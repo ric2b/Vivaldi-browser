@@ -3,8 +3,10 @@
 //
 #include "browser/menus/vivaldi_developertools_menu_controller.h"
 
+#include "app/vivaldi_resources.h"
 #include "apps/switches.h"
 #include "base/command_line.h"
+#include "browser/menus/vivaldi_menu_enums.h"
 #include "browser/vivaldi_browser_finder.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/devtools/devtools_window.h"
@@ -18,6 +20,7 @@
 #include "ui/base/accelerators/accelerator.h"
 #include "ui/base/models/simple_menu_model.h"
 #include "ui/devtools/devtools_connector.h"
+#include "ui/vivaldi_rootdocument_handler.h"
 
 namespace vivaldi {
 
@@ -56,8 +59,10 @@ void DeveloperToolsMenuController::PopulateModel(
     menu_model->AddSeparator(ui::NORMAL_SEPARATOR);
     menu_model->AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTELEMENT,
                                     IDS_CONTENT_CONTEXT_INSPECTELEMENT);
-    menu_model->AddItemWithStringId(IDC_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE,
-                                    IDS_CONTENT_CONTEXT_INSPECTBACKGROUNDPAGE);
+    menu_model->AddItemWithStringId(IDC_VIV_INSPECT_PORTAL_DOCUMENT,
+                                    IDS_VIV_INSPECT_PORTAL_DOCUMENT);
+    menu_model->AddItemWithStringId(IDC_VIV_INSPECT_SERVICE_WORKER,
+                                    IDS_VIV_INSPECT_SERVICE_WORKER);
   }
 }
 
@@ -98,6 +103,28 @@ bool DeveloperToolsMenuController::HandleCommand(int command_id) {
                                                            browser_->profile());
         }
         return true;
+
+      case IDC_VIV_INSPECT_SERVICE_WORKER:
+        if (platform_app && platform_app->is_platform_app()) {
+          extensions::devtools_util::InspectServiceWorkerBackground(platform_app,
+                                                           browser_->profile());
+        }
+        return true;
+
+      case IDC_VIV_INSPECT_PORTAL_DOCUMENT: {
+        // VivaldiRootDocumentHandler only exist for the origin profile.
+        extensions::VivaldiRootDocumentHandler* root_doc_handler =
+            extensions::VivaldiRootDocumentHandlerFactory::GetForBrowserContext(
+                browser_->profile()->GetOriginalProfile());
+
+        content::WebContents* portal_content =
+            browser_->profile()->IsOffTheRecord()
+                ? root_doc_handler->GetOTRWebContents()
+                : root_doc_handler->GetWebContents();
+
+        DevToolsWindow::OpenDevToolsWindow(portal_content);
+        return true;
+      }
     }
   }
   return false;

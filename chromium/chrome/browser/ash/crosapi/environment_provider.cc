@@ -13,6 +13,7 @@
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profiles_state.h"
+#include "chrome/browser/web_applications/preinstalled_web_app_config_utils.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/crosapi/mojom/policy_namespace.mojom.h"
 #include "chromeos/dbus/cros_disks/cros_disks_client.h"
@@ -130,6 +131,11 @@ mojom::DefaultPathsPtr EnvironmentProvider::GetDefaultPaths() {
   default_paths->share_cache =
       file_manager::util::GetShareCacheFilePath(profile);
 
+  default_paths->preinstalled_web_app_config =
+      web_app::GetPreinstalledWebAppConfigDirFromCommandLine(profile);
+  default_paths->preinstalled_web_app_extra_config =
+      web_app::GetPreinstalledWebAppExtraConfigDirFromCommandLine(profile);
+
   return default_paths;
 }
 
@@ -182,17 +188,23 @@ std::string EnvironmentProvider::GetDeviceAccountPolicy() {
   return device_account_policy_blob_;
 }
 
-const MojoPolicyMap& EnvironmentProvider::GetDeviceAccountComponentPolicy() {
+const policy::ComponentPolicyMap&
+EnvironmentProvider::GetDeviceAccountComponentPolicy() {
   return component_policy_;
 }
 
 void EnvironmentProvider::SetDeviceAccountComponentPolicy(
-    MojoPolicyMap component_policy) {
+    policy::ComponentPolicyMap component_policy) {
   component_policy_ = std::move(component_policy);
 }
 
-bool EnvironmentProvider::GetUseNewAccountManager() {
-  return true;
+base::Time EnvironmentProvider::GetLastPolicyFetchAttemptTimestamp() {
+  return last_policy_fetch_attempt_;
+}
+
+void EnvironmentProvider::SetLastPolicyFetchAttemptTimestamp(
+    const base::Time& timestamp) {
+  last_policy_fetch_attempt_ = timestamp;
 }
 
 }  // namespace crosapi

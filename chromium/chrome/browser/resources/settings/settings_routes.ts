@@ -28,7 +28,6 @@ export type SettingsRoutes = {
   IMPORT_DATA: Route,
   INCOMPATIBLE_APPLICATIONS: Route,
   LANGUAGES: Route,
-  LANGUAGE_SETTINGS: Route,
   MANAGE_PROFILE: Route,
   ON_STARTUP: Route,
   PASSWORDS: Route,
@@ -59,6 +58,7 @@ export type SettingsRoutes = {
   SITE_SETTINGS_CLIPBOARD: Route,
   SITE_SETTINGS_COOKIES: Route,
   SITE_SETTINGS_DATA_DETAILS: Route,
+  SITE_SETTINGS_FEDERATED_IDENTITY_API: Route,
   SITE_SETTINGS_HANDLERS: Route,
   SITE_SETTINGS_HID_DEVICES: Route,
   SITE_SETTINGS_IDLE_DETECTION: Route,
@@ -88,4 +88,7 @@ export type SettingsRoutes = {
   SYNC_ADVANCED: Route,
   SYSTEM: Route,
   TRIGGERED_RESET_DIALOG: Route,
+
+  // Vivaldi:
+  SITE_SETTINGS_AUTOPLAY: Route,
 };

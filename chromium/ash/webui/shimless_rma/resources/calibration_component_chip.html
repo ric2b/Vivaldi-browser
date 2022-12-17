@@ -12,8 +12,8 @@
     opacity: 0.38;
   }
 
-  :host([disabled]) #componentName {
-    color: var(--cros-text-color-disabled);
+  :focus {
+    outline: rgba(var(--google-blue-600-rgb), .4) solid 2px;
   }
 
   #componentButton {
@@ -30,8 +30,13 @@
     width: 100%;
   }
 
+  #componentName {
+    color: var(--google-blue-600);
+  }
+
   #labelDiv {
-    color: var(--shimless-component-text-color);
+    align-items: center;
+    display: flex;
     flex-basis: 155px;
     inset-inline-start: 0;
     padding-inline-start: 24px;
@@ -42,18 +47,13 @@
     color: var(--google-blue-700);
   }
 
-  #checkIcon {
-    margin-top: 6px;
-  }
-
   #infoIcon {
-    fill: var(--cros-icon-color-alert);
-    margin-inline-end: 5px;
+    fill: var(--google-blue-600);
   }
 
   #checkIcon {
     height: 20px;
-    inset-inline-end: 16px;
+    inset-inline-end: 12px;
     position: absolute;
     width: 20px;
   }
@@ -62,7 +62,7 @@
 <cr-button id="componentButton" on-click="onComponentButtonClicked_"
     disabled="[[disabled]]">
   <div id="labelDiv">
-    <iron-icon id="infoIcon" icon="shimless-icon:info" hidden="[[!failed]]">
+    <iron-icon id="infoIcon" icon="shimless-icon:info" hidden="[[!failed]]" class="small-icon">
     </iron-icon>
     <span id="componentName">[[componentName]]</span>
     <div>[[componentId]]</div>

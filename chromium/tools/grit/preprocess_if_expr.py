@@ -45,8 +45,7 @@ class PreprocessIfExprNode(grit.node.base.Node):
 
 def ParseDefinesArg(definesArg):
   defines = {}
-  for define_arg in definesArg:
-    define, = define_arg
+  for define in definesArg:
     parts = [part.strip() for part in define.split('=', 1)]
     name = parts[0]
     val = True if len(parts) == 1 else parts[1]
@@ -79,7 +78,7 @@ def main(argv):
   parser.add_argument('--out-folder', required=True)
   parser.add_argument('--out-manifest')
   parser.add_argument('--in-files', required=True, nargs="*")
-  parser.add_argument('-D', '--defines', nargs="*", action='append')
+  parser.add_argument('-D', '--defines', action='append')
   parser.add_argument('-E', '--environment')
   parser.add_argument('-t', '--target')
   parser.add_argument('--enable_removal_comments', action='store_true')
@@ -117,7 +116,12 @@ def main(argv):
       # for overlapping directories hit the makedirs line at the same time.
       if e.errno != errno.EEXIST:
         raise
-    if os.path.exists(out_path) and os.path.samefile(out_path, in_path):
+
+    # Delete the target file before witing it, as it may be hardlinked to other
+    # files, which can break the build. This is the case in particular if the
+    # file was "copied" to different locations with GN (as GN's copy is actually
+    # a hard link under the hood). See https://crbug.com/1332497
+    if os.path.exists(out_path):
       os.remove(out_path)
 
     # Detect and delete any stale TypeScript files present in the output folder,

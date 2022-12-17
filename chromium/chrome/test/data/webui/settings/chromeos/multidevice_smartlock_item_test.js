@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {MultiDeviceBrowserProxyImpl, MultiDeviceFeature, MultiDeviceFeatureState, MultiDevicePageContentData, MultiDeviceSettingsMode, Router, routes} from 'chrome://os-settings/chromeos/os_settings.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertEquals, assertFalse, assertTrue} from '../../chai_assert.js';
@@ -24,7 +25,7 @@ suite('Multidevice', function() {
    * @param {!MultiDevicePageContentData}
    */
   function setPageContentData(newPageContentData) {
-    cr.webUIListenerCallback(
+    webUIListenerCallback(
         'settings.updateMultidevicePageContentData', newPageContentData);
     flush();
   }
@@ -107,11 +108,17 @@ suite('Multidevice', function() {
     });
   }
 
-  suiteSetup(function() {
-    ALL_MODES = Object.values(MultiDeviceSettingsMode);
-  });
-
-  setup(function() {
+  /**
+   * @param {?boolean} isSmartLockSignInRemoved Whether to enable or disable the
+   *     isSmartLockSignInRemoved flag.
+   * @private
+   * TODO(b/227674947): When Sign in with Smart Lock is removed, this function
+   * can be replaced with a normal setup() function that will automatically run
+   * before each test and not require a param.
+   */
+  function initializeElement(isSmartLockSignInRemoved) {
+    loadTimeData.overrideValues(
+        {'isSmartLockSignInRemoved': !!isSmartLockSignInRemoved});
     PolymerTest.clearBody();
     browserProxy = new TestMultideviceBrowserProxy();
     MultiDeviceBrowserProxyImpl.instance_ = browserProxy;
@@ -129,14 +136,21 @@ suite('Multidevice', function() {
     setSmartLockState(MultiDeviceFeatureState.ENABLED_BY_USER);
 
     return browserProxy.whenCalled('getPageContentData');
+  }
+
+  suiteSetup(function() {
+    ALL_MODES = Object.values(MultiDeviceSettingsMode);
   });
 
   teardown(function() {
-    smartLockItem.remove();
+    if (smartLockItem) {
+      smartLockItem.remove();
+    }
     Router.getInstance().resetRouteForTesting();
   });
 
   test('settings row visibile only if host is verified', function() {
+    initializeElement();
     for (const mode of ALL_MODES) {
       setHostData(mode);
       setBetterTogetherState(MultiDeviceFeatureState.ENABLED_BY_USER);
@@ -151,6 +165,7 @@ suite('Multidevice', function() {
   });
 
   test('settings row visibile only if feature is supported', function() {
+    initializeElement();
     let featureItem = smartLockItem.$$('#smartLockItem');
     assertTrue(!!featureItem);
 
@@ -168,6 +183,7 @@ suite('Multidevice', function() {
   test(
       'settings row visibile only if better together suite is enabled',
       function() {
+        initializeElement();
         let featureItem = smartLockItem.$$('#smartLockItem');
         assertTrue(!!featureItem);
         setBetterTogetherState(MultiDeviceFeatureState.DISABLED_BY_USER);
@@ -175,15 +191,26 @@ suite('Multidevice', function() {
         assertFalse(!!featureItem);
       });
 
+  // TODO(b/227674947): Delete this test case when Sign in with Smart Lock is
+  // removed.
   test('clicking item with verified host opens subpage', function() {
+    initializeElement();
     const featureItem = smartLockItem.$$('#smartLockItem');
     assertTrue(!!featureItem);
     expectRouteOnClick(featureItem.$$('#linkWrapper'), routes.SMART_LOCK);
   });
 
   test('feature toggle click event handled', function() {
+    initializeElement();
     simulateFeatureStateChangeRequest(false).then(function() {
       simulateFeatureStateChangeRequest(true);
     });
+  });
+
+  test('SmartLockSignInRemoved flag removes subpage', function() {
+    initializeElement(/*isSmartLockSignInRemoved=*/ true);
+    const featureItem = smartLockItem.$$('#smartLockItem');
+    assertTrue(!!featureItem);
+    assertEquals(undefined, featureItem.subpageRoute);
   });
 });

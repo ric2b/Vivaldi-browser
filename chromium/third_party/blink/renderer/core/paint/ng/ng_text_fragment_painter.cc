@@ -25,6 +25,7 @@
 #include "third_party/blink/renderer/core/paint/inline_text_box_painter.h"
 #include "third_party/blink/renderer/core/paint/list_marker_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_highlight_painter.h"
+#include "third_party/blink/renderer/core/paint/ng/ng_inline_paint_context.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_text_decoration_painter.h"
 #include "third_party/blink/renderer/core/paint/ng/ng_text_painter.h"
 #include "third_party/blink/renderer/core/paint/paint_auto_dark_mode.h"
@@ -317,14 +318,15 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
           : physical_box.offset.top + ascent);
 
   NGTextPainter text_painter(context, font, fragment_paint_info, visual_rect,
-                             text_origin, physical_box, is_horizontal);
+                             text_origin, physical_box, inline_context_,
+                             is_horizontal);
   NGTextDecorationPainter decoration_painter(text_painter, text_item,
                                              paint_info, style, text_style,
                                              rotated_box, selection);
   NGHighlightPainter highlight_painter(
       fragment_paint_info, text_painter, decoration_painter, paint_info,
-      cursor_, *cursor_.CurrentItem(), physical_box.offset, style, selection,
-      is_printing);
+      cursor_, *cursor_.CurrentItem(), rotation, rotated_box,
+      physical_box.offset, style, text_style, selection, is_printing);
 
   if (svg_inline_text) {
     NGTextPainter::SvgTextPaintState& svg_state = text_painter.SetSvgState(
@@ -387,6 +389,8 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
     if (auto* layout_text = DynamicTo<LayoutText>(node->GetLayoutObject()))
       node_id = layout_text->EnsureNodeId();
   }
+  NGInlinePaintContext::ScopedPaintOffset scoped_paint_offset(paint_offset,
+                                                              inline_context_);
 
   AutoDarkMode auto_dark_mode(
       PaintAutoDarkMode(style, DarkModeFilter::ElementRole::kForeground));
@@ -397,7 +401,7 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
 
   if (LIKELY(!highlight_painter.Selection() &&
              (!RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled() ||
-              highlight_painter.Layers().size() == 1))) {
+              highlight_painter.LayerCount() == 1))) {
     // Fast path: just paint the text, including its shadows.
     decoration_painter.Begin(NGTextDecorationPainter::kOriginating);
     decoration_painter.PaintExceptLineThrough();
@@ -418,15 +422,10 @@ void NGTextFragmentPainter::Paint(const PaintInfo& paint_info,
     DCHECK(RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled());
     // New slow path: paint suppressing text proper where highlighted, then
     // paint each highlight overlay, suppressing unless topmost highlight.
-    // TODO(crbug.com/1147859) suppress for ::selection too (regression)
-    decoration_painter.Begin(NGTextDecorationPainter::kOriginating);
-    decoration_painter.PaintExceptLineThrough();
-    highlight_painter.PaintOriginatingText(text_style, node_id, auto_dark_mode);
-    decoration_painter.PaintOnlyLineThrough();
+    highlight_painter.PaintOriginatingText(text_style, node_id);
 
     highlight_painter.PaintHighlightOverlays(
-        text_style, node_id, auto_dark_mode, paint_marker_backgrounds,
-        rotation);
+        text_style, node_id, paint_marker_backgrounds, rotation);
   }
 
   // Paint ::selection background.

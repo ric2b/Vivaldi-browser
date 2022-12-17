@@ -117,6 +117,7 @@ source_set("common") {
     "frame/frame_visual_properties.cc",
     "frame/frame_visual_properties_mojom_traits.cc",
     "frame/from_ad_state.cc",
+    "frame/fullscreen_request_token.cc",
     "frame/payment_request_token.cc",
     "frame/transient_allow_fullscreen.cc",
     "frame/user_activation_state.cc",
@@ -135,6 +136,8 @@ source_set("common") {
     "input/web_mouse_wheel_event.cc",
     "input/web_pointer_event.cc",
     "input/web_touch_event.cc",
+    "interest_group/auction_config.cc",
+    "interest_group/auction_config_mojom_traits.cc",
     "interest_group/interest_group.cc",
     "interest_group/interest_group_mojom_traits.cc",
     "link_to_text/link_to_text_mojom_traits.cc",
@@ -174,7 +177,6 @@ source_set("common") {
     "mime_util/mime_util.cc",
     "mobile_metrics/mobile_friendliness.cc",
     "native_io/native_io_utils.cc",
-    "navigation/impression.cc",
     "navigation/impression_mojom_traits.cc",
     "navigation/navigation_params.cc",
     "navigation/navigation_policy.cc",
@@ -282,6 +284,10 @@ source_set("common") {
     sources += [ "dwrite_rasterizer_support/dwrite_rasterizer_support.cc" ]
     deps += [ "//ui/gfx/" ]
   }
+
+  if (is_chromeos || is_android || is_win || is_chromecast || is_fuchsia) {
+    defines = [ "ENABLE_PROTECTED_MEDIA_IDENTIFIER_PERMISSION" ]
+  }
 }
 
 test("blink_common_unittests") {
@@ -296,10 +302,7 @@ test("blink_common_unittests") {
     "//ui/gfx:test_support",
   ]
   if (is_android) {
-    deps += [
-      "//base:base_java",
-      "//media/base/android:media_java",
-    ]
+    deps += [ "//media/base/android:media_java" ]
   }
 
   if (is_fuchsia) {
@@ -324,11 +327,13 @@ source_set("common_unittests_sources") {
     "client_hints/client_hints_unittest.cc",
     "client_hints/enabled_client_hints_unittest.cc",
     "device_memory/approximated_device_memory_unittest.cc",
+    "frame/fullscreen_request_token_unittest.cc",
     "frame/transient_allow_fullscreen_unittest.cc",
     "frame/user_activation_state_unittest.cc",
     "indexeddb/indexeddb_key_unittest.cc",
     "input/synthetic_web_input_event_builders_unittest.cc",
     "input/web_input_event_unittest.cc",
+    "interest_group/auction_config_mojom_traits_test.cc",
     "interest_group/interest_group_mojom_traits_test.cc",
     "loader/inter_process_time_ticks_converter_unittest.cc",
     "loader/mime_sniffing_throttle_unittest.cc",

@@ -638,8 +638,6 @@ const char* ToString(ax::mojom::Action action) {
       return "replaceSelectedText";
     case ax::mojom::Action::kResumeMedia:
       return "resumeMedia";
-    case ax::mojom::Action::kRunScreenAi:
-      return "runScreenAi";
     case ax::mojom::Action::kScrollBackward:
       return "scrollBackward";
     case ax::mojom::Action::kScrollForward:
@@ -1585,6 +1583,8 @@ const char* ToString(ax::mojom::DescriptionFrom description_from) {
       return "ariaDescription";
     case ax::mojom::DescriptionFrom::kButtonLabel:
       return "buttonLabel";
+    case ax::mojom::DescriptionFrom::kPopupElement:
+      return "popupElement";
     case ax::mojom::DescriptionFrom::kRelatedElement:
       return "relatedElement";
     case ax::mojom::DescriptionFrom::kRubyAnnotation:

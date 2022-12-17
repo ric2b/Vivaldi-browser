@@ -108,8 +108,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/browser/ui/startup/first_run_lacros.h"
-#include "chromeos/lacros/lacros_service.h"
+#include "chrome/browser/ui/startup/lacros_first_run_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -297,6 +297,13 @@ bool CanOpenProfileOnStartup(StartupProfileInfo profile_info) {
     return false;
   }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (profile->IsGuestSession()) {
+    DCHECK_NE(profile_info.mode, StartupProfileMode::kProfilePicker);
+    return true;
+  }
+#endif
+
   // Guest or system profiles are not available unless a separate process
   // already has a window open for the profile.
   return (!profile->IsGuestSession() && !profile->IsSystemProfile()) ||
@@ -376,7 +383,7 @@ Profile* GetPrivateProfileIfRequested(const base::CommandLine& command_line,
       /* show_warning= */ true);
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   if (profiles::IsGuestModeEnabled()) {
-    const auto* init_params = chromeos::LacrosService::Get()->init_params();
+    const auto* init_params = chromeos::BrowserInitParams::Get();
     open_guest_profile =
         open_guest_profile ||
         init_params->initial_browser_action ==
@@ -402,7 +409,7 @@ Profile* GetPrivateProfileIfRequested(const base::CommandLine& command_line,
   } else {
     bool expect_incognito = command_line.HasSwitch(switches::kIncognito);
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    auto* init_params = chromeos::LacrosService::Get()->init_params();
+    auto* init_params = chromeos::BrowserInitParams::Get();
     expect_incognito |=
         init_params->initial_browser_action ==
         crosapi::mojom::InitialBrowserAction::kOpenIncognitoWindow;
@@ -660,11 +667,13 @@ void StartupBrowserCreator::LaunchBrowser(
 
   if (!IsSilentLaunchEnabled(command_line, profile)) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    if (ShouldOpenPrimaryProfileFirstRun()) {
+    auto* fre_service =
+        LacrosFirstRunServiceFactory::GetForBrowserContext(profile);
+    if (fre_service && fre_service->ShouldOpenFirstRun()) {
       // Show the FRE and let `OpenNewWindowForFirstRun()` handle the browser
       // launch. This `StartupBrowserCreator` will get destroyed when the method
       // returns so the relevant data is copied over and passed to the callback.
-      OpenPrimaryProfileFirstRunIfNeeded(
+      fre_service->OpenFirstRunIfNeeded(
           base::BindOnce(&OpenNewWindowForFirstRun, command_line, profile,
                          cur_dir, first_run_tabs_, process_startup,
                          is_first_run, std::move(launch_mode_recorder)));
@@ -813,7 +822,7 @@ SessionStartupPref StartupBrowserCreator::GetSessionStartupPref(
   bool restore_last_session =
       command_line.HasSwitch(switches::kRestoreLastSession);
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto* init_params = chromeos::LacrosService::Get()->init_params();
+  auto* init_params = chromeos::BrowserInitParams::Get();
   if (init_params->initial_browser_action ==
           crosapi::mojom::InitialBrowserAction::kOpenNewTabPageWindow ||
       init_params->initial_browser_action ==
@@ -1026,7 +1035,7 @@ bool StartupBrowserCreator::ProcessCmdLineImpl(
   }
 #endif  //  BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
   if (base::FeatureList::IsEnabled(features::kOnConnectNative) &&
       command_line.HasSwitch(switches::kNativeMessagingConnectHost) &&
       command_line.HasSwitch(switches::kNativeMessagingConnectExtension)) {
@@ -1472,6 +1481,14 @@ StartupProfilePathInfo GetStartupProfilePath(
             StartupProfileMode::kBrowserWindow};
   }
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (chromeos::BrowserInitParams::Get()->session_type ==
+      crosapi::mojom::SessionType::kGuestSession) {
+    return {ProfileManager::GetGuestProfilePath(),
+            StartupProfileMode::kBrowserWindow};
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   if (command_line.HasSwitch(switches::kProfileDirectory)) {
     return {user_data_dir.Append(
                 command_line.GetSwitchValuePath(switches::kProfileDirectory)),
@@ -1519,6 +1536,12 @@ StartupProfileInfo GetStartupProfile(const base::FilePath& cur_dir,
 
   // NOTE: GetProfile() does synchronous file I/O on the main thread.
   Profile* profile = profile_manager->GetProfile(path_info.path);
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (profile->IsGuestSession()) {
+    return {profile, StartupProfileMode::kBrowserWindow};
+  }
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // There are several cases where we should show the profile picker:
   // - if there is no entry in profile attributes storage, which means that the

@@ -4,28 +4,36 @@
 
 #include "components/desks_storage/core/desk_template_conversion.h"
 
-#include "ash/public/cpp/desk_template.h"
 #include "base/guid.h"
 #include "base/json/json_reader.h"
 #include "base/json/values_util.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/time/time.h"
 #include "components/app_constants/constants.h"
 #include "components/app_restore/app_launch_info.h"
 #include "components/app_restore/restore_data.h"
+#include "components/app_restore/tab_group_info.h"
 #include "components/app_restore/window_info.h"
 #include "components/services/app_service/public/cpp/app_registry_cache.h"
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/sync/protocol/proto_enum_conversions.h"
+#include "components/tab_groups/tab_group_color.h"
+#include "components/tab_groups/tab_group_visual_data.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/gfx/geometry/rect.h"
+
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/crosapi/cpp/lacros_startup_state.h"  // nogncheck
+#endif  // !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
 
 using SyncWindowOpenDisposition =
     sync_pb::WorkspaceDeskSpecifics_WindowOpenDisposition;
 using SyncLaunchContainer = sync_pb::WorkspaceDeskSpecifics_LaunchContainer;
+using GroupColor = tab_groups::TabGroupColorId;
 
 // JSON value keys.
 constexpr char kActiveTabIndex[] = "active_tab_index";
@@ -33,10 +41,11 @@ constexpr char kAppId[] = "app_id";
 constexpr char kApps[] = "apps";
 constexpr char kAppName[] = "app_name";
 constexpr char kAppType[] = "app_type";
+constexpr char kAppTypeArc[] = "ARC";
 constexpr char kAppTypeBrowser[] = "BROWSER";
 constexpr char kAppTypeChrome[] = "CHROME_APP";
 constexpr char kAppTypeProgressiveWeb[] = "PWA";
-constexpr char kAppTypeArc[] = "ARC";
+constexpr char kAppTypeUnsupported[] = "UNSUPPORTED";
 constexpr char kBoundsInRoot[] = "bounds_in_root";
 constexpr char kCreatedTime[] = "created_time_usec";
 constexpr char kDesk[] = "desk";
@@ -45,6 +54,7 @@ constexpr char kDeskTypeTemplate[] = "TEMPLATE";
 constexpr char kDeskTypeSaveAndRecall[] = "SAVE_AND_RECALL";
 constexpr char kDisplayId[] = "display_id";
 constexpr char kEventFlag[] = "event_flag";
+constexpr char kIsAppTypeBrowser[] = "is_app";
 constexpr char kLaunchContainer[] = "launch_container";
 constexpr char kLaunchContainerWindow[] = "LAUNCH_CONTAINER_WINDOW";
 constexpr char kLaunchContainerUnspecified[] = "LAUNCH_CONTAINER_UNSPECIFIED";
@@ -55,15 +65,21 @@ constexpr char kMaximumSize[] = "maximum_size";
 constexpr char kMinimumSize[] = "minimum_size";
 constexpr char kName[] = "name";
 constexpr char kPreMinimizedWindowState[] = "pre_minimized_window_state";
+constexpr char kTabRangeFirstIndex[] = "first_index";
+constexpr char kTabRangeLastIndex[] = "last_index";
 constexpr char kSizeHeight[] = "height";
 constexpr char kSizeWidth[] = "width";
 constexpr char kSnapPercentage[] = "snap_percent";
 constexpr char kTabs[] = "tabs";
+constexpr char kTabGroups[] = "tab_groups";
 constexpr char kTabUrl[] = "url";
 constexpr char kTitle[] = "title";
 constexpr char kUpdatedTime[] = "updated_time_usec";
 constexpr char kUuid[] = "uuid";
 constexpr char kVersion[] = "version";
+constexpr char kTabGroupTitleKey[] = "title";
+constexpr char kTabGroupColorKey[] = "color";
+constexpr char kTabGroupIsCollapsed[] = "is_collapsed";
 constexpr char kWindowId[] = "window_id";
 constexpr char kWindowBound[] = "window_bound";
 constexpr char kWindowBoundHeight[] = "height";
@@ -96,6 +112,35 @@ constexpr char kZIndex[] = "z_index";
 // Valid value sets.
 const std::set<std::string> kValidDeskTypes = {kDeskTypeTemplate,
                                                kDeskTypeSaveAndRecall};
+const std::set<std::string> kValidLaunchContainers = {
+    kLaunchContainerWindow, kLaunchContainerPanelDeprecated,
+    kLaunchContainerTab, kLaunchContainerNone, kLaunchContainerUnspecified};
+const std::set<std::string> kValidWindowOpenDispositions = {
+    kWindowOpenDispositionUnknown,
+    kWindowOpenDispositionCurrentTab,
+    kWindowOpenDispositionSingletonTab,
+    kWindowOpenDispositionNewForegroundTab,
+    kWindowOpenDispositionNewBackgroundTab,
+    kWindowOpenDispositionNewPopup,
+    kWindowOpenDispositionNewWindow,
+    kWindowOpenDispositionSaveToDisk,
+    kWindowOpenDispositionOffTheRecord,
+    kWindowOpenDispositionIgnoreAction,
+    kWindowOpenDispositionSwitchToTab,
+    kWindowOpenDispositionNewPictureInPicture};
+const std::set<std::string> kValidWindowStates = {kWindowStateNormal,
+                                                  kWindowStateMinimized,
+                                                  kWindowStateMaximized,
+                                                  kWindowStateFullscreen,
+                                                  kWindowStatePrimarySnapped,
+                                                  kWindowStateSecondarySnapped,
+                                                  kZIndex};
+const std::set<std::string> kValidTabGroupColors = {
+    app_restore::kTabGroupColorUnknown, app_restore::kTabGroupColorGrey,
+    app_restore::kTabGroupColorBlue,    app_restore::kTabGroupColorRed,
+    app_restore::kTabGroupColorYellow,  app_restore::kTabGroupColorGreen,
+    app_restore::kTabGroupColorPink,    app_restore::kTabGroupColorPurple,
+    app_restore::kTabGroupColorCyan,    app_restore::kTabGroupColorOrange};
 
 // Version number.
 constexpr int kVersionNum = 1;
@@ -130,6 +175,20 @@ bool GetInt(const base::Value& dict, const char* key, int* out) {
   return GetInt(&dict, key, out);
 }
 
+bool GetBool(const base::Value* dict, const char* key, bool* out) {
+  const base::Value* value =
+      dict->FindKeyOfType(key, base::Value::Type::BOOLEAN);
+  if (!value)
+    return false;
+
+  *out = value->GetBool();
+  return true;
+}
+
+bool GetBool(const base::Value& dict, const char* key, bool* out) {
+  return GetBool(&dict, key, out);
+}
+
 // Get App ID from App proto.
 std::string GetJsonAppId(const base::Value& app) {
   std::string app_type;
@@ -137,8 +196,20 @@ std::string GetJsonAppId(const base::Value& app) {
     return std::string();  // App Type must be specified.
 
   if (app_type == kAppTypeBrowser) {
+    // Return the primary browser's known app ID.
+    const bool is_lacros =
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+        true;
+#else
+        // Note that this will launch the browser as lacros if it is enabled,
+        // even if it was saved as a non-lacros window (and vice-versa).
+        crosapi::lacros_startup_state::IsLacrosEnabled() &&
+        crosapi::lacros_startup_state::IsLacrosPrimaryEnabled();
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
     // Browser app has a known app ID.
-    return std::string(app_constants::kChromeAppId);
+    return std::string(is_lacros ? app_constants::kLacrosAppId
+                                 : app_constants::kChromeAppId);
   } else if (app_type == kAppTypeChrome || app_type == kAppTypeProgressiveWeb ||
              app_type == kAppTypeArc) {
     // Read the provided app ID
@@ -152,13 +223,114 @@ std::string GetJsonAppId(const base::Value& app) {
   return std::string();
 }
 
+// Convert a TabGroupInfo object to a base::Value dictionary.
+base::Value ConvertTabGroupInfoToValue(
+    const app_restore::TabGroupInfo& group_info) {
+  base::Value tab_group_dict(base::Value::Type::DICTIONARY);
+
+  tab_group_dict.SetIntKey(kTabRangeFirstIndex, group_info.tab_range.start());
+  tab_group_dict.SetIntKey(kTabRangeLastIndex, group_info.tab_range.end());
+  tab_group_dict.SetStringKey(
+      kTabGroupTitleKey, base::UTF16ToUTF8(group_info.visual_data.title()));
+  tab_group_dict.SetStringKey(
+      kTabGroupColorKey,
+      app_restore::TabGroupColorToString(group_info.visual_data.color()));
+  tab_group_dict.SetBoolKey(kTabGroupIsCollapsed,
+                            group_info.visual_data.is_collapsed());
+
+  return tab_group_dict;
+}
+
+bool IsValidGroupColor(const std::string& group_color) {
+  return base::Contains(kValidTabGroupColors, group_color);
+}
+
+GroupColor ConvertGroupColorStringToGroupColor(const std::string& group_color) {
+  if (group_color == app_restore::kTabGroupColorGrey) {
+    return GroupColor::kGrey;
+  } else if (group_color == app_restore::kTabGroupColorBlue) {
+    return GroupColor::kBlue;
+  } else if (group_color == app_restore::kTabGroupColorRed) {
+    return GroupColor::kRed;
+  } else if (group_color == app_restore::kTabGroupColorYellow) {
+    return GroupColor::kYellow;
+  } else if (group_color == app_restore::kTabGroupColorGreen) {
+    return GroupColor::kGreen;
+  } else if (group_color == app_restore::kTabGroupColorPink) {
+    return GroupColor::kPink;
+  } else if (group_color == app_restore::kTabGroupColorPurple) {
+    return GroupColor::kPurple;
+  } else if (group_color == app_restore::kTabGroupColorCyan) {
+    return GroupColor::kCyan;
+  } else if (group_color == app_restore::kTabGroupColorOrange) {
+    return GroupColor::kOrange;
+    // There is no UNKNOWN equivalent in GroupColor, simply default
+    // to grey.
+  } else if (group_color == app_restore::kTabGroupColorUnknown) {
+    return GroupColor::kGrey;
+  } else {
+    NOTREACHED();
+    return GroupColor::kGrey;
+  }
+}
+
+// Constructs a GroupVisualData from value `group_visual_data` IFF all fields
+// are present and valid in the value parameter.  Returns true on success, false
+// on failure.
+bool MakeTabGroupVisualDataFromValue(
+    const base::Value& tab_group,
+    tab_groups::TabGroupVisualData* out_visual_data) {
+  std::string tab_group_title;
+  std::string group_color_string;
+  bool is_collapsed;
+  if (GetString(tab_group, kTabGroupTitleKey, &tab_group_title) &&
+      GetBool(tab_group, kTabGroupIsCollapsed, &is_collapsed) &&
+      GetString(tab_group, kTabGroupColorKey, &group_color_string) &&
+      IsValidGroupColor(group_color_string)) {
+    *out_visual_data = tab_groups::TabGroupVisualData(
+        base::UTF8ToUTF16(tab_group_title),
+        ConvertGroupColorStringToGroupColor(group_color_string), is_collapsed);
+    return true;
+  }
+
+  return false;
+}
+
+// Constructs a gfx::Range from value `group_range` IFF all fields are
+// present and valid in the value parameter.  Returns true on success, false on
+// failure.
+bool MakeTabGroupRangeFromValue(const base::Value& tab_group,
+                                gfx::Range* out_range) {
+  int32_t range_start;
+  int32_t range_end;
+  if (GetInt(tab_group, kTabRangeFirstIndex, &range_start) &&
+      GetInt(tab_group, kTabRangeLastIndex, &range_end)) {
+    *out_range = gfx::Range(range_start, range_end);
+    return true;
+  }
+
+  return false;
+}
+
+// Constructs a TabGroupInfo from `tab_group` IFF all fields are present
+// and valid in the value parameter. Returns true on success, false on failure.
+absl::optional<app_restore::TabGroupInfo> MakeTabGroupInfoFromDict(
+    const base::Value& tab_group) {
+  absl::optional<app_restore::TabGroupInfo> tab_group_info = absl::nullopt;
+
+  tab_groups::TabGroupVisualData visual_data;
+  gfx::Range range;
+  if (MakeTabGroupRangeFromValue(tab_group, &range) &&
+      MakeTabGroupVisualDataFromValue(tab_group, &visual_data)) {
+    tab_group_info.emplace(range, visual_data);
+  }
+
+  return tab_group_info;
+}
+
 // Returns true if launch container string value is valid.
 bool IsValidLaunchContainer(const std::string& launch_container) {
-  return launch_container == kLaunchContainerWindow ||
-         launch_container == kLaunchContainerPanelDeprecated ||
-         launch_container == kLaunchContainerTab ||
-         launch_container == kLaunchContainerNone ||
-         launch_container == kLaunchContainerUnspecified;
+  return base::Contains(kValidLaunchContainers, launch_container);
 }
 
 // Returns a casted apps::mojom::LaunchContainer to be set as an app restore
@@ -189,18 +361,7 @@ int32_t StringToLaunchContainer(const std::string& launch_container) {
 
 // Returns true if the disposition is a valid value.
 bool IsValidWindowOpenDisposition(const std::string& disposition) {
-  return disposition == kWindowOpenDispositionUnknown ||
-         disposition == kWindowOpenDispositionCurrentTab ||
-         disposition == kWindowOpenDispositionSingletonTab ||
-         disposition == kWindowOpenDispositionNewForegroundTab ||
-         disposition == kWindowOpenDispositionNewBackgroundTab ||
-         disposition == kWindowOpenDispositionNewPopup ||
-         disposition == kWindowOpenDispositionNewWindow ||
-         disposition == kWindowOpenDispositionSaveToDisk ||
-         disposition == kWindowOpenDispositionOffTheRecord ||
-         disposition == kWindowOpenDispositionIgnoreAction ||
-         disposition == kWindowOpenDispositionSwitchToTab ||
-         disposition == kWindowOpenDispositionNewPictureInPicture;
+  return base::Contains(kValidWindowOpenDispositions, disposition);
 }
 
 // Returns a casted WindowOpenDisposition to be set in the app restore data.
@@ -285,6 +446,10 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
   // TODO(crbug.com/1311801): Add support for actual event_flag values.
   app_launch_info->event_flag = 0;
 
+  bool app_type_browser;
+  if (GetBool(app, kIsAppTypeBrowser, &app_type_browser))
+    app_launch_info->app_type_browser = app_type_browser;
+
   if (app_type == kAppTypeBrowser) {
     int active_tab_index;
     if (GetInt(app, kActiveTabIndex, &active_tab_index))
@@ -301,6 +466,21 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
         }
       }
     }
+
+    // Fill the tab groups
+    app_launch_info->tab_group_infos.emplace();
+    const base::Value* tab_groups =
+        app.FindKeyOfType(kTabGroups, base::Value::Type::LIST);
+    if (tab_groups) {
+      for (auto& tab : tab_groups->GetList()) {
+        absl::optional<app_restore::TabGroupInfo> tab_group =
+            MakeTabGroupInfoFromDict(tab);
+        if (tab_group.has_value()) {
+          app_launch_info->tab_group_infos->push_back(
+              std::move(tab_group.value()));
+        }
+      }
+    }
   }
   // For Chrome apps and PWAs, the |app_id| is sufficient for identification.
 
@@ -308,12 +488,7 @@ std::unique_ptr<app_restore::AppLaunchInfo> ConvertJsonToAppLaunchInfo(
 }
 
 bool IsValidWindowState(const std::string& window_state) {
-  return window_state == kWindowStateNormal ||
-         window_state == kWindowStateMinimized ||
-         window_state == kWindowStateMaximized ||
-         window_state == kWindowStateFullscreen ||
-         window_state == kWindowStatePrimarySnapped ||
-         window_state == kWindowStateSecondarySnapped;
+  return base::Contains(kValidWindowStates, window_state);
 }
 
 // Convert JSON string WindowState |state| to ui::WindowShowState used by
@@ -604,22 +779,45 @@ base::Value ConvertURLsToBrowserAppTabValues(const std::vector<GURL>& urls) {
 
 std::string GetAppTypeForJson(apps::AppRegistryCache* apps_cache,
                               const std::string& app_id) {
-  const auto app_type = app_id == app_constants::kChromeAppId
-                            ? apps::AppType::kWeb
-                            : apps_cache->GetAppType(app_id);
+  const auto app_type = apps_cache->GetAppType(app_id);
 
+  // This switch should follow the same structure as DeskSyncBridge#FillApp.
   switch (app_type) {
     case apps::AppType::kWeb:
-      return app_id == app_constants::kChromeAppId ? kAppTypeBrowser
-                                                   : kAppTypeProgressiveWeb;
-    case apps::AppType::kChromeApp:
+    case apps::AppType::kSystemWeb:
       return kAppTypeChrome;
+
+    case apps::AppType::kChromeApp:
+      if (app_id == app_constants::kChromeAppId) {
+        return kAppTypeBrowser;
+      } else {
+        return kAppTypeChrome;
+      }
+
+    case apps::AppType::kStandaloneBrowser:
+      if (app_id == app_constants::kLacrosAppId) {
+        return kAppTypeBrowser;
+      } else {
+        return kAppTypeUnsupported;
+      }
+
     case apps::AppType::kArc:
       return kAppTypeArc;
-    default:
-      // Default to browser if unsupported, this shouldn't be captured and
-      // there is no error type in the proto definition.
-      return kAppTypeBrowser;
+
+    case apps::AppType::kStandaloneBrowserChromeApp:
+      return kAppTypeChrome;
+
+    case apps::AppType::kBuiltIn:
+    case apps::AppType::kCrostini:
+    case apps::AppType::kPluginVm:
+    case apps::AppType::kUnknown:
+    case apps::AppType::kMacOs:
+    case apps::AppType::kRemote:
+    case apps::AppType::kBorealis:
+    case apps::AppType::kExtension:
+    case apps::AppType::kStandaloneBrowserExtension:
+      // Default to unsupported. This app should not be captured.
+      return kAppTypeUnsupported;
   }
 }
 
@@ -627,6 +825,12 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
                                    const int window_id,
                                    const app_restore::AppRestoreData* app,
                                    apps::AppRegistryCache* apps_cache) {
+  std::string app_type = GetAppTypeForJson(apps_cache, app_id);
+
+  if (kAppTypeUnsupported == app_type) {
+    return base::Value(base::Value::Type::NONE);
+  }
+
   base::Value app_data = base::Value(base::Value::Type::DICTIONARY);
 
   if (app->current_bounds.has_value()) {
@@ -664,16 +868,29 @@ base::Value ConvertWindowToDeskApp(const std::string& app_id,
   if (app->activation_index.has_value())
     app_data.SetKey(kZIndex, base::Value(app->activation_index.value()));
 
-  std::string app_type = GetAppTypeForJson(apps_cache, app_id);
-
   app_data.SetKey(kAppType, base::Value(app_type));
 
   if (app->urls.has_value())
     app_data.SetKey(kTabs, ConvertURLsToBrowserAppTabValues(app->urls.value()));
 
+  if (app->tab_group_infos.has_value()) {
+    base::Value tab_groups_value(base::Value::Type::LIST);
+
+    for (const auto& tab_group : app->tab_group_infos.value()) {
+      tab_groups_value.Append(ConvertTabGroupInfoToValue(tab_group));
+    }
+
+    app_data.SetKey(kTabGroups, std::move(tab_groups_value));
+  }
+
   if (app->active_tab_index.has_value()) {
     app_data.SetKey(kActiveTabIndex,
                     base::Value(app->active_tab_index.value()));
+  }
+
+  if (app->app_type_browser.has_value()) {
+    app_data.SetKey(kIsAppTypeBrowser,
+                    base::Value(app->app_type_browser.value()));
   }
 
   if (app_type != kAppTypeBrowser)
@@ -725,8 +942,12 @@ base::Value ConvertRestoreDataToValue(
 
   for (const auto& app : restore_data->app_id_to_launch_list()) {
     for (const auto& window : app.second) {
-      desk_data.Append(ConvertWindowToDeskApp(app.first, window.first,
-                                              window.second.get(), apps_cache));
+      auto app_data = ConvertWindowToDeskApp(app.first, window.first,
+                                             window.second.get(), apps_cache);
+      if (app_data.is_none())
+        continue;
+
+      desk_data.Append(std::move(app_data));
     }
   }
 
@@ -760,6 +981,31 @@ namespace desks_storage {
 
 namespace desk_template_conversion {
 
+// Converts the TabGroupColorId passed into its string equivalent
+// as defined in the k constants above.
+std::string ConvertTabGroupColorIdToString(GroupColor color) {
+  switch (color) {
+    case GroupColor::kGrey:
+      return app_restore::kTabGroupColorGrey;
+    case GroupColor::kBlue:
+      return app_restore::kTabGroupColorBlue;
+    case GroupColor::kRed:
+      return app_restore::kTabGroupColorRed;
+    case GroupColor::kYellow:
+      return app_restore::kTabGroupColorYellow;
+    case GroupColor::kGreen:
+      return app_restore::kTabGroupColorGreen;
+    case GroupColor::kPink:
+      return app_restore::kTabGroupColorPink;
+    case GroupColor::kPurple:
+      return app_restore::kTabGroupColorPurple;
+    case GroupColor::kCyan:
+      return app_restore::kTabGroupColorCyan;
+    case GroupColor::kOrange:
+      return app_restore::kTabGroupColorOrange;
+  }
+}
+
 // Converts a time field from sync protobufs to a time object.
 base::Time ProtoTimeToTime(int64_t proto_time) {
   return base::Time::FromDeltaSinceWindowsEpoch(base::Microseconds(proto_time));
@@ -771,8 +1017,9 @@ int64_t TimeToProtoTime(const base::Time& t) {
   return t.ToDeltaSinceWindowsEpoch().InMicroseconds();
 }
 
-std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromPolicy(
-    const base::Value& policy_json) {
+std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
+    const base::Value& policy_json,
+    ash::DeskTemplateSource source) {
   if (!policy_json.is_dict())
     return nullptr;
 
@@ -809,11 +1056,11 @@ std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromPolicy(
 
   std::unique_ptr<ash::DeskTemplate> desk_template =
       std::make_unique<ash::DeskTemplate>(
-          uuid, ash::DeskTemplateSource::kPolicy, name, created_time);
+          uuid, source, name, created_time,
+          GetDeskTypeFromString(desk_type_string));
 
   desk_template->set_updated_time(updated_time);
   desk_template->set_desk_restore_data(ConvertJsonToRestoreData(desk));
-  desk_template->set_type(GetDeskTypeFromString(desk_type_string));
 
   return desk_template;
 }

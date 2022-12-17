@@ -23,19 +23,19 @@ var MAX_SEARCH_DEPTH = 8;
  * Returns an object representing the details of a given link element.
  * @param {HTMLElement} element The element whose details will be returned.
  * @return {!Object} An object of the form {
+ *                     {@code tagName} 'a'
  *                     {@code href} The URL of the link.
  *                     {@code referrerPolicy} The referrer policy to use for
  *                         navigations away from the current page.
  *                     {@code innerText} The inner text of the link.
- *                     {@code boundingBox} The bounding box of the element.
  *                   }.
  */
 var getResponseForLinkElement = function(element) {
   return {
+    tagName: 'a',
     href: getElementHref_(element),
     referrerPolicy: getReferrerPolicy_(element),
     innerText: element.innerText,
-    boundingBox: getElementBoundingBox_(element)
   };
 };
 
@@ -44,25 +44,21 @@ var getResponseForLinkElement = function(element) {
  * @param {HTMLElement} element The element whose details will be returned.
  * @param {string} src The source of the image or image-like element.
  * @return {!Object} An object of the form {
+ *                     {@code tagName} 'img'
  *                     {@code src} The src of the image.
  *                     {@code referrerPolicy} The referrer policy to use for
  *                         navigations away from the current page.
- *                     {@code boundingBox} The bounding box of the element.
  *                     {@code title} (optional) The title of the image, if one
  *                         exists.
  *                     {@code href} (optional) The URL of the link, if one
  *                         exists.
- *                     {@code naturalWidth} (optional) The natural width of
- *                         the image, if one exists.
- *                     {@code naturalHeight} (optional) The natural height of
- *                         the image, if one exists.
  *                   }.
  */
 var getResponseForImageElement = function(element, src) {
   var result = {
+    tagName: 'img',
     src: src,
     referrerPolicy: getReferrerPolicy_(),
-    boundingBox: getElementBoundingBox_(element)
   };
   var parent = element.parentNode;
   // Copy the title, if any.
@@ -91,16 +87,40 @@ var getResponseForImageElement = function(element, src) {
     }
     parent = parent.parentNode;
   }
-  // Copy the image natural width, if any.
-  if (element.naturalWidth) {
-    result.naturalWidth = element.naturalWidth;
-  }
-  // Copy the image natural height, if any.
-  if (element.naturalHeight) {
-    result.naturalHeight = element.naturalHeight;
-  }
   return result;
 };
+
+/**
+ * Returns an object representing the details of a given text element.
+ * @param {HTMLElement} element The element whose details will be returned.
+ * @param {number} x Horizontal center of the selected point in page
+ *                 coordinates.
+ * @param {number} y Vertical center of the selected point in page
+ *                 coordinates.
+ * @return {!Object} An object of the form {
+ *                     {@code tagName} tag name of the text element.
+ *                     {@code innerText} The inner text of the link.
+ *                     {@code textOffset} The tap character offset in
+ *                         innertText.
+ *                   }.
+ */
+var getResponseForTextElement = function(element, x, y) {
+  var result = {
+    tagName: element.tagName,
+  };
+  // caretRangeFromPoint is custom WebKit method.
+  if (document.caretRangeFromPoint) {
+    var range = document.caretRangeFromPoint(x, y);
+    if (range && range.startContainer) {
+      var textNode = range.startContainer;
+      if (textNode.nodeType == 3) {
+        result.textOffset = range.startOffset;
+        result.innerText = textNode.nodeValue;
+      }
+    }
+  }
+  return result;
+}
 
 /**
  * Finds the url of the image or link under the selected point. Sends details
@@ -118,6 +138,7 @@ var getResponseForImageElement = function(element, src) {
 __gCrWeb['findElementAtPointInPageCoordinates'] = function(requestId, x, y) {
   var hitCoordinates = spiralCoordinates_(x, y);
   var processedElements = new Set();
+  var firstDefaultElement = [];
   for (var index = 0; index < hitCoordinates.length; index++) {
     var coordinates = hitCoordinates[index];
 
@@ -134,12 +155,18 @@ __gCrWeb['findElementAtPointInPageCoordinates'] = function(requestId, x, y) {
         coordinateDetails.y;
     var elementWasFound = findElementAtPoint(
         requestId, window.document, processedElements, coordinateX, coordinateY,
-        x, y);
+        x, y, firstDefaultElement);
 
     // Exit early if an element was found.
     if (elementWasFound) {
       return;
     }
+  }
+
+  if (firstDefaultElement.length > 0) {
+    sendFindElementAtPointResponse(requestId, getResponseForTextElement(
+      firstDefaultElement[0], x - window.pageXOffset, y - window.pageYOffset));
+    return;
   }
 
   // If no element was found, send an empty response.
@@ -160,7 +187,8 @@ __gCrWeb['findElementAtPointInPageCoordinates'] = function(requestId, x, y) {
  *                   the touch.
  */
 var findElementAtPoint = function(
-    requestId, root, processedElements, pointX, pointY, centerX, centerY) {
+    requestId, root, processedElements, pointX, pointY, centerX, centerY,
+    firstDefaultElement) {
   var elements = root.elementsFromPoint(pointX, pointY);
   var foundLinkElement;
   for (var elementIndex = 0;
@@ -195,7 +223,7 @@ var findElementAtPoint = function(
         // keep iterating.
         if (findElementAtPoint(
                 requestId, element.shadowRoot, processedElements, pointX,
-                pointY, centerX, centerY)) {
+                pointY, centerX, centerY, firstDefaultElement)) {
           return true;
         }
       }
@@ -203,6 +231,13 @@ var findElementAtPoint = function(
       if (processElementForFindElementAtPoint(
               requestId, centerX, centerY, element)) {
         return true;
+      }
+
+      if (element.tagName != 'HTML' &&
+          element.tagName != 'IMG' &&
+          element.tagName != 'svg' &&
+          firstDefaultElement.length == 0) {
+        firstDefaultElement.push(element);
       }
     }
 
@@ -424,30 +459,6 @@ var getElementHref_ = function(element) {
   return href;
 };
 
-/**
- * Returns the client bounding box of the given element.
- * @param {HTMLElement} element to retrieve the bounding box
- * @return {!Object} An object of the form {
- *                     {@code x} The x coordinate of the bounding box origin.
- *                     {@code y} The y coordinate of the bounding box origin.
- *                     {@code width} The width of the bounding box size.
- *                     {@code height} The height of the bounding box size.
- *                   }.
- */
-var getElementBoundingBox_ = function(element) {
-  var boundingBox = element.getBoundingClientRect();
-  if (boundingBox) {
-    return {
-      x: boundingBox.x,
-      y: boundingBox.y,
-      width: boundingBox.width,
-      height: boundingBox.height
-    };
-  }
-  else {
-    return null;
-  }
-};
 
 /**
  * Checks if the element is effectively transparent and should be skipped when

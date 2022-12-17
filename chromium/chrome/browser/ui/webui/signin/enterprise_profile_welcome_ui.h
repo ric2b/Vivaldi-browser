@@ -44,7 +44,6 @@ class EnterpriseProfileWelcomeUI : public content::WebUIController {
   EnterpriseProfileWelcomeUI& operator=(const EnterpriseProfileWelcomeUI&) =
       delete;
 
-
   // Initializes the EnterpriseProfileWelcomeUI, which will obtain the user's
   // choice about how to set up the profile with the new account.
   // `proceed_callback` will be called when the user performs an action to exit

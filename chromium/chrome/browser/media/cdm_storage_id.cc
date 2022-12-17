@@ -31,6 +31,7 @@
 #endif
 
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+// Vivaldi: Needed to build with signed Widevine
 #if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
 #include "rlz/lib/machine_id.h"
 #else

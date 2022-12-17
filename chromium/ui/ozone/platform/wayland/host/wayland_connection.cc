@@ -51,6 +51,7 @@
 #include "ui/ozone/platform/wayland/host/wayland_window_drag_controller.h"
 #include "ui/ozone/platform/wayland/host/wayland_zaura_shell.h"
 #include "ui/ozone/platform/wayland/host/wayland_zcr_cursor_shapes.h"
+#include "ui/ozone/platform/wayland/host/wayland_zcr_touchpad_haptics.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_linux_dmabuf.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_constraints.h"
 #include "ui/ozone/platform/wayland/host/wayland_zwp_pointer_gestures.h"
@@ -80,12 +81,14 @@ constexpr uint32_t kMaxZXdgShellVersion = 1;
 constexpr uint32_t kMaxWpPresentationVersion = 1;
 constexpr uint32_t kMaxWpViewporterVersion = 1;
 constexpr uint32_t kMaxTextInputManagerVersion = 1;
-constexpr uint32_t kMaxTextInputExtensionVersion = 1;
+constexpr uint32_t kMaxTextInputExtensionVersion = 2;
 constexpr uint32_t kMaxExplicitSyncVersion = 2;
 constexpr uint32_t kMaxAlphaCompositingVersion = 1;
 constexpr uint32_t kMaxXdgDecorationVersion = 1;
 constexpr uint32_t kMaxExtendedDragVersion = 1;
 constexpr uint32_t kMaxXdgOutputManagerVersion = 3;
+constexpr uint32_t kMaxKeyboardShortcutsInhibitManagerVersion = 1;
+constexpr uint32_t kMaxStylusVersion = 2;
 
 int64_t ConvertTimespecToMicros(const struct timespec& ts) {
   // On 32-bit systems, the calculation cannot overflow int64_t.
@@ -182,6 +185,8 @@ bool WaylandConnection::Initialize() {
                               &WaylandZAuraShell::Instantiate);
   RegisterGlobalObjectFactory(WaylandZcrCursorShapes::kInterfaceName,
                               &WaylandZcrCursorShapes::Instantiate);
+  RegisterGlobalObjectFactory(WaylandZcrTouchpadHaptics::kInterfaceName,
+                              &WaylandZcrTouchpadHaptics::Instantiate);
   RegisterGlobalObjectFactory(WaylandZwpLinuxDmabuf::kInterfaceName,
                               &WaylandZwpLinuxDmabuf::Instantiate);
   RegisterGlobalObjectFactory(WaylandZwpPointerConstraints::kInterfaceName,
@@ -426,7 +431,7 @@ void WaylandConnection::Global(void* data,
       &ClockId,
   };
 
-  WaylandConnection* connection = static_cast<WaylandConnection*>(data);
+  auto* connection = static_cast<WaylandConnection*>(data);
 
   auto factory_it = connection->global_object_factories_.find(interface);
   if (factory_it != connection->global_object_factories_.end()) {
@@ -517,6 +522,17 @@ void WaylandConnection::Global(void* data,
     // We will create the keyboard when get them in that case.
     if (connection->seat_)
       connection->seat_->RefreshKeyboard();
+  } else if (!connection->keyboard_shortcuts_inhibit_manager_v1_ &&
+             strcmp(interface, "zwp_keyboard_shortcuts_inhibit_manager_v1") ==
+                 0) {
+    connection->keyboard_shortcuts_inhibit_manager_v1_ =
+        wl::Bind<zwp_keyboard_shortcuts_inhibit_manager_v1>(
+            registry, name,
+            std::min(version, kMaxKeyboardShortcutsInhibitManagerVersion));
+    if (!connection->keyboard_shortcuts_inhibit_manager_v1_) {
+      LOG(ERROR) << "Failed to bind zwp_keyboard_shortcuts_inhibit_manager_v1";
+      return;
+    }
   } else if (!connection->text_input_manager_v1_ &&
              strcmp(interface, "zwp_text_input_manager_v1") == 0) {
     connection->text_input_manager_v1_ = wl::Bind<zwp_text_input_manager_v1>(
@@ -565,6 +581,14 @@ void WaylandConnection::Global(void* data,
     NOTIMPLEMENTED_LOG_ONCE()
         << interface << " is recognized but not yet supported";
     ReportShellUMA(UMALinuxWaylandShell::kZwlrLayerShellV1);
+  } else if (!connection->zcr_stylus_v2_ &&
+             strcmp(interface, "zcr_stylus_v2") == 0) {
+    connection->zcr_stylus_v2_ = wl::Bind<zcr_stylus_v2>(
+        registry, name, std::min(version, kMaxStylusVersion));
+    if (!connection->zcr_stylus_v2_) {
+      LOG(ERROR) << "Failed to bind to zcr_stylus_v2";
+      return;
+    }
   }
 
   connection->available_globals_.emplace_back(interface, version);
@@ -601,6 +625,16 @@ base::TimeTicks WaylandConnection::ConvertPresentationTime(uint32_t tv_sec_hi,
       ConvertTimespecToMicros(presentation_now);
 
   return now + base::Microseconds(delta_us);
+}
+
+const gfx::PointF WaylandConnection::MaybeConvertLocation(
+    const gfx::PointF& location,
+    const WaylandWindow* window) const {
+  if (!surface_submission_in_pixel_coordinates_ || !window)
+    return location;
+  gfx::PointF converted(location);
+  converted.Scale(1.0f / window->window_scale());
+  return converted;
 }
 
 // static

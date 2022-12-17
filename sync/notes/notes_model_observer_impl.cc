@@ -71,6 +71,7 @@ void NotesModelObserverImpl::NotesNodeMoved(vivaldi::NotesModel* model,
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
+  note_tracker_->CheckAllNodesTracked(model);
 }
 
 void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
@@ -111,6 +112,10 @@ void NotesModelObserverImpl::NotesNodeAdded(vivaldi::NotesModel* model,
   // Mark the entity that it needs to be committed.
   note_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
+
+  // Do not check if all nodes are tracked because it's still possible that some
+  // nodes are untracked, e.g. if current node has been just restored and its
+  // children will be added soon.
 }
 
 void NotesModelObserverImpl::OnWillRemoveNotes(vivaldi::NotesModel* model,
@@ -118,7 +123,7 @@ void NotesModelObserverImpl::OnWillRemoveNotes(vivaldi::NotesModel* model,
                                                size_t old_index,
                                                const vivaldi::NoteNode* node) {
   note_tracker_->CheckAllNodesTracked(model);
-  ProcessDelete(parent, node);
+  ProcessDelete(node);
   nudge_for_commit_closure_.Run();
 }
 
@@ -132,10 +137,11 @@ void NotesModelObserverImpl::NotesNodeRemoved(vivaldi::NotesModel* model,
 }
 
 void NotesModelObserverImpl::OnWillRemoveAllNotes(vivaldi::NotesModel* model) {
+  note_tracker_->CheckAllNodesTracked(model);
   const vivaldi::NoteNode* root_node = model->root_node();
   for (const auto& permanent_node : root_node->children()) {
     for (const auto& child : permanent_node->children()) {
-      ProcessDelete(permanent_node.get(), child.get());
+      ProcessDelete(child.get());
     }
     nudge_for_commit_closure_.Run();
   }
@@ -144,6 +150,7 @@ void NotesModelObserverImpl::OnWillRemoveAllNotes(vivaldi::NotesModel* model) {
 void NotesModelObserverImpl::NotesAllNodesRemoved(vivaldi::NotesModel* model) {
   // All the work should have already been done in
   // OnWillRemoveAllUserNotes.
+  note_tracker_->CheckAllNodesTracked(model);
 }
 
 void NotesModelObserverImpl::NotesNodeChanged(vivaldi::NotesModel* model,
@@ -198,15 +205,14 @@ void NotesModelObserverImpl::NotesNodeChildrenReordered(
     const vivaldi::NoteNode* node) {
   // The given node's children got reordered. We need to reorder all the
   // corresponding sync node.
-
-  // TODO(crbug/com/516866): Make sure that single-move case doesn't produce
-  // unnecessary updates. One approach would be something like:
+  // TODO(crbug.com/1321519): children reordering is used to move one bookmark
+  // on Android, it should be either taken into account here or another bridge
+  // interface should be provided. One approach would be something like:
   // 1. Find a subsequence of elements in the beginning of the vector that is
   //    already sorted.
   // 2. The same for the end.
   // 3. If the two overlap, adjust so they don't.
   // 4. Sort the middle, using Between (e.g. recursive implementation).
-
   syncer::UniquePosition position;
   for (const auto& child : node->children()) {
     const SyncedNoteTrackerEntity* entity =
@@ -293,11 +299,11 @@ syncer::UniquePosition NotesModelObserverImpl::ComputePosition(
       suffix);
 }
 
-void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* parent,
-                                           const vivaldi::NoteNode* node) {
+void NotesModelObserverImpl::ProcessDelete(const vivaldi::NoteNode* node) {
   // If not a leaf node, process all children first.
-  for (const auto& child : node->children())
-    ProcessDelete(node, child.get());
+  for (const auto& child : node->children()) {
+    ProcessDelete(child.get());
+  }
   // Process the current node.
   const SyncedNoteTrackerEntity* entity =
       note_tracker_->GetEntityForNoteNode(node);

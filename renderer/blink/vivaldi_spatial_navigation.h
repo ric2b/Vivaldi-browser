@@ -8,6 +8,7 @@
 #include "third_party/blink/renderer/core/core_export.h"
 
 #include "third_party/blink/public/web/web_element.h"
+#include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 
 namespace blink {
 class WebLocalFrame;
@@ -19,6 +20,8 @@ gfx::Rect CORE_EXPORT RevertDeviceScaling(const gfx::Rect& rect, float scale);
 gfx::Rect CORE_EXPORT FindImageElementRect(blink::WebElement element);
 std::string CORE_EXPORT ElementPath(blink::WebElement& element);
 
+blink::ScrollableArea CORE_EXPORT *ScrollableAreaFor(const blink::Node* node);
+void CORE_EXPORT DispatchMouseMoveAt(blink::Element* element);
 std::vector<blink::WebElement> CORE_EXPORT
 GetSpatialNavigationElements(blink::WebLocalFrame* frame, float scale);
 

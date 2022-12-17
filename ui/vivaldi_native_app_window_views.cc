@@ -11,7 +11,6 @@
 #include "base/bind.h"
 #include "base/command_line.h"
 #include "base/stl_util.h"
-#include "browser/vivaldi_browser_finder.h"
 #include "build/build_config.h"
 #include "chrome/app/chrome_command_ids.h"
 #include "chrome/browser/app_mode/app_mode_utils.h"
@@ -30,8 +29,6 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
 #include "content/public/browser/web_contents.h"
-#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
-#include "extensions/api/window/window_private_api.h"
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #include "extensions/browser/image_loader.h"
 #include "extensions/common/draggable_region.h"
@@ -46,6 +43,11 @@
 #include "ui/views/controls/webview/webview.h"
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
+#include "ui/wm/core/easy_resize_window_targeter.h"
+
+#include "browser/vivaldi_browser_finder.h"
+#include "extensions/api/vivaldi_utilities/vivaldi_utilities_api.h"
+#include "extensions/api/window/window_private_api.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_quit_confirmation_dialog.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -236,7 +238,7 @@ void VivaldiNativeAppWindowViews::Init(
 }
 
 void VivaldiNativeAppWindowViews::UpdateEventTargeterWithInset() {
-#if !BUILDFLAG(IS_MAC)
+#if defined(USE_AURA)
   bool is_maximized = IsMaximized();
   aura::Window* window = widget()->GetNativeWindow();
   int resize_inside =

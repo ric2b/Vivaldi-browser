@@ -43,7 +43,7 @@ namespace {
 
 // The duration for the animation which changes the search icon.
 constexpr base::TimeDelta kSearchIconAnimationDuration =
-    base::Milliseconds(250);
+    base::Milliseconds(150);
 
 constexpr int kInnerPadding = 16;
 
@@ -61,7 +61,7 @@ constexpr base::TimeDelta kButtonFadeOutDuration = base::Milliseconds(50);
 constexpr base::TimeDelta kButtonFadeInDelay = base::Milliseconds(50);
 
 // The duration for the button fade in animation.
-constexpr base::TimeDelta kButtonFadeInDuration = base::Milliseconds(200);
+constexpr base::TimeDelta kButtonFadeInDuration = base::Milliseconds(100);
 
 }  // namespace
 
@@ -117,7 +117,8 @@ class SearchBoxImageButton : public views::ImageButton {
     SetPaintToLayer();
     layer()->SetFillsBoundsOpaquely(false);
 
-    SetPreferredSize({kSearchBoxButtonSizeDip, kSearchBoxButtonSizeDip});
+    SetPreferredSize(gfx::Size(kClassicSearchBoxButtonSizeDip,
+                               kClassicSearchBoxButtonSizeDip));
     SetImageHorizontalAlignment(ALIGN_CENTER);
     SetImageVerticalAlignment(ALIGN_MIDDLE);
 
@@ -585,8 +586,6 @@ void SearchBoxViewBase::MaybeFadeButtonIn(SearchBoxImageButton* button) {
   if (!button->layer()->GetAnimator()->is_animating())
     button->layer()->SetOpacity(0.0f);
 
-  button->SetVisible(true);
-  button->set_is_showing(true);
   views::AnimationBuilder()
       .SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
@@ -594,21 +593,29 @@ void SearchBoxViewBase::MaybeFadeButtonIn(SearchBoxImageButton* button) {
       .At(kButtonFadeInDelay)
       .SetDuration(kButtonFadeInDuration)
       .SetOpacity(button->layer(), 1.0f, gfx::Tween::LINEAR);
+
+  // Set the button visible after scheduling the animation because scheduling
+  // the animation might abort a fade-out, which sets the button invisible.
+  button->SetVisible(true);
+  button->set_is_showing(true);
 }
 
 void SearchBoxViewBase::MaybeFadeButtonOut(SearchBoxImageButton* button) {
   if (!button->GetVisible() || !button->is_showing())
     return;
 
-  button->set_is_showing(false);
   views::AnimationBuilder()
       .SetPreemptionStrategy(
           ui::LayerAnimator::IMMEDIATELY_ANIMATE_TO_NEW_TARGET)
       .OnEnded(base::BindOnce(&SearchBoxViewBase::SetVisibilityHidden,
                               weak_factory_.GetWeakPtr(), button))
+      .OnAborted(base::BindOnce(&SearchBoxViewBase::SetVisibilityHidden,
+                                weak_factory_.GetWeakPtr(), button))
       .Once()
       .SetDuration(kButtonFadeOutDuration)
       .SetOpacity(button->layer(), 0.0f, gfx::Tween::LINEAR);
+
+  button->set_is_showing(false);
 }
 
 void SearchBoxViewBase::SetVisibilityHidden(SearchBoxImageButton* button) {

@@ -39,6 +39,14 @@ bool GetIsEnabledWithNoWindows(int action, bool* enabled) {
 #endif
 }
 
+bool GetIsEnabled(int action, bool hasWindow, bool* enabled) {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  return extensions::MenubarAPI::GetIsEnabled(action, hasWindow, enabled);
+#else
+  return false;
+#endif
+}
+
 bool HasActiveWindow() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   return extensions::MenubarAPI::HasActiveWindow();

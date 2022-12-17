@@ -158,7 +158,6 @@ BackendImpl::BackendImpl(
       background_queue_(this, FallbackToInternalIfNull(cache_thread)),
       path_(path),
       block_files_(path),
-      mask_(0),
       user_flags_(0),
       net_log_(net_log) {
   TRACE_EVENT0("disk_cache", "BackendImpl::BackendImpl");
@@ -1542,7 +1541,7 @@ void BackendImpl::RestartCache(bool failure) {
   if (failure) {
     DCHECK(!num_refs_);
     DCHECK(open_entries_.empty());
-    DelayedCacheCleanup(path_);
+    CleanupDirectorySync(path_);
   } else {
     DeleteCache(path_, false);
   }
@@ -2130,7 +2129,22 @@ int BackendImpl::MaxBuffersSize() {
 }
 
 void BackendImpl::FlushForTesting() {
+  if (!g_internal_cache_thread.IsCreated()) {
+    return;
+  }
+
   g_internal_cache_thread.Get().FlushForTesting();
+}
+
+void BackendImpl::FlushAsynchronouslyForTesting(base::OnceClosure callback) {
+  if (!g_internal_cache_thread.IsCreated()) {
+    base::SequencedTaskRunnerHandle::Get()->PostTask(FROM_HERE,
+                                                     std::move(callback));
+    return;
+  }
+
+  InternalCacheThread()->PostTaskAndReply(FROM_HERE, base::BindOnce([]() {}),
+                                          std::move(callback));
 }
 
 }  // namespace disk_cache

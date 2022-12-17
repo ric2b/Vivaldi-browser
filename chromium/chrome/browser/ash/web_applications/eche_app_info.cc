@@ -11,6 +11,7 @@
 #include "ash/webui/grit/ash_eche_bundle_resources.h"
 #include "base/strings/utf_string_conversions.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -37,16 +38,16 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForEcheApp() {
   info->theme_color = 0xFFFFFFFF;
   info->background_color = 0xFFFFFFFF;
   info->display_mode = blink::mojom::DisplayMode::kMinimalUi;
-  info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+  info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
   return info;
 }
 
 EcheSystemAppDelegate::EcheSystemAppDelegate(Profile* profile)
-    : web_app::SystemWebAppDelegate(web_app::SystemAppType::ECHE,
-                                    "Eche",
-                                    GURL("chrome://eche-app"),
-                                    profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::ECHE,
+                                "Eche",
+                                GURL("chrome://eche-app"),
+                                profile) {}
 
 std::unique_ptr<WebAppInstallInfo> EcheSystemAppDelegate::GetWebAppInfo()
     const {

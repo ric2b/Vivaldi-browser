@@ -11,6 +11,7 @@
 
 #include "base/command_line.h"
 #include "base/memory/raw_ptr.h"
+#include "base/notreached.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -39,12 +40,12 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/url_param_filter/cross_otr_observer.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/url_constants.h"
 #include "components/captive_portal/core/buildflags.h"
 #include "components/no_state_prefetch/browser/no_state_prefetch_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/url_param_filter/content/cross_otr_observer.h"
 #include "content/public/browser/browser_url_handler.h"
 #include "content/public/browser/navigation_entry.h"
 #include "content/public/browser/notification_service.h"
@@ -256,13 +257,35 @@ std::pair<Browser*, int> GetBrowserAndTabForDisposition(
       // re-run with NEW_WINDOW.
       return {GetOrCreateBrowser(profile, params.user_gesture), -1};
     case WindowOpenDisposition::NEW_PICTURE_IN_PICTURE:
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
       // Out of paranoia, check that the PictureInPictureV2 feature is actually
       // enabled as a browser feature before allowing the browser to create an
       // always-on-top window.  This helps protect against a compromised
       // renderer. TODO(https://crbug.com/1285144): Remove this check once
       // the feature is no longer experimental.
-      CHECK(base::FeatureList::IsEnabled(features::kPictureInPictureV2));
-      return {params.browser, -1};
+      if (!base::FeatureList::IsEnabled(features::kPictureInPictureV2))
+        return {nullptr, -1};
+
+      // Picture in picture windows may not be opened by other picture in
+      // picture windows.
+      if (params.browser->is_type_picture_in_picture())
+        return {nullptr, -1};
+
+      {
+        Browser::CreateParams browser_params(Browser::TYPE_PICTURE_IN_PICTURE,
+                                             profile, params.user_gesture);
+        browser_params.trusted_source = params.trusted_source;
+        browser_params.initial_bounds = params.window_bounds;
+        browser_params.picture_in_picture_window_title =
+            params.source_contents->GetLastCommittedURL().GetContent();
+        return {Browser::Create(browser_params), -1};
+      }
+#else   // !IS_CHROMEOS_LACROS
+      // Picture in picture 2.0 is turned off in lacros.
+      // See crbug.com/1320453 .
+      NOTIMPLEMENTED_LOG_ONCE() << "TYPE_PICTURE_IN_PICTURE for lacros";
+      return {nullptr, -1};
+#endif  // !IS_CHROMEOS_LACROS
     case WindowOpenDisposition::NEW_POPUP: {
       // Make a new popup window.
       // Coerce app-style if |source| represents an app.
@@ -341,10 +364,10 @@ void NormalizeDisposition(NavigateParams* params) {
       break;
 
     case WindowOpenDisposition::NEW_PICTURE_IN_PICTURE:
-      // Do nothing for a document PiP popup, it's handled via
-      // PictureInPictureController.
-      params->window_action = NavigateParams::NO_ACTION;
+      // Always show a new picture in picture window.
+      params->window_action = NavigateParams::SHOW_WINDOW_INACTIVE;
       break;
+
     case WindowOpenDisposition::NEW_WINDOW:
     case WindowOpenDisposition::NEW_POPUP: {
       // Code that wants to open a new window typically expects it to be shown
@@ -439,10 +462,7 @@ class ScopedBrowserShower {
 
   ~ScopedBrowserShower() {
     BrowserWindow* window = params_->browser->window();
-    if (params_->disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
-      // Don't activate or focus the window, PictureInPictureManager
-      // takes care of that for a DocumentPictureInPictureWindowControllerImpl.
-    } else if (params_->window_action == NavigateParams::SHOW_WINDOW_INACTIVE) {
+    if (params_->window_action == NavigateParams::SHOW_WINDOW_INACTIVE) {
       window->ShowInactive();
     } else if (params_->window_action == NavigateParams::SHOW_WINDOW) {
       window->Show();
@@ -519,7 +539,10 @@ std::unique_ptr<content::WebContents> CreateTargetContents(
   }
 #endif
   url_param_filter::CrossOtrObserver::MaybeCreateForWebContents(
-      target_contents.get(), params);
+      target_contents.get(),
+      params.privacy_sensitivity ==
+          NavigateParams::PrivacySensitivity::CROSS_OTR,
+      params.started_from_context_menu, params.transition);
 
   return target_contents;
 }
@@ -543,7 +566,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
   // Open System Apps in their standalone window if necessary.
   // TODO(crbug.com/1096345): Remove this code after we integrate with intent
   // handling.
-  const absl::optional<web_app::SystemAppType> capturing_system_app_type =
+  const absl::optional<ash::SystemWebAppType> capturing_system_app_type =
       web_app::GetCapturingSystemAppForURL(params->initiating_profile,
                                            params->url);
   if (capturing_system_app_type &&
@@ -763,11 +786,7 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
     params->source_contents->Focus();
   }
 
-  if (params->disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
-    auto* mgr = PictureInPictureWindowManager::GetInstance();
-    mgr->EnterDocumentPictureInPicture(params->source_contents,
-                                       std::move(contents_to_insert));
-  } else if (params->source_contents == contents_to_navigate_or_insert) {
+  if (params->source_contents == contents_to_navigate_or_insert) {
     // The navigation occurred in the source tab.
     params->browser->UpdateUIForNavigationInTab(
         contents_to_navigate_or_insert, params->transition,
@@ -841,6 +860,14 @@ base::WeakPtr<content::NavigationHandle> Navigate(NavigateParams* params) {
       if (should_close_this_tab)
         params->source_contents->Close();
     }
+  }
+
+  // If this is a Picture in Picture window, then notify the pip manager about
+  // it. This enables the opener and pip window to stay connected, so that (for
+  // example), the pip window does not outlive the opener.
+  if (params->disposition == WindowOpenDisposition::NEW_PICTURE_IN_PICTURE) {
+    PictureInPictureWindowManager::GetInstance()->EnterDocumentPictureInPicture(
+        params->source_contents, contents_to_navigate_or_insert);
   }
 
   params->navigated_or_inserted_contents = contents_to_navigate_or_insert;

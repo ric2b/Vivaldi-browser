@@ -66,6 +66,7 @@ struct MenubarMenuParams {
     virtual bool IsBookmarkMenu(int menu_id);
     virtual int GetSelectedMenuId();
     virtual bool IsItemChecked(int id);
+    virtual bool IsItemEnabled(int id);
     virtual bool IsItemPersistent(int id);
     virtual bool GetAccelerator(int id, ui::Accelerator* accelerator);
     virtual bool GetUrl(int id, std::string* url);

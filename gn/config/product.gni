@@ -30,12 +30,10 @@ if (is_vivaldi_polestar) {
   android_vivaldi_manifest_package = "com.vivaldi.browser.sopranos"
 }
 
+_is_snapshot = false
+_is_dev = false
 if (release_kind == "final") {
   is_final_build = true
-  extra_grit_defines = [
-    "-D",
-    "vivaldi_release_final",
-  ]
   VIVALDI_RELEASE_KIND = "vivaldi_final"
   if (is_vivaldi_polestar) {
     # Vivaldi/Polestar
@@ -44,10 +42,7 @@ if (release_kind == "final") {
     android_vivaldi_manifest_package = "com.vivaldi.browser"
   }
 } else if (is_official_build && !force_sopranos_build) {
-  extra_grit_defines = [
-    "-D",
-    "vivaldi_release_snapshot",
-  ]
+  _is_snapshot = true
   VIVALDI_RELEASE_KIND = "vivaldi_snapshot"
   if (is_vivaldi_polestar) {
     # Vivaldi/Polestar
@@ -56,12 +51,18 @@ if (release_kind == "final") {
     android_vivaldi_manifest_package = "com.vivaldi.browser.snapshot"
   }
 } else {
-  extra_grit_defines = [
-    "-D",
-    "vivaldi_release_sopranos",
-  ]
+  _is_dev = true
   VIVALDI_RELEASE_KIND = "vivaldi_sopranos"
 }
+  extra_grit_defines = [
+    "-D",
+    "vivaldi_release_final=${is_final_build}",
+    "-D",
+    "vivaldi_release_snapshot=${_is_snapshot}",
+    "-D",
+    "vivaldi_release_sopranos=${_is_dev}",
+  ]
+
 if (is_vivaldi_automotive && !is_vivaldi_polestar) {
   android_vivaldi_manifest_package += ".automotive"
   if (is_vivaldi_renault) {

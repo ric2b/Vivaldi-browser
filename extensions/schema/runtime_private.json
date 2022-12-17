@@ -164,14 +164,8 @@
       {
         "name": "isGuestSession",
         "type": "function",
-        "description": "Checks whether the profile in the current window is running as a guest session or not.",
-        "parameters": [
-          {
-            "type": "number",
-            "name": "id",
-            "description": "Id of window to retrieve state from."
-          }
-        ],
+        "description": "Checks whether the current profile is running as a guest session or not.",
+        "parameters": [],
         "returns_async": {
           "name": "callback",
           "parameters": [

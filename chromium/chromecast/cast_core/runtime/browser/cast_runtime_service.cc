@@ -7,29 +7,21 @@
 #include "base/command_line.h"
 #include "base/process/process.h"
 #include "chromecast/browser/cast_browser_process.h"
+#include "chromecast/cast_core/cast_core_switches.h"
 #include "chromecast/metrics/cast_event_builder_simple.h"
 
 namespace chromecast {
-namespace {
-
-const char kCastCoreRuntimeIdSwitch[] = "cast-core-runtime-id";
-const char kRuntimeServicePathSwitch[] = "runtime-service-path";
-
-}  // namespace
 
 CastRuntimeService::CastRuntimeService(
     CastWebService* web_service,
     NetworkContextGetter network_context_getter,
     media::VideoPlaneController* video_plane_controller,
     RuntimeApplicationWatcher* application_watcher)
-    : video_plane_controller_(video_plane_controller),
-      app_dispatcher_(web_service,
+    : app_dispatcher_(web_service,
                       this,
                       std::move(network_context_getter),
-                      video_plane_controller_,
-                      application_watcher) {
-  DCHECK(video_plane_controller_);
-}
+                      video_plane_controller,
+                      application_watcher) {}
 
 CastRuntimeService::~CastRuntimeService() = default;
 
@@ -40,9 +32,9 @@ void CastRuntimeService::FinalizeInternal() {}
 void CastRuntimeService::StartInternal() {
   auto* command_line = base::CommandLine::ForCurrentProcess();
   std::string runtime_id =
-      command_line->GetSwitchValueASCII(kCastCoreRuntimeIdSwitch);
+      command_line->GetSwitchValueASCII(cast::core::kCastCoreRuntimeIdSwitch);
   std::string runtime_service_path =
-      command_line->GetSwitchValueASCII(kRuntimeServicePathSwitch);
+      command_line->GetSwitchValueASCII(cast::core::kRuntimeServicePathSwitch);
   if (!app_dispatcher_.Start(runtime_id, runtime_service_path)) {
     base::Process::TerminateCurrentProcessImmediately(1);
   }

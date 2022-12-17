@@ -6,6 +6,7 @@
 #include <string>
 #include <utility>
 
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -114,16 +115,21 @@ void It2MeConfirmationDialogChromeOS::ShowConfirmationNotification(
           FormatMessage(remote_user_email, style_), u"", GURL(),
           message_center::NotifierId(
               message_center::NotifierType::SYSTEM_COMPONENT,
-              kConfirmationNotifierId),
+              kConfirmationNotifierId,
+              ash::NotificationCatalogName::kIt2MeConfirmation),
           data,
           base::MakeRefCounted<message_center::HandleNotificationClickDelegate>(
               base::BindRepeating(&It2MeConfirmationDialogChromeOS::
                                       OnConfirmationNotificationResult,
                                   base::Unretained(this))),
-          GetIcon(), message_center::SystemNotificationWarningLevel::NORMAL);
+          GetIcon(),
+          // Warning level must be set to CRITICAL_WARNING to ensure this
+          // notification is always shown, even when the user enabled
+          // do-not-disturb mode.
+          message_center::SystemNotificationWarningLevel::CRITICAL_WARNING);
 
-  // Set system priority so the notification is always shown (even in
-  // do-not-disturb mode) and it will never time out.
+  // Set system priority so the notification is always shown and it will never
+  // time out.
   notification->SetSystemPriority();
   message_center::MessageCenter::Get()->AddNotification(
       std::move(notification));

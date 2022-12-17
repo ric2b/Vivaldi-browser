@@ -55,7 +55,7 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
     scrollable_strip_layer_->AddChild(new_tab_button_);
   }
 
-  tab_strip_layer_->SetBackgroundColor(SK_ColorBLACK);
+  tab_strip_layer_->SetBackgroundColor(SkColors::kBlack);
   tab_strip_layer_->SetIsDrawable(true);
   tab_strip_layer_->AddChild(scrollable_strip_layer_);
 
@@ -75,6 +75,9 @@ TabStripSceneLayer::TabStripSceneLayer(JNIEnv* env,
 
   // Vivaldi
   use_light_foreground_on_background = false;
+  loading_text_ = cc::UIResourceLayer::Create();
+  loading_text_->SetIsDrawable(true);
+  tab_strip_layer_->AddChild(loading_text_);
 }
 
 TabStripSceneLayer::~TabStripSceneLayer() {
@@ -195,7 +198,8 @@ void TabStripSceneLayer::UpdateStripScrim(JNIEnv* env,
   }
 
   scrim_layer_->SetIsDrawable(true);
-  scrim_layer_->SetBackgroundColor(color);
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
+  scrim_layer_->SetBackgroundColor(SkColor4f::FromColor(color));
   scrim_layer_->SetBounds(gfx::Size(width, height));
   scrim_layer_->SetPosition(gfx::PointF(x, y));
   scrim_layer_->SetOpacity(alpha);
@@ -209,6 +213,7 @@ void TabStripSceneLayer::UpdateNewTabButton(
     jfloat y,
     jfloat width,
     jfloat height,
+    jfloat touch_target_offset,
     jboolean visible,
     jint tint,
     jfloat button_alpha,
@@ -227,6 +232,10 @@ void TabStripSceneLayer::UpdateNewTabButton(
   new_tab_button_->SetUIResourceId(button_resource->ui_resource()->id());
   float left_offset = (width - button_resource->size().width()) / 2;
   float top_offset = (height - button_resource->size().height()) / 2;
+  // The touch target for the new tab button is skewed towards the end of the
+  // strip. This ensures that the view itself is correctly aligned without
+  // adjusting the touch target.
+  left_offset += touch_target_offset;
   new_tab_button_->SetPosition(gfx::PointF(x + left_offset, y + top_offset));
   new_tab_button_->SetBounds(button_resource->size());
   new_tab_button_->SetHideLayerAndSubtree(!visible);
@@ -285,7 +294,7 @@ void TabStripSceneLayer::UpdateTabStripLeftFade(
   // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
   if (vivaldi::IsVivaldiRunning()) {
     fade_resource = resource_manager->GetStaticResourceWithTint(
-        resource_id, tab_strip_layer_->background_color());
+        resource_id, tab_strip_layer_->background_color().toSkColor());
   }
   left_fade_->SetUIResourceId(fade_resource->ui_resource()->id());
 
@@ -332,7 +341,7 @@ void TabStripSceneLayer::UpdateTabStripRightFade(
   // Note (david@vivaldi.com): In Vivaldi we tint the fade resource.
   if (vivaldi::IsVivaldiRunning()) {
     fade_resource = resource_manager->GetStaticResourceWithTint(
-        resource_id, tab_strip_layer_->background_color());
+        resource_id, tab_strip_layer_->background_color().toSkColor());
   }
   right_fade_->SetUIResourceId(fade_resource->ui_resource()->id());
 
@@ -432,11 +441,10 @@ void TabStripSceneLayer::SetTabStripBackgroundColor(
     const JavaParamRef<jobject>& jobj,
     jint java_color,
     jboolean use_light) {
-  absl::optional<SkColor> color = ui::JavaColorToOptionalSkColor(java_color);
-  if (color) {
-    tab_strip_layer_->SetBackgroundColor(*color);
-    use_light_foreground_on_background = use_light;
-  }
+  SkColor4f color =
+      SkColor4f::FromColor(ui::JavaColorToOptionalSkColor(java_color).value());
+  tab_strip_layer_->SetBackgroundColor(color);
+  use_light_foreground_on_background = use_light;
 }
 
 // Vivaldi
@@ -445,6 +453,29 @@ void TabStripSceneLayer::SetIsStackStrip(
       const base::android::JavaParamRef<jobject>& jobj,
       jboolean jis_stack_strip){
   is_stack_strip_ = jis_stack_strip;
+}
+
+// Vivaldi
+void TabStripSceneLayer::UpdateLoadingState(
+    JNIEnv* env,
+    const base::android::JavaParamRef<jobject>& jobj,
+    jint loading_text_resource_id,
+    const base::android::JavaParamRef<jobject>& jresource_manager,
+    jboolean should_show_loading) {
+  ui::ResourceManager* resource_manager =
+      ui::ResourceManagerImpl::FromJavaObject(jresource_manager);
+  ui::Resource* title_resource = resource_manager->GetResource(
+      ui::ANDROID_RESOURCE_TYPE_DYNAMIC_BITMAP, loading_text_resource_id);
+  if (title_resource) {
+    loading_text_->SetUIResourceId(title_resource->ui_resource()->id());
+    loading_text_->SetBounds(title_resource->size());
+    int pos_x = tab_strip_layer_->bounds().width() / 2;
+    int pos_y = tab_strip_layer_->bounds().height() / 2;
+    loading_text_->SetPosition(
+        gfx::PointF(pos_x - (loading_text_->bounds().width() / 2),
+                    pos_y - loading_text_->bounds().height() / 2));
+    loading_text_->SetHideLayerAndSubtree(!should_show_loading);
+  }
 }
 
 static jlong JNI_TabStripSceneLayer_Init(JNIEnv* env,

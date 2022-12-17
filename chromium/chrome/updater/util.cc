@@ -62,9 +62,9 @@ struct Charmap {
 
 // Everything except alphanumerics and !'()*-._~
 // See RFC 2396 for the list of reserved characters.
-static const Charmap kQueryCharmap = {{0xffffffffL, 0xfc00987dL, 0x78000001L,
-                                       0xb8000001L, 0xffffffffL, 0xffffffffL,
-                                       0xffffffffL, 0xffffffffL}};
+constexpr Charmap kQueryCharmap = {{0xffffffffL, 0xfc00987dL, 0x78000001L,
+                                    0xb8000001L, 0xffffffffL, 0xffffffffL,
+                                    0xffffffffL, 0xffffffffL}};
 
 // Given text to escape and a Charmap defining which values to escape,
 // return an escaped string.  If use_plus is true, spaces are converted
@@ -207,11 +207,6 @@ absl::optional<tagging::AppArgs> GetAppArgs(const std::string& app_id) {
       });
   return it != std::end(apps_args) ? absl::optional<tagging::AppArgs>(*it)
                                    : absl::nullopt;
-}
-
-std::string GetAPFromAppArgs(const std::string& app_id) {
-  const absl::optional<tagging::AppArgs> app_args = GetAppArgs(app_id);
-  return app_args ? app_args->ap : std::string();
 }
 
 std::string GetInstallDataIndexFromAppArgs(const std::string& app_id) {

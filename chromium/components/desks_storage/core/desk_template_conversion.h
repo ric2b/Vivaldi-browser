@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_DESKS_STORAGE_CORE_DESK_TEMPLATE_CONVERSION_H_
 #define COMPONENTS_DESKS_STORAGE_CORE_DESK_TEMPLATE_CONVERSION_H_
 
+#include "ash/public/cpp/desk_template.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "components/services/app_service/public/cpp/app_types.h"
@@ -31,6 +32,10 @@ using SyncWindowOpenDisposition =
     sync_pb::WorkspaceDeskSpecifics_WindowOpenDisposition;
 using SyncLaunchContainer = sync_pb::WorkspaceDeskSpecifics_LaunchContainer;
 
+// Converts the TabGroupColorId passed into its string equivalent
+// as defined in the k constants above.
+std::string ConvertTabGroupColorIdToString(tab_groups::TabGroupColorId color);
+
 // Converts a time field from sync protobufs to a time object.
 base::Time ProtoTimeToTime(int64_t proto_time);
 
@@ -38,11 +43,11 @@ base::Time ProtoTimeToTime(int64_t proto_time);
 // (Microseconds since the Windows epoch).
 int64_t TimeToProtoTime(const base::Time& t);
 
-// Converts a JSON desk template to an ash desk template.
-// The returned desk template will have source set to
-// |ash::DeskTemplateSource::kPolicy|.
-std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromPolicy(
-    const base::Value& policy_json);
+// Converts a JSON desk template to an ash desk template. The returned desk
+// template will have source set to `source`.
+std::unique_ptr<ash::DeskTemplate> ParseDeskTemplateFromSource(
+    const base::Value& policy_json,
+    ash::DeskTemplateSource source);
 
 base::Value SerializeDeskTemplateAsPolicy(
     const ash::DeskTemplate* desk_template,

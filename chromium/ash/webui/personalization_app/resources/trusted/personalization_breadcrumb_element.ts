@@ -15,8 +15,8 @@ import 'chrome://resources/cr_elements/icons.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
-import '../common/styles.js';
-import './cros_button_style.js';
+import '../common/common_style.css.js';
+import './cros_button_style.css.js';
 
 import {IronA11yKeysElement} from 'chrome://resources/polymer/v3_0/iron-a11y-keys/iron-a11y-keys.js';
 import {IronSelectorElement} from 'chrome://resources/polymer/v3_0/iron-selector/iron-selector.js';
@@ -47,6 +47,7 @@ export function stringToTopicSource(x: string): TopicSource|null {
 
 export interface PersonalizationBreadcrumb {
   $: {
+    container: HTMLElement,
     keys: IronA11yKeysElement,
     selector: IronSelectorElement,
   };
@@ -160,24 +161,24 @@ export class PersonalizationBreadcrumb extends WithPersonalizationStore {
   }
 
   /**
-   * Returns the class of the breadcrumb. The last breadcrumb will not be
-   * selectable.
+   * Returns the aria-current status of the breadcrumb. The last breadcrumb is
+   * considered the "current" breadcrumb representing the active page.
    */
-  private computeBreadcrumbClass_(index: number, breadcrumbs: string[]):
-      string {
-    if (index < breadcrumbs.length - 1) {
-      return 'breadcrumb selectable';
+  private getBreadcrumbAriaCurrent_(index: number, breadcrumbs: string[]):
+      'page'|'false' {
+    if (index === (breadcrumbs.length - 1)) {
+      return 'page';
     }
-    return 'breadcrumb';
+    return 'false';
   }
 
   private computeBreadcrumbs_(): string[] {
     const breadcrumbs = [];
     switch (this.path) {
-      case Paths.Collections:
+      case Paths.COLLECTIONS:
         breadcrumbs.push(this.i18n('wallpaperLabel'));
         break;
-      case Paths.CollectionImages:
+      case Paths.COLLECTION_IMAGES:
         breadcrumbs.push(this.i18n('wallpaperLabel'));
         if (isNonEmptyArray(this.collections_)) {
           const collection = this.collections_.find(
@@ -187,7 +188,7 @@ export class PersonalizationBreadcrumb extends WithPersonalizationStore {
           }
         }
         break;
-      case Paths.GooglePhotosCollection:
+      case Paths.GOOGLE_PHOTOS_COLLECTION:
         breadcrumbs.push(this.i18n('wallpaperLabel'));
         breadcrumbs.push(this.i18n('googlePhotosLabel'));
         if (isNonEmptyString(this.googlePhotosAlbumId) &&
@@ -200,17 +201,17 @@ export class PersonalizationBreadcrumb extends WithPersonalizationStore {
           }
         }
         break;
-      case Paths.LocalCollection:
+      case Paths.LOCAL_COLLECTION:
         breadcrumbs.push(this.i18n('wallpaperLabel'));
         breadcrumbs.push(this.i18n('myImagesLabel'));
         break;
-      case Paths.User:
+      case Paths.USER:
         breadcrumbs.push(this.i18n('avatarLabel'));
         break;
-      case Paths.Ambient:
+      case Paths.AMBIENT:
         breadcrumbs.push(this.i18n('screensaverLabel'));
         break;
-      case Paths.AmbientAlbums:
+      case Paths.AMBIENT_ALBUMS:
         breadcrumbs.push(this.i18n('screensaverLabel'));
         const topicSourceVal = stringToTopicSource(this.topicSource);
         if (topicSourceVal === TopicSource.kGooglePhotos) {
@@ -227,7 +228,7 @@ export class PersonalizationBreadcrumb extends WithPersonalizationStore {
 
   private computeShowBackButton_(): boolean {
     // Do not show the back button if hub is enabled.
-    return !isPersonalizationHubEnabled() && this.path !== Paths.Collections;
+    return !isPersonalizationHubEnabled() && this.path !== Paths.COLLECTIONS;
   }
 
   private showHomeButton_(): boolean {
@@ -264,7 +265,7 @@ export class PersonalizationBreadcrumb extends WithPersonalizationStore {
   }
 
   private onHomeIconClick_() {
-    PersonalizationRouter.instance().goToRoute(Paths.Root);
+    PersonalizationRouter.instance().goToRoute(Paths.ROOT);
   }
 }
 

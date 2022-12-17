@@ -10,7 +10,7 @@
     // Increment this if you change the data in ways that mean users with
     // existing data should get a new version. Otherwise, existing data may
     // continue to be used and updates made here will not always appear.
-    "kCurrentDataVersion": 10000135
+    "kCurrentDataVersion": 10000137
   },
 
   // The following engines are included in country lists and are added to the
@@ -20,8 +20,9 @@
       "name": "Google",
       "keyword": "g",
       "favicon_url": "https://www.google.com/images/branding/product/ico/googleg_lodp.ico",
-      "search_url": "https://www.google.com/search?q={searchTerms}&{google:originalQueryForSuggestion}{google:prefetchSource}{google:sourceId}{google:contextualSearchVersion}ie={inputEncoding}",
+      "search_url": "{google:baseURL}search?q={searchTerms}&{google:originalQueryForSuggestion}{google:prefetchSource}{google:sourceId}{google:contextualSearchVersion}ie={inputEncoding}",
       "image_url": "https://www.google.com/searchbyimage/upload",
+      "contextual_search_url": "{google:baseURL}_/contextualsearch?{google:contextualSearchVersion}{google:contextualSearchContextData}",
       "image_url_post_params": "encoded_image={google:imageThumbnail},image_url={google:imageURL},sbisrc={google:imageSearchSource},original_width={google:imageOriginalWidth},original_height={google:imageOriginalHeight}",
       "alternate_urls": [
         "https://www.google.com/#q={searchTerms}",
@@ -577,9 +578,9 @@
     "wikipedia_se": {
       "name": "Wikipedia",
       "keyword": "w",
-      "search_url": "https://se.wikipedia.org/wiki/Special:Search?search={searchTerms}",
-      "suggest_url": "https://se.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
-      "favicon_url": "https://se.wikipedia.org/static/favicon/wikipedia.ico",
+      "search_url": "https://sv.wikipedia.org/wiki/Special:Search?search={searchTerms}",
+      "suggest_url": "https://sv.wikipedia.org/w/api.php?action=opensearch&search={searchTerms}",
+      "favicon_url": "https://sv.wikipedia.org/static/favicon/wikipedia.ico",
       "type": "VIVALDI_SEARCH_ENGINE_WIKIPEDIA",
       "id": 6
     },

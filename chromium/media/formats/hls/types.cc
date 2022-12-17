@@ -6,9 +6,11 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 
 #include "base/no_destructor.h"
 #include "base/strings/string_number_conversions.h"
+#include "media/formats/hls/parse_status.h"
 #include "media/formats/hls/source_string.h"
 #include "third_party/re2/src/re2/re2.h"
 
@@ -199,6 +201,76 @@ ParseStatus::Or<SignedDecimalFloatingPoint> ParseSignedDecimalFloatingPoint(
   return result;
 }
 
+ParseStatus::Or<DecimalResolution> DecimalResolution::Parse(
+    SourceString source_str) {
+  // decimal-resolution values are in the format: DecimalInteger 'x'
+  // DecimalInteger
+  const auto x_index = source_str.Str().find_first_of('x');
+  if (x_index == base::StringPiece::npos) {
+    return ParseStatusCode::kFailedToParseDecimalResolution;
+  }
+
+  // Extract width and height strings
+  const auto width_str = source_str.Consume(x_index);
+  source_str.Consume(1);
+  const auto height_str = source_str;
+
+  auto width = ParseDecimalInteger(width_str);
+  auto height = ParseDecimalInteger(height_str);
+  for (auto* x : {&width, &height}) {
+    if (x->has_error()) {
+      return ParseStatus(ParseStatusCode::kFailedToParseDecimalResolution)
+          .AddCause(std::move(*x).error());
+    }
+  }
+
+  return DecimalResolution{.width = std::move(width).value(),
+                           .height = std::move(height).value()};
+}
+
+ParseStatus::Or<ByteRangeExpression> ByteRangeExpression::Parse(
+    SourceString source_str) {
+  // If this ByteRange has an offset, it will be separated from the length by
+  // '@'.
+  const auto at_index = source_str.Str().find_first_of('@');
+  const auto length_str = source_str.Consume(at_index);
+  auto length = ParseDecimalInteger(length_str);
+  if (length.has_error()) {
+    return ParseStatus(ParseStatusCode::kFailedToParseByteRange)
+        .AddCause(std::move(length).error());
+  }
+
+  // If the offset was present, try to parse it
+  absl::optional<types::DecimalInteger> offset;
+  if (at_index != base::StringPiece::npos) {
+    source_str.Consume(1);
+    auto offset_result = ParseDecimalInteger(source_str);
+    if (offset_result.has_error()) {
+      return ParseStatus(ParseStatusCode::kFailedToParseByteRange)
+          .AddCause(std::move(offset_result).error());
+    }
+
+    offset = std::move(offset_result).value();
+  }
+
+  return ByteRangeExpression{.length = std::move(length).value(),
+                             .offset = offset};
+}
+
+absl::optional<ByteRange> ByteRange::Validate(DecimalInteger length,
+                                              DecimalInteger offset) {
+  if (length == 0) {
+    return absl::nullopt;
+  }
+
+  // Ensure that `length+offset` won't overflow `DecimalInteger`
+  if (std::numeric_limits<DecimalInteger>::max() - offset < length) {
+    return absl::nullopt;
+  }
+
+  return ByteRange(length, offset);
+}
+
 ParseStatus::Or<base::StringPiece> ParseQuotedString(
     SourceString source_str,
     const VariableDictionary& variable_dict,
@@ -280,12 +352,6 @@ AttributeMap::AttributeMap(base::span<Item> sorted_items)
   DCHECK(
       std::is_sorted(items_.begin(), items_.end(), AttributeMapComparator()));
 }
-
-AttributeMap::~AttributeMap() = default;
-AttributeMap::AttributeMap(const AttributeMap&) = default;
-AttributeMap::AttributeMap(AttributeMap&&) = default;
-AttributeMap& AttributeMap::operator=(const AttributeMap&) = default;
-AttributeMap& AttributeMap::operator=(AttributeMap&&) = default;
 
 ParseStatus::Or<AttributeListIterator::Item> AttributeMap::Fill(
     AttributeListIterator* iter) {

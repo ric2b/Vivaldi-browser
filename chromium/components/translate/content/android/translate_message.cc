@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "base/android/jni_android.h"
@@ -41,7 +42,7 @@ class BridgeImpl : public TranslateMessage::Bridge {
  public:
   ~BridgeImpl() override;
 
-  void CreateTranslateMessage(JNIEnv* env,
+  bool CreateTranslateMessage(JNIEnv* env,
                               content::WebContents* web_contents,
                               TranslateMessage* native_translate_message,
                               jint dismissal_duration_seconds) override {
@@ -50,6 +51,7 @@ class BridgeImpl : public TranslateMessage::Bridge {
         env, web_contents->GetJavaWebContents(),
         reinterpret_cast<intptr_t>(native_translate_message),
         dismissal_duration_seconds);
+    return !(!java_translate_message_);
   }
 
   void ShowTranslateError(JNIEnv* env,
@@ -58,34 +60,14 @@ class BridgeImpl : public TranslateMessage::Bridge {
         env, web_contents->GetJavaWebContents());
   }
 
-  void ShowBeforeTranslateMessage(
+  void ShowMessage(
       JNIEnv* env,
-      base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-      base::android::ScopedJavaLocalRef<jstring> target_language_display_name)
-      override {
-    Java_TranslateMessage_showBeforeTranslateMessage(
-        env, java_translate_message_, std::move(source_language_display_name),
-        std::move(target_language_display_name));
-  }
-
-  void ShowTranslationInProgressMessage(
-      JNIEnv* env,
-      base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-      base::android::ScopedJavaLocalRef<jstring> target_language_display_name)
-      override {
-    Java_TranslateMessage_showTranslationInProgressMessage(
-        env, java_translate_message_, std::move(source_language_display_name),
-        std::move(target_language_display_name));
-  }
-
-  void ShowAfterTranslateMessage(
-      JNIEnv* env,
-      base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-      base::android::ScopedJavaLocalRef<jstring> target_language_display_name)
-      override {
-    Java_TranslateMessage_showAfterTranslateMessage(
-        env, java_translate_message_, std::move(source_language_display_name),
-        std::move(target_language_display_name));
+      base::android::ScopedJavaLocalRef<jstring> title,
+      base::android::ScopedJavaLocalRef<jstring> description,
+      base::android::ScopedJavaLocalRef<jstring> primary_button_text) override {
+    Java_TranslateMessage_showMessage(env, java_translate_message_,
+                                      std::move(title), std::move(description),
+                                      std::move(primary_button_text));
   }
 
   base::android::ScopedJavaLocalRef<jobjectArray> ConstructMenuItemArray(
@@ -169,10 +151,15 @@ void TranslateMessage::ShowTranslateStep(TranslateStep step,
   JNIEnv* env = base::android::AttachCurrentThread();
 
   if (!ui_delegate_) {
+    if (!bridge_->CreateTranslateMessage(env, web_contents_, this,
+                                         GetDismissalDurationSeconds())) {
+      // The |bridge_| failed to create the Java TranslateMessage, such as when
+      // the activity is being destroyed, so there is no message to show.
+      return;
+    }
+
     ui_delegate_ = std::make_unique<TranslateUIDelegate>(
         translate_manager_, source_language, target_language);
-    bridge_->CreateTranslateMessage(env, web_contents_, this,
-                                    GetDismissalDurationSeconds());
   }
 
   if (ui_delegate_->GetSourceLanguageCode() != source_language)
@@ -192,36 +179,50 @@ void TranslateMessage::ShowTranslateStep(TranslateStep step,
   }
   translate_step_ = step;
 
-  auto source_language_display_name = base::android::ConvertUTF16ToJavaString(
-      env,
-      ui_delegate_->GetLanguageNameAt(ui_delegate_->GetSourceLanguageIndex()));
-  auto target_language_display_name = base::android::ConvertUTF16ToJavaString(
-      env,
-      ui_delegate_->GetLanguageNameAt(ui_delegate_->GetTargetLanguageIndex()));
+  base::android::ScopedJavaLocalRef<jstring> title;
+  base::android::ScopedJavaLocalRef<jstring> primary_button_text;
 
   switch (translate_step_) {
     case TRANSLATE_STEP_BEFORE_TRANSLATE:
-      bridge_->ShowBeforeTranslateMessage(
-          env, std::move(source_language_display_name),
-          std::move(target_language_display_name));
+      title = base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringUTF16(
+                   IDS_TRANSLATE_MESSAGE_BEFORE_TRANSLATE_TITLE));
+      primary_button_text = base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringUTF16(IDS_TRANSLATE_BUTTON));
       break;
 
     case TRANSLATE_STEP_TRANSLATING:
-      bridge_->ShowTranslationInProgressMessage(
-          env, std::move(source_language_display_name),
-          std::move(target_language_display_name));
+      title = base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringUTF16(
+                   IDS_TRANSLATE_MESSAGE_BEFORE_TRANSLATE_TITLE));
+      primary_button_text = nullptr;
       break;
 
     case TRANSLATE_STEP_AFTER_TRANSLATE:
-      bridge_->ShowAfterTranslateMessage(
-          env, std::move(source_language_display_name),
-          std::move(target_language_display_name));
+      title = base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringUTF16(
+                   IDS_TRANSLATE_MESSAGE_AFTER_TRANSLATE_TITLE));
+      primary_button_text = base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringUTF16(IDS_TRANSLATE_MESSAGE_UNDO_BUTTON));
       break;
 
     default:
       NOTREACHED();
       break;
   }
+
+  const std::u16string& source_language_display_name =
+      ui_delegate_->GetLanguageNameAt(ui_delegate_->GetSourceLanguageIndex());
+  const std::u16string& target_language_display_name =
+      ui_delegate_->GetLanguageNameAt(ui_delegate_->GetTargetLanguageIndex());
+  base::android::ScopedJavaLocalRef<jstring> description =
+      base::android::ConvertUTF16ToJavaString(
+          env, l10n_util::GetStringFUTF16(IDS_TRANSLATE_MESSAGE_DESCRIPTION,
+                                          source_language_display_name,
+                                          target_language_display_name));
+
+  bridge_->ShowMessage(env, std::move(title), std::move(description),
+                       std::move(primary_button_text));
 }
 
 void TranslateMessage::HandlePrimaryAction(JNIEnv* env) {

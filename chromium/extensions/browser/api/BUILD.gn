@@ -98,10 +98,10 @@ source_set("api") {
 
     deps += [
       "//chromeos",
+      "//chromeos/ash/components/dbus/media_analytics",
+      "//chromeos/ash/components/dbus/media_analytics:media_perception_proto",
       "//chromeos/ash/components/dbus/upstart",
       "//chromeos/dbus",
-      "//chromeos/dbus/media_analytics",
-      "//chromeos/dbus/media_analytics:media_perception_proto",
       "//chromeos/login/login_state",
       "//chromeos/services/media_perception/public/mojom",
       "//chromeos/services/media_perception/public/mojom:mojom_js_data_deps",
@@ -156,7 +156,6 @@ group("api_implementations") {
       "//extensions/browser/api/cec_private",
       "//extensions/browser/api/diagnostics",
       "//extensions/browser/api/virtual_keyboard",
-      "//extensions/browser/api/vpn_provider",
       "//extensions/browser/api/webcam_private",
     ]
   }

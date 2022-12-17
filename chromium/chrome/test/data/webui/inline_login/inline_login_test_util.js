@@ -2,11 +2,11 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import {AuthMode, AuthParams} from 'chrome://chrome-signin/gaia_auth_host/authenticator.m.js';
 import {InlineLoginBrowserProxy} from 'chrome://chrome-signin/inline_login_browser_proxy.js';
 import {NativeEventTarget as EventTarget} from 'chrome://resources/js/cr/event_target.m.js';
-import {AuthMode, AuthParams} from 'chrome://chrome-signin/gaia_auth_host/authenticator.m.js';
 // <if expr="chromeos_ash">
-import {AccountAdditionOptions} from 'chrome://chrome-signin/inline_login_util.js';
+import {AccountAdditionOptions} from 'chrome://chrome-signin/arc_account_picker/arc_util.js';
 // </if>
 import {TestBrowserProxy} from '../test_browser_proxy.js';
 
@@ -29,12 +29,14 @@ export const fakeAuthExtensionDataWithEmail = {
 };
 
 /*
- * Fake data used for `show-signin-blocked-by-policy-page` web listener in
+ * Fake data used for `show-signin-error-page` web listener in
  * chrome/browser/resources/inline_login/inline_login_app.js.
  */
 export const fakeSigninBlockedByPolicyData = {
   email: 'john.doe@example.com',
   hostedDomain: 'example.com',
+  deviceType: 'Chromebook',
+  signinBlockedByPolicy: true,
 };
 
 export class TestAuthenticator extends EventTarget {

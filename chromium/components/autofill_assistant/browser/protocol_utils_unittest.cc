@@ -230,11 +230,12 @@ TEST_F(ProtocolUtilsTest, ParseActionsParseError) {
   bool unused;
   std::vector<std::unique_ptr<Action>> unused_actions;
   std::vector<std::unique_ptr<Script>> unused_scripts;
+  std::string unused_js_flow_library;
   EXPECT_FALSE(ProtocolUtils::ParseActions(
       /* delegate= */ nullptr, /* response= */ "invalid", /* run_id= */ nullptr,
-      /* global_payload= */ nullptr,
-      /* script_payload= */ nullptr, &unused_actions, &unused_scripts,
-      /* should_update_scripts= */ &unused));
+      /* return_global_payload= */ nullptr,
+      /* return_script_payload= */ nullptr, &unused_actions, &unused_scripts,
+      /* should_update_scripts= */ &unused, &unused_js_flow_library));
 }
 
 TEST_F(ProtocolUtilsTest, ParseActionParseError) {
@@ -258,10 +259,11 @@ TEST_F(ProtocolUtilsTest, ParseActionsValid) {
   bool should_update_scripts = true;
   std::vector<std::unique_ptr<Action>> actions;
   std::vector<std::unique_ptr<Script>> scripts;
+  std::string unused_js_flow_library;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
       nullptr, proto_str, &run_id, &global_payload, &script_payload, &actions,
-      &scripts, &should_update_scripts));
+      &scripts, &should_update_scripts, &unused_js_flow_library));
   EXPECT_EQ(1u, run_id);
   EXPECT_EQ("global_payload", global_payload);
   EXPECT_EQ("script_payload", script_payload);
@@ -288,11 +290,12 @@ TEST_F(ProtocolUtilsTest, ParseActionsEmptyUpdateScriptList) {
   bool should_update_scripts = false;
   std::vector<std::unique_ptr<Script>> scripts;
   std::vector<std::unique_ptr<Action>> unused_actions;
+  std::string unused_js_flow_library;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
       nullptr, proto_str, /* run_id= */ nullptr, /* global_payload= */ nullptr,
       /* script_payload */ nullptr, &unused_actions, &scripts,
-      &should_update_scripts));
+      &should_update_scripts, &unused_js_flow_library));
   EXPECT_TRUE(should_update_scripts);
   EXPECT_TRUE(scripts.empty());
 }
@@ -313,11 +316,13 @@ TEST_F(ProtocolUtilsTest, ParseActionsUpdateScriptListFullFeatured) {
   bool should_update_scripts = false;
   std::vector<std::unique_ptr<Script>> scripts;
   std::vector<std::unique_ptr<Action>> unused_actions;
+  std::string unused_js_flow_library;
 
   EXPECT_TRUE(ProtocolUtils::ParseActions(
-      nullptr, proto_str, /* run_id= */ nullptr, /* global_payload= */ nullptr,
-      /* script_payload= */ nullptr, &unused_actions, &scripts,
-      &should_update_scripts));
+      nullptr, proto_str, /* run_id= */ nullptr,
+      /* return_global_payload= */ nullptr,
+      /* return_script_payload= */ nullptr, &unused_actions, &scripts,
+      &should_update_scripts, &unused_js_flow_library));
   EXPECT_TRUE(should_update_scripts);
   EXPECT_THAT(scripts, SizeIs(1));
   EXPECT_THAT("a", Eq(scripts[0]->handle.path));
@@ -604,28 +609,39 @@ TEST_F(ProtocolUtilsTest, CreateGetUserDataRequest) {
   GetUserDataRequestProto request;
   EXPECT_TRUE(request.ParseFromString(ProtocolUtils::CreateGetUserDataRequest(
       /* run_id= */ 1, /* request_name= */ true, /* request_email= */ true,
-      /* request_phone= */ true, /* request_shipping= */ true,
+      /* request_phone= */ true, /* request_shipping= */ false,
+      /* preexisting_address_ids= */ std::vector<std::string>(),
       /* request_payment_methods= */ false,
       /* supported_card_networks= */ std::vector<std::string>(),
+      /* preexisting_payment_instrument_ids= */ std::vector<std::string>(),
       /* client_token= */ std::string())));
   EXPECT_EQ(request.run_id(), 1u);
   EXPECT_TRUE(request.request_name());
   EXPECT_TRUE(request.request_email());
   EXPECT_TRUE(request.request_phone());
-  EXPECT_TRUE(request.request_addresses());
+  EXPECT_FALSE(request.has_request_shipping_addresses());
   EXPECT_FALSE(request.has_request_payment_methods());
 
   EXPECT_TRUE(request.ParseFromString(ProtocolUtils::CreateGetUserDataRequest(
       /* run_id= */ 1, /* request_name= */ true, /* request_email= */ true,
       /* request_phone= */ true, /* request_shipping= */ true,
+      /* preexisting_address_ids= */
+      std::vector<std::string>({"address-1", "address-2"}),
       /* request_payment_methods= */ true,
       /* supported_card_networks= */
       std::vector<std::string>({"VISA", "MASTERCARD"}),
+      /* preexisting_payment_instrument_ids= */
+      std::vector<std::string>({"instrument-1", "instrument-2"}),
       /* client_token= */ "token")));
+  EXPECT_TRUE(request.has_request_shipping_addresses());
+  EXPECT_THAT(request.request_shipping_addresses().preexisting_ids(),
+              ElementsAre("address-1", "address-2"));
   EXPECT_TRUE(request.has_request_payment_methods());
   EXPECT_EQ(request.request_payment_methods().client_token(), "token");
   EXPECT_THAT(request.request_payment_methods().supported_card_networks(),
               ElementsAre("VISA", "MASTERCARD"));
+  EXPECT_THAT(request.request_payment_methods().preexisting_ids(),
+              ElementsAre("instrument-1", "instrument-2"));
 }
 
 TEST_F(ProtocolUtilsTest, ComputeNetworkStats) {

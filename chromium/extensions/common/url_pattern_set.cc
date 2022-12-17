@@ -164,6 +164,10 @@ bool URLPatternSet::AddOrigin(int valid_schemes, const GURL& origin) {
   const url::Origin real_origin = url::Origin::Create(origin);
   DCHECK(real_origin.IsSameOriginWith(
       url::Origin::Create(origin.DeprecatedGetOriginAsURL())));
+  // TODO(devlin): Implement this in terms of the `AddOrigin()` call that takes
+  // an url::Origin? It's interesting because this doesn't currently supply an
+  // extra path, so if the GURL has not path ("https://example.com"), it would
+  // fail to add - which is probably a bug.
   URLPattern origin_pattern(valid_schemes);
   // Origin adding could fail if |origin| does not match |valid_schemes|.
   if (origin_pattern.Parse(origin.spec()) !=
@@ -171,6 +175,18 @@ bool URLPatternSet::AddOrigin(int valid_schemes, const GURL& origin) {
     return false;
   }
   origin_pattern.SetPath("/*");
+  return AddPattern(origin_pattern);
+}
+
+bool URLPatternSet::AddOrigin(int valid_schemes, const url::Origin& origin) {
+  DCHECK(!origin.opaque());
+  URLPattern origin_pattern(valid_schemes);
+  // Origin adding could fail if |origin| does not match |valid_schemes|.
+  std::string string_pattern = origin.Serialize() + "/*";
+  if (origin_pattern.Parse(string_pattern) !=
+      URLPattern::ParseResult::kSuccess) {
+    return false;
+  }
   return AddPattern(origin_pattern);
 }
 
@@ -238,7 +254,7 @@ std::unique_ptr<base::ListValue> URLPatternSet::ToValue() const {
   std::unique_ptr<base::ListValue> value(new base::ListValue);
   for (auto i = patterns_.cbegin(); i != patterns_.cend(); ++i) {
     base::Value pattern_str_value(i->GetAsString());
-    if (!base::Contains(value->GetListDeprecated(), pattern_str_value))
+    if (!base::Contains(value->GetList(), pattern_str_value))
       value->Append(std::move(pattern_str_value));
   }
   return value;
@@ -283,7 +299,7 @@ bool URLPatternSet::Populate(const base::ListValue& value,
                              bool allow_file_access,
                              std::string* error) {
   std::vector<std::string> patterns;
-  for (const base::Value& pattern : value.GetListDeprecated()) {
+  for (const base::Value& pattern : value.GetList()) {
     const std::string* item = pattern.GetIfString();
     if (!item)
       return false;

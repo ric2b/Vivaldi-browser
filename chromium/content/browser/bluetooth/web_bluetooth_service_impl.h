@@ -93,7 +93,9 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
   WebBluetoothServiceImpl(const WebBluetoothServiceImpl&) = delete;
   WebBluetoothServiceImpl& operator=(const WebBluetoothServiceImpl&) = delete;
 
-  void CrashRendererAndClosePipe(bad_message::BadMessageReason reason);
+  // Prefer `DocumentService::ReportBadMessageAndDeleteThis()` in new code.
+  // Existing callers should be migrated as well.
+  void TerminateRendererAndDeleteThis(bad_message::BadMessageReason reason);
 
   // Checks the current requesting and embedding origins as well as the policy
   // or global Web Bluetooth block to determine if Web Bluetooth is allowed.
@@ -153,9 +155,9 @@ class CONTENT_EXPORT WebBluetoothServiceImpl
   FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            DeviceGattServicesDiscoveryTimeout);
 #if PAIR_BLUETOOTH_ON_DEMAND()
-  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplBondingTest,
+  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            ReadCharacteristicValueNotAuthorized);
-  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplBondingTest,
+  FRIEND_TEST_ALL_PREFIXES(WebBluetoothServiceImplTest,
                            IncompletePairingOnShutdown);
 #endif  // PAIR_BLUETOOTH_ON_DEMAND()
 

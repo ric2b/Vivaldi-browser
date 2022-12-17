@@ -14,8 +14,8 @@
 #include "chrome/browser/ash/guest_os/guest_os_registry_service_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chromeos/dbus/cicerone/cicerone_client.h"
-#include "chromeos/dbus/cicerone/cicerone_service.pb.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_client.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_service.pb.h"
 
 namespace borealis {
 
@@ -53,7 +53,7 @@ void BorealisAppLauncher::Launch(const BorealisContext& ctx,
       args.begin(), args.end(),
       google::protobuf::RepeatedFieldBackInserter(request.mutable_files()));
 
-  chromeos::CiceroneClient::Get()->LaunchContainerApplication(
+  ash::CiceroneClient::Get()->LaunchContainerApplication(
       std::move(request),
       base::BindOnce(
           [](OnLaunchedCallback callback,
@@ -74,57 +74,6 @@ void BorealisAppLauncher::Launch(const BorealisContext& ctx,
             std::move(callback).Run(LaunchResult::kSuccess);
           },
           std::move(callback)));
-}
-
-BorealisAppLauncher::BorealisAppLauncher(Profile* profile)
-    : profile_(profile) {}
-
-void BorealisAppLauncher::Launch(std::string app_id,
-                                 OnLaunchedCallback callback) {
-  Launch(std::move(app_id), {}, std::move(callback));
-}
-
-void BorealisAppLauncher::Launch(std::string app_id,
-                                 const std::vector<std::string>& args,
-                                 OnLaunchedCallback callback) {
-  BorealisFeatures::AllowStatus allow_status =
-      borealis::BorealisService::GetForProfile(profile_)
-          ->Features()
-          .MightBeAllowed();
-  if (allow_status != BorealisFeatures::AllowStatus::kAllowed) {
-    LOG(WARNING) << "Borealis app launch blocked: " << allow_status;
-    std::move(callback).Run(LaunchResult::kError);
-    return;
-  }
-  if (!borealis::BorealisService::GetForProfile(profile_)
-           ->Features()
-           .IsEnabled()) {
-    borealis::ShowBorealisInstallerView(profile_);
-    return;
-  }
-  if (!borealis::BorealisService::GetForProfile(profile_)
-           ->ContextManager()
-           .IsRunning())
-    borealis::ShowBorealisSplashScreenView(profile_);
-  BorealisService::GetForProfile(profile_)->ContextManager().StartBorealis(
-      base::BindOnce(
-          [](std::string app_id, const std::vector<std::string>& args,
-             BorealisAppLauncher::OnLaunchedCallback callback,
-             BorealisContextManager::ContextOrFailure result) {
-            if (!result) {
-              LOG(ERROR) << "Failed to launch " << app_id << "(code "
-                         << result.Error().error()
-                         << "): " << result.Error().description();
-              // If splash screen is showing and borealis did not launch
-              // properly, close it.
-              borealis::CloseBorealisSplashScreenView();
-              std::move(callback).Run(LaunchResult::kError);
-              return;
-            }
-            BorealisAppLauncher::Launch(*result.Value(), std::move(app_id),
-                                        std::move(args), std::move(callback));
-          },
-          std::move(app_id), std::move(args), std::move(callback)));
 }
 
 }  // namespace borealis

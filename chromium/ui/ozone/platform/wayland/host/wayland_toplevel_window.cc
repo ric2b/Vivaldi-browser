@@ -16,6 +16,7 @@
 #include "ui/base/hit_test.h"
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/native_widget_types.h"
 #include "ui/ozone/platform/wayland/host/gtk_shell1.h"
 #include "ui/ozone/platform/wayland/host/gtk_surface1.h"
@@ -68,6 +69,11 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
     LOG(ERROR) << "Failed to create a ShellToplevel.";
     return false;
   }
+  screen_coordinates_enabled_ &= shell_toplevel_->SupportsScreenCoordinates();
+  screen_coordinates_enabled_ &= !use_native_frame_;
+
+  if (screen_coordinates_enabled_)
+    shell_toplevel_->EnableScreenCoordinates();
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   shell_toplevel_->SetAppId(window_unique_id_);
@@ -80,8 +86,16 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
   SetUpShellIntegration();
   OnDecorationModeChanged();
 
+  if (system_modal_ && aura_surface_ &&
+      zaura_surface_get_version(aura_surface_.get()) >=
+          ZAURA_SURFACE_SET_FRAME_SINCE_VERSION) {
+    zaura_surface_set_frame(aura_surface_.get(),
+                            ZAURA_SURFACE_FRAME_TYPE_SHADOW);
+  }
+
+  // TODO(oshima): Change to use DIP.
   if (screen_coordinates_enabled_)
-    SetBounds(GetBounds());
+    SetBoundsInPixels(GetBoundsInPixels());
 
   // This could be the proper time to update window mask using
   // NonClientView::GetWindowMask, since |non_client_view| is not created yet
@@ -92,11 +106,10 @@ bool WaylandToplevelWindow::CreateShellToplevel() {
 }
 
 void WaylandToplevelWindow::ApplyPendingBounds() {
-  if (pending_configures_.empty())
-    return;
-  DCHECK(shell_toplevel_);
-
-  WaylandWindow::ApplyPendingBounds();
+  if (HasPendingConfigures()) {
+    DCHECK(shell_toplevel_);
+    WaylandWindow::ApplyPendingBounds();
+  }
 }
 
 void WaylandToplevelWindow::DispatchHostWindowDragMovement(
@@ -282,6 +295,10 @@ bool WaylandToplevelWindow::CanSetDecorationInsets() const {
 
 void WaylandToplevelWindow::SetOpaqueRegion(
     const std::vector<gfx::Rect>* region_px) {
+  if (region_px)
+    opaque_region_px_ = *region_px;
+  else
+    opaque_region_px_ = absl::nullopt;
   root_surface()->SetOpaqueRegion(region_px);
 }
 
@@ -291,6 +308,12 @@ void WaylandToplevelWindow::SetInputRegion(const gfx::Rect* region_px) {
   else
     input_region_px_ = absl::nullopt;
   root_surface()->SetInputRegion(region_px);
+}
+
+void WaylandToplevelWindow::NotifyStartupComplete(
+    const std::string& startup_id) {
+  if (auto* gtk_shell = connection()->gtk_shell1())
+    gtk_shell->SetStartupId(startup_id);
 }
 
 void WaylandToplevelWindow::SetAspectRatio(const gfx::SizeF& aspect_ratio) {
@@ -376,25 +399,24 @@ void WaylandToplevelWindow::HandleAuraToplevelConfigure(int32_t x,
   // the fullscreen mode, wayland may set the width and height to be 1. Instead,
   // explicitly set the bounds to the current desired ones or the previous
   // bounds.
+  gfx::Rect bounds_dip(pending_bounds_dip());
   if (width_dip > 1 && height_dip > 1) {
-    pending_bounds_dip_ = gfx::Rect(x, y, width_dip, height_dip);
+    bounds_dip.SetRect(x, y, width_dip, height_dip);
+    // TODO(crbug.com/3651999): Change SetDecorationInsets to take DIP.
     if (is_normal && frame_insets_px()) {
-      pending_bounds_dip_.Inset(
+      bounds_dip.Inset(
           -gfx::ScaleToRoundedInsets(*frame_insets_px(), 1.f / window_scale()));
-      pending_bounds_dip_.set_origin({x, y});
+      bounds_dip.set_origin({x, y});
     }
   } else if (is_normal) {
-    pending_bounds_dip_.set_size(
-        gfx::ScaleToRoundedSize(GetRestoredBoundsInPixels().IsEmpty()
-                                    ? GetBounds().size()
-                                    : GetRestoredBoundsInPixels().size(),
-                                1.0 / window_scale()));
+    gfx::Size size_in_dip = restored_size_dip().IsEmpty()
+                                ? GetBoundsInDIP().size()
+                                : restored_size_dip();
+    bounds_dip.set_origin(gfx::Point(x, y));
+    bounds_dip.set_size(size_in_dip);
   }
 
-  pending_bounds_dip_ = gfx::ScaleToRoundedRect(
-      AdjustBoundsToConstraintsPx(
-          gfx::ScaleToRoundedRect(pending_bounds_dip_, window_scale())),
-      1 / window_scale());
+  set_pending_bounds_dip(AdjustBoundsToConstraintsDIP(bounds_dip));
 
   // Store the restored bounds if current state differs from the normal state.
   // It can be client or compositor side change from normal to something else.
@@ -412,25 +434,27 @@ void WaylandToplevelWindow::HandleAuraToplevelConfigure(int32_t x,
   state_change_in_transit_ = false;
 }
 
-void WaylandToplevelWindow::SetBounds(const gfx::Rect& bounds) {
-  if (!shell_toplevel_ || !screen_coordinates_enabled_) {
-    WaylandWindow::SetBounds(bounds);
-    return;
+void WaylandToplevelWindow::SetBoundsInPixels(const gfx::Rect& bounds) {
+  WaylandWindow::SetBoundsInPixels(bounds);
+  if (shell_toplevel_ && screen_coordinates_enabled_) {
+    gfx::Rect bounds_in_dip = delegate()->ConvertRectToDIP(bounds);
+    shell_toplevel_->RequestWindowBounds(bounds_in_dip);
   }
-  gfx::Rect bounds_in_dip =
-      gfx::ScaleToEnclosingRect(bounds, 1.f / window_scale());
-  shell_toplevel_->RequestWindowBounds(bounds_in_dip);
 }
 
 void WaylandToplevelWindow::SetOrigin(const gfx::Point& origin) {
+  // TODO(crbug.com/1306688): Using UpdateBoundsInDIP changes the size of the
+  // window due to the rounding.  Change this to use SetBoundsInDIP when
+  // `bounds_px_` becomes `bounds_dip_`.
   gfx::Point origin_px =
       gfx::ScaleToFlooredPoint(origin, window_scale(), window_scale());
-  WaylandWindow::SetBounds(gfx::Rect(origin_px, GetBounds().size()));
+  WaylandWindow::SetBoundsInPixels(
+      gfx::Rect(origin_px, GetBoundsInPixels().size()));
 }
 
 void WaylandToplevelWindow::HandleSurfaceConfigure(uint32_t serial) {
   ProcessPendingBoundsDip(serial);
-  pending_bounds_dip_ = gfx::Rect();
+  set_pending_bounds_dip({});
 }
 
 void WaylandToplevelWindow::UpdateVisualSize(const gfx::Size& size_px,
@@ -474,8 +498,12 @@ bool WaylandToplevelWindow::OnInitialize(
   } else if (properties.visible_on_all_workspaces) {
     workspace_ = kVisibleOnAllWorkspaces;
   }
+  restore_session_id_ = properties.restore_session_id;
+  restore_window_id_ = properties.restore_window_id;
+  restore_window_id_source_ = properties.restore_window_id_source;
 
   SetPinnedModeExtension(this, static_cast<PinnedModeExtension*>(this));
+  SetSystemModalExtension(this, static_cast<SystemModalExtension*>(this));
   return true;
 }
 
@@ -738,6 +766,17 @@ void WaylandToplevelWindow::Unpin() const {
   }
 }
 
+void WaylandToplevelWindow::SetSystemModal(bool modal) {
+  system_modal_ = modal;
+  if (shell_toplevel_)
+    shell_toplevel_->SetSystemModal(modal);
+}
+
+void WaylandToplevelWindow::UpdateSystemModal() {
+  if (shell_toplevel_)
+    shell_toplevel_->SetSystemModal(system_modal_);
+}
+
 std::string WaylandToplevelWindow::GetWorkspace() const {
   return workspace_.has_value() ? base::NumberToString(workspace_.value())
                                 : std::string();
@@ -806,34 +845,28 @@ WmMoveResizeHandler* WaylandToplevelWindow::AsWmMoveResizeHandler() {
 void WaylandToplevelWindow::SetSizeConstraints() {
   DCHECK(delegate());
 
-  min_size_ = delegate()->GetMinimumSizeForWindow();
-  max_size_ = delegate()->GetMaximumSizeForWindow();
+  auto min_size_dip = delegate()->GetMinimumSizeForWindow();
+  auto max_size_dip = delegate()->GetMaximumSizeForWindow();
 
-  if (min_size_.has_value()) {
-    auto min_size_dip =
-        gfx::ScaleToRoundedSize(min_size_.value(), 1.0f / window_scale());
-    shell_toplevel_->SetMinSize(min_size_dip.width(), min_size_dip.height());
-  }
+  if (min_size_dip.has_value())
+    shell_toplevel_->SetMinSize(min_size_dip->width(), min_size_dip->height());
 
-  if (max_size_.has_value()) {
-    auto max_size_dip =
-        gfx::ScaleToRoundedSize(max_size_.value(), 1.0f / window_scale());
-    shell_toplevel_->SetMaxSize(max_size_dip.width(), max_size_dip.height());
-  }
+  if (max_size_dip.has_value())
+    shell_toplevel_->SetMaxSize(max_size_dip->width(), max_size_dip->height());
 
   connection()->ScheduleFlush();
 }
 
 void WaylandToplevelWindow::SetOrResetRestoredBounds() {
-  // The |restored_bounds_| are used when the window gets back to normal
+  // The |restored_size_in_dp_| are used when the window gets back to normal
   // state after it went maximized or fullscreen.  So we reset these if the
   // window has just become normal and store the current bounds if it is
   // either going out of normal state or simply changes the state and we don't
   // have any meaningful value stored.
   if (GetPlatformWindowState() == PlatformWindowState::kNormal) {
-    SetRestoredBoundsInPixels({});
-  } else if (GetRestoredBoundsInPixels().IsEmpty()) {
-    SetRestoredBoundsInPixels(GetBounds());
+    SetRestoredBoundsInDIP({});
+  } else if (GetRestoredBoundsInDIP().IsEmpty()) {
+    SetRestoredBoundsInDIP(GetBoundsInDIP());
   }
 }
 
@@ -852,6 +885,15 @@ void WaylandToplevelWindow::SetUpShellIntegration() {
     zaura_surface_set_occlusion_tracking(aura_surface_.get());
     SetImmersiveFullscreenStatus(false);
     SetInitialWorkspace();
+    if (restore_window_id_) {
+      DCHECK(!restore_window_id_source_);
+      shell_toplevel_->SetRestoreInfo(restore_session_id_,
+                                      restore_window_id_.value());
+    } else if (restore_window_id_source_) {
+      shell_toplevel_->SetRestoreInfoWithWindowIdSource(
+          restore_session_id_, restore_window_id_source_.value());
+    }
+    UpdateSystemModal();
   }
 
   if (connection()->gtk_shell1()) {
@@ -908,26 +950,12 @@ void WaylandToplevelWindow::SetInitialWorkspace() {
 }
 
 void WaylandToplevelWindow::UpdateWindowMask() {
-  // TODO(http://crbug.com/1158733): When supporting PlatformWindow::SetShape,
-  // update window region with the given |shape|.
-  WaylandWindow::UpdateWindowMask();
-  gfx::Rect region(visual_size_px());
+  std::vector<gfx::Rect> region{gfx::Rect({}, visual_size_px())};
+  root_surface()->SetOpaqueRegion(opaque_region_px_.has_value()
+                                      ? &*opaque_region_px_
+                                      : (IsOpaqueWindow() ? &region : nullptr));
   root_surface()->SetInputRegion(input_region_px_ ? &*input_region_px_
-                                                  : &region);
-}
-
-void WaylandToplevelWindow::UpdateWindowShape() {
-  // Create |window_shape_in_dips_| using the window mask of
-  // PlatformWindowDelegate otherwise resets it.
-  SkPath window_mask_in_pixels =
-      delegate()->GetWindowMaskForWindowShapeInPixels();
-  if (window_mask_in_pixels.isEmpty()) {
-    window_shape_in_dips_.reset();
-    return;
-  }
-  SkPath window_mask_in_dips =
-      wl::ConvertPathToDIP(window_mask_in_pixels, window_scale());
-  window_shape_in_dips_ = wl::CreateRectsFromSkPath(window_mask_in_dips);
+                                                  : &*region.begin());
 }
 
 bool WaylandToplevelWindow::GetTabletMode() {

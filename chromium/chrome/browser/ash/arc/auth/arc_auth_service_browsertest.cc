@@ -35,14 +35,14 @@
 #include "chrome/browser/ash/arc/session/arc_service_launcher.h"
 #include "chrome/browser/ash/arc/session/arc_session_manager.h"
 #include "chrome/browser/ash/arc/test/test_arc_session_manager.h"
-#include "chrome/browser/ash/certificate_provider/certificate_provider_service.h"
-#include "chrome/browser/ash/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/browser_process_platform_part.h"
+#include "chrome/browser/certificate_provider/certificate_provider_service.h"
+#include "chrome/browser/certificate_provider/certificate_provider_service_factory.h"
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/signin/chrome_device_id_helper.h"
@@ -613,19 +613,6 @@ IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest, GetPrimaryAccountForPublicAccounts) {
       primary_account = RequestPrimaryAccount();
   EXPECT_EQ(std::string(), primary_account.first);
   EXPECT_EQ(mojom::ChromeAccountType::ROBOT_ACCOUNT, primary_account.second);
-}
-
-IN_PROC_BROWSER_TEST_P(ArcAuthServiceTest,
-                       GetPrimaryAccountForOfflineDemoAccounts) {
-  ash::DemoSession::SetDemoConfigForTesting(
-      ash::DemoSession::DemoModeConfig::kOffline);
-  ash::DemoSession::StartIfInDemoMode();
-  SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
-  const std::pair<std::string, mojom::ChromeAccountType>
-      primary_account = RequestPrimaryAccount();
-  EXPECT_EQ(std::string(), primary_account.first);
-  EXPECT_EQ(mojom::ChromeAccountType::OFFLINE_DEMO_ACCOUNT,
-            primary_account.second);
 }
 
 // Tests that when ARC requests account info for a non-managed account,
@@ -1204,26 +1191,6 @@ IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetDemoAccount) {
             auth_instance().account_info()->account_type);
   EXPECT_FALSE(auth_instance().account_info()->enrollment_token);
   EXPECT_FALSE(auth_instance().account_info()->is_managed);
-}
-
-IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest, GetOfflineDemoAccount) {
-  ash::DemoSession::SetDemoConfigForTesting(
-      ash::DemoSession::DemoModeConfig::kOffline);
-  ash::DemoSession::StartIfInDemoMode();
-
-  SetAccountAndProfile(user_manager::USER_TYPE_PUBLIC_ACCOUNT);
-
-  base::RunLoop run_loop;
-  auth_instance().RequestPrimaryAccountInfo(run_loop.QuitClosure());
-  run_loop.Run();
-
-  ASSERT_TRUE(auth_instance().account_info());
-  EXPECT_TRUE(auth_instance().account_info()->account_name.value().empty());
-  EXPECT_TRUE(auth_instance().account_info()->auth_code.value().empty());
-  EXPECT_EQ(mojom::ChromeAccountType::OFFLINE_DEMO_ACCOUNT,
-            auth_instance().account_info()->account_type);
-  EXPECT_FALSE(auth_instance().account_info()->enrollment_token);
-  EXPECT_TRUE(auth_instance().account_info()->is_managed);
 }
 
 IN_PROC_BROWSER_TEST_P(ArcRobotAccountAuthServiceTest,

@@ -74,8 +74,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
 
   std::string TestTypeToString() {
     switch (renderer_type_) {
-      case viz::RendererType::kGL:
-        return "GL";
       case viz::RendererType::kSkiaGL:
         return "Skia GL";
       case viz::RendererType::kSkiaVk:
@@ -151,6 +149,7 @@ class LayerTreeTest : public testing::Test, public TestHooks {
     initial_root_bounds_ = bounds;
   }
 
+  virtual void CleanupBeforeDestroy() {}
   virtual void AfterTest() {}
   virtual void WillBeginTest();
   virtual void BeginTest() = 0;
@@ -200,13 +199,10 @@ class LayerTreeTest : public testing::Test, public TestHooks {
       scoped_refptr<viz::RasterContextProvider> worker_context_provider);
   std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
   CreateDisplayControllerOnThread() override;
-  std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurfaceOnThread(
+  std::unique_ptr<viz::SkiaOutputSurface> CreateSkiaOutputSurfaceOnThread(
       viz::DisplayCompositorMemoryAndTaskController*) override;
-  // TODO(crbug.com/1247756): This should only ever return SoftwareOutputSurface
-  // after GLRenderer is deleted and can be refactored.
-  std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurfaceOnThread(
-      scoped_refptr<viz::ContextProvider> compositor_context_provider) override;
+  std::unique_ptr<viz::OutputSurface> CreateSoftwareOutputSurfaceOnThread()
+      override;
 
   base::SingleThreadTaskRunner* image_worker_task_runner() const {
     return image_worker_->task_runner().get();
@@ -216,11 +212,6 @@ class LayerTreeTest : public testing::Test, public TestHooks {
     begin_frame_source_ = begin_frame_source;
   }
 
-  bool use_skia_renderer() const {
-    return renderer_type_ == viz::RendererType::kSkiaGL ||
-           renderer_type_ == viz::RendererType::kSkiaVk ||
-           renderer_type_ == viz::RendererType::kSkiaDawn;
-  }
   bool use_software_renderer() const {
     return renderer_type_ == viz::RendererType::kSoftware;
   }

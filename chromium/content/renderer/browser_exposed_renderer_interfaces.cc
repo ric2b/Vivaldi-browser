@@ -26,6 +26,7 @@
 #include "content/renderer/render_thread_impl.h"
 #include "content/renderer/service_worker/embedded_worker_instance_client_impl.h"
 #include "content/renderer/worker/shared_worker_factory_impl.h"
+#include "content/services/auction_worklet/auction_worklet_service_impl.h"
 #include "mojo/public/cpp/bindings/binder_map.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/self_owned_receiver.h"
@@ -149,11 +150,10 @@ void CreateEmbeddedWorker(
     mojo::PendingReceiver<blink::mojom::EmbeddedWorkerInstanceClient>
         receiver) {
   initiator_task_runner->PostTask(
-      FROM_HERE,
-      base::BindOnce(&EmbeddedWorkerInstanceClientImpl::CreateForRequest,
-                     initiator_task_runner,
-                     render_thread->cors_exempt_header_list(),
-                     std::move(receiver)));
+      FROM_HERE, base::BindOnce(&EmbeddedWorkerInstanceClientImpl::Create,
+                                initiator_task_runner,
+                                render_thread->cors_exempt_header_list(),
+                                std::move(receiver)));
 }
 
 }  // namespace
@@ -167,6 +167,12 @@ void ExposeRendererInterfacesToBrowser(
                base::ThreadTaskRunnerHandle::Get());
   binders->Add(base::BindRepeating(&CreateResourceUsageReporter, render_thread),
                base::ThreadTaskRunnerHandle::Get());
+#if BUILDFLAG(IS_ANDROID)
+  binders->Add(
+      base::BindRepeating(
+          &auction_worklet::AuctionWorkletServiceImpl::CreateForRenderer),
+      base::ThreadTaskRunnerHandle::Get());
+#endif
 
   auto task_runner_for_service_worker_startup =
       base::ThreadPool::CreateSingleThreadTaskRunner(

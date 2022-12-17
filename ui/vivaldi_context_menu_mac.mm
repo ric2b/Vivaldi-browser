@@ -10,6 +10,7 @@
 #include "base/compiler_specific.h"
 #import "base/mac/scoped_sending_event.h"
 #include "base/task/current_thread.h"
+#include "browser/menus/vivaldi_render_view_context_menu.h"
 #include "chrome/browser/renderer_context_menu/render_view_context_menu.h"
 #include "components/renderer_context_menu/render_view_context_menu_base.h"
 #include "content/public/browser/render_view_host.h"
@@ -50,6 +51,30 @@ NSMenuItem* VivaldiGetMenuItemByID(ui::MenuModel* model,
   return nil;
 }
 
+class VivaldiToolkitDelegateMac : public RenderViewContextMenu::ToolkitDelegate {
+ public:
+  explicit VivaldiToolkitDelegateMac(vivaldi::VivaldiContextMenuMac* menu)
+      : menu_(menu) {}
+
+  VivaldiToolkitDelegateMac(const VivaldiToolkitDelegateMac&) = delete;
+  VivaldiToolkitDelegateMac& operator=(const VivaldiToolkitDelegateMac&) = delete;
+
+  ~VivaldiToolkitDelegateMac() override {}
+
+ private:
+  // RenderViewContextMenu::ToolkitDelegate
+  void Init(ui::SimpleMenuModel* menu_model) override {}
+  void Cancel() override {}
+  void UpdateMenuItem(int command_id,
+                      bool enabled,
+                      bool hidden,
+                      const std::u16string& title) override {
+    menu_->UpdateItem(command_id, enabled, hidden, title);
+  }
+
+  vivaldi::VivaldiContextMenuMac* menu_;
+};
+
 }  // namespace
 
 namespace vivaldi {
@@ -61,21 +86,27 @@ VivaldiContextMenu* CreateVivaldiContextMenu(
     VivaldiRenderViewContextMenu* context_menu
     ) {
   if (force_views) {
-    return new VivaldiContextMenuViews(web_contents, menu_model, rect, context_menu);
+    return new VivaldiContextMenuViews(web_contents, menu_model, rect,
+                                       context_menu);
   } else {
-    return new VivaldiContextMenuMac(web_contents, menu_model, rect);
+    return new VivaldiContextMenuMac(web_contents, menu_model, rect,
+                                     context_menu);
   }
 }
-
-}  // vivialdi
 
 VivaldiContextMenuMac::VivaldiContextMenuMac(
     content::WebContents* web_contents,
     ui::SimpleMenuModel* menu_model,
-    const gfx::Rect& rect)
+    const gfx::Rect& rect,
+    vivaldi::VivaldiRenderViewContextMenu* context_menu)
   :web_contents_(web_contents),
    menu_model_(menu_model),
    rect_(rect) {
+  if (context_menu) {
+    std::unique_ptr<RenderViewContextMenu::ToolkitDelegate> delegate(
+        new VivaldiToolkitDelegateMac(this));
+    context_menu->set_toolkit_delegate(std::move(delegate));
+  }
 }
 
 VivaldiContextMenuMac::~VivaldiContextMenuMac() {
@@ -106,9 +137,9 @@ bool VivaldiContextMenuMac::Show() {
                   NSHeight([parent_view bounds]) - params_position.y());
   position = [parent_view convertPoint:position toView:nil];
   NSTimeInterval eventTime = [currentEvent timestamp];
-  NSEvent* clickEvent = [NSEvent mouseEventWithType:NSRightMouseDown
+  NSEvent* clickEvent = [NSEvent mouseEventWithType:NSEventTypeRightMouseDown
                                            location:position
-                                      modifierFlags:NSRightMouseDownMask
+                                      modifierFlags:NSEventMaskRightMouseDown
                                           timestamp:eventTime
                                        windowNumber:[window windowNumber]
                                             context:nil
@@ -136,12 +167,29 @@ bool VivaldiContextMenuMac::Show() {
 }
 
 void VivaldiContextMenuMac::SetIcon(const gfx::Image& icon, int id) {
-  NSMenuItem* item = VivaldiGetMenuItemByID(menu_model_, [menu_controller_ menu], id);
+  NSMenuItem* item = VivaldiGetMenuItemByID(menu_model_,
+                                            [menu_controller_ menu],
+                                            id);
   item.image = icon.ToNSImage();
 }
 
 void VivaldiContextMenuMac::SetParentView(gfx::NativeView parent_view) {
   parent_view_ = parent_view.GetNativeNSView();
+}
+
+void VivaldiContextMenuMac::UpdateItem(int id,
+                                       bool enabled,
+                                       bool hidden,
+                                       const std::u16string& title) {
+  NSMenuItem* item = VivaldiGetMenuItemByID(menu_model_,
+                                            [menu_controller_ menu],
+                                            id);
+  if (!item)
+    return;
+  [item setEnabled:enabled];
+  [item setTitle:base::SysUTF16ToNSString(title)];
+  [item setHidden:hidden];
+  [[item menu] itemChanged:item];
 }
 
 NSView* VivaldiContextMenuMac::GetActiveNativeView() {
@@ -156,3 +204,5 @@ NSView* VivaldiContextMenuMac::GetActiveNativeView() {
 bool VivaldiContextMenuMac::HasDarkTextColor() {
   return vivaldi::getSystemDarkMode() == 0;
 }
+
+}  // namespace vivialdi

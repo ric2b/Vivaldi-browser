@@ -25,10 +25,7 @@ import {
   CaptureCandidate,
   FakeCameraCaptureCandidate,
 } from './capture_candidate.js';
-import {
-  CaptureCandidatePreferrer,
-  DefaultPreferrer,
-} from './capture_candidate_preferrer.js';
+import {CaptureCandidatePreferrer} from './capture_candidate_preferrer.js';
 import {DeviceInfoUpdater} from './device_info_updater.js';
 import {Modes, Video} from './mode/index.js';
 import {Preview} from './preview.js';
@@ -72,7 +69,7 @@ class Reconfigurer {
 
   private shouldSuspend = false;
 
-  readonly capturePreferrer: CaptureCandidatePreferrer = new DefaultPreferrer();
+  readonly capturePreferrer = new CaptureCandidatePreferrer();
 
   constructor(
       private readonly preview: Preview,
@@ -138,17 +135,16 @@ class Reconfigurer {
   private async *
       getConfigurationCandidates(cameraInfo: CameraInfo):
           AsyncIterable<ConfigureCandidate> {
-    const deviceOperator = await DeviceOperator.getInstance();
+    const deviceOperator = DeviceOperator.getInstance();
 
     for (const deviceId of this.getDeviceIdCandidates(cameraInfo)) {
       for (const mode of await this.getModeCandidates(deviceId)) {
         let candidates: CaptureCandidate[];
         let photoResolutions;
         if (deviceOperator !== null) {
+          assert(cameraInfo.camera3DevicesInfo !== null);
           candidates = this.capturePreferrer.getSortedCandidates(
-              assertInstanceof(
-                  cameraInfo.getCamera3DeviceInfo(deviceId), Camera3DeviceInfo),
-              mode);
+              cameraInfo.camera3DevicesInfo, deviceId, mode);
           photoResolutions = await deviceOperator.getPhotoResolutions(deviceId);
         } else {
           candidates =
@@ -214,7 +210,7 @@ class Reconfigurer {
       return false;
     }
 
-    const deviceOperator = await DeviceOperator.getInstance();
+    const deviceOperator = DeviceOperator.getInstance();
     state.set(state.State.USE_FAKE_CAMERA, deviceOperator === null);
 
     for await (const c of this.getConfigurationCandidates(cameraInfo)) {
@@ -252,6 +248,12 @@ class Reconfigurer {
           mode: c.mode,
           captureCandidate: c.captureCandidate,
         };
+        if (this.config.mode === Mode.VIDEO) {
+          const fps = this.config.captureCandidate.getConstFps();
+          state.set(state.State.FPS_30, fps === 30);
+          state.set(state.State.FPS_60, fps === 60);
+        }
+        this.capturePreferrer.onUpdateConfig(this.config);
         await this.listener.onUpdateConfig(this.config);
 
         return true;
@@ -361,7 +363,7 @@ export class OperationScheduler {
         defaultFacing,
     );
     this.capturer = new Capturer(this.modes);
-    this.infoUpdater.addDeviceChangeListener(async (updater) => {
+    this.infoUpdater.addDeviceChangeListener((updater) => {
       const info = new CameraInfo(updater);
       if (this.ongoingOperationType !== null) {
         this.pendingUpdateInfo = info;

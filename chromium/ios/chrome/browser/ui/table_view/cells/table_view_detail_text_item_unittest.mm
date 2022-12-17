@@ -22,7 +22,7 @@ using TableViewDetailTextItemTest = PlatformTest;
 }
 
 // Tests that the UILabels are set properly after a call to
-// |configureCell:|.
+// `configureCell:`.
 TEST_F(TableViewDetailTextItemTest, ItemProperties) {
   NSString* text = @"Cell text";
   NSString* detailText = @"Cell detail text";
@@ -92,4 +92,36 @@ TEST_F(TableViewDetailTextItemTest, ItemPropertiesDefaultColor) {
   EXPECT_NSEQ([UIColor colorNamed:kTextPrimaryColor], cell.textLabel.textColor);
   EXPECT_NSEQ([UIColor colorNamed:kTextSecondaryColor],
               cell.detailTextLabel.textColor);
+}
+
+// Tests the accessory symbol is set and unset.
+TEST_F(TableViewDetailTextItemTest, ItemPropertiesAccessorySymbol) {
+  TableViewDetailTextItem* item =
+      [[TableViewDetailTextItem alloc] initWithType:0];
+  TableViewDetailTextCell* cell = [[[item cellClass] alloc] init];
+
+  [item configureCell:cell withStyler:[[ChromeTableViewStyler alloc] init]];
+  EXPECT_NSEQ(nil, cell.accessoryView);
+
+  item.accessorySymbol = TableViewDetailTextCellAccessorySymbolChevron;
+  [item configureCell:cell withStyler:[[ChromeTableViewStyler alloc] init]];
+  EXPECT_NSNE(nil, cell.accessoryView);
+
+  item.accessorySymbol = TableViewDetailTextCellAccessorySymbolNone;
+  [item configureCell:cell withStyler:[[ChromeTableViewStyler alloc] init]];
+  EXPECT_NSEQ(nil, cell.accessoryView);
+}
+
+// Tests the accessory view is nil after cell prepare for reuse.
+TEST_F(TableViewDetailTextItemTest, CellPrepareForReuseAccessorySymbolNil) {
+  TableViewDetailTextItem* item =
+      [[TableViewDetailTextItem alloc] initWithType:0];
+  TableViewDetailTextCell* cell = [[[item cellClass] alloc] init];
+
+  item.accessorySymbol = TableViewDetailTextCellAccessorySymbolExternalLink;
+  [item configureCell:cell withStyler:[[ChromeTableViewStyler alloc] init]];
+  EXPECT_NSNE(nil, cell.accessoryView);
+
+  [cell prepareForReuse];
+  EXPECT_NSEQ(nil, cell.accessoryView);
 }

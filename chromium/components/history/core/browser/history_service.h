@@ -247,6 +247,10 @@ class HistoryService : public KeyedService {
                                  const std::u16string& search_terms,
                                  VisitID visit_id);
 
+  // Updates the history database with additional page metadata.
+  void AddPageMetadataForVisit(const std::string& alternative_title,
+                               VisitID visit_id);
+
   // Querying ------------------------------------------------------------------
 
   // Returns the information about the requested URL. If the URL is found,
@@ -325,14 +329,12 @@ class HistoryService : public KeyedService {
       base::CancelableTaskTracker* tracker);
 
   // Request the `result_count` most visited URLs and the chain of
-  // redirects leading to each of these URLs. `days_back` is the
-  // number of days of history to use. Used by TopSites.
+  // redirects leading to each of these URLs. Used by TopSites.
   using QueryMostVisitedURLsCallback =
       base::OnceCallback<void(MostVisitedURLList)>;
 
   base::CancelableTaskTracker::TaskId QueryMostVisitedURLs(
       int result_count,
-      int days_back,
       QueryMostVisitedURLsCallback callback,
       base::CancelableTaskTracker* tracker);
 
@@ -650,6 +652,11 @@ class HistoryService : public KeyedService {
   std::unique_ptr<syncer::ModelTypeControllerDelegate>
   GetTypedURLSyncControllerDelegate();
 
+  // For sync codebase only: instantiates a controller delegate to interact with
+  // HistorySyncBridge. Must be called from the UI thread.
+  std::unique_ptr<syncer::ModelTypeControllerDelegate>
+  GetHistorySyncControllerDelegate();
+
   // Override `backend_task_runner_` for testing; needs to be called before
   // Init.
   void set_backend_task_runner_for_testing(
@@ -739,13 +746,9 @@ class HistoryService : public KeyedService {
 
   // Notify all HistoryServiceObservers registered that user is visiting a URL.
   // The `row` ID will be set to the value that is currently in effect in the
-  // main history database. `redirects` is the list of redirects leading up to
-  // the URL. If we have a redirect chain A -> B -> C and user is visiting C,
-  // then `redirects[0]=B` and `redirects[1]=A`. If there are no redirects,
-  // `redirects` is an empty vector.
+  // main history database.
   void NotifyURLVisited(ui::PageTransition transition,
                         const URLRow& row,
-                        const RedirectList& redirects,
                         base::Time visit_time);
 
   // Notify all HistoryServiceObservers registered that URLs have been added or

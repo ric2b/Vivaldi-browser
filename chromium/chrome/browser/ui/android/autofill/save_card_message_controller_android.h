@@ -42,6 +42,7 @@ class SaveCardMessageControllerAndroid : public SaveCardMessageConfirmDelegate {
             const CreditCard& card,
             const LegalMessageLines& legal_message_lines,
             std::u16string inferred_name,
+            std::u16string cardholder_account,
             AutofillClient::UploadSaveCardPromptCallback
                 upload_save_card_prompt_callback,
             AutofillClient::LocalSaveCardPromptCallback
@@ -54,6 +55,7 @@ class SaveCardMessageControllerAndroid : public SaveCardMessageConfirmDelegate {
 
   void HandleMessageDismiss(messages::DismissReason dismiss_reason);
   void HandleMessageAction();
+  void HandleMessageSecondaryButtonClicked();
   void DismissMessage();
 
   void MaybeShowDialog();
@@ -71,10 +73,10 @@ class SaveCardMessageControllerAndroid : public SaveCardMessageConfirmDelegate {
       const base::android::JavaParamRef<jstring>& month,
       const base::android::JavaParamRef<jstring>& year) override;
   void OnSaveCardConfirmed(JNIEnv* env) override;
+  void OnUserDismiss(JNIEnv* env) override;
   void DialogDismissed(JNIEnv* env) override;
-  void OnLegalMessageLinkClicked(
-      JNIEnv* env,
-      const base::android::JavaParamRef<jstring>& url) override;
+  void OnLinkClicked(JNIEnv* env,
+                     const base::android::JavaParamRef<jstring>& url) override;
 
   bool IsGooglePayBrandingEnabled() const;
 
@@ -121,6 +123,7 @@ class SaveCardMessageControllerAndroid : public SaveCardMessageConfirmDelegate {
       save_card_message_confirm_controller_;
 
   std::u16string inferred_name_;
+  std::u16string cardholder_account_;
   std::u16string card_label_;
 
   // Whether we need to request users to fill in more info.

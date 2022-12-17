@@ -20,7 +20,6 @@
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
 #include "base/values.h"
@@ -32,6 +31,7 @@
 #include "chrome/browser/extensions/extension_tab_util.h"
 #include "chrome/browser/first_run/first_run.h"
 #include "chrome/browser/media/router/media_router_feature.h"
+#include "chrome/browser/permissions/permission_decision_auto_blocker_factory.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/prefs/session_startup_pref.h"
 #include "chrome/browser/profiles/profile.h"
@@ -60,6 +60,8 @@
 #include "components/media_router/browser/media_router_dialog_controller.h"
 #include "components/media_router/browser/media_router_metrics.h"
 #include "components/os_crypt/os_crypt.h"
+#include "components/permissions/permission_decision_auto_blocker.h"
+#include "components/permissions/permission_uma_util.h"
 #include "components/prefs/pref_service.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/version_info/version_info.h"
@@ -136,15 +138,6 @@ ContentSetting vivContentSettingFromString(const std::string& name) {
   ContentSetting setting;
   content_settings::ContentSettingFromString(name, &setting);
   return setting;
-}
-
-ContentSettingsType vivContentSettingsTypeFromGroupName(
-    const std::string& name) {
-  return site_settings::ContentSettingsTypeFromGroupName(name);
-}
-
-std::string vivContentSettingToString(ContentSetting setting) {
-  return content_settings::ContentSettingToString(setting);
 }
 
 }  // namespace
@@ -1203,7 +1196,7 @@ UtilitiesSetDefaultContentSettingsFunction::Run() {
   ContentSetting default_setting = vivContentSettingFromString(value);
   //
   ContentSettingsType content_type =
-      vivContentSettingsTypeFromGroupName(content_settings);
+        site_settings::ContentSettingsTypeFromGroupName(content_settings);
 
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
@@ -1235,7 +1228,7 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
   std::string& content_settings = params->content_setting;
   std::string def_provider = "";
   ContentSettingsType content_type =
-      vivContentSettingsTypeFromGroupName(content_settings);
+      site_settings::ContentSettingsTypeFromGroupName(content_settings);
   ContentSetting default_setting;
   Profile* profile =
       Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
@@ -1243,7 +1236,8 @@ UtilitiesGetDefaultContentSettingsFunction::Run() {
   default_setting = HostContentSettingsMapFactory::GetForProfile(profile)
                         ->GetDefaultContentSetting(content_type, &def_provider);
 
-  std::string setting = vivContentSettingToString(default_setting);
+  std::string setting =
+      content_settings::ContentSettingToString(default_setting);
 
   return RespondNow(ArgumentList(Results::Create(setting)));
 }
@@ -1588,6 +1582,20 @@ ExtensionFunction::ResponseAction UtilitiesSetContentSettingsFunction::Run() {
       secondary_pattern_string.empty()
           ? ContentSettingsPattern::Wildcard()
           : ContentSettingsPattern::FromString(secondary_pattern_string);
+
+  // Clear any existing embargo status if the new setting isn't block.
+  if (setting != CONTENT_SETTING_BLOCK) {
+    GURL url(primary_pattern.ToString());
+    if (url.is_valid()) {
+      PermissionDecisionAutoBlockerFactory::GetForProfile(profile)
+          ->RemoveEmbargoAndResetCounts(url, content_type);
+    }
+  }
+
+  permissions::PermissionUmaUtil::ScopedRevocationReporter
+      scoped_revocation_reporter(
+          profile, primary_pattern, secondary_pattern, content_type,
+          permissions::PermissionSourceUI::SITE_SETTINGS);
 
   map->SetContentSettingCustomScope(primary_pattern, secondary_pattern,
                                     content_type, setting);

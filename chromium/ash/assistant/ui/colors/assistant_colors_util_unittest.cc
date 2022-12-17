@@ -5,6 +5,7 @@
 #include "ash/assistant/ui/colors/assistant_colors_util.h"
 
 #include "ash/assistant/ui/colors/assistant_colors.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/session/session_controller_impl.h"
 #include "ash/shell.h"
@@ -25,29 +26,35 @@ TEST_F(AssistantColorsUtilUnittest, AssistantColor) {
       chromeos::features::kDarkLightMode);
   AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
       Shell::Get()->session_controller()->GetActivePrefService());
+  auto* color_provider = AshColorProvider::Get();
+  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
 
   EXPECT_EQ(
       ResolveAssistantColor(assistant_colors::ColorName::kBgAssistantPlate),
       assistant_colors::ResolveColor(
           assistant_colors::ColorName::kBgAssistantPlate,
-          /*is_dark_mode=*/false, /*use_debug_colors=*/false));
+          /*is_dark_mode=*/initial_dark_mode_status,
+          /*use_debug_colors=*/false));
 
-  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
-      prefs::kDarkModeEnabled, true);
+  // Switch the color mode.
+  color_provider->ToggleColorMode();
+  ASSERT_NE(initial_dark_mode_status, color_provider->IsDarkModeEnabled());
 
   EXPECT_EQ(
       ResolveAssistantColor(assistant_colors::ColorName::kBgAssistantPlate),
       assistant_colors::ResolveColor(
           assistant_colors::ColorName::kBgAssistantPlate,
-          /*is_dark_mode=*/true, /*use_debug_colors=*/false));
+          /*is_dark_mode=*/!initial_dark_mode_status,
+          /*use_debug_colors=*/false));
 }
 
 TEST_F(AssistantColorsUtilUnittest, AssistantColorFlagOff) {
-  ASSERT_FALSE(chromeos::features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   EXPECT_EQ(
       ResolveAssistantColor(assistant_colors::ColorName::kBgAssistantPlate),
@@ -60,11 +67,12 @@ TEST_F(AssistantColorsUtilUnittest, AssistantColorFlagOff) {
 // ResolveAssistantColor falls back to assistant_colors::ResolveColor with dark
 // mode off if the color is not defined in the cc file map and the flag is off.
 TEST_F(AssistantColorsUtilUnittest, AssistantColorFlagOffFallback) {
-  ASSERT_FALSE(chromeos::features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   EXPECT_EQ(ResolveAssistantColor(assistant_colors::ColorName::kGoogleBlue100),
             assistant_colors::ResolveColor(

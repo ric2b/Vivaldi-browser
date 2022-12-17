@@ -20,8 +20,10 @@ import org.chromium.components.version_info.VersionInfo;
 import org.chromium.ui.widget.Toast;
 
 import java.util.Calendar;
+
 // Vivaldi
 import org.chromium.build.BuildConfig;
+import org.vivaldi.browser.common.VivaldiUtils;
 
 /**
  * Settings fragment that displays information about Chrome.
@@ -55,8 +57,9 @@ public class AboutChromeSettings
         Preference p = findPreference(PREF_APPLICATION_VERSION);
         p.setSummary(
                 getApplicationVersion(getActivity(), AboutSettingsBridge.getApplicationVersion()));
-        // Vivaldi (ref. VB-59279)
-        // p.setOnPreferenceClickListener(this);
+        // Vivaldi (ref. VAB-693)
+        if (!BuildConfig.IS_VIVALDI)
+        p.setOnPreferenceClickListener(this);
         p = findPreference(PREF_OS_VERSION);
         p.setSummary(AboutSettingsBridge.getOSVersion());
         p = findPreference(PREF_LEGAL_INFORMATION);
@@ -77,6 +80,12 @@ public class AboutChromeSettings
             version = version.concat("(PS)");
         } else if (BuildConfig.IS_OEM_RENAULT_BUILD) {
             version = version.concat("(RNO)");
+        }
+        if (BuildConfig.IS_OEM_AUTOMOTIVE_BUILD) {
+            version = version.concat(
+                    "\n[" + VivaldiUtils.getCarInfoMake() + " "
+                          + VivaldiUtils.getCarInfoModel() + " "
+                          + VivaldiUtils.getCarInfoModelYear() + "]");
         }
         if (VersionInfo.isOfficialBuild()) {
             return version;

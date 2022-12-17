@@ -30,7 +30,6 @@ import org.chromium.base.Callback;
 import org.chromium.base.CallbackController;
 import org.chromium.base.MathUtils;
 import org.chromium.base.TraceEvent;
-import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.R;
 import org.chromium.chrome.browser.app.video_tutorials.NewTabPageVideoIPHManager;
 import org.chromium.chrome.browser.compositor.layouts.content.InvalidationAwareThumbnailProvider;
@@ -46,23 +45,13 @@ import org.chromium.chrome.browser.logo.LogoBridge.Logo;
 import org.chromium.chrome.browser.logo.LogoBridge.LogoObserver;
 import org.chromium.chrome.browser.logo.LogoDelegateImpl;
 import org.chromium.chrome.browser.logo.LogoView;
-import org.chromium.chrome.browser.native_page.ContextMenuManager;
 import org.chromium.chrome.browser.ntp.NewTabPage.OnSearchBoxScrollListener;
 import org.chromium.chrome.browser.ntp.search.SearchBoxCoordinator;
-import org.chromium.chrome.browser.offlinepages.OfflinePageBridge;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.query_tiles.QueryTileSection;
 import org.chromium.chrome.browser.query_tiles.QueryTileUtils;
-import org.chromium.chrome.browser.suggestions.SuggestionsConfig;
-import org.chromium.chrome.browser.suggestions.SuggestionsDependencyFactory;
-import org.chromium.chrome.browser.suggestions.tile.MostVisitedListCoordinator;
-import org.chromium.chrome.browser.suggestions.tile.SiteSectionViewHolder;
-import org.chromium.chrome.browser.suggestions.tile.Tile;
-import org.chromium.chrome.browser.suggestions.tile.TileGridLayout;
-import org.chromium.chrome.browser.suggestions.tile.TileGridViewHolder;
+import org.chromium.chrome.browser.suggestions.tile.MostVisitedTilesCoordinator;
 import org.chromium.chrome.browser.suggestions.tile.TileGroup;
-import org.chromium.chrome.browser.suggestions.tile.TileRenderer;
-import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.native_page.TouchEnabledDelegate;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
@@ -85,7 +74,7 @@ import org.chromium.ui.vr.VrModeObserver;
  * Layout for the new tab page. This positions the page elements in the correct vertical positions.
  * There are no separate phone and tablet UIs; this layout adapts based on the available space.
  */
-public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer, VrModeObserver {
+public class NewTabPageLayout extends LinearLayout implements VrModeObserver {
     private static final String TAG = "NewTabPageLayout";
 
     // Used to signify the cached resource value is unset.
@@ -105,33 +94,22 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
 
     private LogoView mSearchProviderLogoView;
     private SearchBoxCoordinator mSearchBoxCoordinator;
-    private ViewGroup mSiteSectionView;
-    private SiteSectionViewHolder mSiteSectionViewHolder;
-    private View mTileGridPlaceholder;
-    private View mNoSearchLogoSpacer;
     private QueryTileSection mQueryTileSection;
     private NewTabPageVideoIPHManager mVideoIPHManager;
     private ImageView mCryptidHolder;
+    private ViewGroup mMvTilesContainerLayout;
+    private MostVisitedTilesCoordinator mMostVisitedTilesCoordinator;
 
     @Nullable
     private View mExploreSectionView; // View is null if explore flag is disabled.
     @Nullable
     private Object mExploreSection; // Null when explore sites disabled.
 
-    // View is null if scrollable-mv-tiles flag is disabled.
-    @Nullable
-    private ViewGroup mMvTilesContainerLayout;
-
-    // Null if scrollable-mv-tiles flag is disabled.
-    @Nullable
-    private MostVisitedListCoordinator mMostVisitedListCoordinator;
-
     private OnSearchBoxScrollListener mSearchBoxScrollListener;
 
     private NewTabPageManager mManager;
     private Activity mActivity;
     private LogoDelegateImpl mLogoDelegate;
-    private TileGroup mTileGroup;
     private UiConfig mUiConfig;
     private CallbackController mCallbackController = new CallbackController();
 
@@ -210,11 +188,9 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      * @param searchProviderHasLogo Whether the search provider has a logo.
      * @param searchProviderIsGoogle Whether the search provider is Google.
      * @param scrollDelegate The delegate used to obtain information about scroll state.
-     * @param contextMenuManager The manager for long-press context menus.
      * @param touchEnabledDelegate The {@link TouchEnabledDelegate} for handling whether touch
      *         events are allowed.
      * @param uiConfig UiConfig that provides display information about this view.
-     * @param tabProvider Provides the current active tab.
      * @param lifecycleDispatcher Activity lifecycle dispatcher.
      * @param uma {@link NewTabPageUma} object recording user metrics.
      * @param isIncognito Whether the new tab page is in incognito mode.
@@ -223,8 +199,7 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     public void initialize(NewTabPageManager manager, Activity activity,
             TileGroup.Delegate tileGroupDelegate, boolean searchProviderHasLogo,
             boolean searchProviderIsGoogle, FeedSurfaceScrollDelegate scrollDelegate,
-            ContextMenuManager contextMenuManager, TouchEnabledDelegate touchEnabledDelegate,
-            UiConfig uiConfig, Supplier<Tab> tabProvider,
+            TouchEnabledDelegate touchEnabledDelegate, UiConfig uiConfig,
             ActivityLifecycleDispatcher lifecycleDispatcher, NewTabPageUma uma, boolean isIncognito,
             WindowAndroid windowAndroid) {
         TraceEvent.begin(TAG + ".initialize()");
@@ -249,17 +224,9 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             mSearchBoxBoundsVerticalInset = getResources().getDimensionPixelSize(
                     R.dimen.ntp_search_box_bounds_vertical_inset_modern);
         }
-        mNoSearchLogoSpacer = findViewById(R.id.no_search_logo_spacer);
 
-        if (isScrollableMVTEnabled()) {
-            // If SHOW_SCROLLABLE_MV_ON_NTP is true, TileGroup and other logic will be handled by
-            // MostVisitedListCoordinator.
-            initializeMostVisitedListCoordinator(
-                    lifecycleDispatcher, tileGroupDelegate, touchEnabledDelegate);
-        } else {
-            initializeTileGroup(
-                    profile, searchProviderIsGoogle, contextMenuManager, tileGroupDelegate);
-        }
+        initializeMostVisitedTilesCoordinator(profile, lifecycleDispatcher, tileGroupDelegate,
+                touchEnabledDelegate, isScrollableMvtEnabled(), searchProviderIsGoogle);
         initializeSearchBoxBackground();
         initializeSearchBoxTextView();
         initializeVoiceSearchButton();
@@ -364,49 +331,32 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         TraceEvent.end(TAG + ".initializeLayoutChangeListener()");
     }
 
-    private void initializeTileGroup(Profile profile, boolean searchProviderIsGoogle,
-            ContextMenuManager contextMenuManager, TileGroup.Delegate tileGroupDelegate) {
-        OfflinePageBridge offlinePageBridge =
-                SuggestionsDependencyFactory.getInstance().getOfflinePageBridge(profile);
-        TileRenderer tileRenderer =
-                new TileRenderer(mActivity, SuggestionsConfig.getTileStyle(mUiConfig),
-                        getTileTitleLines(), mManager.getImageFetcher());
-        mTileGroup = new TileGroup(tileRenderer, mManager, contextMenuManager, tileGroupDelegate,
-                /* observer = */ this, offlinePageBridge);
+    private void initializeMostVisitedTilesCoordinator(Profile profile,
+            ActivityLifecycleDispatcher activityLifecycleDispatcher,
+            TileGroup.Delegate tileGroupDelegate, TouchEnabledDelegate touchEnabledDelegate,
+            boolean isScrollableMvtEnabled, boolean searchProviderIsGoogle) {
+        assert mMvTilesContainerLayout != null;
 
         int maxRows = 2;
         if (searchProviderIsGoogle && QueryTileUtils.isQueryTilesEnabledOnNTP()) {
             maxRows = QueryTileSection.getMaxRowsForMostVisitedTiles(getContext());
         }
 
-        mSiteSectionViewHolder =
-                getSiteSectionViewHolder(getSiteSectionView(), maxRows, MAX_TILE_COLUMNS);
-        mSiteSectionViewHolder.bindDataSource(mTileGroup, tileRenderer);
+        mMostVisitedTilesCoordinator = new MostVisitedTilesCoordinator(mActivity,
+                activityLifecycleDispatcher, mMvTilesContainerLayout, mWindowAndroid,
+                /*shouldShowSkeletonUIPreNative=*/false, isScrollableMvtEnabled, maxRows,
+                MAX_TILE_COLUMNS, () -> mSnapshotTileGridChanged = true, () -> {
+                    if (mUrlFocusChangePercent == 1f) mTileCountChanged = true;
+                });
+
+        mMostVisitedTilesCoordinator.initWithNative(
+                mManager, tileGroupDelegate, touchEnabledDelegate);
 
         int variation = ExploreSitesBridge.getVariation();
         if (ExploreSitesBridge.isExperimental(variation)) {
             mExploreSection = new ExperimentalExploreSitesSection(
                     mExploreSectionView, profile, mManager.getNavigationDelegate());
         }
-
-        mTileGroup.startObserving(maxRows * getMaxColumnsForMostVisitedTiles());
-    }
-
-    private void initializeMostVisitedListCoordinator(
-            ActivityLifecycleDispatcher activityLifecycleDispatcher,
-            TileGroup.Delegate tileGroupDelegate, TouchEnabledDelegate touchEnabledDelegate) {
-        assert mMvTilesContainerLayout != null;
-        mMostVisitedListCoordinator = new MostVisitedListCoordinator(mActivity,
-                activityLifecycleDispatcher, mMvTilesContainerLayout, mWindowAndroid,
-                /*shouldShowSkeletonUIPreNative=*/false);
-        // Let mMvTilesLayout attached to the edge of the screen.
-        int lateralPaddingsForNTP = mActivity.getResources().getDimensionPixelSize(
-                R.dimen.ntp_header_lateral_paddings_v2);
-        MarginLayoutParams params = (MarginLayoutParams) mMvTilesContainerLayout.getLayoutParams();
-        params.leftMargin = -lateralPaddingsForNTP;
-        params.rightMargin = -lateralPaddingsForNTP;
-        mMostVisitedListCoordinator.initWithNative(
-                mManager, tileGroupDelegate, touchEnabledDelegate);
     }
 
     /**
@@ -468,40 +418,17 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
                 1f);
     }
 
-    @VisibleForTesting
-    public static ViewGroup inflateSiteSection(ViewGroup parent) {
-        return (ViewGroup) LayoutInflater.from(parent.getContext())
-                .inflate(R.layout.suggestions_site_tile_grid_modern, parent, false);
-    }
-
     private void insertSiteSectionView() {
         int insertionPoint = indexOfChild(mMiddleSpacer) + 1;
 
-        if (isScrollableMVTEnabled()) {
-            setClipToPadding(false);
-            mMvTilesContainerLayout = (ViewGroup) LayoutInflater.from(this.getContext())
-                                              .inflate(R.layout.mv_tiles_layout, this, false);
-            mMvTilesContainerLayout.setVisibility(View.VISIBLE);
-            addView(mMvTilesContainerLayout, insertionPoint);
-
-            // The page contents are initially hidden; otherwise they'll be drawn centered on the
-            // page before the tiles are available and then jump upwards to make space once the
-            // tiles are available.
-            if (getVisibility() != View.VISIBLE) setVisibility(View.VISIBLE);
-        } else {
-            mSiteSectionView = inflateSiteSection(this);
-            ViewGroup.LayoutParams layoutParams = mSiteSectionView.getLayoutParams();
-            layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
-            mSiteSectionView.setLayoutParams(layoutParams);
-            addView(mSiteSectionView, insertionPoint);
-        }
-    }
-
-    /**
-     * @return the embedded {@link TileGridLayout}.
-     */
-    private ViewGroup getSiteSectionView() {
-        return mSiteSectionView;
+        mMvTilesContainerLayout = (ViewGroup) LayoutInflater.from(this.getContext())
+                                          .inflate(R.layout.mv_tiles_container, this, false);
+        mMvTilesContainerLayout.setVisibility(View.VISIBLE);
+        addView(mMvTilesContainerLayout, insertionPoint);
+        // The page contents are initially hidden; otherwise they'll be drawn centered on the
+        // page before the tiles are available and then jump upwards to make space once the
+        // tiles are available.
+        if (getVisibility() != View.VISIBLE) setVisibility(View.VISIBLE);
     }
 
     /**
@@ -517,32 +444,10 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         unifyElementWidths();
     }
 
-    /**
-     * @return The placeholder that is shown above the fold when there is no other content to show,
-     *         or null if it has not been inflated yet.
-     */
-    @VisibleForTesting
-    @Nullable
-    public View getPlaceholder() {
-        return mTileGridPlaceholder;
-    }
-
     public void onSwitchToForeground() {
-        if (mTileGroup != null) {
-            mTileGroup.onSwitchToForeground(/* trackLoadTask = */ false);
-        } else if (mMostVisitedListCoordinator != null) {
-            mMostVisitedListCoordinator.onSwitchToForeground();
+        if (mMostVisitedTilesCoordinator != null) {
+            mMostVisitedTilesCoordinator.onSwitchToForeground();
         }
-    }
-
-    public TileGroup getTileGroup() {
-        return mTileGroup;
-    }
-
-    @VisibleForTesting
-    public static TileGridViewHolder getSiteSectionViewHolder(
-            ViewGroup contentView, int maxRows, int maxColumns) {
-        return new TileGridViewHolder(contentView, maxRows, maxColumns);
     }
 
     /**
@@ -579,6 +484,12 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         if (!mSearchProviderHasLogo) return;
 
         mSearchProviderLogoView.showSearchProviderInitialView();
+
+        // If pull up Feed position is enabled and search provider is Google, we should show
+        // standard Google logo, which is already done in showSearchProviderInitialView() above.
+        // Since standard Google logo should be shown and doodle is not supported, we don't need to
+        // fetch logo image.
+        if (FeedPositionUtils.isFeedPullUpEnabled() && mSearchProviderIsGoogle) return;
 
         mLogoDelegate.getSearchProviderLogo(new LogoObserver() {
             @Override
@@ -618,13 +529,12 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         mSearchProviderHasLogo = hasLogo;
         mSearchProviderIsGoogle = isGoogle;
 
-        updateTileGridPadding();
+        updateTilesLayoutMargins();
 
         // Hide or show the views above the tile grid as needed, including logo, search box, and
         // spacers.
         mSearchProviderLogoView.setVisibility(shouldShowLogo() ? View.VISIBLE : View.GONE);
         mSearchBoxCoordinator.setVisibility(mSearchProviderHasLogo);
-        updateTileGridPlaceholderVisibility();
 
         onUrlFocusAnimationChanged();
 
@@ -632,22 +542,30 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     }
 
     /**
-     * Updates the padding for the tile grid based on what is shown above it.
+     * Updates the margins for the tile grid based on what is shown above it.
      */
-    private void updateTileGridPadding() {
+    private void updateTilesLayoutMargins() {
         // Set a bit more top padding on the tile grid if there is no logo.
-        int paddingTop = getResources().getDimensionPixelSize(shouldShowLogo()
-                        ? R.dimen.tile_grid_layout_padding_top
-                        : R.dimen.tile_grid_layout_no_logo_padding_top);
-        if (mSiteSectionViewHolder != null) {
-            mSiteSectionViewHolder.getItemView().setPadding(
-                    0, paddingTop, 0, mSiteSectionViewHolder.getItemView().getPaddingBottom());
-        } else if (mMvTilesContainerLayout != null) {
-            MarginLayoutParams marginLayoutParams =
-                    (MarginLayoutParams) mMvTilesContainerLayout.getLayoutParams();
-            marginLayoutParams.topMargin = paddingTop;
-            marginLayoutParams.bottomMargin =
-                    getResources().getDimensionPixelOffset(R.dimen.tile_grid_layout_bottom_margin);
+        MarginLayoutParams marginLayoutParams =
+                (MarginLayoutParams) mMvTilesContainerLayout.getLayoutParams();
+
+        if (isScrollableMvtEnabled()) {
+            // Let mMvTilesContainerLayout attached to the edge of the screen.
+            setClipToPadding(false);
+            int lateralPaddingsForNTP = mActivity.getResources().getDimensionPixelSize(
+                    R.dimen.ntp_header_lateral_paddings_v2);
+            marginLayoutParams.leftMargin = -lateralPaddingsForNTP;
+            marginLayoutParams.rightMargin = -lateralPaddingsForNTP;
+            marginLayoutParams.topMargin = getResources().getDimensionPixelSize(shouldShowLogo()
+                            ? R.dimen.tile_grid_layout_top_margin
+                            : R.dimen.tile_grid_layout_no_logo_top_margin);
+            marginLayoutParams.bottomMargin = getResources().getDimensionPixelOffset(
+                    R.dimen.tile_carousel_layout_bottom_margin);
+        } else {
+            ViewGroup.LayoutParams layoutParams = mMvTilesContainerLayout.getLayoutParams();
+            layoutParams.width = ViewGroup.LayoutParams.WRAP_CONTENT;
+            marginLayoutParams.topMargin = getGridMvtTopMargin();
+            marginLayoutParams.bottomMargin = getGridMvtBottomMargin();
         }
     }
 
@@ -786,6 +704,12 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
     void setSearchProviderTopMargin(int topMargin) {
         ((MarginLayoutParams) mSearchProviderLogoView.getLayoutParams()).topMargin = topMargin;
     }
+
+    void setSearchProviderBottomMargin(int bottomMargin) {
+        ((MarginLayoutParams) mSearchProviderLogoView.getLayoutParams()).bottomMargin =
+                bottomMargin;
+    }
+
     /**
      * @return Whether the search box view is scrolled off the screen.
      */
@@ -858,45 +782,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
         mSnapshotTileGridChanged = false;
     }
 
-    /**
-     * Shows the most visited placeholder ("Nothing to see here") if there are no most visited
-     * items and there is no search provider logo.
-     */
-    private void updateTileGridPlaceholderVisibility() {
-        // If scrollable MVT is enabled, the placeholder will be handled in {@link
-        // MostVisitedListMediator}.
-        if (isScrollableMVTEnabled()) return;
-        boolean showPlaceholder =
-                mTileGroup.hasReceivedData() && mTileGroup.isEmpty() && !mSearchProviderHasLogo;
-
-        mNoSearchLogoSpacer.setVisibility(
-                (mSearchProviderHasLogo || showPlaceholder) ? View.GONE : View.INVISIBLE);
-
-        mSiteSectionViewHolder.getItemView().setVisibility(showPlaceholder ? GONE : VISIBLE);
-
-        if (showPlaceholder) {
-            if (mTileGridPlaceholder == null) {
-                ViewStub placeholderStub = findViewById(R.id.tile_grid_placeholder_stub);
-                mTileGridPlaceholder = placeholderStub.inflate();
-            }
-            mTileGridPlaceholder.setVisibility(VISIBLE);
-        } else if (mTileGridPlaceholder != null) {
-            mTileGridPlaceholder.setVisibility(GONE);
-        }
-    }
-
-    /**
-     * Determines The maximum number of tiles to try and fit in a row. On smaller screens, there
-     * may not be enough space to fit all of them.
-     */
-    private int getMaxColumnsForMostVisitedTiles() {
-        return 4;
-    }
-
-    private static int getTileTitleLines() {
-        return 1;
-    }
-
     private boolean shouldShowLogo() {
         return mSearchProviderHasLogo;
     }
@@ -926,39 +811,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
                 }));
     }
 
-    // TileGroup.Observer interface.
-
-    @Override
-    public void onTileDataChanged() {
-        mSiteSectionViewHolder.refreshData();
-        mSnapshotTileGridChanged = true;
-
-        // The page contents are initially hidden; otherwise they'll be drawn centered on the page
-        // before the tiles are available and then jump upwards to make space once the tiles are
-        // available.
-        if (getVisibility() != View.VISIBLE) setVisibility(View.VISIBLE);
-    }
-
-    @Override
-    public void onTileCountChanged() {
-        // If the number of tile rows change while the URL bar is focused, the icons'
-        // position will be wrong. Schedule the translation to be updated.
-        if (mUrlFocusChangePercent == 1f) mTileCountChanged = true;
-        updateTileGridPlaceholderVisibility();
-    }
-
-    @Override
-    public void onTileIconChanged(Tile tile) {
-        mSiteSectionViewHolder.updateIconView(tile);
-        mSnapshotTileGridChanged = true;
-    }
-
-    @Override
-    public void onTileOfflineBadgeVisibilityChanged(Tile tile) {
-        mSiteSectionViewHolder.updateOfflineBadge(tile);
-        mSnapshotTileGridChanged = true;
-    }
-
     @Override
     public void onEnterVr() {
         mSearchBoxCoordinator.setVisibility(false);
@@ -975,10 +827,6 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             mCallbackController = null;
         }
 
-        if (mTileGroup != null) {
-            mTileGroup.destroy();
-        }
-
         VrModuleProvider.unregisterVrModeObserver(this);
 
         if (mSearchProviderLogoView != null) {
@@ -991,9 +839,9 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
 
         mSearchBoxCoordinator.destroy();
 
-        if (mMostVisitedListCoordinator != null) {
-            mMostVisitedListCoordinator.destroyMVTiles();
-            mMostVisitedListCoordinator = null;
+        if (mMostVisitedTilesCoordinator != null) {
+            mMostVisitedTilesCoordinator.destroyMvtiles();
+            mMostVisitedTilesCoordinator = null;
         }
     }
 
@@ -1018,6 +866,11 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
             userEducationHelper.requestShowIPH(iphCommandBuilder.build());
             tryNowTracker.tryNowUIShown(FeatureType.VOICE_SEARCH);
         }
+    }
+
+    @VisibleForTesting
+    MostVisitedTilesCoordinator getMostVisitedTilesCoordinatorForTesting() {
+        return mMostVisitedTilesCoordinator;
     }
 
     void maybeShowFeatureNotificationVoiceSearchIPH() {
@@ -1056,15 +909,23 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
      * Makes the Search Box and Logo as wide as Most Visited.
      */
     private void unifyElementWidths() {
-        if (mSiteSectionView != null && mSiteSectionView.getVisibility() != GONE) {
-            final int width = mSiteSectionView.getMeasuredWidth() - mTileGridLayoutBleed;
-            measureExactly(getSearchBoxView(), width, getSearchBoxView().getMeasuredHeight());
-            measureExactly(
-                    mSearchProviderLogoView, width, mSearchProviderLogoView.getMeasuredHeight());
+        if (mMvTilesContainerLayout.getVisibility() != GONE) {
+            if (!isScrollableMvtEnabled()) {
+                final int width = mMvTilesContainerLayout.getMeasuredWidth() - mTileGridLayoutBleed;
+                measureExactly(getSearchBoxView(), width, getSearchBoxView().getMeasuredHeight());
+                measureExactly(mSearchProviderLogoView, width,
+                        mSearchProviderLogoView.getMeasuredHeight());
 
-            if (mExploreSectionView != null) {
-                measureExactly(mExploreSectionView, mSiteSectionView.getMeasuredWidth(),
-                        mExploreSectionView.getMeasuredHeight());
+                if (mExploreSectionView != null) {
+                    measureExactly(mExploreSectionView, mMvTilesContainerLayout.getMeasuredWidth(),
+                            mExploreSectionView.getMeasuredHeight());
+                }
+            } else {
+                final int exploreWidth = getMeasuredWidth() - mTileGridLayoutBleed;
+                measureExactly(
+                        getSearchBoxView(), exploreWidth, getSearchBoxView().getMeasuredHeight());
+                measureExactly(mSearchProviderLogoView, exploreWidth,
+                        mSearchProviderLogoView.getMeasuredHeight());
             }
         } else if (mExploreSectionView != null) {
             final int exploreWidth = mExploreSectionView.getMeasuredWidth() - mTileGridLayoutBleed;
@@ -1072,18 +933,49 @@ public class NewTabPageLayout extends LinearLayout implements TileGroup.Observer
                     getSearchBoxView(), exploreWidth, getSearchBoxView().getMeasuredHeight());
             measureExactly(mSearchProviderLogoView, exploreWidth,
                     mSearchProviderLogoView.getMeasuredHeight());
-        } else if (mMvTilesContainerLayout != null) {
-            final int exploreWidth = getMeasuredWidth() - mTileGridLayoutBleed;
-            measureExactly(
-                    getSearchBoxView(), exploreWidth, getSearchBoxView().getMeasuredHeight());
-            measureExactly(mSearchProviderLogoView, exploreWidth,
-                    mSearchProviderLogoView.getMeasuredHeight());
         }
     }
 
-    private boolean isScrollableMVTEnabled() {
+    private boolean isScrollableMvtEnabled() {
         return ChromeFeatureList.isEnabled(ChromeFeatureList.SHOW_SCROLLABLE_MVT_ON_NTP_ANDROID)
                 && !DeviceFormFactor.isNonMultiDisplayContextOnTablet(mContext);
+    }
+
+    // TODO(crbug.com/1329288): Remove this method when the Feed position experiment is cleaned up.
+    private int getGridMvtTopMargin() {
+        if (!shouldShowLogo()) {
+            return getResources().getDimensionPixelOffset(
+                    R.dimen.tile_grid_layout_no_logo_top_margin);
+        }
+
+        int resourcesId = R.dimen.tile_grid_layout_top_margin;
+
+        if (FeedPositionUtils.isFeedPushDownLargeEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_top_margin_push_down_large;
+        } else if (FeedPositionUtils.isFeedPushDownSmallEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_top_margin_push_down_small;
+        } else if (FeedPositionUtils.isFeedPullUpEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_top_margin_pull_up;
+        }
+
+        return getResources().getDimensionPixelOffset(resourcesId);
+    }
+
+    // TODO(crbug.com/1329288): Remove this method when the Feed position experiment is cleaned up.
+    private int getGridMvtBottomMargin() {
+        int resourcesId = R.dimen.tile_grid_layout_bottom_margin;
+
+        if (!shouldShowLogo()) return getResources().getDimensionPixelOffset(resourcesId);
+
+        if (FeedPositionUtils.isFeedPushDownLargeEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_bottom_margin_push_down_large;
+        } else if (FeedPositionUtils.isFeedPushDownSmallEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_bottom_margin_push_down_small;
+        } else if (FeedPositionUtils.isFeedPullUpEnabled()) {
+            resourcesId = R.dimen.tile_grid_layout_bottom_margin_pull_up;
+        }
+
+        return getResources().getDimensionPixelOffset(resourcesId);
     }
 
     /**

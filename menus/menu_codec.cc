@@ -172,7 +172,8 @@ bool MenuCodec::DecodeNode(Menu_Node* parent,
 
     if (type) {
       if (!guid_valid) {
-        LOG(ERROR) << "Menu Codec: Guid missing or not valid for " << *type;
+        LOG(ERROR) << "Menu Codec: Guid missing or not valid for " << *type
+                   << " with action " << (action ? *action : "<missing>");
 #if !defined(OFFICIAL_BUILD)
         if (is_bundle) {
           LOG(ERROR) << "Menu Codec: Developer - Missing in bundled file, "

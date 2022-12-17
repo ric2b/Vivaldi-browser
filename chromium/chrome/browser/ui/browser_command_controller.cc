@@ -47,7 +47,7 @@
 #include "chrome/browser/ui/web_applications/web_app_dialog_utils.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_utils.h"
 #include "chrome/browser/ui/webui/inspect_ui.h"
-#include "chrome/browser/web_applications/web_app_install_manager.h"
+#include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/content_restriction.h"
 #include "chrome/common/pref_names.h"
@@ -55,6 +55,7 @@
 #include "components/bookmarks/common/bookmark_pref_names.h"
 #include "components/dom_distiller/core/dom_distiller_features.h"
 #include "components/prefs/pref_service.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/sessions/core/tab_restore_service.h"
 #include "components/signin/public/base/signin_buildflags.h"
 #include "components/signin/public/base/signin_pref_names.h"
@@ -71,7 +72,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/events/keycodes/keyboard_codes.h"
 
-#if BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 #include "ui/accessibility/accessibility_features.h"
 #endif
 
@@ -102,6 +103,16 @@
 
 #if defined(USE_OZONE)
 #include "ui/ozone/public/ozone_platform.h"
+#endif
+
+// TODO(https://crbug.com/1331331): Clean this up after the deprecation period.
+#if BUILDFLAG(ENABLE_PRINTING)
+#include "chrome/browser/infobars/simple_alert_infobar_creator.h"
+#include "chrome/browser/ui/accelerator_utils.h"
+#include "chrome/grit/generated_resources.h"
+#include "components/infobars/content/content_infobar_manager.h"
+#include "components/vector_icons/vector_icons.h"
+#include "ui/base/l10n/l10n_util.h"
 #endif
 
 #include "app/vivaldi_command_controller.h"
@@ -160,6 +171,28 @@ bool CanOpenFile(Browser* browser) {
 
   return true;
 }
+
+#if BUILDFLAG(ENABLE_PRINTING)
+// TODO(https://crbug.com/1331331): Clean this up after the deprecation period.
+void ShowDeprecatedBasicPrintInfoBar(Browser* browser) {
+  ui::AcceleratorProvider* provider =
+      chrome::AcceleratorProviderForBrowser(browser);
+
+  ui::Accelerator accelerator;
+  bool success =
+      provider->GetAcceleratorForCommandId(IDC_BASIC_PRINT, &accelerator);
+  DCHECK(success);
+
+  auto message = l10n_util::GetStringFUTF16(
+      IDS_PRINT_BASIC_SHORTCUT_DEPRECATION_TEXT, accelerator.GetShortcutText());
+  CreateSimpleAlertInfoBar(
+      infobars::ContentInfoBarManager::FromWebContents(
+          browser->tab_strip_model()->GetActiveWebContents()),
+      infobars::InfoBarDelegate::BASIC_PRINT_DEPRECATED_ACCELERATOR_DELEGATE,
+      &vector_icons::kWarningIcon, message,
+      /*auto_expire=*/false, /*should_animate=*/true);
+}
+#endif  // BUILDFLAG(ENABLE_PRINTING)
 
 }  // namespace
 
@@ -569,7 +602,7 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_VIEW_SOURCE:
       browser_->tab_strip_model()
           ->GetActiveWebContents()
-          ->GetMainFrame()
+          ->GetPrimaryMainFrame()
           ->ViewSource();
       break;
     case IDC_PRINT:
@@ -577,6 +610,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       break;
 
 #if BUILDFLAG(ENABLE_PRINTING)
+    case IDC_BASIC_PRINT_DEPRECATED:
+      ShowDeprecatedBasicPrintInfoBar(browser_);
+      [[fallthrough]];
     case IDC_BASIC_PRINT:
       base::RecordAction(base::UserMetricsAction("Accel_Advanced_Print"));
       BasicPrint(browser_);
@@ -702,14 +738,12 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
     case IDC_CREATE_SHORTCUT:
       base::RecordAction(base::UserMetricsAction("CreateShortcut"));
       web_app::CreateWebAppFromCurrentWebContents(
-          browser_,
-          web_app::WebAppInstallManager::WebAppInstallFlow::kCreateShortcut);
+          browser_, web_app::WebAppInstallFlow::kCreateShortcut);
       break;
     case IDC_INSTALL_PWA:
       base::RecordAction(base::UserMetricsAction("InstallWebAppFromMenu"));
       web_app::CreateWebAppFromCurrentWebContents(
-          browser_,
-          web_app::WebAppInstallManager::WebAppInstallFlow::kInstallSite);
+          browser_, web_app::WebAppInstallFlow::kInstallSite);
       break;
     case IDC_DEV_TOOLS:
       ToggleDevToolsWindow(browser_, DevToolsToggleAction::Show(),
@@ -928,9 +962,9 @@ bool BrowserCommandController::ExecuteCommandWithDisposition(
       ExecuteUIDebugCommand(id, browser_);
       break;
 
-#if BUILDFLAG(IS_LINUX)
-    case IDC_RUN_SCREEN_AI:
-      RunScreenAi(browser_);
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+    case IDC_RUN_SCREEN_AI_VISUAL_ANNOTATIONS:
+      RunScreenAIVisualAnnotation(browser_);
       break;
 #endif
 
@@ -1347,9 +1381,9 @@ void BrowserCommandController::UpdateCommandsForTabState() {
   command_updater_.UpdateCommandEnabled(IDC_OPEN_IN_PWA_WINDOW,
                                         web_app::CanPopOutWebApp(profile()));
 
-  bool is_isolated_app =
-      current_web_contents->GetMainFrame()->GetWebExposedIsolationLevel() >=
-      WebExposedIsolationLevel::kMaybeIsolatedApplication;
+  bool is_isolated_app = current_web_contents->GetPrimaryMainFrame()
+                             ->GetWebExposedIsolationLevel() >=
+                         WebExposedIsolationLevel::kMaybeIsolatedApplication;
   command_updater_.UpdateCommandEnabled(
       IDC_OPEN_IN_CHROME, IsWebAppOrCustomTab() && !is_isolated_app);
 
@@ -1480,9 +1514,10 @@ void BrowserCommandController::UpdateCommandsForFullscreenMode() {
   command_updater_.UpdateCommandEnabled(
       IDC_FOCUS_INACTIVE_POPUP_FOR_ACCESSIBILITY, main_not_fullscreen);
 
-#if BUILDFLAG(IS_LINUX)
-  command_updater_.UpdateCommandEnabled(IDC_RUN_SCREEN_AI,
-                                        features::IsScreenAIEnabled());
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+  command_updater_.UpdateCommandEnabled(
+      IDC_RUN_SCREEN_AI_VISUAL_ANNOTATIONS,
+      features::IsScreenAIVisualAnnotationsEnabled());
 #endif
 
   // Show various bits of UI
@@ -1600,6 +1635,8 @@ void BrowserCommandController::UpdatePrintingState() {
   bool print_enabled = CanPrint(browser_);
   command_updater_.UpdateCommandEnabled(IDC_PRINT, print_enabled);
 #if BUILDFLAG(ENABLE_PRINTING)
+  command_updater_.UpdateCommandEnabled(IDC_BASIC_PRINT_DEPRECATED,
+                                        CanBasicPrint(browser_));
   command_updater_.UpdateCommandEnabled(IDC_BASIC_PRINT,
                                         CanBasicPrint(browser_));
 #endif

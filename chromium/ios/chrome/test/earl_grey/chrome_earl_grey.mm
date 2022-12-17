@@ -480,7 +480,7 @@ UIWindow* GetAnyKeyWindow() {
   auto result = [self evaluateJavaScript:kGetCookiesScript];
 
   EG_TEST_HELPER_ASSERT_TRUE(result.is_list(),
-                             @"The script response is not iteratble.");
+                             @"The script response is not iterable.");
 
   NSMutableDictionary* cookies = [NSMutableDictionary dictionary];
   for (const auto& option : result.GetListDeprecated()) {
@@ -1241,10 +1241,6 @@ UIWindow* GetAnyKeyWindow() {
   return [ChromeEarlGreyAppInterface areMultipleWindowsSupported];
 }
 
-- (BOOL)isContextMenuInWebViewEnabled {
-  return [ChromeEarlGreyAppInterface isContextMenuInWebViewEnabled];
-}
-
 - (BOOL)isNewOverflowMenuEnabled {
   return [ChromeEarlGreyAppInterface isNewOverflowMenuEnabled];
 }
@@ -1256,6 +1252,10 @@ UIWindow* GetAnyKeyWindow() {
 - (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber {
   return [ChromeEarlGreyAppInterface
       isThumbstripEnabledForWindowWithNumber:windowNumber];
+}
+
+- (BOOL)isWebChannelsEnabled {
+  return [ChromeEarlGreyAppInterface isWebChannelsEnabled];
 }
 
 #pragma mark - ContentSettings

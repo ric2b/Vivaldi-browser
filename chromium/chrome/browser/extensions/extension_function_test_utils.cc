@@ -62,19 +62,19 @@ absl::optional<base::Value> ParseList(const std::string& data) {
   return result;
 }
 
-base::Value::DictStorage ToDictionary(std::unique_ptr<base::Value> val) {
+base::Value::Dict ToDictionary(std::unique_ptr<base::Value> val) {
   if (!val || !val->is_dict()) {
     ADD_FAILURE() << "val is nullptr or is not a dictonary.";
-    return base::Value::DictStorage();
+    return base::Value::Dict();
   }
-  return std::move(*val).TakeDictDeprecated();
+  return std::move(val->GetDict());
 }
 
-base::Value::DictStorage ToDictionary(const base::Value& val) {
+base::Value::Dict ToDictionary(const base::Value& val) {
   EXPECT_TRUE(val.is_dict());
   if (!val.is_dict())
-    return base::Value::DictStorage();
-  return val.Clone().TakeDictDeprecated();
+    return base::Value::Dict();
+  return val.GetDict().Clone();
 }
 
 std::unique_ptr<base::ListValue> ToList(std::unique_ptr<base::Value> val) {
@@ -85,7 +85,7 @@ std::unique_ptr<base::ListValue> ToList(std::unique_ptr<base::Value> val) {
   return base::ListValue::From(std::move(val));
 }
 
-bool HasAnyPrivacySensitiveFields(const base::Value::DictStorage& dict) {
+bool HasAnyPrivacySensitiveFields(const base::Value::Dict& dict) {
   constexpr std::array privacySensitiveKeys{keys::kUrlKey, keys::kTitleKey,
                                             keys::kFaviconUrlKey,
                                             keys::kPendingUrlKey};
@@ -111,10 +111,9 @@ std::string RunFunctionAndReturnError(
   RunFunction(function, args, browser, flags);
   // When sending a response, the function will set an empty list value if there
   // is no specified result.
-  const base::ListValue* results = function->GetResultList();
+  const base::Value::List* results = function->GetResultList();
   CHECK(results);
-  EXPECT_TRUE(results->GetListDeprecated().empty())
-      << "Did not expect a result";
+  EXPECT_TRUE(results->empty()) << "Did not expect a result";
   CHECK(function->response_type());
   EXPECT_EQ(ExtensionFunction::FAILED, *function->response_type());
   return function->GetError();
@@ -138,10 +137,9 @@ std::unique_ptr<base::Value> RunFunctionAndReturnSingleResult(
   RunFunction(function, args, browser, flags);
   EXPECT_TRUE(function->GetError().empty()) << "Unexpected error: "
       << function->GetError();
-  if (function->GetResultList() &&
-      !function->GetResultList()->GetListDeprecated().empty()) {
+  if (function->GetResultList() && !function->GetResultList()->empty()) {
     return base::Value::ToUniquePtrValue(
-        function->GetResultList()->GetListDeprecated()[0].Clone());
+        (*function->GetResultList())[0].Clone());
   }
   return nullptr;
 }

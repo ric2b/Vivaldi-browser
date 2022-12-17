@@ -210,7 +210,7 @@ void NoStatePrefetchContents::StartPrerendering(
   // TODO(davidben): This logic assumes each prerender has at most one
   // process. https://crbug.com/440544
   no_state_prefetch_manager()->AddPrerenderProcessHost(
-      GetMainFrame()->GetProcess());
+      GetPrimaryMainFrame()->GetProcess());
 
   NotifyPrefetchStart();
 
@@ -385,7 +385,7 @@ void NoStatePrefetchContents::DidRedirectNavigation(
 void NoStatePrefetchContents::DidFinishLoad(
     content::RenderFrameHost* render_frame_host,
     const GURL& validated_url) {
-  if (!render_frame_host->GetParent())
+  if (render_frame_host->IsInPrimaryMainFrame())
     has_finished_loading_ = true;
 }
 
@@ -437,7 +437,7 @@ void NoStatePrefetchContents::Destroy(FinalStatus final_status) {
 
 void NoStatePrefetchContents::DestroyWhenUsingTooManyResources() {
   if (process_pid_ == base::kNullProcessId) {
-    RenderFrameHost* rfh = GetMainFrame();
+    RenderFrameHost* rfh = GetPrimaryMainFrame();
     if (!rfh)
       return;
 
@@ -484,9 +484,9 @@ void NoStatePrefetchContents::DidGetMemoryUsage(
   }
 }
 
-RenderFrameHost* NoStatePrefetchContents::GetMainFrame() {
+RenderFrameHost* NoStatePrefetchContents::GetPrimaryMainFrame() {
   return no_state_prefetch_contents_
-             ? no_state_prefetch_contents_->GetMainFrame()
+             ? no_state_prefetch_contents_->GetPrimaryMainFrame()
              : nullptr;
 }
 

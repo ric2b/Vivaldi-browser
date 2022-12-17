@@ -116,19 +116,33 @@ class FeedStream : public ::feed::FeedStreamSurface {
   jlong GetLastFetchTimeMs(JNIEnv* env,
                            const base::android::JavaParamRef<jobject>& obj);
 
-  void ReportNoticeCreated(JNIEnv* env,
-                           const base::android::JavaParamRef<jobject>& obj,
-                           const base::android::JavaParamRef<jstring>& key);
-  void ReportNoticeViewed(JNIEnv* env,
-                          const base::android::JavaParamRef<jobject>& obj,
-                          const base::android::JavaParamRef<jstring>& key);
-  void ReportNoticeOpenAction(JNIEnv* env,
-                              const base::android::JavaParamRef<jobject>& obj,
-                              const base::android::JavaParamRef<jstring>& key);
+  void ReportInfoCardTrackViewStarted(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      int info_card_type);
 
-  void ReportNoticeDismissed(JNIEnv* env,
+  void ReportInfoCardViewed(JNIEnv* env,
+                            const base::android::JavaParamRef<jobject>& obj,
+                            int info_card_type,
+                            int minimum_view_interval_seconds);
+
+  void ReportInfoCardClicked(JNIEnv* env,
                              const base::android::JavaParamRef<jobject>& obj,
-                             const base::android::JavaParamRef<jstring>& key);
+                             int info_card_type);
+
+  void ReportInfoCardDismissedExplicitly(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      int info_card_type);
+
+  void ResetInfoCardStates(JNIEnv* env,
+                           const base::android::JavaParamRef<jobject>& obj,
+                           int info_card_type);
+
+  void InvalidateContentCacheFor(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& obj,
+      jint stream_kind);
 
  private:
   base::android::ScopedJavaGlobalRef<jobject> java_ref_;

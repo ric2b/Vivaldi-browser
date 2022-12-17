@@ -28,7 +28,6 @@
 #include "chromeos/constants/devicetype.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/power_manager/power_supply_properties.pb.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "ui/aura/client/aura_constants.h"
 
 namespace ash {
@@ -577,7 +576,7 @@ TabProperty UserActivityManager::UpdateOpenTabURL() {
 
     if (contents) {
       ukm::SourceId source_id =
-          ukm::GetSourceIdForWebContentsDocument(contents);
+          contents->GetPrimaryMainFrame()->GetPageUkmSourceId();
       if (source_id == ukm::kInvalidSourceId)
         return property;
 

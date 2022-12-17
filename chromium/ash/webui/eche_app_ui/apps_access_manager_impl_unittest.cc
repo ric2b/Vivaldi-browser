@@ -75,9 +75,7 @@ class AppsAccessManagerImplTest : public testing::Test {
     multidevice_setup::RegisterFeaturePrefs(pref_service_.registry());
 
     scoped_feature_list_.InitWithFeatures(
-        /*enabled_features=*/{chromeos::features::kEcheSWA,
-                              chromeos::features::
-                                  kEchePhoneHubPermissionsOnboarding},
+        /*enabled_features=*/{chromeos::features::kEcheSWA},
         /*disabled_features=*/{});
 
     fake_eche_connector_ = std::make_unique<FakeEcheConnector>();
@@ -112,6 +110,11 @@ class AppsAccessManagerImplTest : public testing::Test {
   void FakeSendAppsSetupResponse(eche_app::proto::Result result,
                                  eche_app::proto::AppsAccessState status) {
     fake_eche_message_receiver_->FakeSendAppsSetupResponse(result, status);
+  }
+
+  void FakeSendAppsPolicyStateChange(
+      eche_app::proto::AppStreamingPolicy app_policy_state) {
+    fake_eche_message_receiver_->FakeAppPolicyStateChange(app_policy_state);
   }
 
   void SetFeatureStatus(FeatureStatus status) {
@@ -593,6 +596,54 @@ TEST_F(AppsAccessManagerImplTest,
       /*expected_feature=*/Feature::kEche,
       /*expected_enabled=*/false, /*expected_auth_token=*/absl::nullopt,
       /*success=*/true);
+}
+
+TEST_F(AppsAccessManagerImplTest,
+       ShouleNotEnableEcheFeatureWhenAppsPolicyDisabled) {
+  // Explicitly disable Phone Hub, all sub feature should be disabled
+  SetFeatureState(Feature::kPhoneHub, FeatureState::kDisabledByUser);
+  SetFeatureState(Feature::kEche, FeatureState::kDisabledByUser);
+  Initialize(AccessStatus::kAvailableButNotGranted);
+  VerifyAppsAccessGrantedState(AccessStatus::kAvailableButNotGranted);
+
+  // Simulate flipping the policy state is disabled.
+  FakeSendAppsPolicyStateChange(
+      eche_app::proto::AppStreamingPolicy::APP_POLICY_DISABLED);
+  // No action after access is granted.
+  // Simulate flipping the access state granted.
+  FakeGetAppsAccessStateResponse(
+      eche_app::proto::Result::RESULT_NO_ERROR,
+      eche_app::proto::AppsAccessState::ACCESS_GRANTED);
+
+  EXPECT_EQ(
+      0u,
+      fake_multidevice_setup_client()->NumPendingSetFeatureEnabledStateCalls());
+}
+
+TEST_F(AppsAccessManagerImplTest,
+       SimulateAppsPolicyDisabledShouleDisableEcheFeature) {
+  SetFeatureState(Feature::kPhoneHub, FeatureState::kEnabledByUser);
+  SetFeatureState(Feature::kEche, FeatureState::kEnabledByUser);
+  Initialize(AccessStatus::kAccessGranted);
+  VerifyAppsAccessGrantedState(AccessStatus::kAccessGranted);
+
+  // Test that there is a call to disable kEche when apps polcy state has been
+  // changed. Simulate flipping the policy state is disabled.
+  FakeSendAppsPolicyStateChange(
+      eche_app::proto::AppStreamingPolicy::APP_POLICY_DISABLED);
+
+  // No action is taken until get apps access state response is received.
+  EXPECT_EQ(0u, GetNumObserverCalls());
+
+  FakeGetAppsAccessStateResponse(
+      eche_app::proto::Result::RESULT_NO_ERROR,
+      eche_app::proto::AppsAccessState::ACCESS_GRANTED);
+
+  fake_multidevice_setup_client()->InvokePendingSetFeatureEnabledStateCallback(
+      /*expected_feature=*/Feature::kEche,
+      /*expected_enabled=*/false, /*expected_auth_token=*/absl::nullopt,
+      /*success=*/true);
+  EXPECT_EQ(1u, GetNumObserverCalls());
 }
 
 }  // namespace eche_app

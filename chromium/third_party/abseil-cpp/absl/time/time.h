@@ -162,7 +162,7 @@ class Duration {
   constexpr Duration() : rep_hi_(0), rep_lo_(0) {}  // zero-length duration
 
   // Copyable.
-#if !defined(__clang__) && defined(_MSC_VER) && _MSC_VER < 1910
+#if !defined(__clang__) && defined(_MSC_VER) && _MSC_VER < 1930
   // Explicitly defining the constexpr copy constructor avoids an MSVC bug.
   constexpr Duration(const Duration& d)
       : rep_hi_(d.rep_hi_), rep_lo_(d.rep_lo_) {}
@@ -579,7 +579,7 @@ bool ParseDuration(absl::string_view dur_string, Duration* d);
 
 // AbslParseFlag()
 //
-// Parses a command-line flag string representation `text` into a a Duration
+// Parses a command-line flag string representation `text` into a Duration
 // value. Duration flags must be specified in a format that is valid input for
 // `absl::ParseDuration()`.
 bool AbslParseFlag(absl::string_view text, Duration* dst, std::string* error);

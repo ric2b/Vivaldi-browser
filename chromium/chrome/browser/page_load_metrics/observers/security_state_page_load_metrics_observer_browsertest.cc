@@ -20,7 +20,6 @@
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
 #include "components/reputation/core/safety_tip_test_utils.h"
-#include "components/security_state/core/features.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -666,11 +665,8 @@ class SecurityStatePageLoadMetricsFencedFrameBrowserTest
   content::test::FencedFrameTestHelper fenced_frame_helper_;
 };
 
-// TODO(crbug.com/1301880): This test will be enabled after toyoshim@'s CL
-// restricts call to SecurityStatePageLoadMetricsObserver::OnCommit for fenced
-// frames"
 IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsFencedFrameBrowserTest,
-                       DISABLED_DoNotRecordOnCommitSecurityLevelHistogram) {
+                       DoNotRecordOnCommitSecurityLevelHistogram) {
   StartHttpsServer(net::EmbeddedTestServer::CERT_OK);
 
   GURL https_url = https_test_server()->GetURL("/title1.html");
@@ -683,7 +679,7 @@ IN_PROC_BROWSER_TEST_F(SecurityStatePageLoadMetricsFencedFrameBrowserTest,
       https_test_server()->GetURL("/fenced_frames/title1.html"));
   content::RenderFrameHost* fenced_frame_host =
       fenced_frame_test_helper().CreateFencedFrame(
-          GetWebContents()->GetMainFrame(), fenced_frame_url);
+          GetWebContents()->GetPrimaryMainFrame(), fenced_frame_url);
   ASSERT_TRUE(fenced_frame_host);
 
   histogram_tester()->ExpectTotalCount("Security.SecurityLevel.OnCommit", 1);

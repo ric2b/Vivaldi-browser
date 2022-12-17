@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Poskusite zagnati Windows diagnostiko omrežja<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Na tem spletnem mestu so škodljivi programi</translation>
 <translation id="1916770123977586577">Če želite uporabiti posodobljene nastavitve za to spletno mesto, znova naložite to stran</translation>
+<translation id="1973351931613083086">samodejno predvajanje</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />preverite strežnik proxy in požarni zid<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Izdano za: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Pojdi nazaj</translation>
 <translation id="2539524384386349900">Zaznava</translation>
 <translation id="255002559098805027">Spletno mesto <ph name="HOST_NAME" /> je poslalo neveljaven odgovor.</translation>
-<translation id="2609632851001447353">Različice</translation>
 <translation id="2634124572758952069">Naslova IP strežnika <ph name="HOST_NAME" /> ni bilo mogoče najti.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dostop do datoteke je bil zavrnjen</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Morda poskušajo napadalci ukrasti vaše podatke s spletnega mesta <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (na primer gesla, sporočila ali podatke kreditnih kartic). <ph name="BEGIN_LEARN_MORE_LINK" />Več o tem<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Zaznana je bila sprememba omrežja.</translation>
 <translation id="2948083400971632585">Na strani nastavitev lahko onemogočite vse strežnike, konfigurirane za povezavo.</translation>
+<translation id="2953943267837858202">Samodejno predvajanje videa ni dovoljeno</translation>
 <translation id="2991571918955627853">Spletnega mesta <ph name="SITE" /> trenutno ni mogoče obiskati, saj uporablja protokol HSTS. Napake omrežja in napadi na omrežje so običajno začasni, zato bo ta stran verjetno delovala pozneje.</translation>
 <translation id="3005723025932146533">Pokaži shranjeno kopijo</translation>
 <translation id="301521992641321250">Samodejno blokirano</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Pritisnite gumb za vnovično nalaganje, da znova pošljete podatke za nalaganje strani.</translation>
 <translation id="3234666976984236645">Vedno zaznaj pomembno vsebino na tem spletnem mestu</translation>
+<translation id="3291915639428159043">Samodejno predvajanje je blokirano</translation>
 <translation id="3308738399950580893">oglasi</translation>
 <translation id="3422472998109090673">Spletno mesto <ph name="HOST_NAME" /> trenutno ni dosegljivo.</translation>
 <translation id="3427092606871434483">Dovoli (privzeto)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Vaša povezava ni zasebna</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Skrij podrobnosti</translation>
+<translation id="3620979700683094848">Spletna mesta lahko samodejno predvajajo video</translation>
 <translation id="3630155396527302611">Če je že na seznamu programov, ki jim je dovoljen dostop do omrežja, ga poskusite
     odstraniti s seznama in znova dodati.</translation>
 <translation id="3658742229777143148">Različica</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861">Spletno mesto <ph name="HOST_NAME" /> je blokirano</translation>
 <translation id="3987940399970879459">Manj kot 1 MB</translation>
 <translation id="4075732493274867456">Odjemalec in strežnik ne podpirata skupne različice protokola SSL ali šifrirne zbirke.</translation>
+<translation id="410351446219883937">Samodejno predvajanje</translation>
 <translation id="4116663294526079822">Vedno dovoli na tem spletnem mestu</translation>
 <translation id="4130226655945681476">preverite omrežne kable, modem in usmerjevalnik</translation>
 <translation id="4151403195736952345">Globalno uporabi privzete nastavitve (Zaznaj)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Preverite nastavitve za DNS</translation>
 <translation id="6328639280570009161">Poskusite onemogočiti omrežno predvidevanje</translation>
 <translation id="6328786501058569169">To spletno mesto je zavajajoče</translation>
+<translation id="6348220984832452017">Aktivne variacije</translation>
 <translation id="6358450015545214790">Kaj to pomeni?</translation>
 <translation id="6433595998831338502">Spletno mesto <ph name="HOST_NAME" /> ni dovolilo povezave.</translation>
 <translation id="6447842834002726250">Piškotki</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Dovoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Spletno mesto <ph name="HOST_NAME" /> ne upošteva varnostnih standardov.</translation>
 <translation id="7219179957768738017">Povezava uporablja <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Prikaži obvestila</translation>
 <translation id="7260504762447901703">Prekliči dostop</translation>
 <translation id="7353601530677266744">Ukazna vrstica</translation>
 <translation id="7364115444476960850">Stran, do katere ste poskušali dostopati, je blokirala družba Vivaldi <ph name="BLOCKER_NAME" /></translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Povezavo je morda blokiral požarni zid ali protivirusni program.</translation>
 <translation id="7800304661137206267">Povezava je šifrirana s <ph name="CIPHER" /> in uporablja <ph name="MAC" /> za preverjanje pristnosti sporočil ter <ph name="KX" /> kot mehanizem za izmenjavo ključev.</translation>
 <translation id="7834399512844817676">Spletno mesto <ph name="SITE" /> za zaščito vaših podatkov običajno uporablja šifriranje. Ko se je Vivaldi tokrat poskusil povezati s spletnim mestom <ph name="SITE" />, je to vrnilo nenavadne in nepravilne poverilnice. Do tega lahko pride, če se napadalec lažno predstavlja za spletno mesto <ph name="SITE" /> ali če je povezavo prekinil zaslon za prijavo v omrežje Wi-Fi. Vaši podatki so še vedno varni, saj je Vivaldi pred izmenjavo podatkov prekinil povezavo.</translation>
+<translation id="7834693436815575883">Samodejno predvajanje je dovoljeno</translation>
 <translation id="7878562273885520351">Vaše geslo je morda ogroženo</translation>
 <translation id="7951415247503192394">(32-bitno)</translation>
 <translation id="8025119109950072390">Napadalci na tem spletnem mestu vas lahko z zavajanjem morda pripravijo do tega, da storite kaj nevarnega – denimo, da namestite programsko opremo ali razkrijete osebne podatke (na primer gesla, telefonske številke ali podatke kreditnih kartic).</translation>
 <translation id="8037357227543935929">Vprašaj (privzeto)</translation>
 <translation id="8041940743680923270">Uporabi globalno privzeto (Vprašaj)</translation>
+<translation id="8044382196220116469">Spletnim mestom ne dovoli samodejno predvajanje videoposnetkov</translation>
 <translation id="808894953321890993">Zamenjajte geslo</translation>
 <translation id="8119307142152921512">sledilci in oglasi</translation>
 <translation id="8149426793427495338">Računalnik je preklopil v stanje spanja.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Uporabniško ime</translation>
 <translation id="8703575177326907206">Vaša povezava z <ph name="DOMAIN" /> ni šifrirana.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;DNS address&lt;/abbr&gt; ni bilo mogoče najti. Poteka diagnosticiranje težave.</translation>
+<translation id="8774017153185436870">Spletna mesta lahko samodejno predvajajo video</translation>
 <translation id="8820817407110198400">Zaznamki</translation>
 <translation id="8940028675168378100">Blokiral <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Pojdi na nastavitve spletnega mesta</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Prezri</translation>
 <translation id="9025348182339809926">(Neveljavno)</translation>
 <translation id="9039213469156557790">Poleg tega so na tej strani druga sredstva, ki niso varna. Ta sredstva lahko med prenosom pregledujejo drugi, morebitni napadalec pa jih lahko spremeni, tako da se spremeni način delovanja strani.</translation>
+<translation id="9048224371732578627">Dovoljeno samodejno predvajanje videa</translation>
 <translation id="9062620674789239642">Morda je premaknjena, urejana ali izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano z razširitvijo</translation>
 <translation id="9073799351042754113">Izbrali ste izklop varnostnih opozoril za to spletno mesto.</translation>

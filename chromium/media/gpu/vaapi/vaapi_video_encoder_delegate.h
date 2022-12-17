@@ -42,25 +42,12 @@ class VaapiVideoEncoderDelegate {
                             base::RepeatingClosure error_cb);
   virtual ~VaapiVideoEncoderDelegate();
 
-  enum class BitrateControl {
-    kConstantBitrate,  // Constant Bitrate mode. This class relies on other
-                       // parts (e.g. driver) to achieve the specified bitrate.
-    kConstantQuantizationParameter  // Constant Quantization Parameter mode.
-                                    // This class needs to compute a proper
-                                    // quantization parameter and give other
-                                    // parts (e.g. the driver) the value.
-  };
-
   struct Config {
-    // Maxium number of reference frames.
+    // Maximum number of reference frames.
     // For H.264 encoding, the value represents the maximum number of reference
     // frames for both the reference picture list 0 (bottom 16 bits) and the
     // reference picture list 1 (top 16 bits).
     size_t max_num_ref_frames;
-
-    bool native_input_mode = false;
-
-    BitrateControl bitrate_control = BitrateControl::kConstantBitrate;
   };
 
   // EncodeResult owns the necessary resource to keep the encoded buffer. The
@@ -91,12 +78,13 @@ class VaapiVideoEncoderDelegate {
     // Creates an EncodeJob to encode |input_frame|, which will be executed by
     // calling ExecuteSetupCallbacks() in VaapiVideoEncoderDelegate::Encode().
     // If |keyframe| is true, requests this job to produce a keyframe.
-    EncodeJob(scoped_refptr<VideoFrame> input_frame, bool keyframe);
+    EncodeJob(bool keyframe,
+              base::TimeDelta timestamp,
+              VASurfaceID input_surface_id);
     // Constructor for VA-API.
-    EncodeJob(scoped_refptr<VideoFrame> input_frame,
-              bool keyframe,
+    EncodeJob(bool keyframe,
+              base::TimeDelta timestamp,
               VASurfaceID input_surface_id,
-              const gfx::Size& input_surface_size,
               scoped_refptr<CodecPicture> picture,
               std::unique_ptr<ScopedVABuffer> coded_buffer);
 
@@ -121,25 +109,20 @@ class VaapiVideoEncoderDelegate {
 
     base::TimeDelta timestamp() const;
 
-    const scoped_refptr<VideoFrame>& input_frame() const;
-
     // VA-API specific methods.
     VABufferID coded_buffer_id() const;
     VASurfaceID input_surface_id() const;
-    const gfx::Size& input_surface_size() const;
     const scoped_refptr<CodecPicture>& picture() const;
 
    private:
-    // Input VideoFrame to be encoded.
-    const scoped_refptr<VideoFrame> input_frame_;
-
     // True if this job is to produce a keyframe.
     bool keyframe_;
+    // |timestamp_| to be added to the produced encoded chunk.
+    const base::TimeDelta timestamp_;
 
     // VA-API specific members.
     // Input surface ID and size for video frame data or scaled data.
     const VASurfaceID input_surface_id_;
-    const gfx::Size input_surface_size_;
     const scoped_refptr<CodecPicture> picture_;
     // Buffer that will contain the output bitstream data for this frame.
     std::unique_ptr<ScopedVABuffer> coded_buffer_;
@@ -192,8 +175,6 @@ class VaapiVideoEncoderDelegate {
 
   base::RepeatingClosure error_cb_;
 
-  bool native_input_mode_ = false;
-
   SEQUENCE_CHECKER(sequence_checker_);
 
  private:
@@ -203,9 +184,8 @@ class VaapiVideoEncoderDelegate {
   virtual bool PrepareEncodeJob(EncodeJob& encode_job) = 0;
 
   // Notifies the encoded chunk size in bytes to update a bitrate controller in
-  // VaapiVideoEncoderDelegate. This should be called only if
-  // VaapiVideoEncoderDelegate is configured with
-  // BitrateControl::kConstantQuantizationParameter.
+  // VaapiVideoEncoderDelegate. This should be called only if constant
+  // quantization encoding is used, which currently is true for VP8 and VP9.
   virtual void BitrateControlUpdate(uint64_t encoded_chunk_size_bytes);
 };
 }  // namespace media

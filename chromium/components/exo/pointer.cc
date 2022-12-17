@@ -478,15 +478,13 @@ void Pointer::OnSurfaceDestroying(Surface* surface) {
 // ui::EventHandler overrides:
 
 void Pointer::OnMouseEvent(ui::MouseEvent* event) {
-  if (seat_->was_shutdown())
+  if (seat_->was_shutdown() || event->handled())
     return;
 
   // Nothing to report to a client nor have to update the pointer when capture
   // changes.
   if (event->type() == ui::ET_MOUSE_CAPTURE_CHANGED)
     return;
-
-  seat_->SetLastPointerLocation(event->root_location_f());
 
   Surface* target = GetEffectiveTargetForEvent(event);
   gfx::PointF location_in_target = event->location_f();
@@ -737,7 +735,7 @@ void Pointer::OnDragCompleted(const ui::DropTargetEvent& event) {
   // being destroyed. Verify whether this is the case, and adapt the event.
   //
   // TODO(https://crbug.com/1160925): Avoid nested RunLoop in exo
-  // DataDevice::OnPerformDrop() - remove the block below when it is fixed.
+  // DataDevice::GetDropCallback() - remove the block below when it is fixed.
   auto* event_target = static_cast<aura::Window*>(event.target());
   if (!event_target) {
     LOG(WARNING) << "EventTarget has been destroyed during the drop operation.";

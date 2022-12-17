@@ -192,12 +192,12 @@ FastPairPairerImpl::FastPairPairerImpl(
 }
 
 FastPairPairerImpl::~FastPairPairerImpl() {
-  std::string device_address = device_->classic_address().value();
-  device::BluetoothDevice* bt_device = adapter_->GetDevice(device_address);
-  if (bt_device) {
-    bt_device->CancelPairing();
-  }
   adapter_->RemovePairingDelegate(this);
+  device::BluetoothDevice* bt_device = nullptr;
+  if (device_->classic_address())
+    bt_device = adapter_->GetDevice(device_->classic_address().value());
+  if (bt_device)
+    bt_device->CancelPairing();
 }
 
 void FastPairPairerImpl::StartPairing() {
@@ -368,12 +368,12 @@ void FastPairPairerImpl::OnParseDecryptedPasskey(
 
 void FastPairPairerImpl::AttemptSendAccountKey() {
   // We only send the account key if we're doing an initial or retroactive
-  // pairing. For other FastPair protocols, we can consider the paring
-  // procedure complete at this point.
-  if (device_->protocol != Protocol::kFastPairInitial &&
-      device_->protocol != Protocol::kFastPairRetroactive) {
-    QP_LOG(INFO) << __func__ << ": Ignoring due to incorrect protocol: "
-                 << device_->protocol;
+  // pairing. For subsequent pairing, we have to save the account key
+  // locally so that we can refer to it in API calls to the server.
+  if (device_->protocol == Protocol::kFastPairSubsequent) {
+    QP_LOG(INFO) << __func__
+                 << ": Saving Account Key locally for subsequent pair";
+    FastPairRepository::Get()->AssociateAccountKeyLocally(device_);
     std::move(pairing_procedure_complete_).Run(device_);
     return;
   }
@@ -393,8 +393,17 @@ void FastPairPairerImpl::AttemptSendAccountKey() {
     return;
   }
 
-  FastPairRepository::Get()->CheckOptInStatus(base::BindOnce(
-      &FastPairPairerImpl::OnCheckOptInStatus, weak_ptr_factory_.GetWeakPtr()));
+  // We want to verify the opt in status if the flag is enabled before we write
+  // an account key.
+  if (features::IsFastPairSavedDevicesEnabled()) {
+    QP_LOG(INFO) << __func__ << ": Saved Devices Flag enabled";
+    FastPairRepository::Get()->CheckOptInStatus(
+        base::BindOnce(&FastPairPairerImpl::OnCheckOptInStatus,
+                       weak_ptr_factory_.GetWeakPtr()));
+    return;
+  }
+
+  WriteAccountKey();
 }
 
 void FastPairPairerImpl::OnCheckOptInStatus(
@@ -408,6 +417,10 @@ void FastPairPairerImpl::OnCheckOptInStatus(
     return;
   }
 
+  WriteAccountKey();
+}
+
+void FastPairPairerImpl::WriteAccountKey() {
   std::array<uint8_t, 16> account_key;
   RAND_bytes(account_key.data(), account_key.size());
   account_key[0] = 0x04;

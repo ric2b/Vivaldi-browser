@@ -474,6 +474,10 @@ NetworkContext::NetworkContext(
           std::make_unique<NetworkContextApplicationStatusListener>()),
 #endif
       receiver_(this, std::move(receiver)),
+      first_party_sets_access_delegate_(
+          std::move(params_->first_party_sets_access_delegate_receiver),
+          std::move(params_->first_party_sets_access_delegate_params),
+          network_service_->first_party_sets_manager()),
       cors_preflight_controller_(network_service),
       cors_non_wildcard_request_headers_support_(base::FeatureList::IsEnabled(
           features::kCorsNonWildcardRequestHeadersSupport)) {
@@ -510,8 +514,9 @@ NetworkContext::NetworkContext(
       session_cleanup_cookie_store,
       std::move(on_url_request_context_builder_configured));
   url_request_context_ = url_request_context_owner_.url_request_context.get();
+
   cookie_manager_ = std::make_unique<CookieManager>(
-      url_request_context_, network_service_->first_party_sets(),
+      url_request_context_, &first_party_sets_access_delegate_,
       std::move(session_cleanup_cookie_store),
       std::move(params_->cookie_manager_params));
 
@@ -589,11 +594,15 @@ NetworkContext::NetworkContext(
           std::make_unique<NetworkContextApplicationStatusListener>()),
 #endif
       receiver_(this, std::move(receiver)),
-      cookie_manager_(
-          std::make_unique<CookieManager>(url_request_context,
-                                          nullptr,
-                                          nullptr /* first_party_sets */,
-                                          nullptr)),
+      first_party_sets_access_delegate_(
+          /*receiver=*/mojo::NullReceiver(),
+          /*params=*/nullptr,
+          /*manager=*/nullptr),
+      cookie_manager_(std::make_unique<CookieManager>(
+          url_request_context,
+          nullptr,
+          /*first_party_sets_access_delegate=*/nullptr,
+          nullptr)),
       socket_factory_(
           std::make_unique<SocketFactory>(url_request_context_->net_log(),
                                           url_request_context)),
@@ -736,13 +745,15 @@ void NetworkContext::SetClient(
 void NetworkContext::CreateURLLoaderFactory(
     mojo::PendingReceiver<mojom::URLLoaderFactory> receiver,
     mojom::URLLoaderFactoryParamsPtr params) {
-  scoped_refptr<ResourceSchedulerClient> resource_scheduler_client =
-      base::MakeRefCounted<ResourceSchedulerClient>(
-          current_resource_scheduler_client_id_,
-          IsBrowserInitiated(params->process_id == mojom::kBrowserProcessId),
-          resource_scheduler_.get(),
-          url_request_context_->network_quality_estimator());
-  current_resource_scheduler_client_id_.Increment();
+  scoped_refptr<ResourceSchedulerClient> resource_scheduler_client;
+  if (!base::FeatureList::IsEnabled(features::kDisableResourceScheduler)) {
+    resource_scheduler_client = base::MakeRefCounted<ResourceSchedulerClient>(
+        current_resource_scheduler_client_id_,
+        IsBrowserInitiated(params->process_id == mojom::kBrowserProcessId),
+        resource_scheduler_.get(),
+        url_request_context_->network_quality_estimator());
+    current_resource_scheduler_client_id_.Increment();
+  }
   CreateURLLoaderFactory(std::move(receiver), std::move(params),
                          std::move(resource_scheduler_client));
 }
@@ -788,7 +799,7 @@ void NetworkContext::OnComputedFirstPartySetMetadata(
           role, url_request_context_->cookie_store(),
           cookie_manager_->cookie_settings(), origin, isolation_info,
           std::move(cookie_observer),
-          network_service_->first_party_sets()->is_enabled(),
+          first_party_sets_access_delegate_.is_enabled(),
           std::move(first_party_set_metadata)),
       std::move(receiver));
 }
@@ -1113,16 +1124,12 @@ void NetworkContext::QueueReport(
     const absl::optional<base::UnguessableToken>& reporting_source,
     const net::NetworkIsolationKey& network_isolation_key,
     const absl::optional<std::string>& user_agent,
-    base::Value body) {
+    base::Value::Dict body) {
 #if BUILDFLAG(ENABLE_REPORTING)
   // If |reporting_source| is provided, it must not be empty.
   DCHECK(!(reporting_source.has_value() && reporting_source->is_empty()));
   if (require_network_isolation_key_)
     DCHECK(!network_isolation_key.IsEmpty());
-
-  DCHECK(body.is_dict());
-  if (!body.is_dict())
-    return;
 
   // Get the ReportingService.
   net::URLRequestContext* request_context = url_request_context();
@@ -1140,9 +1147,9 @@ void NetworkContext::QueueReport(
         request_context->http_user_agent_settings()->GetUserAgent();
   }
 
-  reporting_service->QueueReport(
-      url, reporting_source, network_isolation_key, reported_user_agent, group,
-      type, base::Value::ToUniquePtrValue(std::move(body)), 0 /* depth */);
+  reporting_service->QueueReport(url, reporting_source, network_isolation_key,
+                                 reported_user_agent, group, type,
+                                 std::move(body), 0 /* depth */);
 #endif  // BUILDFLAG(ENABLE_REPORTING)
 }
 
@@ -1506,7 +1513,7 @@ void NetworkContext::GetExpectCTState(
     const std::string& domain,
     const net::NetworkIsolationKey& network_isolation_key,
     GetExpectCTStateCallback callback) {
-  base::Value result(base::Value::Type::DICTIONARY);
+  base::Value::Dict result;
   if (base::IsStringASCII(domain)) {
     net::TransportSecurityState* transport_security_state =
         url_request_context()->transport_security_state();
@@ -1517,26 +1524,26 @@ void NetworkContext::GetExpectCTState(
 
       // TODO(estark): query static Expect-CT state as well.
       if (found) {
-        result.SetStringKey("dynamic_expect_ct_domain", domain);
-        result.SetDoubleKey("dynamic_expect_ct_observed",
-                            dynamic_expect_ct_state.last_observed.ToDoubleT());
-        result.SetDoubleKey("dynamic_expect_ct_expiry",
-                            dynamic_expect_ct_state.expiry.ToDoubleT());
-        result.SetBoolKey("dynamic_expect_ct_enforce",
-                          dynamic_expect_ct_state.enforce);
-        result.SetStringKey("dynamic_expect_ct_report_uri",
-                            dynamic_expect_ct_state.report_uri.spec());
+        result.Set("dynamic_expect_ct_domain", domain);
+        result.Set("dynamic_expect_ct_observed",
+                   dynamic_expect_ct_state.last_observed.ToDoubleT());
+        result.Set("dynamic_expect_ct_expiry",
+                   dynamic_expect_ct_state.expiry.ToDoubleT());
+        result.Set("dynamic_expect_ct_enforce",
+                   dynamic_expect_ct_state.enforce);
+        result.Set("dynamic_expect_ct_report_uri",
+                   dynamic_expect_ct_state.report_uri.spec());
       }
 
-      result.SetBoolKey("result", found);
+      result.Set("result", found);
     } else {
-      result.SetStringKey("error", "no Expect-CT state active");
+      result.Set("error", "no Expect-CT state active");
     }
   } else {
-    result.SetStringKey("error", "non-ASCII domain name");
+    result.Set("error", "non-ASCII domain name");
   }
 
-  std::move(callback).Run(std::move(result));
+  std::move(callback).Run(base::Value(std::move(result)));
 }
 
 void NetworkContext::MaybeEnqueueSCTReport(
@@ -1951,6 +1958,7 @@ void NetworkContext::EnableStaticKeyPinningForTesting(
   net::TransportSecurityState* state =
       url_request_context_->transport_security_state();
   state->EnableStaticPinsForTesting();
+  state->SetPinningListAlwaysTimelyForTesting(true);
   std::move(callback).Run();
 }
 
@@ -2365,7 +2373,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     std::unique_ptr<net::CookieMonster> cookie_store =
         std::make_unique<net::CookieMonster>(
             session_cleanup_cookie_store.get(), net_log,
-            network_service_->first_party_sets()->is_enabled());
+            first_party_sets_access_delegate_.is_enabled());
     if (params_->persist_session_cookies)
       cookie_store->SetPersistSessionCookies(true);
 
@@ -2433,6 +2441,11 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
     } else {
       cache_params.path = params_->http_cache_directory->path();
       cache_params.type = network_session_configurator::ChooseCacheType();
+      if (params_->http_cache_file_operations_factory) {
+        cache_params.file_operations_factory =
+            base::MakeRefCounted<MojoBackendFileOperationsFactory>(
+                std::move(params_->http_cache_file_operations_factory));
+      }
     }
     cache_params.reset_cache = params_->reset_http_cache_backend;
 
@@ -2578,7 +2591,7 @@ URLRequestContextOwner NetworkContext::MakeURLRequestContext(
       command_line->GetSwitchValueASCII(switches::kHostResolverRules));
 
   builder.set_first_party_sets_enabled(
-      network_service_->first_party_sets()->is_enabled());
+      first_party_sets_access_delegate_.is_enabled());
 
   // If `require_network_isolation_key_` is true, but the features that can
   // trigger another URLRequest are not set to respect NetworkIsolationKeys,

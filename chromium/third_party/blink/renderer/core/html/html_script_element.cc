@@ -31,8 +31,12 @@
 #include "third_party/blink/renderer/core/dom/events/event.h"
 #include "third_party/blink/renderer/core/dom/text.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/core/frame/attribution_src_loader.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
+#include "third_party/blink/renderer/core/frame/local_dom_window.h"
+#include "third_party/blink/renderer/core/frame/web_feature.h"
 #include "third_party/blink/renderer/core/html_names.h"
+#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/core/script/script_loader.h"
 #include "third_party/blink/renderer/core/script/script_runner.h"
 #include "third_party/blink/renderer/core/script_type_names.h"
@@ -82,11 +86,6 @@ void HTMLScriptElement::ChildrenChanged(const ChildrenChange& change) {
   children_changed_by_api_ |= !change.ByParser();
 }
 
-void HTMLScriptElement::DidMoveToNewDocument(Document& old_document) {
-  ScriptRunner::MovePendingScript(old_document, GetDocument(), loader_.Get());
-  HTMLElement::DidMoveToNewDocument(old_document);
-}
-
 void HTMLScriptElement::ParseAttribute(
     const AttributeModificationParams& params) {
   if (params.name == html_names::kSrcAttr) {
@@ -110,6 +109,18 @@ void HTMLScriptElement::ParseAttribute(
     blocking_attribute_->DidUpdateAttributeValue(params.old_value,
                                                  params.new_value);
     blocking_attribute_->CountTokenUsage();
+    if (GetDocument().GetRenderBlockingResourceManager() &&
+        !IsPotentiallyRenderBlocking()) {
+      GetDocument().GetRenderBlockingResourceManager()->RemovePendingScript(
+          *this);
+    }
+  } else if (params.name == html_names::kAttributionsrcAttr) {
+    const AtomicString& attribution_src_value =
+        FastGetAttribute(html_names::kAttributionsrcAttr);
+    if (!attribution_src_value.IsNull() && GetDocument().GetFrame()) {
+      GetDocument().GetFrame()->GetAttributionSrcLoader()->Register(
+          GetDocument().CompleteURL(attribution_src_value), this);
+    }
   } else {
     HTMLElement::ParseAttribute(params);
   }
@@ -118,9 +129,8 @@ void HTMLScriptElement::ParseAttribute(
 Node::InsertionNotificationRequest HTMLScriptElement::InsertedInto(
     ContainerNode& insertion_point) {
   if (insertion_point.isConnected() && HasSourceAttribute() &&
-      ScriptLoader::GetScriptTypeAtPrepare(
-          TypeAttributeValue(), LanguageAttributeValue(),
-          ScriptLoader::kDisallowLegacyTypeInTypeAttribute) ==
+      ScriptLoader::GetScriptTypeAtPrepare(TypeAttributeValue(),
+                                           LanguageAttributeValue()) ==
           ScriptLoader::ScriptTypeAtPrepare::kInvalid) {
     UseCounter::Count(GetDocument(),
                       WebFeature::kScriptElementWithInvalidTypeHasSrc);
@@ -331,6 +341,14 @@ Element& HTMLScriptElement::CloneWithoutAttributesAndChildren(
       CreateElementFlags::ByCloneNode().SetAlreadyStarted(
           loader_->AlreadyStarted());
   return *factory.CreateElement(TagQName(), flags, IsValue());
+}
+
+bool HTMLScriptElement::IsPotentiallyRenderBlocking() const {
+  return blocking_attribute_->HasRenderToken() ||
+         (loader_->IsParserInserted() &&
+          loader_->GetScriptType() ==
+              ScriptLoader::ScriptTypeAtPrepare::kClassic &&
+          !AsyncAttributeValue() && !DeferAttributeValue());
 }
 
 // static

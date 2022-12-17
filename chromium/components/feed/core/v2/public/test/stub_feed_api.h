@@ -71,6 +71,7 @@ class StubFeedApi : public FeedApi {
                          const LoggingParameters& logging_parameters) override {
   }
   bool WasUrlRecentlyNavigatedFromFeed(const GURL& url) override;
+  void InvalidateContentCacheFor(StreamKind stream_kind) override {}
   void ReportSliceViewed(SurfaceId surface_id,
                          const StreamType& stream_type,
                          const std::string& slice_id) override {}
@@ -89,14 +90,17 @@ class StubFeedApi : public FeedApi {
   void ReportStreamScrollStart() override {}
   void ReportOtherUserAction(const StreamType& stream_type,
                              FeedUserActionType action_type) override {}
-  void ReportNoticeCreated(const StreamType& stream_type,
-                           const std::string& key) override {}
-  void ReportNoticeViewed(const StreamType& stream_type,
-                          const std::string& key) override {}
-  void ReportNoticeOpenAction(const StreamType& stream_type,
-                              const std::string& key) override {}
-  void ReportNoticeDismissed(const StreamType& stream_type,
-                             const std::string& key) override {}
+  void ReportInfoCardTrackViewStarted(const StreamType& stream_type,
+                                      int info_card_type) override {}
+  void ReportInfoCardViewed(const StreamType& stream_type,
+                            int info_card_type,
+                            int minimum_view_interval_seconds) override {}
+  void ReportInfoCardClicked(const StreamType& stream_type,
+                             int info_card_type) override {}
+  void ReportInfoCardDismissedExplicitly(const StreamType& stream_type,
+                                         int info_card_type) override {}
+  void ResetInfoCardStates(const StreamType& stream_type,
+                           int info_card_type) override {}
   DebugStreamData GetDebugStreamData() override;
   void ForceRefreshForDebugging(const StreamType& stream_type) override {}
   std::string DumpStateForDebugging() override;

@@ -108,7 +108,7 @@ def main():
   if not translations:
     return
 
-  with open(options.xtb_file, "w") as xtbfile:
+  with open(options.xtb_file, "w", encoding="utf8") as xtbfile:
     print(("""<?xml version="1.0" encoding="utf-8" ?>\n"""
                   """<!DOCTYPE translationbundle>\n"""
                   """<translationbundle lang="%s">""" % locale), file=xtbfile)
@@ -118,8 +118,8 @@ def main():
       # unescape <ph/> and \"
       text = text.replace("&lt;ph", "<ph").replace("/&gt;", "/>").replace('\"', '"')
       try:
-        print((u"""<translation id="%s">%s</translation>""" %
-                        (msgid, text)).encode("utf8"), file=xtbfile)
+        print(("""<translation id="%s">%s</translation>""" %
+                        (msgid, text)), file=xtbfile)
       except:
         print(repr(msgid), "|", repr(text), "|",\
               repr(text.encode("utf8")), file=sys.stderr)

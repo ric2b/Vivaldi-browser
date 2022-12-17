@@ -16,6 +16,9 @@ namespace web {
 // findElementAtPoint.
 extern const char kContextMenuElementRequestId[];
 
+// Optional key. Represents element's tagName attribute.
+extern const char kContextMenuElementTagName[];
+
 // Optional key. Represents element's href attribute if present or parent's href
 // if element is an image.
 extern const char kContextMenuElementHyperlink[];
@@ -33,27 +36,16 @@ extern const char kContextMenuElementTitle[];
 extern const char kContextMenuElementReferrerPolicy[];
 
 // Optional key. Represents element's innerText attribute if present (<a>
-// elements with href only).
+// elements with href only or any other text element).
 extern const char kContextMenuElementInnerText[];
+
+// Optional key. Represents element's offset into innerText where tap occurred
+// (text elements only).
+extern const char kContextMenuElementTextOffset[];
 
 // Optional key. Represents element's alt attribute if present (<img> element
 // only).
 extern const char kContextMenuElementAlt[];
-
-// Optional key. Represents element's naturalWidth attribute if present (<img>
-// element only).
-extern const char kContextMenuElementNaturalWidth[];
-
-// Optional key. Represents element's naturalHeight attribute if present (<img>
-// element only).
-extern const char kContextMenuElementNaturalHeight[];
-
-// Optional key. Represents element's client bounding box if present.
-extern const char kContextMenuElementBoundingBox[];
-extern const char kContextMenuElementBoundingBoxX[];
-extern const char kContextMenuElementBoundingBoxY[];
-extern const char kContextMenuElementBoundingBoxWidth[];
-extern const char kContextMenuElementBoundingBoxHeight[];
 
 }  // namespace web
 

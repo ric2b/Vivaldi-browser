@@ -44,27 +44,6 @@ absl::optional<size_t> MockGooglePhotosAlbumsFetcher::GetResultCount(
   return GooglePhotosAlbumsFetcher::GetResultCount(result);
 }
 
-MockGooglePhotosCountFetcher::MockGooglePhotosCountFetcher(Profile* profile)
-    : GooglePhotosCountFetcher(profile) {
-  ON_CALL(*this, AddRequestAndStartIfNecessary)
-      .WillByDefault([](base::OnceCallback<void(int)> callback) {
-        base::SequencedTaskRunnerHandle::Get()->PostTask(
-            FROM_HERE, base::BindOnce(std::move(callback), /*count=*/0));
-      });
-
-  ON_CALL(*this, ParseResponse)
-      .WillByDefault([this](const base::Value::Dict* response) {
-        return GooglePhotosCountFetcher::ParseResponse(response);
-      });
-}
-
-MockGooglePhotosCountFetcher::~MockGooglePhotosCountFetcher() = default;
-
-absl::optional<size_t> MockGooglePhotosCountFetcher::GetResultCount(
-    const int& result) {
-  return GooglePhotosCountFetcher::GetResultCount(result);
-}
-
 MockGooglePhotosEnabledFetcher::MockGooglePhotosEnabledFetcher(Profile* profile)
     : GooglePhotosEnabledFetcher(profile) {
   ON_CALL(*this, AddRequestAndStartIfNecessary)
@@ -98,7 +77,7 @@ MockGooglePhotosPhotosFetcher::MockGooglePhotosPhotosFetcher(Profile* profile)
       .WillByDefault(
           [](const absl::optional<std::string>& item_id,
              const absl::optional<std::string>& album_id,
-             const absl::optional<std::string>& resume_token,
+             const absl::optional<std::string>& resume_token, bool shuffle,
              base::OnceCallback<void(GooglePhotosPhotosCbkArgs)> callback) {
             auto response = FetchGooglePhotosPhotosResponse::New(
                 std::vector<GooglePhotosPhotoPtr>(), absl::nullopt);

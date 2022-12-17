@@ -10,6 +10,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/location.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "gpu/ipc/common/gpu_memory_buffer_support.h"
 #include "media/base/format_utils.h"
 #include "media/base/media_util.h"
@@ -81,8 +82,7 @@ scoped_refptr<DecoderBuffer> DecryptBitstreamBuffer(
     BitstreamBuffer bitstream_buffer) {
   // Check to see if we have our secure buffer tag and then extract the
   // decrypt parameters.
-  auto mem_region = base::UnsafeSharedMemoryRegion::Deserialize(
-      bitstream_buffer.DuplicateRegion());
+  auto mem_region = bitstream_buffer.DuplicateRegion();
   if (!mem_region.IsValid()) {
     DVLOG(2) << "Invalid shared memory region";
     return nullptr;
@@ -242,7 +242,8 @@ bool VdVideoDecodeAccelerator::Initialize(const Config& config,
         std::make_unique<VdaVideoFramePool>(weak_this_, client_task_runner_);
     vd_ = create_vd_cb_.Run(client_task_runner_, std::move(frame_pool),
                             std::make_unique<VideoFrameConverter>(),
-                            std::make_unique<NullMediaLog>());
+                            std::make_unique<NullMediaLog>(),
+                            /*oop_video_decoder=*/{});
     if (!vd_)
       return false;
 

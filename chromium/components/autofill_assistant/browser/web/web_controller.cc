@@ -31,8 +31,12 @@
 #include "components/autofill_assistant/browser/string_conversions_util.h"
 #include "components/autofill_assistant/browser/user_data_util.h"
 #include "components/autofill_assistant/browser/web/element.h"
+#include "components/autofill_assistant/browser/web/element_finder_result.h"
+#include "components/autofill_assistant/browser/web/element_finder_result_type.h"
 #include "components/autofill_assistant/browser/web/selector_observer.h"
 #include "components/autofill_assistant/browser/web/web_controller_util.h"
+#include "components/autofill_assistant/content/browser/content_autofill_assistant_driver.h"
+#include "components/autofill_assistant/content/common/autofill_assistant_agent.mojom.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/render_frame_host.h"
@@ -875,21 +879,21 @@ void WebController::FindElement(const Selector& selector,
                                 ElementFinder::Callback callback) {
   RunElementFinder(/* start_element= */ ElementFinderResult::EmptyResult(),
                    selector,
-                   strict_mode ? ElementFinder::ResultType::kExactlyOneMatch
-                               : ElementFinder::ResultType::kAnyMatch,
+                   strict_mode ? ElementFinderResultType::kExactlyOneMatch
+                               : ElementFinderResultType::kAnyMatch,
                    std::move(callback));
 }
 
 void WebController::FindAllElements(const Selector& selector,
                                     ElementFinder::Callback callback) {
   RunElementFinder(/* start_element= */ ElementFinderResult::EmptyResult(),
-                   selector, ElementFinder::ResultType::kMatchArray,
+                   selector, ElementFinderResultType::kMatchArray,
                    std::move(callback));
 }
 
 void WebController::RunElementFinder(const ElementFinderResult& start_element,
                                      const Selector& selector,
-                                     ElementFinder::ResultType result_type,
+                                     ElementFinderResultType result_type,
                                      ElementFinder::Callback callback) {
   auto finder = std::make_unique<ElementFinder>(
       web_contents_, devtools_client_.get(), user_data_, log_info_,
@@ -915,13 +919,11 @@ void WebController::OnFindElementResult(
 
 ClientStatus WebController::ObserveSelectors(
     const std::vector<SelectorObserver::ObservableSelector>& selectors,
-    base::TimeDelta timeout_ms,
-    base::TimeDelta periodic_check_interval,
-    base::TimeDelta extra_timeout,
+    const SelectorObserver::Settings& settings,
     SelectorObserver::Callback callback) {
   auto observer = std::make_unique<SelectorObserver>(
-      selectors, timeout_ms, periodic_check_interval, extra_timeout,
-      web_contents_, devtools_client_.get(), user_data_, std::move(callback));
+      selectors, settings, web_contents_, devtools_client_.get(), user_data_,
+      std::move(callback));
   auto* ptr = observer.get();
   pending_workers_.emplace_back(std::move(observer));
   return ptr->Start(base::BindOnce(&WebController::OnSelectorObserverFinished,
@@ -1000,11 +1002,28 @@ void WebController::GetElementFormAndFieldData(
                             ContentAutofillDriver* driver,
                             const autofill::FormData&,
                             const autofill::FormFieldData&)> callback) {
-  GetBackendNodeId(
-      element,
-      base::BindOnce(&WebController::OnGetBackendNodeIdForFormAndFieldData,
-                     weak_ptr_factory_.GetWeakPtr(), element,
-                     std::move(callback)));
+  if (!element.backend_node_id()) {
+    DVLOG(1) << __func__
+             << "No backend node id on element intended for native execution.";
+    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__), nullptr,
+                            autofill::FormData(), autofill::FormFieldData());
+    return;
+  }
+
+  ContentAutofillDriver* driver =
+      ContentAutofillDriver::GetForRenderFrameHost(element.render_frame_host());
+  if (driver == nullptr) {
+    DVLOG(1) << __func__ << " Failed to get the autofill driver.";
+    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__), nullptr,
+                            autofill::FormData(), autofill::FormFieldData());
+    return;
+  }
+
+  driver->GetAutofillAgent()->GetElementFormAndFieldDataForDevToolsNodeId(
+      *element.backend_node_id(),
+      base::BindOnce(&WebController::OnGetFormAndFieldData,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback),
+                     driver));
 }
 
 void WebController::GetBackendNodeId(
@@ -1032,35 +1051,6 @@ void WebController::OnGetBackendNodeId(
 
   std::move(callback).Run(OkClientStatus(),
                           result->GetNode()->GetBackendNodeId());
-}
-
-void WebController::OnGetBackendNodeIdForFormAndFieldData(
-    const ElementFinderResult& element,
-    base::OnceCallback<void(const ClientStatus&,
-                            ContentAutofillDriver* driver,
-                            const autofill::FormData&,
-                            const autofill::FormFieldData&)> callback,
-    const ClientStatus& node_status,
-    const int backend_node_id) {
-  if (!node_status.ok()) {
-    std::move(callback).Run(node_status, nullptr, autofill::FormData(),
-                            autofill::FormFieldData());
-    return;
-  }
-
-  ContentAutofillDriver* driver =
-      ContentAutofillDriver::GetForRenderFrameHost(element.render_frame_host());
-  if (driver == nullptr) {
-    DVLOG(1) << __func__ << " Failed to get the autofill driver.";
-    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__), nullptr,
-                            autofill::FormData(), autofill::FormFieldData());
-    return;
-  }
-
-  driver->GetAutofillAgent()->GetElementFormAndFieldDataForDevToolsNodeId(
-      backend_node_id, base::BindOnce(&WebController::OnGetFormAndFieldData,
-                                      weak_ptr_factory_.GetWeakPtr(),
-                                      std::move(callback), driver));
 }
 
 void WebController::OnGetFormAndFieldData(
@@ -1633,6 +1623,39 @@ void WebController::ExecuteJS(
   ExecuteJsWithoutArguments(
       element, base::StrCat({"function() { ", js_snippet, "\n}"}),
       WebControllerErrorInfoProto::EXECUTE_JS, std::move(callback));
+}
+
+void WebController::SetNativeValue(
+    const std::string& value,
+    const ElementFinderResult& element,
+    base::OnceCallback<void(const ClientStatus&)> callback) {
+  if (!element.backend_node_id()) {
+    DVLOG(1) << __func__
+             << "No backend node id on element intended for native execution.";
+    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__));
+    return;
+  }
+
+  auto* render_frame_host = element.render_frame_host();
+  DCHECK(render_frame_host);
+  auto* driver = ContentAutofillAssistantDriver::GetOrCreateForRenderFrameHost(
+      render_frame_host, annotate_dom_model_service_);
+  if (!driver) {
+    std::move(callback).Run(UnexpectedErrorStatus(__FILE__, __LINE__));
+    return;
+  }
+  driver->GetAutofillAssistantAgent()->SetElementValue(
+      *element.backend_node_id(), base::UTF8ToUTF16(value),
+      /* send_events= */ true,
+      base::BindOnce(&WebController::OnSetElementValue,
+                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
+}
+
+void WebController::OnSetElementValue(
+    base::OnceCallback<void(const ClientStatus&)> callback,
+    bool success) const {
+  std::move(callback).Run(success ? OkClientStatus()
+                                  : UnexpectedErrorStatus(__FILE__, __LINE__));
 }
 
 base::WeakPtr<WebController> WebController::GetWeakPtr() const {

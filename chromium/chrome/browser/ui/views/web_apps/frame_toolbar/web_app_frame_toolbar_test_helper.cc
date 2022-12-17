@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/views/web_apps/frame_toolbar/web_app_toolbar_button_container.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "content/public/browser/web_contents.h"
@@ -39,7 +40,7 @@ web_app::AppId WebAppFrameToolbarTestHelper::InstallAndLaunchWebApp(
   web_app_info->scope = start_url.GetWithoutFilename();
   web_app_info->title = u"A minimal-ui app";
   web_app_info->display_mode = web_app::DisplayMode::kMinimalUi;
-  web_app_info->user_display_mode = web_app::DisplayMode::kStandalone;
+  web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
   web_app::AppId app_id =
       web_app::test::InstallWebApp(browser->profile(), std::move(web_app_info));
@@ -134,7 +135,7 @@ WebAppFrameToolbarTestHelper::GetXYWidthHeightListValue(
     content::WebContents* web_contents,
     const std::string& rect_value_list,
     const std::string& rect_var_name) {
-  EXPECT_TRUE(ExecJs(web_contents->GetMainFrame(), rect_value_list));
+  EXPECT_TRUE(ExecJs(web_contents->GetPrimaryMainFrame(), rect_value_list));
   return EvalJs(web_contents, rect_var_name).ExtractList().TakeListDeprecated();
 }
 
@@ -151,7 +152,7 @@ gfx::Rect WebAppFrameToolbarTestHelper::GetXYWidthHeightRect(
 void WebAppFrameToolbarTestHelper::SetupGeometryChangeCallback(
     content::WebContents* web_contents) {
   EXPECT_TRUE(
-      ExecJs(web_contents->GetMainFrame(),
+      ExecJs(web_contents->GetPrimaryMainFrame(),
              "var geometrychangeCount = 0;"
              "document.title = 'beforegeometrychange';"
              "navigator.windowControlsOverlay.ongeometrychange = (e) => {"

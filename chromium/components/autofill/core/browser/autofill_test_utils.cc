@@ -582,6 +582,8 @@ CreditCard GetVirtualCard() {
                           "5555555555554444",  // Mastercard
                           "10", test::NextYear().c_str(), "1");
   credit_card.set_record_type(CreditCard::RecordType::VIRTUAL_CARD);
+  credit_card.set_virtual_card_enrollment_state(
+      CreditCard::VirtualCardEnrollmentState::ENROLLED);
   CreditCardTestApi(&credit_card).set_network_for_virtual_card(kMasterCard);
   return credit_card;
 }
@@ -642,52 +644,60 @@ CreditCardCloudTokenData GetCreditCardCloudTokenData2() {
   return data;
 }
 
-AutofillOfferData GetCardLinkedOfferData1() {
-  AutofillOfferData data;
-  data.offer_id = 111;
+AutofillOfferData GetCardLinkedOfferData1(int64_t offer_id) {
   // Sets the expiry to be 45 days later.
-  data.expiry = AutofillClock::Now() + base::Days(45);
-  data.offer_details_url = GURL("http://www.example1.com");
-  data.merchant_origins.emplace_back("http://www.example1.com");
-  data.display_strings.value_prop_text = "Get 5% off your purchase";
-  data.display_strings.see_details_text = "See details";
-  data.display_strings.usage_instructions_text =
+  base::Time expiry = AutofillClock::Now() + base::Days(45);
+  GURL offer_details_url = GURL("http://www.example1.com");
+  std::vector<GURL> merchant_origins{offer_details_url};
+  DisplayStrings display_strings;
+  display_strings.value_prop_text = "Get 5% off your purchase";
+  display_strings.see_details_text = "See details";
+  display_strings.usage_instructions_text =
       "Check out with this card to activate";
-  data.offer_reward_amount = "5%";
-  data.eligible_instrument_id.emplace_back(111111);
-  return data;
+  std::string offer_reward_amount = "5%";
+  std::vector<int64_t> eligible_instrument_id{111111};
+
+  return AutofillOfferData::GPayCardLinkedOffer(
+      offer_id, expiry, merchant_origins, offer_details_url, display_strings,
+      eligible_instrument_id, offer_reward_amount);
 }
 
-AutofillOfferData GetCardLinkedOfferData2() {
-  AutofillOfferData data;
-  data.offer_id = 222;
+AutofillOfferData GetCardLinkedOfferData2(int64_t offer_id) {
   // Sets the expiry to be 40 days later.
-  data.expiry = AutofillClock::Now() + base::Days(40);
-  data.offer_details_url = GURL("http://www.example2.com");
-  data.merchant_origins.emplace_back("http://www.example2.com");
-  data.display_strings.value_prop_text = "Get $10 off your purchase";
-  data.display_strings.see_details_text = "See details";
-  data.display_strings.usage_instructions_text =
+  base::Time expiry = AutofillClock::Now() + base::Days(40);
+  GURL offer_details_url = GURL("http://www.example2.com");
+  std::vector<GURL> merchant_origins{offer_details_url};
+  DisplayStrings display_strings;
+  display_strings.value_prop_text = "Get $10 off your purchase";
+  display_strings.see_details_text = "See details";
+  display_strings.usage_instructions_text =
       "Check out with this card to activate";
-  data.offer_reward_amount = "$10";
-  data.eligible_instrument_id.emplace_back(222222);
-  return data;
+  std::string offer_reward_amount = "$10";
+  std::vector<int64_t> eligible_instrument_id{222222};
+
+  return AutofillOfferData::GPayCardLinkedOffer(
+      offer_id, expiry, merchant_origins, offer_details_url, display_strings,
+      eligible_instrument_id, offer_reward_amount);
 }
 
-AutofillOfferData GetPromoCodeOfferData(GURL origin, bool is_expired) {
-  AutofillOfferData data;
-  data.offer_id = 333;
+AutofillOfferData GetPromoCodeOfferData(GURL origin,
+                                        bool is_expired,
+                                        int64_t offer_id) {
   // Sets the expiry to be later if not expired, or earlier if expired.
-  data.expiry = is_expired ? AutofillClock::Now() - base::Days(1)
-                           : AutofillClock::Now() + base::Days(35);
-  data.offer_details_url = GURL("http://www.example.com");
-  data.merchant_origins.emplace_back(origin);
-  data.display_strings.value_prop_text = "5% off on shoes. Up to $50.";
-  data.display_strings.see_details_text = "See details";
-  data.display_strings.usage_instructions_text =
+  base::Time expiry = is_expired ? AutofillClock::Now() - base::Days(1)
+                                 : AutofillClock::Now() + base::Days(35);
+  std::vector<GURL> merchant_origins{origin};
+  DisplayStrings display_strings;
+  display_strings.value_prop_text = "5% off on shoes. Up to $50.";
+  display_strings.see_details_text = "See details";
+  display_strings.usage_instructions_text =
       "Click the promo code field at checkout to autofill it.";
-  data.promo_code = "5PCTOFFSHOES";
-  return data;
+  std::string promo_code = "5PCTOFFSHOES";
+  GURL offer_details_url = GURL("https://pay.google.com");
+
+  return AutofillOfferData::GPayPromoCodeOffer(
+      offer_id, expiry, merchant_origins, offer_details_url, display_strings,
+      promo_code);
 }
 
 void SetProfileInfo(AutofillProfile* profile,
@@ -977,9 +987,9 @@ std::vector<FormSignature> GetEncodedSignatures(
 }
 
 void AddFieldSuggestionToForm(
-    const autofill::FormFieldData& field_data,
+    const FormFieldData& field_data,
     ServerFieldType field_type,
-    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+    AutofillQueryResponse_FormSuggestion* form_suggestion) {
   auto* field_suggestion = form_suggestion->add_field_suggestions();
   field_suggestion->set_field_signature(
       CalculateFieldSignatureForField(field_data).value());
@@ -987,9 +997,9 @@ void AddFieldSuggestionToForm(
 }
 
 void AddFieldPredictionsToForm(
-    const autofill::FormFieldData& field_data,
+    const FormFieldData& field_data,
     const std::vector<int>& field_types,
-    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+    AutofillQueryResponse_FormSuggestion* form_suggestion) {
   std::vector<ServerFieldType> types;
   for (auto type : field_types) {
     types.emplace_back(ToSafeServerFieldType(type, UNKNOWN_TYPE));
@@ -998,9 +1008,9 @@ void AddFieldPredictionsToForm(
 }
 
 void AddFieldPredictionsToForm(
-    const autofill::FormFieldData& field_data,
+    const FormFieldData& field_data,
     const std::vector<ServerFieldType>& field_types,
-    ::autofill::AutofillQueryResponse_FormSuggestion* form_suggestion) {
+    AutofillQueryResponse_FormSuggestion* form_suggestion) {
   auto* field_suggestion = form_suggestion->add_field_suggestions();
   field_suggestion->set_field_signature(
       CalculateFieldSignatureForField(field_data).value());

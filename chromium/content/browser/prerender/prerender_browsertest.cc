@@ -8,6 +8,7 @@
 #include "base/barrier_closure.h"
 #include "base/base_switches.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file_util.h"
@@ -612,7 +613,7 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderCancelledOn205Page) {
       PrerenderHost::FinalStatus::kNavigationBadHttpStatus);
 }
 
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderCancelledOn204Iframe) {
+IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderAllowedOn204Iframe) {
   base::HistogramTester histogram_tester;
 
   // Navigate to an initial page.
@@ -633,14 +634,10 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PrerenderCancelledOn204Iframe) {
              "const i = document.createElement('iframe'); i.src = '" +
                  kIFrameUrl.spec() + "'; document.body.appendChild(i);");
 
-  // The prerender should be destroyed.
-  host_observer.WaitForDestroyed();
-  EXPECT_EQ(GetHostForUrl(kPrerenderingUrl),
-            RenderFrameHost::kNoFrameTreeNodeId);
-
-  // Cancellation must have occurred due to bad http status code.
-  ExpectFinalStatusForSpeculationRule(
-      PrerenderHost::FinalStatus::kNavigationBadHttpStatus);
+  // Fetching a subframe that response 204 status code shouldn't cancel
+  // prerendering unlike the mainframe that response 204 status code.
+  // https://wicg.github.io/nav-speculation/prerendering.html#no-bad-navs
+  EXPECT_EQ(GetHostForUrl(kPrerenderingUrl), host_id);
 }
 
 IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, CancelOnAuthRequested) {
@@ -2896,12 +2893,19 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, PluginsCancelPrerendering) {
       "Prerender.Experimental.PrerenderCancelledUnknownInterface."
       "SpeculationRule",
       InterfaceNameHasher(mojom::PepperHost::Name_), 2);
+
+  // Run JavaScript code to inject a new iframe to load a page, and see if it
+  // correctly runs and results in making a navigation request in the iframe. If
+  // the initiator is still working normally after prerendering cancellation,
+  // this request should arrive.
+  RenderFrameHostImpl* main_frame_host = current_frame_host();
+  EXPECT_TRUE(AddTestUtilJS(main_frame_host));
+  EXPECT_TRUE(ExecJs(main_frame_host, "add_iframe_async('/title1.html')",
+                     EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+  WaitForRequest(GetUrl("/title1.html"), 1);
 }
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
-// This is a browser test and cannot be upstreamed to WPT because it diverges
-// from the spec by cancelling prerendering in the Notification constructor,
-// whereas the spec says to defer upon use requestPermission().
 #if BUILDFLAG(IS_ANDROID)
 // On Android the Notification constructor throws an exception regardless of
 // whether the page is being prerendered.
@@ -2926,28 +2930,6 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, NotificationConstructorAndroid) {
       } catch(e) { return false; }
     })();
   )"));
-}
-#else
-// On non-Android the Notification constructor is supported and can be used to
-// show a notification, but if used during prerendering it cancels prerendering.
-// Tests that we will cancel the prerendering if the prerendering page attempts
-// to use notification.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, NotificationConstructor) {
-  base::HistogramTester histogram_tester;
-  const GURL kInitialUrl = GetUrl("/empty.html");
-
-  // Navigate to an initial page.
-  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
-
-  LoadAndWaitForPrerenderDestroyed(web_contents(),
-                                   GetUrl("/prerender/notification.html"),
-                                   prerender_helper());
-
-  ExpectFinalStatusForSpeculationRule(
-      PrerenderHost::FinalStatus::kMojoBinderPolicy);
-  histogram_tester.ExpectUniqueSample(
-      "Prerender.Experimental.PrerenderCancelledInterface.SpeculationRule",
-      PrerenderCancelledInterface::kNotificationService, 1);
 }
 #endif  // BUILDFLAG(IS_ANDROID)
 
@@ -4783,13 +4765,28 @@ IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest, SkipCrossOriginPrerender) {
   ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
   test::PrerenderHostRegistryObserver registry_observer(*web_contents_impl());
 
-  // Add a cross-origin prerender.
+  url::Origin initiator_origin = url::Origin::Create(kInitialUrl);
+  url::Origin prerender_origin = url::Origin::Create(kPrerenderingUrl);
+  std::string kConsolePattern = base::StringPrintf(
+      "The SpeculationRules API does not support cross-origin "
+      "prerender yet. (initiator origin: %s, prerender origin: %s). "
+      "https://crbug.com/1176054 tracks cross-origin support.",
+      initiator_origin.Serialize().c_str(),
+      prerender_origin.Serialize().c_str());
+  WebContentsConsoleObserver console_observer(web_contents_impl());
+  console_observer.SetPattern(kConsolePattern);
+
+  // Add a cross-origin prerender rule.
   AddPrerenderAsync(kPrerenderingUrl);
 
   // Wait for PrerenderHostRegistry to receive the cross-origin prerender
   // request, and it should be ignored.
   registry_observer.WaitForTrigger(kPrerenderingUrl);
   EXPECT_FALSE(HasHostForUrl(kPrerenderingUrl));
+
+  // A warning message should be sent to console for debugging purpose.
+  console_observer.Wait();
+  EXPECT_EQ(1u, console_observer.messages().size());
 
   ExpectFinalStatusForSpeculationRule(
       PrerenderHost::FinalStatus::kCrossOriginNavigation);
@@ -4843,213 +4840,6 @@ void PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
                                                             prerendering_url);
 
   ASSERT_EQ(2u, redirect_chain_observer.redirect_chain().size());
-}
-
-void CheckExpectedCrossOriginMetrics(
-    const base::HistogramTester& histogram_tester,
-    PrerenderCrossOriginRedirectionMismatch mismatch_type,
-    absl::optional<PrerenderCrossOriginRedirectionProtocolChange>
-        protocol_change,
-    absl::optional<PrerenderCrossOriginRedirectionDomain> domain_change) {
-  histogram_tester.ExpectUniqueSample(
-      "Prerender.Experimental.PrerenderHostFinalStatus.Embedder_"
-      "EmbedderSuffixForTest",
-      PrerenderHost::FinalStatus::kEmbedderTriggeredAndCrossOriginRedirected,
-      1);
-  histogram_tester.ExpectUniqueSample(
-      "Prerender.Experimental.PrerenderCrossOriginRedirectionMismatch.Embedder_"
-      "EmbedderSuffixForTest",
-      mismatch_type, 1);
-  if (protocol_change.has_value()) {
-    histogram_tester.ExpectUniqueSample(
-        "Prerender.Experimental.CrossOriginRedirectionProtocolChange.Embedder_"
-        "EmbedderSuffixForTest",
-        protocol_change.value(), 1);
-  }
-  if (domain_change.has_value()) {
-    histogram_tester.ExpectUniqueSample(
-        "Prerender.Experimental.CrossOriginRedirectionDomain.Embedder_"
-        "EmbedderSuffixForTest",
-        domain_change.value(), 1);
-  }
-}
-
-// Tests PrerenderCrossOriginRedirectionMismatch.kSchemeHostPortMismatch was
-// recorded when a prerendering navigaton was redireted to another origin with
-// different scheme, host and port.
-IN_PROC_BROWSER_TEST_F(
-    PrerenderBrowserTest,
-    EmbedderTrigger_CrossOriginRedirection_SchemeHostPortMismatch) {
-  base::HistogramTester histogram_tester;
-  embedded_test_server()->AddDefaultHandlers(GetTestDataFilePath());
-  ASSERT_TRUE(embedded_test_server()->Start());
-  GURL initial_url = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  // The redirected_url's origin completely differs from the prerendering one.
-  GURL redirected_url = embedded_test_server()->GetURL("b.test", "/empty.html");
-  GURL prerendering_url = GetUrl("/server-redirect?" + redirected_url.spec());
-  ASSERT_NE(prerendering_url.scheme(), redirected_url.scheme());
-  ASSERT_NE(prerendering_url.host(), redirected_url.host());
-  ASSERT_NE(prerendering_url.port(), redirected_url.port());
-
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester,
-      PrerenderCrossOriginRedirectionMismatch::kSchemeHostPortMismatch,
-      /*protocol_change=*/absl::nullopt, /*domain_change=*/absl::nullopt);
-}
-
-// Tests a prerendering navigaton goes with HTTP protocol, and being redirected
-// to upgrade its protocol to HTTPS.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       EmbedderTrigger_CrossOriginRedirection_ProtocolUpgrade) {
-  base::HistogramTester histogram_tester;
-  embedded_test_server()->AddDefaultHandlers(GetTestDataFilePath());
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  GURL initial_url = embedded_test_server()->GetURL("a.test", "/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  // Redirect to another url with protocol upgraded.
-  GURL redirected_url = ssl_server().GetURL("a.test", "/empty.html");
-  GURL prerendering_url = embedded_test_server()->GetURL(
-      "a.test", "/server-redirect?" + redirected_url.spec());
-  ASSERT_NE(prerendering_url.scheme(), redirected_url.scheme());
-  ASSERT_NE(prerendering_url.port(), redirected_url.port());
-  ASSERT_EQ(prerendering_url.scheme(), url::kHttpScheme);
-  ASSERT_EQ(redirected_url.scheme(), url::kHttpsScheme);
-
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester,
-      PrerenderCrossOriginRedirectionMismatch::kSchemePortMismatch,
-      PrerenderCrossOriginRedirectionProtocolChange::kHttpProtocolUpgrade,
-      /*domain_change=*/absl::nullopt);
-}
-
-// Similar to
-// CancelEmbedderTriggeredPrerenderingCrossOriginRedirection_ProtocolUpgrade,
-// tests a prerendering navigaton goes with HTTPS protocol, and being redirected
-// to upgrade its protocol to HTTPS.
-IN_PROC_BROWSER_TEST_F(
-    PrerenderBrowserTest,
-    EmbedderTrigger_CrossOriginRedirection_ProtocolDowngrade) {
-  base::HistogramTester histogram_tester;
-  GURL initial_url = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  GURL::Replacements downgrade_protocol;
-  downgrade_protocol.SetSchemeStr(url::kHttpScheme);
-  std::string port_str(base::NumberToString(ssl_server().port() + 1));
-  downgrade_protocol.SetPortStr(port_str);
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  // Redirect to another url with protocol upgraded.
-  GURL redirected_url =
-      GetUrl("/empty.html").ReplaceComponents(downgrade_protocol);
-  GURL prerendering_url = GetUrl("/server-redirect?" + redirected_url.spec());
-  ASSERT_NE(prerendering_url.scheme(), redirected_url.scheme());
-  ASSERT_NE(prerendering_url.port(), redirected_url.port());
-  ASSERT_EQ(prerendering_url.scheme(), url::kHttpsScheme);
-  ASSERT_EQ(redirected_url.scheme(), "http");
-
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester,
-      PrerenderCrossOriginRedirectionMismatch::kSchemePortMismatch,
-      PrerenderCrossOriginRedirectionProtocolChange::kHttpProtocolDowngrade,
-      /*domain_change=*/absl::nullopt);
-}
-
-// Tests PrerenderCrossOriginRedirectionMismatch.kHostMismatch and
-// PrerenderCrossOriginRedirectionDomain.kRedirectToSubDomain are recorded
-// when the prerendering navigation is redirected to a subdomain URL.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       EmbedderTrigger_CrossOriginRedirection_ToSubdomain) {
-  base::HistogramTester histogram_tester;
-  GURL initial_url = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  GURL::Replacements set_host;
-  set_host.SetHostStr("www.a.test");
-
-  GURL redirected_url = GetUrl("/empty.html").ReplaceComponents(set_host);
-  GURL prerendering_url = GetUrl("/server-redirect?" + redirected_url.spec());
-
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester, PrerenderCrossOriginRedirectionMismatch::kHostMismatch,
-      /*protocol_change=*/absl::nullopt,
-      PrerenderCrossOriginRedirectionDomain::kRedirectToSubDomain);
-}
-
-// Tests PrerenderCrossOriginRedirectionMismatch.kHostMismatch and
-// PrerenderCrossOriginRedirectionDomain.kRedirectFromSubDomain are recorded
-// when the prerendering navigation is redirected to a subdomain URL.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       EmbedderTrigger_CrossOriginRedirection_FromSubdomain) {
-  base::HistogramTester histogram_tester;
-  GURL initial_url = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  GURL::Replacements set_host;
-  set_host.SetHostStr("www.a.test");
-
-  GURL redirected_url = GetUrl("/empty.html");
-  GURL prerendering_url = GetUrl("/server-redirect?" + redirected_url.spec())
-                              .ReplaceComponents(set_host);
-
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester, PrerenderCrossOriginRedirectionMismatch::kHostMismatch,
-      /*protocol_change=*/absl::nullopt,
-      PrerenderCrossOriginRedirectionDomain::kRedirectFromSubDomain);
-}
-
-// Tests PrerenderCrossOriginRedirectionMismatch.kHostMismatch and
-// PrerenderCrossOriginRedirectionDomain.kCrossDomain are recorded
-// when the prerendering navigation is redirected to a different domain.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       EmbedderTrigger_CrossOriginRedirection_DifferentDomain) {
-  base::HistogramTester histogram_tester;
-  GURL kInitialUrl = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), kInitialUrl));
-  GURL kRedirectedUrl = GetCrossOriginUrl("/empty.html?prerender");
-  GURL kPrerenderingUrl = GetUrl("/server-redirect?" + kRedirectedUrl.spec());
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), kPrerenderingUrl, kRedirectedUrl);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester, PrerenderCrossOriginRedirectionMismatch::kHostMismatch,
-      /*protocol_change=*/absl::nullopt,
-      PrerenderCrossOriginRedirectionDomain::kCrossDomain);
-}
-
-// Tests that a prerendering navigation is redirected to another origin whose
-// port differs from the prerendering one. The prerender should be cancelled and
-// `PrerenderCrossOriginRedirectionCase::kPortMismatch` should be recorded.
-IN_PROC_BROWSER_TEST_F(PrerenderBrowserTest,
-                       EmbedderTrigger_CrossOriginRedirection_PortChanged) {
-  base::HistogramTester histogram_tester;
-  GURL initial_url = GetUrl("/empty.html");
-  ASSERT_TRUE(NavigateToURL(shell(), initial_url));
-
-  std::string port_str(base::NumberToString(ssl_server().port() + 1));
-  GURL::Replacements set_port;
-  set_port.SetPortStr(port_str);
-  GURL redirected_url = initial_url.ReplaceComponents(set_port);
-  GURL prerendering_url = GetUrl("/server-redirect?" + redirected_url.spec());
-  PrerenderEmbedderTriggeredCrossOriginRedirectionPage(
-      *web_contents_impl(), prerendering_url, redirected_url);
-  CheckExpectedCrossOriginMetrics(
-      histogram_tester, PrerenderCrossOriginRedirectionMismatch::kPortMismatch,
-      /*protocol_change=*/absl::nullopt,
-      /*domain_change=*/absl::nullopt);
 }
 
 namespace {

@@ -69,10 +69,9 @@ const base::Feature kRestrictDeveloperModeAPIs{
 // claims to act on behalf of a given extension id, (i.e. even if the browser
 // process things that renderer process never run content scripts from the
 // extension).
-// Currently disabled due to https://crbug.com/1312125.
 const base::Feature kCheckingUnexpectedExtensionIdInContentScriptIpcs{
     "EMF_INVALID_EXTENSION_ID_FOR_CONTENT_SCRIPT",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // When enabled, then bad_message::ReceivedBadMessage will be called when
 // browser receives an IPC from a content script and the IPC that unexpectedly
@@ -85,6 +84,25 @@ extern const base::Feature kCheckingNoExtensionIdInExtensionIpcs{
 
 // Controls whether extensions can use the new favicon fetching in Manifest V3.
 const base::Feature kNewExtensionFaviconHandling{
-    "ExtensionsNewFaviconHandling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ExtensionsNewFaviconHandling", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// Determine if dynamic extension URLs are handled and redirected.
+const base::Feature kExtensionDynamicURLRedirection{
+    "kExtensionDynamicURLRedirection", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables enhanced site control for extensions and allowing the user to control
+// site permissions.
+const base::Feature kExtensionsMenuAccessControl{
+    "ExtensionsMenuAccessControl", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, calls RenderFrame::SetAllowsCrossBrowsingInstanceFrameLookup() in
+// DidCreateScriptContext() instead of DidCommitProvisionalLoad() to avoid
+// creating the script context too early which can be bad for performance.
+const base::Feature kAvoidEarlyExtensionScriptContextCreation{
+    "AvoidEarlyExtensionScriptContextCreation",
+    // Disabled in Vivaldi because of VB-90136. extension.getViews fails after
+    // webcontents.OnDidFinishNavigation. We need to signal when
+    // Dispatcher::DidCreateScriptContext is called.
+    base::FEATURE_DISABLED_BY_DEFAULT};
 
 }  // namespace extensions_features

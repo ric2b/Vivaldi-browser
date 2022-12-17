@@ -46,6 +46,7 @@ import java.util.Iterator;
 import java.util.List;
 
 // Vivaldi
+import android.annotation.SuppressLint;
 import java.net.MalformedURLException;
 import java.net.URL;
 
@@ -361,6 +362,7 @@ public class SearchEngineAdapter extends BaseAdapter
         }
     }
 
+    @SuppressLint("SetTextI18n") // Vivaldi
     @Override
     public View getView(int position, View convertView, ViewGroup parent) {
         View view = convertView;
@@ -419,7 +421,10 @@ public class SearchEngineAdapter extends BaseAdapter
         try {
             URL itemUrl = new URL(templateUrl.getURL());
             url.setText(itemUrl.getHost());
-        } catch (MalformedURLException ignored) {}
+        } catch (MalformedURLException e) {
+            if (templateUrl.getURL().contains("{google:baseURL}"))
+                url.setText("google.com");
+        }
         return view;
     }
 

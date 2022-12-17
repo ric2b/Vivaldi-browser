@@ -117,12 +117,57 @@ constexpr int kMinProductivityLauncherMargin = 24;
 constexpr int kMinProductivityLauncherGridHorizontalMargin =
     kMinProductivityLauncherMargin + 32;
 
-int GetExpectedProductivityLauncherAppsContainerHeight(int row_count,
-                                                       int tile_height,
-                                                       int tile_margins) {
-  return row_count * tile_height + (row_count - 1) * tile_margins +
-         2 * kMinProductivityLauncherMargin + kGridVerticalMargin +
-         kGridVerticalInset + 48 /*search box height*/ + 56 /*shelf size*/;
+// The amount of the screen height that should be taken up by the vertical
+// margin for the apps container view.
+constexpr float kProductivityLauncherVerticalMarginRatio = 1.0f / 24.0f;
+constexpr float kProductivityLauncherVerticalMarginRatioLargeHeight =
+    1.0f / 16.0f;
+
+// `is_large_height` should be set depending on whether the screen height is
+// expected to be greater than 800. This is set so that the correct vertical
+// margin ratio is used depending on the expected screen height.
+int GetExpectedScreenSizeForProductivityLauncher(int row_count,
+                                                 int tile_height,
+                                                 int tile_margins,
+                                                 bool is_large_height) {
+  // The vertical margins are calculated as a ratio of the total screen height.
+
+  // Below we solve for the screen_height where vertical AppsContainerView
+  // margins are defined as margin_ratio * screen_height.
+
+  // Given the following values:
+  // h = screen_height
+  // r = margin_ratio
+
+  // The screen_height can be calculated with the following:
+  // h = 2 * r * h  + grid_size + space_above_grid + shelf_size
+
+  // Solving for h results in the following, which is used below:
+  // h = (grid_size + space_above_grid + shelf_size) / (1 - 2 * r)
+
+  float margin_ratio = kProductivityLauncherVerticalMarginRatio;
+  if (is_large_height)
+    margin_ratio = kProductivityLauncherVerticalMarginRatioLargeHeight;
+
+  const float shelf_size = 56;
+  const float grid_size =
+      row_count * tile_height + (row_count - 1) * tile_margins;
+  const float search_box_height = 48;
+  const float space_above_grid =
+      kGridVerticalMargin + kGridVerticalInset + search_box_height;
+
+  DCHECK_NE(margin_ratio, 0.5f);
+  const float screen_height = (grid_size + space_above_grid + shelf_size) /
+                              (1.0f - 2.0f * margin_ratio);
+
+  // If the margins would be less than the minimum allowed margin, then add back
+  // the necessary amount to account for the minimum margin.
+  if (screen_height * margin_ratio < kMinProductivityLauncherMargin) {
+    return screen_height + 2 * (kMinProductivityLauncherMargin -
+                                (screen_height * margin_ratio));
+  }
+
+  return screen_height;
 }
 
 SearchModel* GetSearchModel() {
@@ -375,8 +420,14 @@ class AppListViewTest : public views::ViewsTestBase {
     ASSERT_EQ(column_count, apps_grid_view()->cols());
     ASSERT_EQ(row_count, apps_grid_view()->GetFirstPageRowsForTesting());
 
-    const int expected_vertical_margin = kMinProductivityLauncherMargin;
+    const float ratio =
+        (container_size.height() > 800)
+            ? kProductivityLauncherVerticalMarginRatioLargeHeight
+            : kProductivityLauncherVerticalMarginRatio;
 
+    const int expected_vertical_margin =
+        std::max(static_cast<int>(container_size.height() * ratio),
+                 kMinProductivityLauncherMargin);
     const int expected_grid_width =
         container_size.width() - 2 * expected_horizontal_margin;
 
@@ -1970,65 +2021,6 @@ TEST_F(AppListViewPeekingTest, ShowPeekingByDefault) {
   ASSERT_EQ(ash::AppListViewState::kPeeking, view_->app_list_state());
 }
 
-TEST_P(AppListViewTabletTest, RecordFolderMetrics_ZeroFolders) {
-  base::HistogramTester histogram;
-  Initialize(/*is_tablet_mode=*/true);
-  delegate_->GetTestModel()->PopulateApps(2);
-  Show();
-
-  // 1 sample in the 0 folders bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfFolders", 0));
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfNonSystemFolders", 0));
-  // 1 sample in the 0 apps bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount(
-                   "Apps.AppsInFolders.FullscreenAppListEnabled", 0));
-}
-
-TEST_P(AppListViewTabletTest, RecordFolderMetrics_OneRegularFolder) {
-  base::HistogramTester histogram;
-  Initialize(/*is_tablet_mode=*/true);
-  delegate_->GetTestModel()->CreateAndPopulateFolderWithApps(2);
-  Show();
-
-  // 1 sample in the 1 folder bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfFolders", 1));
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfNonSystemFolders", 1));
-  // 1 sample in the 2 apps bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount(
-                   "Apps.AppsInFolders.FullscreenAppListEnabled", 2));
-}
-
-TEST_P(AppListViewTabletTest, RecordFolderMetrics_OemFolder) {
-  base::HistogramTester histogram;
-  Initialize(/*is_tablet_mode=*/true);
-  delegate_->GetTestModel()->CreateSingleItemFolder(kOemFolderId, "item_id");
-  Show();
-
-  // 1 sample in the 1 folder bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfFolders", 1));
-  // 1 sample in the 0 folders bucket, because OEM folder is a system folder.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfNonSystemFolders", 0));
-  // 1 sample in the 0 apps bucket, because OEM apps don't count.
-  EXPECT_EQ(1, histogram.GetBucketCount(
-                   "Apps.AppsInFolders.FullscreenAppListEnabled", 0));
-}
-
-TEST_P(AppListViewTabletTest, RecordFolderMetrics_LinuxAppsFolder) {
-  base::HistogramTester histogram;
-  Initialize(/*is_tablet_mode=*/true);
-  delegate_->GetTestModel()->CreateSingleItemFolder(kCrostiniFolderId,
-                                                    "item_id");
-  Show();
-
-  // 1 sample in the 1 folder bucket.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfFolders", 1));
-  // 1 sample in the 0 folders bucket, because "Linux apps" is a system folder.
-  EXPECT_EQ(1, histogram.GetBucketCount("Apps.NumberOfNonSystemFolders", 0));
-  // 1 sample in the 1 app bucket, because Linux apps do count.
-  EXPECT_EQ(1, histogram.GetBucketCount(
-                   "Apps.AppsInFolders.FullscreenAppListEnabled", 1));
-}
-
 // Tests that in side shelf mode, the app list opens in fullscreen by default
 // and verifies that the top rounded corners of the app list background are
 // hidden (see https://crbug.com/920082). ProductivityLauncher does not change
@@ -3159,9 +3151,10 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest, RegularLandscapeScreen) {
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularLandscapeScreenAtMinPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/8);
-  EXPECT_EQ(680, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/8,
+      /*large_height=*/false);
+  EXPECT_EQ(689, window_height);
   const gfx::Size window_size = gfx::Size(800, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3193,11 +3186,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularLandscapeScreenWithRemovedRows) {
-  const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/8) -
-      4;
-  EXPECT_EQ(676, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+                                /*row_count=*/4, /*tile_height=*/120,
+                                /*tile_margins=*/8, /*large_height=*/false) -
+                            4;
+  EXPECT_EQ(685, window_height);
   const gfx::Size window_size = gfx::Size(800, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3229,10 +3222,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularLandscapeScreenAtMaxPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/96);
-  EXPECT_EQ(944, window_height);
-  const gfx::Size window_size = gfx::Size(1000, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/96,
+      /*large_height=*/true);
+  EXPECT_EQ(1024, window_height);
+  const gfx::Size window_size = gfx::Size(1100, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
   InitializeAppList();
@@ -3256,19 +3250,19 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
     SCOPED_TRACE("With recent apps");
     EXPECT_EQ(4, apps_grid_view()->GetRowsForTesting());
     VerifyAppsContainerLayoutForProductivityLauncher(
-        window_size, 3 /*row_count*/, expected_horizontal_margin,
+        window_size, 4 /*row_count*/, expected_horizontal_margin,
         expected_item_size, /*has_recent_apps=*/true);
   }
 }
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularLandscapeScreenWithAddedRows) {
-  const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/4, /*tile_height=*/120, /*tile_margins=*/96) +
-      6;
-  EXPECT_EQ(950, window_height);
-  const gfx::Size window_size = gfx::Size(1000, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+                                /*row_count=*/4, /*tile_height=*/120,
+                                /*tile_margins=*/96, /*large_height=*/true) +
+                            6;
+  EXPECT_EQ(1030, window_height);
+  const gfx::Size window_size = gfx::Size(1100, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
   InitializeAppList();
@@ -3292,7 +3286,7 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
     SCOPED_TRACE("With recent apps");
     EXPECT_EQ(5, apps_grid_view()->GetRowsForTesting());
     VerifyAppsContainerLayoutForProductivityLauncher(
-        window_size, 3 /*row_count*/, expected_horizontal_margin,
+        window_size, 4 /*row_count*/, expected_horizontal_margin,
         expected_item_size, /*has_recent_apps=*/true);
   }
 }
@@ -3329,9 +3323,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest, RegularPortraitScreen) {
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularPortraitScreenAtMinPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/8);
-  EXPECT_EQ(808, window_height);
+  int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/8,
+      /*large_height=*/true);
+  // window_height = 860;
+  EXPECT_EQ(868, window_height);
   const gfx::Size window_size = gfx::Size(700, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3364,10 +3360,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularPortraitScreenWithRemovedRows) {
   const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/8) -
+      GetExpectedScreenSizeForProductivityLauncher(
+          /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/8,
+          /*large_height=*/true) -
       8;
-  EXPECT_EQ(800, window_height);
+  EXPECT_EQ(860, window_height);
   const gfx::Size window_size = gfx::Size(700, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3399,9 +3396,10 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularPortraitScreenAtMaxPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/96);
-  EXPECT_EQ(1160, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/96,
+      /*large_height=*/true);
+  EXPECT_EQ(1270, window_height);
   const gfx::Size window_size = gfx::Size(1200, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3433,10 +3431,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        RegularPortraitScreenWithExtraRows) {
   const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/96) +
+      GetExpectedScreenSizeForProductivityLauncher(
+          /*row_count=*/5, /*tile_height=*/120, /*tile_margins=*/96,
+          /*large_height=*/true) +
       4;
-  EXPECT_EQ(1164, window_height);
+  EXPECT_EQ(1274, window_height);
   const gfx::Size window_size = gfx::Size(1200, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3497,8 +3496,9 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest, DenseLandscapeScreen) {
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DenseLandscapeScreenAtMinPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/4, /*tile_height=*/88, /*tile_margins=*/8);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/4, /*tile_height=*/88, /*tile_margins=*/8,
+      /*large_height=*/false);
   EXPECT_EQ(552, window_height);
   const gfx::Size window_size = gfx::Size(800, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
@@ -3532,8 +3532,9 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DenseLandscapeScreenWithRemovedRows) {
   const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/4, /*tile_height=*/88, /*tile_margins=*/8) -
+      GetExpectedScreenSizeForProductivityLauncher(
+          /*row_count=*/4, /*tile_height=*/88, /*tile_margins=*/8,
+          /*large_height*/ false) -
       4;
   EXPECT_EQ(548, window_height);
   const gfx::Size window_size = gfx::Size(800, window_height);
@@ -3597,9 +3598,10 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest, DensePortraitScreen) {
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DensePortraitScreenAtMinPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/8);
-  EXPECT_EQ(648, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/8,
+      /*large_height*/ false);
+  EXPECT_EQ(654, window_height);
   const gfx::Size window_size = gfx::Size(600, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3631,11 +3633,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DensePortraitScreenWithRemovedRows) {
-  const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/8) -
-      8;
-  EXPECT_EQ(640, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+                                /*row_count=*/5, /*tile_height=*/88,
+                                /*tile_margins=*/8, /*large_height*/ false) -
+                            8;
+  EXPECT_EQ(646, window_height);
   const gfx::Size window_size = gfx::Size(540, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
@@ -3667,10 +3669,11 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DensePortraitScreenAtMaxPreferredVerticalMargin) {
-  const int window_height = GetExpectedProductivityLauncherAppsContainerHeight(
-      /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/96);
-  EXPECT_EQ(1000, window_height);
-  const gfx::Size window_size = gfx::Size(600, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+      /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/96,
+      /*large_height*/ true);
+  EXPECT_EQ(1088, window_height);
+  const gfx::Size window_size = gfx::Size(601, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
   InitializeAppList();
@@ -3701,12 +3704,12 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
 TEST_F(ProductivityLauncherAppListViewLayoutTest,
        DensePortraitScreenWithExtraRows) {
-  const int window_height =
-      GetExpectedProductivityLauncherAppsContainerHeight(
-          /*row_count=*/5, /*tile_height=*/88, /*tile_margins=*/96) +
-      4;
-  EXPECT_EQ(1004, window_height);
-  const gfx::Size window_size = gfx::Size(600, window_height);
+  const int window_height = GetExpectedScreenSizeForProductivityLauncher(
+                                /*row_count=*/5, /*tile_height=*/88,
+                                /*tile_margins=*/96, /*large_height*/ true) +
+                            4;
+  EXPECT_EQ(1092, window_height);
+  const gfx::Size window_size = gfx::Size(601, window_height);
   GetContext()->SetBounds(gfx::Rect(window_size));
 
   InitializeAppList();
@@ -3820,9 +3823,9 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
   const int expected_horizontal_margin =
       kMinProductivityLauncherGridHorizontalMargin;
   const gfx::Size expected_item_size(96, 120);
-  EXPECT_EQ(6, apps_grid_view()->GetRowsForTesting());
+  EXPECT_EQ(5, apps_grid_view()->GetRowsForTesting());
   VerifyAppsContainerLayoutForProductivityLauncher(
-      window_size, /*row_count=*/6, expected_horizontal_margin,
+      window_size, /*row_count=*/5, expected_horizontal_margin,
       expected_item_size, /*has_recent_apps=*/false);
 }
 
@@ -3838,9 +3841,9 @@ TEST_F(ProductivityLauncherAppListViewLayoutTest,
 
   const int expected_horizontal_margin = 62;
   const gfx::Size expected_item_size(96, 120);
-  EXPECT_EQ(6, apps_grid_view()->GetRowsForTesting());
+  EXPECT_EQ(5, apps_grid_view()->GetRowsForTesting());
   VerifyAppsContainerLayoutForProductivityLauncher(
-      window_size, /*row_count=*/6, expected_horizontal_margin,
+      window_size, /*row_count=*/5, expected_horizontal_margin,
       expected_item_size, /*has_recent_apps=*/false);
 }
 

@@ -220,7 +220,7 @@ TEST_F(PhoneHubTrayTest, FocusBubbleWhenOpenedByKeyboard) {
 
   // Generate a tab key press.
   ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-  generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EventFlags::EF_NONE);
+  generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_NONE);
 
   // The bubble widget should get focus when it's opened by keyboard and the tab
   // key is pressed.
@@ -343,9 +343,7 @@ TEST_F(PhoneHubTrayTest, StartAllPermissionSetUpFlow) {
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
                             chromeos::features::kPhoneHubCameraRoll,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAvailableButNotGranted, AccessProhibitedReason::kUnknown);
@@ -376,9 +374,7 @@ TEST_F(PhoneHubTrayTest, StartNotificationAndAppSetUpFlow) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAvailableButNotGranted, AccessProhibitedReason::kUnknown);
@@ -407,9 +403,7 @@ TEST_F(PhoneHubTrayTest, StartNotificationAccessOnlySetUpFlow) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAvailableButNotGranted, AccessProhibitedReason::kUnknown);
@@ -436,9 +430,7 @@ TEST_F(PhoneHubTrayTest, StartAppsAccessOnlySetUpFlow) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAccessGranted, AccessProhibitedReason::kUnknown);
@@ -467,9 +459,7 @@ TEST_F(PhoneHubTrayTest, DoNotShowAppsAccessSetUpFlowIfFeatureIsNotReady) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAccessGranted, AccessProhibitedReason::kUnknown);
@@ -487,9 +477,7 @@ TEST_F(PhoneHubTrayTest, StartCameraRollOnlySetUpFlow) {
   base::test::ScopedFeatureList feature_list;
   feature_list.InitWithFeatures(
       /*enabled_features=*/{chromeos::features::kPhoneHub,
-                            chromeos::features::kEcheSWA,
-                            chromeos::features::
-                                kEchePhoneHubPermissionsOnboarding},
+                            chromeos::features::kEcheSWA},
       /*disabled_features=*/{});
   GetMultideviceFeatureAccessManager()->SetNotificationAccessStatusInternal(
       AccessStatus::kAccessGranted, AccessProhibitedReason::kUnknown);

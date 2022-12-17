@@ -7,6 +7,7 @@
 #include <utility>
 
 #include "ash/constants/ash_pref_names.h"
+#include "base/metrics/field_trial_params.h"
 #include "base/strings/strcat.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -14,26 +15,39 @@
 #include "chrome/browser/apps/app_discovery_service/app_discovery_service_factory.h"
 #include "chrome/browser/apps/app_discovery_service/app_discovery_util.h"
 #include "chrome/browser/apps/app_discovery_service/game_extras.h"
+#include "chrome/browser/apps/app_discovery_service/result.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/app_list/app_list_controller_delegate.h"
 #include "chrome/browser/ui/app_list/search/games/game_result.h"
+#include "chrome/browser/ui/app_list/search/search_features.h"
 #include "chrome/grit/generated_resources.h"
+#include "chromeos/components/string_matching/fuzzy_tokenized_string_match.h"
 #include "chromeos/components/string_matching/tokenized_string.h"
-#include "chromeos/components/string_matching/tokenized_string_match.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 
 namespace app_list {
 namespace {
 
+using chromeos::string_matching::FuzzyTokenizedStringMatch;
 using chromeos::string_matching::TokenizedString;
-using chromeos::string_matching::TokenizedStringMatch;
 
-constexpr double kRelevanceThreshold = 0.7;
+// Parameters for FuzzyTokenizedStringMatch.
+constexpr bool kUsePrefixOnly = false;
+constexpr bool kUseWeightedRatio = false;
+constexpr bool kUseEditDistance = false;
+constexpr double kRelevanceThreshold = 0.32;
+constexpr double kPartialMatchPenaltyRate = 0.9;
+
 constexpr size_t kMaxResults = 3u;
 
-bool IsSuggestedContentEnabled(Profile* profile) {
-  return profile->GetPrefs()->GetBoolean(ash::prefs::kSuggestedContentEnabled);
+bool DisabledByPolicy(Profile* profile) {
+  bool suggested_content_enabled =
+      profile->GetPrefs()->GetBoolean(ash::prefs::kSuggestedContentEnabled);
+  bool enabled_override = base::GetFieldTrialParamByFeatureAsBool(
+      search_features::kLauncherGameSearch, "enabled_override",
+      /*default_value=*/false);
+  return !suggested_content_enabled && !enabled_override;
 }
 
 double CalculateTitleRelevance(const TokenizedString& tokenized_query,
@@ -46,8 +60,12 @@ double CalculateTitleRelevance(const TokenizedString& tokenized_query,
     return kDefaultRelevance;
   }
 
-  TokenizedStringMatch match;
-  match.Calculate(tokenized_query, tokenized_title);
+  FuzzyTokenizedStringMatch match;
+  // The return parameter is ignored here, but this method also implicitly
+  // calculates the match relevance.
+  match.IsRelevant(tokenized_query, tokenized_title, kRelevanceThreshold,
+                   kUsePrefixOnly, kUseWeightedRatio, kUseEditDistance,
+                   kPartialMatchPenaltyRate);
   return match.relevance();
 }
 
@@ -80,9 +98,17 @@ GameProvider::GameProvider(Profile* profile,
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // This call will fail if the app discovery service has not finished
-  // initializing. In that case, we will update when notified via the observer.
-  // TODO(crbug.com/1305880): Add observer once implemented.
+  // initializing. In that case, we will update when notified via the
+  // subscription.
   UpdateIndex();
+
+  DCHECK(app_discovery_service_);
+  // It's safe to use an unretained pointer here due to the nature of
+  // CallbackListSubscription.
+  subscription_ = app_discovery_service_->RegisterForAppUpdates(
+      apps::ResultType::kGameSearchCatalog,
+      base::BindRepeating(&GameProvider::OnIndexUpdatedBySubscription,
+                          base::Unretained(this)));
 }
 
 GameProvider::~GameProvider() = default;
@@ -92,7 +118,6 @@ ash::AppListSearchResultType GameProvider::ResultType() const {
 }
 
 void GameProvider::UpdateIndex() {
-  // TODO(crbug.com/1305880): Replace with kGames once added.
   app_discovery_service_->GetApps(apps::ResultType::kGameSearchCatalog,
                                   base::BindOnce(&GameProvider::OnIndexUpdated,
                                                  weak_factory_.GetWeakPtr()));
@@ -105,10 +130,18 @@ void GameProvider::OnIndexUpdated(const GameIndex& index,
     game_index_ = index;
 }
 
+void GameProvider::OnIndexUpdatedBySubscription(const GameIndex& index) {
+  // TODO(crbug.com/1305880): Report the error to UMA.
+  // TODO(crbug.com/1305880): Add tests to check that this is called when the
+  // app discovery service notifies its subscribers.
+  if (!index.empty())
+    game_index_ = index;
+}
+
 void GameProvider::Start(const std::u16string& query) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  if (!IsSuggestedContentEnabled(profile_) || game_index_.empty())
+  if (DisabledByPolicy(profile_) || game_index_.empty())
     return;
 
   // Clear results and discard any existing searches.
@@ -137,6 +170,12 @@ void GameProvider::OnSearchComplete(
 
   SearchProvider::Results results;
   for (size_t i = 0; i < std::min(matches.size(), kMaxResults); ++i) {
+    const apps::Result* result = matches[i].first;
+    if (!result->GetSourceExtras() ||
+        !result->GetSourceExtras()->AsGameExtras()) {
+      // Result was not a game.
+      continue;
+    }
     results.emplace_back(std::make_unique<GameResult>(
         profile_, list_controller_, app_discovery_service_, *matches[i].first,
         matches[i].second, query));

@@ -26,7 +26,7 @@ UserNoteStorageImpl::UserNoteStorageImpl(
 
 void UserNoteStorageImpl::GetNoteMetadataForUrls(
     std::vector<GURL> urls,
-    base::OnceCallback<void(UserNoteStorage::UrlNoteMetadataIDMap)> callback) {
+    base::OnceCallback<void(UserNoteMetadataSnapshot)> callback) {
   database_.AsyncCall(&UserNoteDatabase::GetNoteMetadataForUrls)
       .WithArgs(std::move(urls))
       .Then(std::move(callback));
@@ -40,21 +40,11 @@ void UserNoteStorageImpl::GetNotesById(
       .Then(std::move(callback));
 }
 
-void UserNoteStorageImpl::CreateNote(base::UnguessableToken id,
+void UserNoteStorageImpl::UpdateNote(const UserNote* model,
                                      std::string note_body_text,
-                                     UserNoteTarget::TargetType target_type,
-                                     std::string original_text,
-                                     GURL target_page,
-                                     std::string selector) {
-  database_.AsyncCall(&UserNoteDatabase::CreateNote)
-      .WithArgs(id, note_body_text, target_type, original_text, target_page,
-                selector);
-}
-
-void UserNoteStorageImpl::UpdateNote(base::UnguessableToken id,
-                                     std::string note_body_text) {
+                                     bool is_creation) {
   database_.AsyncCall(&UserNoteDatabase::UpdateNote)
-      .WithArgs(id, note_body_text);
+      .WithArgs(model, note_body_text, is_creation);
 }
 
 void UserNoteStorageImpl::DeleteNote(const base::UnguessableToken& id) {

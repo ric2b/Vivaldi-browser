@@ -118,6 +118,9 @@ FromMojomResponseToAutomationResponse(
           SET_NATIVE_CHROME_VOX_RESPONSE_WINDOWNOTFOUND;
     case arc::mojom::SetNativeChromeVoxResponse::FAILURE:
       return SetNativeChromeVoxResponse::SET_NATIVE_CHROME_VOX_RESPONSE_FAILURE;
+    case arc::mojom::SetNativeChromeVoxResponse::NEED_DEPRECATION_CONFIRMATION:
+      return SetNativeChromeVoxResponse::
+          SET_NATIVE_CHROME_VOX_RESPONSE_NEEDDEPRECATIONCONFIRMATION;
   }
 }
 
@@ -494,14 +497,14 @@ bool ArcAccessibilityTreeTracker::EnableTree(const ui::AXTreeID& tree_id) {
   if (!tree_source || !tree_source->window())
     return false;
 
-  arc::mojom::AccessibilityWindowKeyPtr window_key =
-      arc::mojom::AccessibilityWindowKey::New();
+  arc::mojom::AccessibilityWindowKeyPtr window_key;
   if (const absl::optional<int32_t> window_id_opt =
           exo::GetShellClientAccessibilityId(tree_source->window())) {
-    window_key->set_window_id(window_id_opt.value());
+    window_key =
+        arc::mojom::AccessibilityWindowKey::NewWindowId(window_id_opt.value());
   } else if (const absl::optional<int32_t> task_id =
                  GetWindowTaskId(tree_source->window())) {
-    window_key->set_task_id(task_id.value());
+    window_key = arc::mojom::AccessibilityWindowKey::NewTaskId(task_id.value());
   } else {
     return false;
   }
@@ -778,8 +781,7 @@ void ArcAccessibilityTreeTracker::UpdateWindowIdMapping(aura::Window* window) {
 
   // The window ID is new to us. Request the entire tree.
   arc::mojom::AccessibilityWindowKeyPtr window_key =
-      arc::mojom::AccessibilityWindowKey::New();
-  window_key->set_window_id(window_id.value());
+      arc::mojom::AccessibilityWindowKey::NewWindowId(window_id.value());
   accessibility_helper_instance_.RequestSendAccessibilityTree(
       std::move(window_key));
 }

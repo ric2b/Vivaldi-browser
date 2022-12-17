@@ -323,6 +323,14 @@ void DidActivatePrerender(const NavigationRequest& nav_request) {
                    nav_request);
 }
 
+void DidCancelPrerender(const GURL& prerendering_url,
+                        FrameTreeNode* ftn,
+                        PrerenderHost::FinalStatus status) {
+  std::string initiating_frame_id = ftn->devtools_frame_token().ToString();
+  DispatchToAgents(ftn, &protocol::PageHandler::DidCancelPrerender,
+                   prerendering_url, initiating_frame_id, status);
+}
+
 namespace {
 
 protocol::String BuildBlockedByResponseReason(
@@ -1277,7 +1285,15 @@ void OnWebTransportHandshakeFailed(
 
 void OnServiceWorkerMainScriptFetchingFailed(
     const GlobalRenderFrameHostId& requesting_frame_id,
-    const std::string& error) {
+    const ServiceWorkerContextWrapper* context_wrapper,
+    int64_t version_id,
+    const std::string& error,
+    const network::URLLoaderCompletionStatus& status,
+    const network::mojom::URLResponseHead* response_head,
+    const GURL& url) {
+  DCHECK(!error.empty());
+  DCHECK_NE(net::OK, status.error_code);
+
   // If we have a requesting_frame_id, we should have a frame and a frame tree
   // node. However since the lifetime of these objects can be complex, we check
   // at each step that we indeed can go reach all the way to the FrameTreeNode.
@@ -1300,13 +1316,44 @@ void OnServiceWorkerMainScriptFetchingFailed(
                    .SetTimestamp(base::Time::Now().ToDoubleT() * 1000.0)
                    .Build();
   DispatchToAgents(ftn, &protocol::LogHandler::EntryAdded, entry.get());
+
+  ServiceWorkerDevToolsAgentHost* agent_host =
+      ServiceWorkerDevToolsManager::GetInstance()
+          ->GetDevToolsAgentHostForNewInstallingWorker(context_wrapper,
+                                                       version_id);
+
+  if (response_head) {
+    DCHECK(agent_host);
+    network::mojom::URLResponseHeadDevToolsInfoPtr head_info =
+        network::ExtractDevToolsInfo(*response_head);
+    auto worker_token = agent_host->devtools_worker_token().ToString();
+    for (auto* network_handler :
+         protocol::NetworkHandler::ForAgentHost(agent_host)) {
+      network_handler->ResponseReceived(
+          worker_token, worker_token, url,
+          protocol::Network::ResourceTypeEnum::Other, *head_info,
+          ftn->devtools_frame_token().ToString());
+      network_handler->frontend()->LoadingFinished(
+          worker_token,
+          status.completion_time.ToInternalValue() /
+              static_cast<double>(base::Time::kMicrosecondsPerSecond),
+          status.encoded_data_length);
+    }
+  } else if (agent_host) {
+    for (auto* network_handler :
+         protocol::NetworkHandler::ForAgentHost(agent_host)) {
+      network_handler->LoadingComplete(
+          agent_host->devtools_worker_token().ToString(),
+          protocol::Network::ResourceTypeEnum::Other, status);
+    }
+  }
 }
 
 void OnServiceWorkerMainScriptRequestWillBeSent(
     const GlobalRenderFrameHostId& requesting_frame_id,
     const ServiceWorkerContextWrapper* context_wrapper,
     int64_t version_id,
-    const network::ResourceRequest& request) {
+    network::ResourceRequest& request) {
   // Currently, `requesting_frame_id` is invalid when payment apps and
   // extensions register a service worker. See the callers of
   // ServiceWorkerContextWrapper::RegisterServiceWorker().
@@ -1327,7 +1374,7 @@ void OnServiceWorkerMainScriptRequestWillBeSent(
           ->GetDevToolsAgentHostForNewInstallingWorker(context_wrapper,
                                                        version_id);
   DCHECK(agent_host);
-  DCHECK(request.devtools_request_id.has_value());
+  request.devtools_request_id = agent_host->devtools_worker_token().ToString();
   for (auto* network_handler :
        protocol::NetworkHandler::ForAgentHost(agent_host)) {
     network_handler->RequestSent(

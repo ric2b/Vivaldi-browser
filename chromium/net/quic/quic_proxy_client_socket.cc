@@ -31,11 +31,8 @@ QuicProxyClientSocket::QuicProxyClientSocket(
     const NetLogWithSource& net_log,
     HttpAuthController* auth_controller,
     ProxyDelegate* proxy_delegate)
-    : next_state_(STATE_DISCONNECTED),
-      stream_(std::move(stream)),
+    : stream_(std::move(stream)),
       session_(std::move(session)),
-      read_buf_(nullptr),
-      write_buf_len_(0),
       endpoint_(endpoint),
       auth_(auth_controller),
       proxy_server_(proxy_server),
@@ -147,11 +144,6 @@ bool QuicProxyClientSocket::GetSSLInfo(SSLInfo* ssl_info) {
   // Do not delegate to `session_`. While `session_` has a secure channel to the
   // proxy, this object represents the tunneled TCP connection to the origin.
   return false;
-}
-
-void QuicProxyClientSocket::GetConnectionAttempts(
-    ConnectionAttempts* out) const {
-  out->clear();
 }
 
 int64_t QuicProxyClientSocket::GetTotalReceivedBytes() const {

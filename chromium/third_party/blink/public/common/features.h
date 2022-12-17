@@ -30,6 +30,7 @@ BLINK_COMMON_EXPORT extern const base::Feature kConversionMeasurement;
 BLINK_COMMON_EXPORT extern const base::Feature kExcludeLowEntropyImagesFromLCP;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<double>
     kMinimumEntropyForLCP;
+BLINK_COMMON_EXPORT extern const base::Feature kFixedElementsDontOverscroll;
 BLINK_COMMON_EXPORT extern const base::Feature kGMSCoreEmoji;
 BLINK_COMMON_EXPORT extern const base::Feature kPaintHolding;
 BLINK_COMMON_EXPORT extern const base::Feature kPaintHoldingCrossOrigin;
@@ -59,8 +60,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kPortals;
 BLINK_COMMON_EXPORT extern const base::Feature kPortalsCrossOrigin;
 BLINK_COMMON_EXPORT extern const base::Feature kFencedFrames;
 BLINK_COMMON_EXPORT extern const base::Feature kUserAgentClientHint;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kUserAgentClientHintFullVersionList;
 BLINK_COMMON_EXPORT extern const base::Feature
     kPrefersColorSchemeClientHintHeader;
 BLINK_COMMON_EXPORT extern const base::Feature kViewportHeightClientHintHeader;
@@ -98,21 +97,28 @@ BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
 // Maximum number of tries to initialize the database.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
     kMaxSharedStorageInitTries;
-// The maximum number of keys or key-value pairs returned in each batch by
+// Maximum number of keys or key-value pairs returned in each batch by
 // the async `keys()` and `entries()` iterators, respectively.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
     kMaxSharedStorageIteratorBatchSize;
-// The length of the initial interval from service startup after which
+// Maximum number of bits of entropy allowed per origin to output via the Shared
+// Storage API.
+BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
+    kSharedStorageBitBudget;
+// Interval over which `kSharedStorageBitBudget` is defined.
+BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
+    kSharedStorageBudgetInterval;
+// Initial interval from service startup after which
 // SharedStorageManager first checks for any stale origins, purging any that it
 // finds.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kSharedStorageStaleOriginPurgeInitialInterval;
-// The length of the second and subsequent intervals from service startup after
+// Second and subsequent intervals from service startup after
 // which SharedStorageManager checks for any stale origins, purging any that it
 // finds.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kSharedStorageStaleOriginPurgeRecurringInterval;
-// The length of time that an origin must be inactive for it to be deemed stale
+// Length of time that an origin must be inactive for it to be deemed stale
 // and hence necessary to auto-purge.
 BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kSharedStorageOriginStalenessThreshold;
@@ -176,8 +182,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kResourceLoadViaDataPipe;
 BLINK_COMMON_EXPORT extern const base::Feature kServiceWorkerUpdateDelay;
 BLINK_COMMON_EXPORT extern const base::Feature kSpeculationRulesPrefetchProxy;
 BLINK_COMMON_EXPORT extern const base::Feature kStopInBackground;
-BLINK_COMMON_EXPORT extern const base::Feature
-    kFreezeBackgroundTabOnNetworkIdle;
 BLINK_COMMON_EXPORT extern const base::Feature kStorageAccessAPI;
 BLINK_COMMON_EXPORT extern const base::Feature kTextFragmentAnchor;
 BLINK_COMMON_EXPORT extern const base::Feature kCssSelectorFragmentAnchor;
@@ -262,7 +266,8 @@ BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
 // is in stable with no issues.
 BLINK_COMMON_EXPORT extern const base::Feature kOffsetParentNewSpecBehavior;
 
-BLINK_COMMON_EXPORT extern const base::Feature kKeepScriptResourceAlive;
+BLINK_COMMON_EXPORT extern const base::Feature
+    kCancelFormSubmissionInDefaultHandler;
 
 BLINK_COMMON_EXPORT extern const base::Feature
     kAlignFontDisplayAutoTimeoutWithLCPGoal;
@@ -383,6 +388,10 @@ BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableTranslations;
 
 BLINK_COMMON_EXPORT extern const base::Feature kWebAppEnableUrlHandlers;
 
+BLINK_COMMON_EXPORT extern const base::Feature kWebAppManifestLockScreen;
+
+BLINK_COMMON_EXPORT extern const base::Feature kWebAppBorderless;
+
 BLINK_COMMON_EXPORT extern const base::Feature kLoadingTasksUnfreezable;
 
 BLINK_COMMON_EXPORT extern const base::Feature kTargetBlankImpliesNoOpener;
@@ -411,6 +420,7 @@ BLINK_COMMON_EXPORT extern const base::FeatureParam<std::string>
     kBackgroundTracingPerformanceMark_AllowList;
 
 BLINK_COMMON_EXPORT extern const base::Feature kSanitizerAPI;
+BLINK_COMMON_EXPORT extern const base::Feature kSanitizerAPIv0;
 BLINK_COMMON_EXPORT extern const base::Feature kSanitizerAPINamespaces;
 BLINK_COMMON_EXPORT extern const base::Feature kManagedConfiguration;
 
@@ -501,9 +511,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kClipboardCustomFormats;
 // heuristic where images occupying the full viewport are ignored.
 BLINK_COMMON_EXPORT extern const base::Feature kUsePageViewportInLCP;
 
-// Enable "Sec-CH-UA-Platform" client hint and request header for all requests
-BLINK_COMMON_EXPORT extern const base::Feature kUACHPlatformEnabledByDefault;
-
 // When enabled, allow dropping alpha on media streams for rendering sinks if
 // other sinks connected do not use alpha.
 BLINK_COMMON_EXPORT extern const base::Feature kAllowDropAlphaForMediaStream;
@@ -591,6 +598,7 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kMaxUnthrottledTimeoutNestingLevel;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<int>
     kMaxUnthrottledTimeoutNestingLevelParam;
+BLINK_COMMON_EXPORT void ClearUnthrottledNestedTimeoutOverrideCacheForTesting();
 BLINK_COMMON_EXPORT bool IsMaxUnthrottledTimeoutNestingLevelEnabled();
 BLINK_COMMON_EXPORT int GetMaxUnthrottledTimeoutNestingLevel();
 
@@ -646,12 +654,6 @@ BLINK_COMMON_EXPORT extern const base::Feature kSystemColorChooser;
 BLINK_COMMON_EXPORT extern const base::Feature kNoForcedFrameUpdatesForWebTests;
 
 BLINK_COMMON_EXPORT extern const base::Feature kElementSuperRareData;
-
-BLINK_COMMON_EXPORT extern const base::Feature kClientHintsPartitionedCookies;
-
-BLINK_COMMON_EXPORT extern const base::Feature kScaleTileMemoryLimit;
-BLINK_COMMON_EXPORT
-extern const base::FeatureParam<double> kScaleTileMemoryLimitFactor;
 
 // If enabled, the client hints cache will be loaded on browser restarts.
 BLINK_COMMON_EXPORT extern const base::Feature kDurableClientHintsCache;
@@ -722,6 +724,65 @@ BLINK_COMMON_EXPORT extern const base::Feature
     kDeferBeginMainFrameDuringLoading;
 BLINK_COMMON_EXPORT extern const base::FeatureParam<base::TimeDelta>
     kRecentBeginMainFrameCutoff;
+
+// If enabled, script source text will be decoded and hashed off the main
+// thread.
+BLINK_COMMON_EXPORT extern const base::Feature kDecodeScriptSourceOffThread;
+
+// If enabled, allows MediaStreamVideoSource objects to be restarted by a
+// successful source switch. Normally, switching the source would only allowed
+// on streams that are in started state. However, changing the source also first
+// stops the stream before performing the switch and sometimes it can be useful
+// to do a change directly on a paused stream.
+BLINK_COMMON_EXPORT extern const base::Feature
+    kAllowSourceSwitchOnPausedVideoMediaStream;
+
+// Kill switch for firing popstate immediately, instead of deferring it until
+// after onload.
+BLINK_COMMON_EXPORT extern const base::Feature kDispatchPopstateSync;
+
+// If enabled, expose non-standard stats in the WebRTC getStats API.
+BLINK_COMMON_EXPORT extern const base::Feature kWebRtcExposeNonStandardStats;
+
+// If enabled, CSS rulesets with many different rules on the same attribute
+// will be attempted accelerated with a substring set tree.
+BLINK_COMMON_EXPORT extern const base::Feature
+    kSubstringSetTreeForAttributeBuckets;
+
+// Whether the pending beacon API is enabled or not.
+// https://github.com/darrenw/docs/blob/main/explainers/beacon_api.md
+BLINK_COMMON_EXPORT extern const base::Feature kPendingBeaconAPI;
+
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_ANDROID)
+// If enabled, font lookup tables will be prefetched on renderer startup.
+BLINK_COMMON_EXPORT extern const base::Feature kPrefetchFontLookupTables;
+#endif
+
+// If enabled, inline scripts will be stream compiled using a background HTML
+// scanner.
+BLINK_COMMON_EXPORT extern const base::Feature kPrecompileInlineScripts;
+
+// TODO(accessibility): This flag is set to accommodate JAWS on Windows so they
+// can adjust to us not simulating click events on a focus action. It should be
+// disabled by default (and removed) before 5/17/2023.
+// See https://crbug.com/1326622 for more info.
+BLINK_COMMON_EXPORT extern const base::Feature kSimulateClickOnAXFocus;
+
+// If enabled, allows the use of WebSQL in non-secure contexts.
+BLINK_COMMON_EXPORT extern const base::Feature kWebSQLNonSecureContextAccess;
+
+// Switch to temporary turn back on file system url navigation.
+// TODO(https://crbug.com/1332598): Remove this feature.
+BLINK_COMMON_EXPORT extern const base::Feature kFileSystemUrlNavigation;
+
+// Early exit when the style or class attribute of an element is set to the same
+// value as before.
+BLINK_COMMON_EXPORT extern const base::Feature
+    kEarlyExitOnNoopClassOrStyleChange;
+
+// If enabled, the HTMLDocumentParser will use a budget based on elapsed time
+// rather than token count.
+BLINK_COMMON_EXPORT extern const base::Feature kTimedHTMLParserBudget;
 
 }  // namespace features
 }  // namespace blink

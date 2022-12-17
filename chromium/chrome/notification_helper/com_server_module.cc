@@ -20,6 +20,11 @@
 #include "chrome/notification_helper/notification_activator.h"
 #include "chrome/notification_helper/trace_util.h"
 
+#include "base/files/file_path.h"
+#include "base/path_service.h"
+#include "installer/util/vivaldi_install_util.h"
+#include "installer/vivaldi_install_modes.h"
+
 namespace mswr = Microsoft::WRL;
 
 namespace {
@@ -104,7 +109,13 @@ HRESULT ComServerModule::RegisterClassObjects() {
   static_assert(std::extent<decltype(cookies_)>() == std::size(class_factories),
                 "Arrays cookies_ and class_factories must be the same size.");
 
-  IID class_ids[] = {install_static::GetToastActivatorClsid()};
+  base::FilePath target_exe = vivaldi::GetPathOfCurrentExe();
+
+  const CLSID toast_activator_clsid =
+      vivaldi::GetOrGenerateToastActivatorCLSID(&target_exe);
+
+  IID class_ids[] = {toast_activator_clsid};
+
   static_assert(std::extent<decltype(cookies_)>() == std::size(class_ids),
                 "Arrays cookies_ and class_ids must be the same size.");
 

@@ -6,6 +6,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "ash/public/cpp/style/color_provider.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -166,15 +167,22 @@ OmniboxResult::OmniboxResult(Profile* profile,
   UpdateTitleAndDetails();
 
   if (is_zero_suggestion_) {
+    DCHECK(!ash::features::IsProductivityLauncherEnabled());
     InitializeButtonActions({ash::SearchResultActionType::kRemove,
                              ash::SearchResultActionType::kAppend});
   } else if (is_omnibox_search &&
              ash::features::IsProductivityLauncherEnabled()) {
     InitializeButtonActions({ash::SearchResultActionType::kRemove});
   }
+
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->AddObserver(this);
 }
 
-OmniboxResult::~OmniboxResult() = default;
+OmniboxResult::~OmniboxResult() {
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->RemoveObserver(this);
+}
 
 void OmniboxResult::Open(int event_flags) {
   list_controller_->OpenURL(profile_, match_.destination_url, match_.transition,
@@ -254,6 +262,11 @@ ash::SearchResultType OmniboxResult::GetSearchResultType() const {
   }
 }
 
+void OmniboxResult::OnColorModeChanged(bool dark_mode_enabled) {
+  if (uses_generic_icon_)
+    SetGenericIcon();
+}
+
 void OmniboxResult::UpdateIcon() {
   if (IsRichEntity()) {
     FetchRichEntityImage(match_.image_url);
@@ -273,6 +286,11 @@ void OmniboxResult::UpdateIcon() {
     }
   }
 
+  SetGenericIcon();
+}
+
+void OmniboxResult::SetGenericIcon() {
+  uses_generic_icon_ = true;
   // If this is neither a rich entity nor eligible for a favicon, use either
   // the generic bookmark or another generic icon as appropriate.
   BookmarkModel* bookmark_model =
@@ -373,24 +391,16 @@ void OmniboxResult::InitializeButtonActions(
     const std::vector<ash::SearchResultActionType>& button_actions) {
   Actions actions;
   for (ash::SearchResultActionType button_action : button_actions) {
-    gfx::ImageSkia button_image;
     std::u16string button_tooltip;
     bool visible_on_hover = false;
-    const int kImageButtonIconSize = kSystemIconDimension;
 
     switch (button_action) {
       case ash::SearchResultActionType::kRemove:
-        button_image =
-            gfx::CreateVectorIcon(ash::kSearchResultRemoveIcon,
-                                  kImageButtonIconSize, GetGenericIconColor());
         button_tooltip = l10n_util::GetStringFUTF16(
             IDS_APP_LIST_REMOVE_SUGGESTION_ACCESSIBILITY_NAME, title());
         visible_on_hover = true;  // visible upon hovering
         break;
       case ash::SearchResultActionType::kAppend:
-        button_image =
-            gfx::CreateVectorIcon(ash::kSearchResultAppendIcon,
-                                  kImageButtonIconSize, GetGenericIconColor());
         button_tooltip = l10n_util::GetStringFUTF16(
             IDS_APP_LIST_APPEND_SUGGESTION_ACCESSIBILITY_NAME, title());
         visible_on_hover = false;  // always visible
@@ -398,8 +408,7 @@ void OmniboxResult::InitializeButtonActions(
       default:
         NOTREACHED();
     }
-    Action search_action(button_action, button_image, button_tooltip,
-                         visible_on_hover);
+    Action search_action(button_action, button_tooltip, visible_on_hover);
     actions.emplace_back(search_action);
   }
 

@@ -6,9 +6,12 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/ambient/ambient_client.h"
+#include "ash/rgb_keyboard/rgb_keyboard_manager.h"
+#include "ash/shell.h"
 #include "ash/webui/grit/ash_personalization_app_resources.h"
 #include "ash/webui/grit/ash_personalization_app_resources_map.h"
 #include "ash/webui/personalization_app/personalization_app_ambient_provider.h"
+#include "ash/webui/personalization_app/personalization_app_keyboard_backlight_provider.h"
 #include "ash/webui/personalization_app/personalization_app_theme_provider.h"
 #include "ash/webui/personalization_app/personalization_app_url_constants.h"
 #include "ash/webui/personalization_app/personalization_app_user_provider.h"
@@ -60,6 +63,7 @@ void AddStrings(content::WebUIDataSource* source) {
       {"personalizationTitle",
        IDS_PERSONALIZATION_APP_PERSONALIZATION_HUB_TITLE},
       {"wallpaperLabel", IDS_PERSONALIZATION_APP_WALLPAPER_LABEL},
+      {"defaultWallpaper", IDS_PERSONALIZATION_APP_DEFAULT_WALLPAPER},
       {"back", IDS_PERSONALIZATION_APP_BACK_BUTTON},
       {"currentlySet", IDS_PERSONALIZATION_APP_CURRENTLY_SET},
       {"myImagesLabel", IDS_PERSONALIZATION_APP_MY_IMAGES},
@@ -110,6 +114,8 @@ void AddStrings(content::WebUIDataSource* source) {
       {"avatarLabel", IDS_PERSONALIZATION_APP_AVATAR_LABEL},
       {"takeWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_TAKE_PHOTO},
       {"takeWebcamVideo", IDS_PERSONALIZATION_APP_AVATAR_TAKE_VIDEO},
+      {"webcamCaptureInProgress",
+       IDS_PERSONALIZATION_APP_AVATAR_CAPTURE_IN_PROGRESS},
       {"confirmWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_CONFIRM_PHOTO},
       {"confirmWebcamVideo", IDS_PERSONALIZATION_APP_AVATAR_CONFIRM_VIDEO},
       {"rejectWebcamPhoto", IDS_PERSONALIZATION_APP_AVATAR_REJECT_PHOTO},
@@ -122,6 +128,14 @@ void AddStrings(content::WebUIDataSource* source) {
       {"chooseAFile", IDS_PERSONALIZATION_APP_AVATAR_CHOOSE_A_FILE},
       {"lastExternalImageTitle",
        IDS_PERSONALIZATION_APP_AVATAR_LAST_EXTERNAL_IMAGE},
+      {"ariaLabelCurrentAvatar",
+       IDS_PERSONALIZATION_APP_ARIA_LABEL_CURRENT_AVATAR},
+      {"ariaAnnounceAvatarChanged",
+       IDS_PERSONALIZATION_APP_ARIA_ANNOUNCE_AVATAR_CHANGED},
+      {"ariaLabelCloseCamera",
+       IDS_PERSONALIZATION_APP_AVATAR_ARIA_LABEL_CLOSE_CAMERA},
+      {"ariaLabelWebcamVideo",
+       IDS_PERSONALIZATION_APP_AVATAR_ARIA_LABEL_WEBCAM_VIDEO},
 
       // Ambient mode related string.
       {"screensaverLabel", IDS_PERSONALIZATION_APP_SCREENSAVER_LABEL},
@@ -147,6 +161,8 @@ void AddStrings(content::WebUIDataSource* source) {
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_TOPIC_SOURCE_UNSELECTED_ROW},
       {"ambientModeWeatherTitle",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_WEATHER_TITLE},
+      {"ambientModeAriaDescriptionWeather",
+       IDS_PERSONALIZATION_APP_ARIA_DESCRIPTION_AMBIENT_MODE_WEATHER},
       {"ambientModeWeatherUnitFahrenheit",
        IDS_PERSONALIZATION_APP_AMBIENT_MODE_WEATHER_UNIT_FAHRENHEIT},
       {"ambientModeWeatherUnitCelsius",
@@ -184,8 +200,34 @@ void AddStrings(content::WebUIDataSource* source) {
       {"ariaLabelChangeScreensaver",
        IDS_PERSONALIZATION_APP_ARIA_LABEL_CHANGE_SCREENSAVER},
 
+      // Keyboard backlight strings
+      {"keyboardBacklightTitle",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_TITLE},
+      {"wallpaperColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_WALLPAPER_COLOR_LABEL},
+      {"wallpaperColorTooltipText",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_WALLPAPER_COLOR_TOOLTIP_TEXT},
+      {"whiteColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_WHITE_COLOR_LABEL},
+      {"redColor", IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_RED_COLOR_LABEL},
+      {"yellowColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_YELLOW_COLOR_LABEL},
+      {"greenColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_GREEN_COLOR_LABEL},
+      {"blueColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_BLUE_COLOR_LABEL},
+      {"indigoColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_INDIGO_COLOR_LABEL},
+      {"purpleColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_PURPLE_COLOR_LABEL},
+      {"rainbowColor",
+       IDS_PERSONALIZATION_APP_KEYBOARD_BACKLIGHT_RAINBOW_COLOR_LABEL},
+
       // Google Photos strings
+      // TODO(b/229149314): Finalize error and retry strings.
       {"googlePhotosLabel", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS},
+      {"googlePhotosError", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ERROR},
+      {"googlePhotosTryAgain", IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_TRY_AGAIN},
       {"googlePhotosAlbumsTabLabel",
        IDS_PERSONALIZATION_APP_GOOGLE_PHOTOS_ALBUMS_TAB},
       {"googlePhotosPhotosTabLabel",
@@ -220,10 +262,18 @@ void AddBooleans(content::WebUIDataSource* source) {
   source->AddBoolean("isPersonalizationHubEnabled",
                      features::IsPersonalizationHubEnabled());
 
+  source->AddBoolean("isAmbientModeAnimationEnabled",
+                     features::IsAmbientModeAnimationEnabled());
+
   source->AddBoolean("isDarkLightModeEnabled",
                      features::IsDarkLightModeEnabled());
 
   source->AddBoolean("isAmbientModeAllowed", IsAmbientModeAllowed());
+
+  source->AddBoolean(
+      "isRgbKeyboardSupported",
+      features::IsRgbKeyboardEnabled() &&
+          Shell::Get()->rgb_keyboard_manager()->IsRgbKeyboardSupported());
 }
 
 }  // namespace
@@ -231,11 +281,14 @@ void AddBooleans(content::WebUIDataSource* source) {
 PersonalizationAppUI::PersonalizationAppUI(
     content::WebUI* web_ui,
     std::unique_ptr<PersonalizationAppAmbientProvider> ambient_provider,
+    std::unique_ptr<PersonalizationAppKeyboardBacklightProvider>
+        keyboard_backlight_provider,
     std::unique_ptr<PersonalizationAppThemeProvider> theme_provider,
     std::unique_ptr<PersonalizationAppUserProvider> user_provider,
     std::unique_ptr<PersonalizationAppWallpaperProvider> wallpaper_provider)
     : ui::MojoWebUIController(web_ui),
       ambient_provider_(std::move(ambient_provider)),
+      keyboard_backlight_provider_(std::move(keyboard_backlight_provider)),
       theme_provider_(std::move(theme_provider)),
       user_provider_(std::move(user_provider)),
       wallpaper_provider_(std::move(wallpaper_provider)) {
@@ -264,6 +317,12 @@ void PersonalizationAppUI::BindInterface(
     mojo::PendingReceiver<personalization_app::mojom::AmbientProvider>
         receiver) {
   ambient_provider_->BindInterface(std::move(receiver));
+}
+
+void PersonalizationAppUI::BindInterface(
+    mojo::PendingReceiver<personalization_app::mojom::KeyboardBacklightProvider>
+        receiver) {
+  keyboard_backlight_provider_->BindInterface(std::move(receiver));
 }
 
 void PersonalizationAppUI::BindInterface(

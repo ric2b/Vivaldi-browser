@@ -654,9 +654,6 @@ UIWindow* GetAnyKeyWindow();
 // can, open multiple windows.
 - (BOOL)areMultipleWindowsSupported;
 
-// Returns whether the new ContextMenu for web content feature is enabled.
-- (BOOL)isContextMenuInWebViewEnabled;
-
 // Returns whether the NewOverflowMenu feature is enabled.
 - (BOOL)isNewOverflowMenuEnabled;
 
@@ -666,6 +663,9 @@ UIWindow* GetAnyKeyWindow();
 // Returns whether the Thumbstrip feature is enabled for window with given
 // number.
 - (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber;
+
+// Returns whether the Web Channels feature is enabled.
+- (BOOL)isWebChannelsEnabled;
 
 #pragma mark - ContentSettings
 

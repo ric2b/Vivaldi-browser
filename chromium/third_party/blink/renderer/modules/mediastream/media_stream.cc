@@ -31,6 +31,7 @@
 #include "third_party/blink/renderer/modules/mediastream/focusable_media_stream_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track_event.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track_impl.h"
+#include "third_party/blink/renderer/modules/mediastream/transferred_media_stream_track.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -38,10 +39,10 @@
 
 namespace blink {
 
-static bool ContainsSource(MediaStreamTrackVector& track_vector,
-                           MediaStreamSource* source) {
+static bool ContainsTrack(MediaStreamTrackVector& track_vector,
+                          MediaStreamTrack* media_stream_track) {
   for (MediaStreamTrack* track : track_vector) {
-    if (source->Id() == track->Component()->Source()->Id())
+    if (media_stream_track->id() == track->id())
       return true;
   }
   return false;
@@ -49,8 +50,7 @@ static bool ContainsSource(MediaStreamTrackVector& track_vector,
 
 static void ProcessTrack(MediaStreamTrack* track,
                          MediaStreamTrackVector& track_vector) {
-  MediaStreamSource* source = track->Component()->Source();
-  if (!ContainsSource(track_vector, source))
+  if (!ContainsTrack(track_vector, track))
     track_vector.push_back(track);
 }
 
@@ -94,14 +94,20 @@ MediaStream* MediaStream::Create(ExecutionContext* context,
 
 MediaStream* MediaStream::Create(ExecutionContext* context,
                                  MediaStreamDescriptor* stream_descriptor) {
-  return MakeGarbageCollected<MediaStream>(context, stream_descriptor,
+  return MakeGarbageCollected<MediaStream>(context, stream_descriptor, nullptr,
                                            /*callback=*/base::DoNothing());
 }
 
 void MediaStream::Create(ExecutionContext* context,
                          MediaStreamDescriptor* stream_descriptor,
+                         TransferredMediaStreamTrack* track,
                          base::OnceCallback<void(MediaStream*)> callback) {
-  MakeGarbageCollected<MediaStream>(context, stream_descriptor,
+  DCHECK(track == nullptr ||
+         stream_descriptor->NumberOfAudioComponents() +
+                 stream_descriptor->NumberOfVideoComponents() ==
+             1);
+
+  MakeGarbageCollected<MediaStream>(context, stream_descriptor, track,
                                     std::move(callback));
 }
 
@@ -115,6 +121,7 @@ MediaStream* MediaStream::Create(ExecutionContext* context,
 
 MediaStream::MediaStream(ExecutionContext* context,
                          MediaStreamDescriptor* stream_descriptor,
+                         TransferredMediaStreamTrack* transferred_track,
                          base::OnceCallback<void(MediaStream*)> callback)
     : ExecutionContextClient(context),
       descriptor_(stream_descriptor),
@@ -132,6 +139,10 @@ MediaStream::MediaStream(ExecutionContext* context,
         context, descriptor_->AudioComponent(i));
     new_track->RegisterMediaStream(this);
     audio_tracks_.push_back(new_track);
+    if (transferred_track) {
+      DCHECK(!transferred_track->HasImplementation());
+      transferred_track->SetImplementation(new_track);
+    }
   }
 
   uint32_t number_of_video_tracks = descriptor_->NumberOfVideoComponents();
@@ -144,6 +155,10 @@ MediaStream::MediaStream(ExecutionContext* context,
         descriptor_->Id());
     new_track->RegisterMediaStream(this);
     video_tracks_.push_back(new_track);
+    if (transferred_track) {
+      DCHECK(!transferred_track->HasImplementation());
+      transferred_track->SetImplementation(new_track);
+    }
   }
 
   if (EmptyOrOnlyEndedTracks()) {

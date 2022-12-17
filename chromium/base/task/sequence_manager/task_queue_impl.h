@@ -18,6 +18,7 @@
 #include "base/callback.h"
 #include "base/containers/flat_map.h"
 #include "base/containers/intrusive_heap.h"
+#include "base/dcheck_is_on.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
@@ -112,7 +113,7 @@ class BASE_EXPORT TaskQueueImpl {
 
     // `task_queue` is not a raw_ptr<...> for performance reasons (based on
     // analysis of sampling profiler data and tab_search:top100:2020).
-    internal::TaskQueueImpl* task_queue;
+    RAW_PTR_EXCLUSION internal::TaskQueueImpl* task_queue;
 
     WorkQueueType work_queue_type;
   };
@@ -334,9 +335,10 @@ class BASE_EXPORT TaskQueueImpl {
 
   class TaskRunner final : public SingleThreadTaskRunner {
    public:
-    explicit TaskRunner(scoped_refptr<GuardedTaskPoster> task_poster,
-                        scoped_refptr<AssociatedThreadId> associated_thread,
-                        TaskType task_type);
+    explicit TaskRunner(
+        scoped_refptr<GuardedTaskPoster> task_poster,
+        scoped_refptr<const AssociatedThreadId> associated_thread,
+        TaskType task_type);
 
     bool PostDelayedTask(const Location& location,
                          OnceClosure callback,
@@ -365,7 +367,7 @@ class BASE_EXPORT TaskQueueImpl {
     ~TaskRunner() final;
 
     const scoped_refptr<GuardedTaskPoster> task_poster_;
-    const scoped_refptr<AssociatedThreadId> associated_thread_;
+    const scoped_refptr<const AssociatedThreadId> associated_thread_;
     const TaskType task_type_;
   };
 
@@ -374,7 +376,7 @@ class BASE_EXPORT TaskQueueImpl {
    public:
     OnTaskPostedCallbackHandleImpl(
         TaskQueueImpl* task_queue_impl,
-        scoped_refptr<AssociatedThreadId> associated_thread_);
+        scoped_refptr<const AssociatedThreadId> associated_thread_);
     ~OnTaskPostedCallbackHandleImpl() override;
 
     // Callback handles can outlive the associated TaskQueueImpl, so the
@@ -383,7 +385,7 @@ class BASE_EXPORT TaskQueueImpl {
 
    private:
     raw_ptr<TaskQueueImpl> task_queue_impl_;
-    scoped_refptr<AssociatedThreadId> associated_thread_;
+    const scoped_refptr<const AssociatedThreadId> associated_thread_;
   };
 
   // A queue for holding delayed tasks before their delay has expired.
@@ -556,7 +558,7 @@ class BASE_EXPORT TaskQueueImpl {
   const char* name_;
   const raw_ptr<SequenceManagerImpl> sequence_manager_;
 
-  scoped_refptr<AssociatedThreadId> associated_thread_;
+  const scoped_refptr<const AssociatedThreadId> associated_thread_;
 
   const scoped_refptr<GuardedTaskPoster> task_poster_;
 
@@ -593,7 +595,7 @@ class BASE_EXPORT TaskQueueImpl {
     // to index into
     // SequenceManager::Settings::per_priority_cross_thread_task_delay to apply
     // a priority specific delay for debugging purposes.
-    int queue_set_index = 0;
+    size_t queue_set_index = 0;
 #endif
 
     TracingOnly tracing_only;

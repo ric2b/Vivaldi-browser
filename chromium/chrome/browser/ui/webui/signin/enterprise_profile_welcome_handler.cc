@@ -24,7 +24,9 @@
 #include "chrome/browser/ui/webui/management/management_ui_handler.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
 #include "chrome/browser/ui/webui/webui_util.h"
+#include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
+#include "chrome/grit/google_chrome_strings.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/strings/grit/components_strings.h"
 #include "content/public/browser/web_contents.h"
@@ -141,7 +143,7 @@ void EnterpriseProfileWelcomeHandler::RegisterMessages() {
       "initialized",
       base::BindRepeating(&EnterpriseProfileWelcomeHandler::HandleInitialized,
                           base::Unretained(this)));
-  web_ui()->RegisterDeprecatedMessageCallback(
+  web_ui()->RegisterMessageCallback(
       "initializedWithSize",
       base::BindRepeating(
           &EnterpriseProfileWelcomeHandler::HandleInitializedWithSize,
@@ -209,11 +211,18 @@ void EnterpriseProfileWelcomeHandler::HandleInitialized(
 }
 
 void EnterpriseProfileWelcomeHandler::HandleInitializedWithSize(
-    const base::ListValue* args) {
+    const base::Value::List& args) {
   AllowJavascript();
 
   if (browser_)
     signin::SetInitializedModalHeight(browser_, web_ui(), args);
+}
+
+void EnterpriseProfileWelcomeHandler::HandleProceedForTesting(
+    bool should_link_data) {
+  base::Value::List args;
+  args.Append(should_link_data);
+  HandleProceed(args);
 }
 
 void EnterpriseProfileWelcomeHandler::HandleProceed(
@@ -348,7 +357,7 @@ std::string EnterpriseProfileWelcomeHandler::GetPictureUrl() {
   return webui::GetBitmapDataUrl(
       profiles::GetSizedAvatarIcon(
           icon.value_or(GetProfileEntry()->GetAvatarIcon(avatar_icon_size)),
-          true, avatar_icon_size, avatar_icon_size)
+          avatar_icon_size, avatar_icon_size)
           .AsBitmap());
 }
 

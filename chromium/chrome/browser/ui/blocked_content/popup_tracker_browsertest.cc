@@ -301,7 +301,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, AllowlistedPopup_HasTracker) {
   // Is blocked by the popup blocker.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
   EXPECT_TRUE(content_settings::PageSpecificContentSettings::GetForFrame(
-                  web_contents->GetMainFrame())
+                  web_contents->GetPrimaryMainFrame())
                   ->IsContentBlocked(ContentSettingsType::POPUPS));
 
   // Click through to open the popup.
@@ -553,7 +553,7 @@ IN_PROC_BROWSER_TEST_F(PopupTrackerBrowserTest, PopupInTab_IsWindowFalse) {
 }
 
 // TODO(crbug.com/1178846): Test is flaky on Linux.
-#if BUILDFLAG(IS_LINUX)
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 #define MAYBE_PopupInWindow_IsWindowTrue DISABLED_PopupInWindow_IsWindowTrue
 #else
 #define MAYBE_PopupInWindow_IsWindowTrue PopupInWindow_IsWindowTrue

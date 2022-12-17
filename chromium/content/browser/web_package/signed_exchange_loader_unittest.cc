@@ -80,8 +80,6 @@ class SignedExchangeLoaderTest : public testing::TestWithParam<bool> {
                  void(int64_t, int64_t, base::OnceCallback<void()> callback));
     MOCK_METHOD1(OnReceiveCachedMetadata, void(mojo_base::BigBuffer));
     MOCK_METHOD1(OnTransferSizeUpdated, void(int32_t));
-    MOCK_METHOD1(OnStartLoadingResponseBody,
-                 void(mojo::ScopedDataPipeConsumerHandle));
     MOCK_METHOD1(OnComplete, void(const network::URLLoaderCompletionStatus&));
 
    private:
@@ -226,8 +224,9 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
   base::RunLoop run_loop;
   raw_producer->Write(
       std::make_unique<mojo::StringDataSource>(
-          "Hello, world!", mojo::StringDataSource::AsyncWritingMode::
-                               STRING_MAY_BE_INVALIDATED_BEFORE_COMPLETION),
+          MockSignedExchangeHandler::kMockSxgPrefix + "Hello, world!",
+          mojo::StringDataSource::AsyncWritingMode::
+              STRING_MAY_BE_INVALIDATED_BEFORE_COMPLETION),
       base::BindOnce([](std::unique_ptr<mojo::DataPipeProducer> producer,
                         base::OnceClosure quit_closure,
                         MojoResult result) { std::move(quit_closure).Run(); },
@@ -245,7 +244,6 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
   if (!base::FeatureList::IsEnabled(
           features::kSignedHTTPExchangePingValidity)) {
     run_loop.Run();
-    EXPECT_CALL(mock_client_after_redirect, OnStartLoadingResponseBody(_));
     EXPECT_CALL(mock_client_after_redirect, OnComplete(_));
   }
 
@@ -257,7 +255,6 @@ TEST_P(SignedExchangeLoaderTest, Simple) {
     // client-after-redirect will be called only after the ping loader returns
     // something.
     ASSERT_TRUE(ping_loader_client());
-    EXPECT_CALL(mock_client_after_redirect, OnStartLoadingResponseBody(_));
     EXPECT_CALL(mock_client_after_redirect, OnComplete(_));
     ping_loader_client()->OnReceiveResponse(
         network::mojom::URLResponseHead::New(),

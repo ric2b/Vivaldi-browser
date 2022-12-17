@@ -34,7 +34,7 @@
 <translation id="4759238208242260848">下载</translation>
 <translation id="4883379392681899581">离开隐私模式</translation>
 <translation id="4943872375798546930">无结果</translation>
-<translation id="49576331685473090">内容拦截</translation>
+<translation id="49576331685473090">内容拦截器</translation>
 <translation id="5079259810715830221">当谷歌网站在其页面上要求加密预下载链接内容时，Vivaldi将通过谷歌服务器加密和预加载页面而不使用Cookie。这将对预加载页面隐藏您的身份。</translation>
 <translation id="5118676864324397542"><ph name="APP_NAME" /> 存储数据</translation>
 <translation id="5186185447130319458">隐私</translation>
@@ -53,7 +53,7 @@
 <translation id="732145680195464316">书签已保存至 <ph name="PRODUCT_NAME" /></translation>
 <translation id="7427132068601343474">关于 Vivaldi</translation>
 <translation id="7465104139234185284">关闭全部隐私标签</translation>
-<translation id="7519434535192513364">“点按搜索”功能会在以Google为默认搜索引擎的前提下将所选字词和当前页面（作为上下文）一起发送至 Google 搜索。您可在<ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭该功能。</translation>
+<translation id="7519434535192513364">“点按搜索”功能会在以谷歌为默认搜索引擎的前提下将所选字词和当前页面（作为上下文）一起发送至谷歌搜索。您可在<ph name="BEGIN_LINK" />设置<ph name="END_LINK" />中关闭该功能。</translation>
 <translation id="804786196054284061">最终用户许可协议</translation>
 <translation id="85991616550051997">前往首页</translation>
 <translation id="8820817407110198400">书签</translation>

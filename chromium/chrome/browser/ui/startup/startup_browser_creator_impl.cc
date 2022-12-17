@@ -62,6 +62,7 @@
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/prefs/pref_service.h"
+#include "components/privacy_sandbox/privacy_sandbox_features.h"
 #include "content/public/browser/child_process_security_policy.h"
 #include "content/public/browser/dom_storage_context.h"
 #include "content/public/browser/storage_partition.h"
@@ -91,7 +92,7 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 #include "app/vivaldi_apptools.h"
@@ -251,11 +252,14 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
     // at the state of the MessageLoop.
     Browser::CreateParams params = Browser::CreateParams(profile_, false);
     params.creation_source = Browser::CreationSource::kStartupCreator;
+#if BUILDFLAG(IS_LINUX)
+    params.startup_id = command_line_.GetSwitchValueASCII("desktop-startup-id");
+#endif
     browser = Browser::Create(params);
   }
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto* init_params = chromeos::LacrosService::Get()->init_params();
+  auto* init_params = chromeos::BrowserInitParams::Get();
   bool from_arc =
       init_params->initial_browser_action ==
           crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls &&
@@ -317,7 +321,7 @@ Browser* StartupBrowserCreatorImpl::OpenTabsInBrowser(
                   nullptr /* source_site_instance */, ui::PAGE_TRANSITION_LINK,
                   false /* is_renderer_initiated */, std::string(),
                   controller->GetBrowserContext(),
-                  nullptr /* blob_url_loader_factory */));
+                  nullptr /* blob_url_loader_factory */, false));
 
       controller->SetPendingEntry(std::move(entry));
       controller->SetNeedsReload();
@@ -441,10 +445,18 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
 
   auto* privacy_sandbox_serivce =
       PrivacySandboxServiceFactory::GetForProfile(profile_);
-  const bool privacy_sandbox_confirmation_required =
+  const bool will_use_new_notice_ui =
+      privacy_sandbox::kPrivacySandboxSettings3NewNotice.Get() &&
+      (privacy_sandbox_serivce &&
+       privacy_sandbox_serivce->GetRequiredPromptType() ==
+           PrivacySandboxService::PromptType::kNotice);
+  // Don't add any tabs for the new notice UI. It is a bubble instead of the
+  // modal dialog and it will stay up even while the user is navigating.
+  const bool privacy_sandbox_dialog_required =
       privacy_sandbox_serivce &&
-      privacy_sandbox_serivce->GetRequiredDialogType() !=
-          PrivacySandboxService::DialogType::kNone;
+      privacy_sandbox_serivce->GetRequiredPromptType() !=
+          PrivacySandboxService::PromptType::kNone &&
+      !will_use_new_notice_ui;
 
   if (vivaldi::IsVivaldiRunning()) {
     // Vivaldi always open the same sets of tabs even if the prev. session
@@ -465,7 +477,7 @@ StartupBrowserCreatorImpl::DetermineURLsAndLaunch(
       StartupTabProviderImpl(), process_startup, is_incognito_or_guest,
       is_post_crash_launch, has_incompatible_applications,
       promotional_tabs_enabled, welcome_enabled, whats_new_enabled,
-      privacy_sandbox_confirmation_required);
+      privacy_sandbox_dialog_required);
   StartupTabs tabs = std::move(result.tabs);
 
   // Return immediately if we start an async restore, since the remainder of
@@ -537,7 +549,7 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     bool promotional_tabs_enabled,
     bool welcome_enabled,
     bool whats_new_enabled,
-    bool privacy_sandbox_confirmation_required) {
+    bool privacy_sandbox_dialog_required) {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   {
     // If URLs are passed via crosapi, forcibly opens those tabs.
@@ -663,7 +675,7 @@ StartupBrowserCreatorImpl::DetermineStartupTabs(
     // Potentially add a tab appropriate to display the Privacy Sandbox
     // confirmaton dialog on top of. Ideally such a tab will already exist
     // in |tabs|, and no additional tab will be required.
-    if (onboarding_tabs.empty() && privacy_sandbox_confirmation_required &&
+    if (onboarding_tabs.empty() && privacy_sandbox_dialog_required &&
         launch_result == LaunchResult::kNormally) {
       AppendTabs(provider.GetPrivacySandboxTabs(profile_, tabs), &tabs);
     }

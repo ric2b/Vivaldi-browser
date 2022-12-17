@@ -13,6 +13,7 @@
 #include "base/memory/ptr_util.h"
 #include "base/run_loop.h"
 #include "base/test/scoped_feature_list.h"
+#include "chrome/browser/ash/login/demo_mode/demo_session.h"
 #include "chrome/browser/ash/login/users/fake_chrome_user_manager.h"
 #include "chrome/browser/ash/multidevice_setup/multidevice_setup_client_factory.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -20,6 +21,7 @@
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
 #include "chromeos/dbus/power/power_manager_client.h"
+#include "chromeos/dbus/tpm_manager/tpm_manager_client.h"
 #include "chromeos/login/login_state/login_state.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "chromeos/system/statistics_provider.h"
@@ -30,7 +32,11 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/metrics_proto/system_profile.pb.h"
 
+using Hardware = metrics::SystemProfileProto::Hardware;
+
 namespace {
+
+constexpr int kTpmFirmwareVersion = 100;
 
 class FakeMultiDeviceSetupClientImplFactory
     : public ash::multidevice_setup::MultiDeviceSetupClientImpl::Factory {
@@ -93,6 +99,7 @@ class ChromeOSMetricsProviderTest : public testing::Test {
   void SetUp() override {
     // Set up a PowerManagerClient instance for PerfProvider.
     chromeos::PowerManagerClient::InitializeFake();
+    chromeos::TpmManagerClient::InitializeFake();
 
     ash::multidevice_setup::MultiDeviceSetupClientFactory::GetInstance()
         ->SetServiceIsNULLWhileTestingForTesting(false);
@@ -122,6 +129,7 @@ class ChromeOSMetricsProviderTest : public testing::Test {
   void TearDown() override {
     // Destroy the login state tracker if it was initialized.
     chromeos::LoginState::Shutdown();
+    chromeos::TpmManagerClient::Shutdown();
     chromeos::PowerManagerClient::Shutdown();
     ash::multidevice_setup::MultiDeviceSetupClientImpl::Factory::
         SetFactoryForTesting(nullptr);
@@ -241,4 +249,41 @@ TEST_F(ChromeOSMetricsProviderTest, FullHardwareClass) {
       system_profile.hardware().full_hardware_class();
 
   EXPECT_EQ(expected_full_hw_class, proto_full_hw_class);
+}
+
+TEST_F(ChromeOSMetricsProviderTest, DemoModeDimensions) {
+  ash::DemoSession::SetDemoConfigForTesting(
+      ash::DemoSession::DemoModeConfig::kOnline);
+  const std::string expected_country = "CA";
+  g_browser_process->local_state()->SetString("demo_mode.country",
+                                              expected_country);
+
+  TestChromeOSMetricsProvider provider;
+  provider.OnDidCreateMetricsLog();
+  metrics::SystemProfileProto system_profile;
+  provider.ProvideSystemProfileMetrics(&system_profile);
+
+  ASSERT_TRUE(system_profile.has_demo_mode_dimensions());
+  ASSERT_TRUE(system_profile.demo_mode_dimensions().has_country());
+  std::string country = system_profile.demo_mode_dimensions().country();
+
+  EXPECT_EQ(country, expected_country);
+}
+
+TEST_F(ChromeOSMetricsProviderTest, TpmFirmwareVersion) {
+  chromeos::TpmManagerClient::Get()
+      ->GetTestInterface()
+      ->mutable_version_info_reply()
+      ->set_firmware_version(kTpmFirmwareVersion);
+
+  TestChromeOSMetricsProvider provider;
+  provider.OnDidCreateMetricsLog();
+  metrics::SystemProfileProto system_profile;
+  provider.ProvideSystemProfileMetrics(&system_profile);
+
+  ASSERT_TRUE(system_profile.has_hardware());
+  ASSERT_TRUE(system_profile.hardware().has_tpm_firmware_version());
+
+  EXPECT_EQ(system_profile.hardware().tpm_firmware_version(),
+            kTpmFirmwareVersion);
 }

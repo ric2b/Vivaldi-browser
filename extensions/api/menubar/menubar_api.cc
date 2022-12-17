@@ -29,81 +29,88 @@ namespace menubar = vivaldi::menubar;
 struct ItemInfo {
   int id;
   bool enabled_with_no_window;
+  bool enabled;
 };
 
 std::map<std::string, ItemInfo> tag_map;
 int tag_counter = IDC_VIV_DYNAMIC_MENU_ID_START;
 
 int getIdByAction(const menubar::MenuItem& item) {
+  bool enabled = item.enabled ? *item.enabled : true;
   auto it = tag_map.find(item.action);
   if (it != tag_map.end()) {
+    tag_map[item.action].enabled = enabled;
     return tag_map[item.action].id;
   }
 
   // We need hardcoded ids for some actions. These actions must be mapped as we
   // tests for those elsewhere and even let chromium handle some of them.
   if (item.action == "COMMAND_CLIPBOARD_UNDO")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_UNDO, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_UNDO, false, enabled};
   else if (item.action == "COMMAND_CLIPBOARD_REDO")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_REDO, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_REDO, false, enabled};
   else if (item.action == "COMMAND_CLIPBOARD_CUT")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_CUT, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_CUT, false, enabled};
   else if (item.action == "COMMAND_CLIPBOARD_COPY")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_COPY, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_COPY, false, enabled};
   else if (item.action == "COMMAND_CLIPBOARD_PASTE")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_PASTE, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_PASTE, false, enabled};
   else if (item.action == "COMMAND_DELETE")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_DELETE, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_DELETE, false, enabled};
   else if (item.action == "COMMAND_CLIPBOARD_SELECT_ALL")
-    tag_map[item.action] = {IDC_CONTENT_CONTEXT_SELECTALL, false};
+    tag_map[item.action] = {IDC_CONTENT_CONTEXT_SELECTALL, false, enabled};
   else if (item.action == "COMMAND_HIDE_VIVALDI")
-    tag_map[item.action] = {IDC_HIDE_APP, false};
+    tag_map[item.action] = {IDC_HIDE_APP, false, enabled};
   else if (item.action == "COMMAND_HIDE_OTHERS")
-    tag_map[item.action] = {IDC_VIV_HIDE_OTHERS, true};
+    tag_map[item.action] = {IDC_VIV_HIDE_OTHERS, true, enabled};
   else if (item.action == "COMMAND_SHOW_ALL")
-    tag_map[item.action] = {IDC_VIV_SHOW_ALL, true};
+    tag_map[item.action] = {IDC_VIV_SHOW_ALL, true, enabled};
   // These are ids we test for in app_controller_mac.mm
   else if (item.action == "COMMAND_CHECK_FOR_UPDATES")
-    tag_map[item.action] = {IDC_VIV_CHECK_FOR_UPDATES, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_CHECK_FOR_UPDATES, item.with_no_window,
+                            enabled};
   else if (item.action == "COMMAND_QUIT_MAC_MAYBE_WARN")
-    tag_map[item.action] = {IDC_VIV_EXIT, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_EXIT, item.with_no_window, enabled};
   else if (item.action == "COMMAND_NEW_WINDOW")
-    tag_map[item.action] = {IDC_VIV_NEW_WINDOW, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_NEW_WINDOW, item.with_no_window, enabled};
   else if (item.action == "COMMAND_NEW_PRIVATE_WINDOW")
-    tag_map[item.action] = {IDC_VIV_NEW_PRIVATE_WINDOW, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_NEW_PRIVATE_WINDOW, item.with_no_window,
+                            enabled};
   else if (item.action == "COMMAND_NEW_PRIVATE_WINDOW")
-    tag_map[item.action] = {IDC_VIV_NEW_PRIVATE_WINDOW, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_NEW_PRIVATE_WINDOW, item.with_no_window,
+                            enabled};
   else if (item.action == "COMMAND_NEW_TAB")
-    tag_map[item.action] = {IDC_VIV_NEW_TAB, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_NEW_TAB, item.with_no_window, enabled};
   else if (item.action == "COMMAND_CLOSE_WINDOW")
-    tag_map[item.action] = {IDC_VIV_CLOSE_WINDOW, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_CLOSE_WINDOW, item.with_no_window, enabled};
   else if (item.action == "COMMAND_CLOSE_TAB")
-    tag_map[item.action] = {IDC_VIV_CLOSE_TAB, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_CLOSE_TAB, item.with_no_window, enabled};
   else if (item.action == "COMMAND_WINDOW_MINIMIZE")
-    tag_map[item.action] = {IDC_VIV_MAC_MINIMIZE, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_MAC_MINIMIZE, item.with_no_window, enabled};
   // Some menus
   else if (item.action == "MENU_APPLE_APP")
-    tag_map[item.action] = {IDC_CHROME_MENU, item.with_no_window};
+    tag_map[item.action] = {IDC_CHROME_MENU, item.with_no_window, enabled};
   else if (item.action == "MENU_EDIT")
-    tag_map[item.action] = {IDC_EDIT_MENU, item.with_no_window};
+    tag_map[item.action] = {IDC_EDIT_MENU, item.with_no_window, enabled};
   else if (item.action == "MENU_BOOKMARKS")
-    tag_map[item.action] = {IDC_BOOKMARKS_MENU, item.with_no_window};
+    tag_map[item.action] = {IDC_BOOKMARKS_MENU, item.with_no_window, enabled};
   else if (item.action == "MENU_WINDOW")
-    tag_map[item.action] = {IDC_WINDOW_MENU, item.with_no_window};
+    tag_map[item.action] = {IDC_WINDOW_MENU, item.with_no_window, enabled};
   else if (item.action == "MENU_HELP")
-    tag_map[item.action] = {IDC_VIV_HELP_MENU, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_HELP_MENU, item.with_no_window, enabled};
   // And containers
   else if (item.action == "CONTAINER_MAC_SERVICES")
-    tag_map[item.action] = {IDC_VIV_MAC_SERVICES, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_MAC_SERVICES, item.with_no_window, enabled};
   else if (item.action == "CONTAINER_BOOKMARK") {
-    tag_map[item.action] = {IDC_VIV_BOOKMARK_CONTAINER, item.with_no_window};
+    tag_map[item.action] = {IDC_VIV_BOOKMARK_CONTAINER, item.with_no_window,
+                            enabled};
   }
   // And something we could do better
   else if (item.action == "JS_LOCAL_ADD_ACTIVE_TAB_TO_BOOKMARKS")
     tag_map[item.action] = {IDC_VIV_ADD_ACTIVE_TAB_TO_BOOKMARKS,
-                            item.with_no_window};
+                            item.with_no_window, enabled};
   else
-    tag_map[item.action] = {tag_counter++, item.with_no_window};
+    tag_map[item.action] = {tag_counter++, item.with_no_window, enabled};
 
   return tag_map[item.action].id;
 }
@@ -153,6 +160,21 @@ bool MenubarAPI::GetIsEnabledWithNoWindows(int id, bool* enabled) {
   for (auto it = tag_map.begin(); it != tag_map.end(); ++it) {
     if (it->second.id == id) {
       *enabled = it->second.enabled_with_no_window;
+      return true;
+    }
+  }
+  return false;
+}
+
+// static
+bool MenubarAPI::GetIsEnabled(int id, bool hasWindow, bool* enabled) {
+  for (auto it = tag_map.begin(); it != tag_map.end(); ++it) {
+    if (it->second.id == id) {
+      if (it->second.enabled_with_no_window) {
+        *enabled = !hasWindow || it->second.enabled;
+      } else {
+        *enabled = it->second.enabled;
+      }
       return true;
     }
   }

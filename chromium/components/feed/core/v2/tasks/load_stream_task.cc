@@ -52,6 +52,8 @@ feedwire::FeedQuery::RequestReason GetRequestReason(
                  // TODO(b/185848601): Switch back to PREFETCHED_WEB_FEED when
                  // the server supports it.
                  : feedwire::FeedQuery::INTERACTIVE_WEB_FEED;
+    case LoadType::kFeedCloseBackgroundRefresh:
+      return feedwire::FeedQuery::APP_CLOSE_REFRESH;
     case LoadType::kLoadMore:
       NOTREACHED();
       return feedwire::FeedQuery::MANUAL_REFRESH;
@@ -172,7 +174,9 @@ bool LoadStreamTask::CheckPreconditions() {
 }
 
 void LoadStreamTask::CheckIfSubscriberComplete(bool is_web_feed_subscriber) {
-  if (!is_web_feed_subscriber) {
+  is_web_feed_subscriber_ = is_web_feed_subscriber;
+  if (!is_web_feed_subscriber &&
+      !base::FeatureList::IsEnabled(kWebFeedOnboarding)) {
     Done({LoadStreamStatus::kNotAWebFeedSubscriber,
           feedwire::DiscoverLaunchResult::NOT_A_WEB_FEED_SUBSCRIBER});
     return;
@@ -208,7 +212,7 @@ void LoadStreamTask::PassedPreconditions() {
           : LoadStreamFromStoreTask::LoadType::kLoadNoContent;
   load_from_store_task_ = std::make_unique<LoadStreamFromStoreTask>(
       load_from_store_type, &stream_, options_.stream_type, &stream_.GetStore(),
-      stream_.MissedLastRefresh(options_.stream_type),
+      stream_.MissedLastRefresh(options_.stream_type), is_web_feed_subscriber_,
       base::BindOnce(&LoadStreamTask::LoadFromStoreComplete, GetWeakPtr()));
   load_from_store_task_->Execute(base::DoNothing());
 }
@@ -322,6 +326,7 @@ void LoadStreamTask::UploadActionsComplete(UploadActionsTask::Result result) {
             base::BindOnce(&LoadStreamTask::QueryApiRequestComplete,
                            GetWeakPtr()));
         break;
+      case LoadType::kFeedCloseBackgroundRefresh:
       case LoadType::kBackgroundRefresh:
         network.SendApiRequest<QueryBackgroundFeedDiscoverApi>(
             request, account_info, std::move(request_metadata),

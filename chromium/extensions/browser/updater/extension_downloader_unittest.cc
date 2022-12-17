@@ -11,8 +11,10 @@
 #include "extensions/browser/extensions_test.h"
 #include "extensions/browser/updater/extension_cache_fake.h"
 #include "extensions/browser/updater/extension_downloader_test_helper.h"
+#include "extensions/browser/updater/extension_downloader_types.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
+#include "services/network/test/test_utils.h"
 
 using testing::_;
 using testing::AnyNumber;
@@ -39,8 +41,8 @@ class ExtensionDownloaderTest : public ExtensionsTest {
 
   std::unique_ptr<ManifestFetchData> CreateManifestFetchData(
       const GURL& update_url,
-      ManifestFetchData::FetchPriority fetch_priority =
-          ManifestFetchData::FetchPriority::BACKGROUND) {
+      DownloadFetchPriority fetch_priority =
+          DownloadFetchPriority::kBackground) {
     return std::make_unique<ManifestFetchData>(
         update_url, 0, "", "", ManifestFetchData::PING, fetch_priority);
   }
@@ -49,10 +51,14 @@ class ExtensionDownloaderTest : public ExtensionsTest {
     GURL kUpdateUrl("http://localhost/manifest1");
     std::unique_ptr<ManifestFetchData> fetch(
         CreateManifestFetchData(kUpdateUrl));
-    ManifestFetchData::PingData zero_days(0, 0, true, 0);
+    DownloadPingData zero_days(0, 0, true, 0);
     fetch->AddExtension(kTestExtensionId, "1.0", &zero_days, "", "",
                         mojom::ManifestLocation::kInternal,
-                        ManifestFetchData::FetchPriority::BACKGROUND);
+                        DownloadFetchPriority::kBackground);
+    fetch->AddAssociatedTask(ExtensionDownloaderTask(
+        kTestExtensionId, kUpdateUrl, mojom::ManifestLocation::kInternal,
+        false /* is_corrupt_reinstall */, 0 /* request_id */,
+        DownloadFetchPriority::kBackground));
     return fetch;
   }
 
@@ -427,19 +433,19 @@ TEST_F(ExtensionDownloaderTest, TestURLStats) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, extension_urls::GetWebstoreUpdateUrl(),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   EXPECT_EQ(1, stats.google_url_count);
 
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId2, GURL() /* update_url */,
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   EXPECT_EQ(1, stats.no_url_count);
 
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId3, kUpdateUrl, mojom::ManifestLocation::kInternal,
       false /* is_corrupt_reinstall */, 0 /* request_id */,
-      ManifestFetchData::FetchPriority::BACKGROUND));
+      DownloadFetchPriority::kBackground));
   EXPECT_EQ(1, stats.other_url_count);
 }
 
@@ -455,7 +461,7 @@ TEST_F(ExtensionDownloaderTest, TestUpdateURLHandle) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL("http://?invalid=url"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   EXPECT_EQ(0u, tasks.size());
 
   // Clear pending queue to check it.
@@ -464,7 +470,7 @@ TEST_F(ExtensionDownloaderTest, TestUpdateURLHandle) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL("http://clients2.google.com/service/update2/crx"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   ASSERT_EQ(1u, tasks.size());
   EXPECT_EQ(GURL("https://clients2.google.com/service/update2/crx"),
             tasks.rbegin()->update_url);
@@ -475,7 +481,7 @@ TEST_F(ExtensionDownloaderTest, TestUpdateURLHandle) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL("https://example.com"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   ASSERT_EQ(1u, tasks.size());
   EXPECT_EQ(GURL("https://example.com"), tasks.rbegin()->update_url);
 
@@ -485,7 +491,7 @@ TEST_F(ExtensionDownloaderTest, TestUpdateURLHandle) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL(""), mojom::ManifestLocation::kInternal,
       false /* is_corrupt_reinstall */, 0 /* request_id */,
-      ManifestFetchData::FetchPriority::BACKGROUND));
+      DownloadFetchPriority::kBackground));
   ASSERT_EQ(1u, tasks.size());
   EXPECT_EQ(GURL("https://clients2.google.com/service/update2/crx"),
             tasks.rbegin()->update_url);
@@ -500,11 +506,11 @@ TEST_F(ExtensionDownloaderTest, TestMultipleUpdates) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL("http://example1.com/"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId2, GURL("http://example2.com/"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
 
   helper.downloader().StartAllPending(nullptr);
 
@@ -512,11 +518,11 @@ TEST_F(ExtensionDownloaderTest, TestMultipleUpdates) {
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId, GURL("http://example1.com/"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
   helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
       kTestExtensionId2, GURL("http://example2.com/"),
       mojom::ManifestLocation::kInternal, false /* is_corrupt_reinstall */,
-      0 /* request_id */, ManifestFetchData::FetchPriority::BACKGROUND));
+      0 /* request_id */, DownloadFetchPriority::kBackground));
 
   helper.downloader().StartAllPending(nullptr);
 
@@ -531,6 +537,66 @@ TEST_F(ExtensionDownloaderTest, TestMultipleUpdates) {
         request->request.url.spec(), "not found", net::HTTP_NOT_FOUND);
   }
   EXPECT_EQ(2, requests_count);
+}
+
+// Tests that extension download is retried if no network found and
+// extension not found in cache.
+TEST_F(ExtensionDownloaderTest, TestNoNetworkRetryAfterCacheMiss) {
+  ExtensionDownloaderTestHelper helper;
+
+  helper.downloader().SetBackoffPolicyForTesting(&kZeroBackoffPolicy);
+
+  helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
+      kTestExtensionId, extension_urls::GetWebstoreUpdateUrl(),
+      mojom::ManifestLocation::kExternalPolicyDownload,
+      false /* is_corrupt_reinstall */, 0 /* request_id */,
+      DownloadFetchPriority::kBackground));
+  auto test_extension_cache = std::make_unique<ExtensionCacheFake>();
+  helper.downloader().StartAllPending(test_extension_cache.get());
+
+  ASSERT_EQ(1, helper.test_url_loader_factory().NumPending());
+  network::mojom::URLResponseHeadPtr response_head(
+      network::CreateURLResponseHead(net::HTTP_OK));
+  helper.test_url_loader_factory().SimulateResponseForPendingRequest(
+      helper.test_url_loader_factory().GetPendingRequest(0)->request.url,
+      network::URLLoaderCompletionStatus(net::ERR_INTERNET_DISCONNECTED),
+      std::move(response_head), "" /* content*/);
+
+  // ExtensionDownloader is expected to retry the request, so number of pending
+  // ones should be one again.
+  EXPECT_EQ(1, helper.test_url_loader_factory().NumPending());
+}
+
+// Tests that manifest fetch failure is properly reported if extension not found
+// in cache.
+TEST_F(ExtensionDownloaderTest, TestManifestFetchFailureAfterCacheMiss) {
+  ExtensionDownloaderTestHelper helper;
+
+  helper.downloader().SetBackoffPolicyForTesting(&kZeroBackoffPolicy);
+
+  helper.downloader().AddPendingExtension(ExtensionDownloaderTask(
+      kTestExtensionId, extension_urls::GetWebstoreUpdateUrl(),
+      mojom::ManifestLocation::kExternalPolicyDownload,
+      false /* is_corrupt_reinstall */, 0 /* request_id */,
+      DownloadFetchPriority::kBackground));
+
+  EXPECT_CALL(
+      helper.delegate(),
+      OnExtensionDownloadFailed(
+          kTestExtensionId,
+          ExtensionDownloaderDelegate::Error::MANIFEST_FETCH_FAILED, _, _, _));
+
+  auto test_extension_cache = std::make_unique<ExtensionCacheFake>();
+  helper.downloader().StartAllPending(test_extension_cache.get());
+
+  ASSERT_EQ(1, helper.test_url_loader_factory().NumPending());
+  helper.test_url_loader_factory().SimulateResponseForPendingRequest(
+      helper.test_url_loader_factory().GetPendingRequest(0)->request.url.spec(),
+      "" /* content */, net::HTTP_NOT_FOUND);
+
+  content::RunAllTasksUntilIdle();
+
+  testing::Mock::VerifyAndClearExpectations(&helper.delegate());
 }
 
 }  // namespace extensions

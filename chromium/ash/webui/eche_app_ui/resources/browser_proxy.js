@@ -10,10 +10,12 @@ let urlParams = window.location.hash ?
     new URLSearchParams(window.location.hash.substring(1)) :
     new URLSearchParams(window.location.search.substring(1));
 urlParams = urlParams.toString();
-document.getElementsByTagName('iframe')[0].src = mainUrl;
+
+let iframeUrl = mainUrl;
 if (urlParams) {
-    document.getElementsByTagName('iframe')[0].src = mainUrl + '?' + urlParams;
+  iframeUrl = mainUrl + '?' + urlParams;
 }
+document.getElementsByTagName('iframe')[0].src = iframeUrl;
 
 // Returns a remote for SignalingMessageExchanger interface which sends messages
 // to the browser.
@@ -146,6 +148,15 @@ displayStreamHandler.setStreamActionObserver(
        notificationGenerator.showNotification(
            titleArray, messageArray, message.notificationType);
      });
+
+ guestMessagePipe.registerHandler(Message.SHOW_TOAST, async (message) => {
+   // The C++ layer uses std::u16string, which use 16 bit characters. JS
+   // strings support either 8 or 16 bit characters, and must be converted
+   // to an array of 16 bit character codes that match std::u16string.
+   const textArray = {data: Array.from(message.text, c => c.charCodeAt())};
+   console.log('echeapi browser_proxy.js showToast');
+   notificationGenerator.showToast(textArray);
+ });
 
  guestMessagePipe.registerHandler(
      Message.TIME_HISTOGRAM_MESSAGE, async (message) => {

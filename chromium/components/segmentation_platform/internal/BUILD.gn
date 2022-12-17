@@ -12,7 +12,9 @@ static_library("internal") {
   visibility = [
     ":*",
     "//chrome/browser",
+    "//chrome/browser/segmentation_platform:*",
     "//chrome/test:*",
+    "//ios/chrome/browser/segmentation_platform:*",
   ]
 
   sources = [
@@ -27,8 +29,6 @@ static_library("internal") {
     "database/database_maintenance.h",
     "database/database_maintenance_impl.cc",
     "database/database_maintenance_impl.h",
-    "database/metadata_utils.cc",
-    "database/metadata_utils.h",
     "database/segment_info_database.cc",
     "database/segment_info_database.h",
     "database/signal_database.h",
@@ -46,8 +46,11 @@ static_library("internal") {
     "database/ukm_database.h",
     "database/ukm_database_backend.cc",
     "database/ukm_database_backend.h",
+    "database/ukm_database_impl.cc",
+    "database/ukm_database_impl.h",
     "database/ukm_metrics_table.cc",
     "database/ukm_metrics_table.h",
+    "database/ukm_types.cc",
     "database/ukm_types.h",
     "database/ukm_url_table.cc",
     "database/ukm_url_table.h",
@@ -55,17 +58,10 @@ static_library("internal") {
     "dummy_segmentation_platform_service.h",
     "dummy_ukm_data_manager.cc",
     "dummy_ukm_data_manager.h",
-    "execution/custom_input_processor.cc",
-    "execution/custom_input_processor.h",
     "execution/default_model_manager.cc",
     "execution/default_model_manager.h",
-    "execution/feature_aggregator.h",
-    "execution/feature_aggregator_impl.cc",
-    "execution/feature_aggregator_impl.h",
-    "execution/feature_list_query_processor.cc",
-    "execution/feature_list_query_processor.h",
-    "execution/feature_processor_state.cc",
-    "execution/feature_processor_state.h",
+    "execution/execution_request.cc",
+    "execution/execution_request.h",
     "execution/model_execution_manager.h",
     "execution/model_execution_manager_impl.cc",
     "execution/model_execution_manager_impl.h",
@@ -73,11 +69,32 @@ static_library("internal") {
     "execution/model_executor.h",
     "execution/model_executor_impl.cc",
     "execution/model_executor_impl.h",
-    "execution/query_processor.h",
-    "execution/sql_feature_processor.cc",
-    "execution/sql_feature_processor.h",
-    "execution/uma_feature_processor.cc",
-    "execution/uma_feature_processor.h",
+    "execution/processing/custom_input_processor.cc",
+    "execution/processing/custom_input_processor.h",
+    "execution/processing/feature_aggregator.h",
+    "execution/processing/feature_aggregator_impl.cc",
+    "execution/processing/feature_aggregator_impl.h",
+    "execution/processing/feature_list_query_processor.cc",
+    "execution/processing/feature_list_query_processor.h",
+    "execution/processing/feature_processor_state.cc",
+    "execution/processing/feature_processor_state.h",
+    "execution/processing/input_delegate.cc",
+    "execution/processing/input_delegate.h",
+    "execution/processing/query_processor.h",
+    "execution/processing/sql_feature_processor.cc",
+    "execution/processing/sql_feature_processor.h",
+    "execution/processing/uma_feature_processor.cc",
+    "execution/processing/uma_feature_processor.h",
+    "input_context.cc",
+    "input_context.h",
+    "local_state_helper_impl.cc",
+    "local_state_helper_impl.h",
+    "metadata/metadata_utils.cc",
+    "metadata/metadata_utils.h",
+    "metadata/metadata_writer.cc",
+    "metadata/metadata_writer.h",
+    "metric_filter_utils.cc",
+    "metric_filter_utils.h",
     "platform_options.cc",
     "platform_options.h",
     "scheduler/execution_service.cc",
@@ -85,10 +102,14 @@ static_library("internal") {
     "scheduler/model_execution_scheduler.h",
     "scheduler/model_execution_scheduler_impl.cc",
     "scheduler/model_execution_scheduler_impl.h",
+    "segment_id_convertor.cc",
+    "segment_id_convertor.h",
     "segmentation_platform_service_impl.cc",
     "segmentation_platform_service_impl.h",
     "segmentation_ukm_helper.cc",
     "segmentation_ukm_helper.h",
+    "selection/experimental_group_recorder.cc",
+    "selection/experimental_group_recorder.h",
     "selection/segment_result_provider.cc",
     "selection/segment_result_provider.h",
     "selection/segment_score_provider.cc",
@@ -134,6 +155,7 @@ static_library("internal") {
     "//components/prefs",
     "//components/segmentation_platform/internal/proto",
     "//components/segmentation_platform/public",
+    "//components/segmentation_platform/public/proto",
     "//components/ukm:ukm_recorder",
     "//services/metrics/public/cpp:metrics_cpp",
     "//services/metrics/public/cpp:ukm_builders",
@@ -146,6 +168,8 @@ static_library("internal") {
 
   if (is_android) {
     sources += [
+      "android/segmentation_platform_conversion_bridge.cc",
+      "android/segmentation_platform_conversion_bridge.h",
       "android/segmentation_platform_service_android.cc",
       "android/segmentation_platform_service_android.h",
     ]
@@ -184,7 +208,6 @@ source_set("unit_tests") {
   sources = [
     "data_collection/training_data_collector_impl_unittest.cc",
     "database/database_maintenance_impl_unittest.cc",
-    "database/metadata_utils_unittest.cc",
     "database/mock_signal_database.cc",
     "database/mock_signal_database.h",
     "database/mock_signal_storage_config.cc",
@@ -204,19 +227,19 @@ source_set("unit_tests") {
     "database/ukm_metrics_table_unittest.cc",
     "database/ukm_url_table_unittest.cc",
     "dummy_segmentation_platform_service_unittest.cc",
-    "execution/custom_input_processor_unittest.cc",
     "execution/default_model_manager_unittest.cc",
-    "execution/feature_aggregator_impl_unittest.cc",
-    "execution/feature_list_query_processor_unittest.cc",
-    "execution/mock_feature_aggregator.cc",
-    "execution/mock_feature_aggregator.h",
-    "execution/mock_feature_list_query_processor.cc",
-    "execution/mock_feature_list_query_processor.h",
-    "execution/mock_model_provider.cc",
-    "execution/mock_model_provider.h",
     "execution/model_execution_manager_impl_unittest.cc",
     "execution/model_executor_impl_unittest.cc",
-    "execution/query_processor.h",
+    "execution/processing/custom_input_processor_unittest.cc",
+    "execution/processing/feature_aggregator_impl_unittest.cc",
+    "execution/processing/feature_list_query_processor_unittest.cc",
+    "execution/processing/mock_feature_aggregator.cc",
+    "execution/processing/mock_feature_aggregator.h",
+    "execution/processing/mock_feature_list_query_processor.cc",
+    "execution/processing/mock_feature_list_query_processor.h",
+    "execution/processing/query_processor.h",
+    "execution/processing/sql_feature_processor_unittest.cc",
+    "metadata/metadata_utils_unittest.cc",
     "mock_ukm_data_manager.cc",
     "mock_ukm_data_manager.h",
     "scheduler/model_execution_scheduler_unittest.cc",
@@ -244,6 +267,7 @@ source_set("unit_tests") {
 
   deps = [
     ":internal",
+    ":test_support",
     "//base",
     "//base/test:test_support",
     "//components/history/core/browser:browser",
@@ -279,6 +303,20 @@ source_set("unit_tests") {
   }
 }
 
+source_set("test_support") {
+  testonly = true
+  sources = [
+    "execution/mock_model_provider.cc",
+    "execution/mock_model_provider.h",
+  ]
+  deps = [
+    "//base",
+    "//components/segmentation_platform/public:public",
+    "//testing/gmock",
+    "//testing/gtest",
+  ]
+}
+
 bundle_data("unit_tests_bundle_data") {
   visibility = [ ":unit_tests" ]
   testonly = true
@@ -290,13 +328,17 @@ bundle_data("unit_tests_bundle_data") {
 if (is_android) {
   android_library("internal_java") {
     visibility = [ "//chrome/android:chrome_all_java" ]
-    sources = [ "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformServiceImpl.java" ]
+    sources = [
+      "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformConversionBridge.java",
+      "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformServiceImpl.java",
+    ]
 
     deps = [
       "//base:base_java",
+      "//base:jni_java",
+      "//build/android:build_java",
       "//components/optimization_guide/proto:optimization_guide_proto_java",
       "//components/segmentation_platform/public:public_java",
-      "//third_party/androidx:androidx_annotation_annotation_java",
     ]
     annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
   }
@@ -307,6 +349,9 @@ if (is_android) {
       "//chrome/browser",
     ]
 
-    sources = [ "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformServiceImpl.java" ]
+    sources = [
+      "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformConversionBridge.java",
+      "android/java/src/org/chromium/components/segmentation_platform/SegmentationPlatformServiceImpl.java",
+    ]
   }
 }

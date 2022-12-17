@@ -119,7 +119,7 @@ bool MaybeDisallowFetchForDocWrittenScript(FetchParameters& params,
   if (!settings)
     return false;
 
-  if (!document.GetFrame() || !document.GetFrame()->IsMainFrame())
+  if (!document.IsInOutermostMainFrame())
     return false;
 
   // Only block synchronously loaded (parser blocking) scripts.
@@ -210,6 +210,7 @@ void PossiblyFetchBlockedDocWriteScript(
   FetchParameters params(options.CreateFetchParameters(
       resource->Url(), context->GetSecurityOrigin(), context->GetCurrentWorld(),
       cross_origin, resource->Encoding(), FetchParameters::kIdleLoad));
+  params.SetRenderBlockingBehavior(RenderBlockingBehavior::kNonBlocking);
   AddHeader(&params);
   ScriptResource::Fetch(params, element_document.Fetcher(), nullptr,
                         ScriptResource::kNoStreaming);

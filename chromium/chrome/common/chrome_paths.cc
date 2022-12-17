@@ -43,7 +43,8 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chrome/common/chrome_paths_lacros.h"  // nogncheck
+#include "chromeos/crosapi/cpp/crosapi_constants.h"  // nogncheck
+#include "chromeos/lacros/lacros_paths.h"
 #endif
 
 namespace {
@@ -252,14 +253,14 @@ bool PathProvider(int key, base::FilePath* result) {
 #endif
       break;
     case chrome::DIR_APP_DICTIONARIES:
-#if BUILDFLAG(IS_POSIX)
-      // We can't write into the EXE dir on Linux, so keep dictionaries
-      // alongside the safe browsing database in the user data dir.
-      // And we don't want to write into the bundle on the Mac, so push
-      // it to the user data dir there also.
+#if !BUILDFLAG(IS_WIN)
+      // On most platforms, we can't write into the directory where
+      // binaries are stored, so keep dictionaries in the user data dir.
       if (!base::PathService::Get(chrome::DIR_USER_DATA, &cur))
         return false;
 #else
+      // TODO(crbug.com/1325862): Migrate Windows to use `DIR_USER_DATA` like
+      // other platforms.
       if (!base::PathService::Get(base::DIR_EXE, &cur))
         return false;
 #endif
@@ -367,20 +368,16 @@ bool PathProvider(int key, base::FilePath* result) {
       break;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    case chrome::FILE_FALLBACK_RESOURCES_PACK:
+    case chrome::FILE_RESOURCES_FOR_SHARING_PACK:
       if (!GetDefaultUserDataDirectory(&cur))
         return false;
-      cur = cur.Append(FILE_PATH_LITERAL("resources_fallback.pak"));
+      cur = cur.Append(FILE_PATH_LITERAL(crosapi::kSharedResourcesPackName));
       break;
     case chrome::FILE_ASH_RESOURCES_PACK:
-      if (!chrome::GetAshResourcesPath(&cur))
+      if (!base::PathService::Get(chromeos::lacros_paths::ASH_RESOURCES_DIR,
+                                  &cur))
         return false;
       cur = cur.Append("resources.pak");
-      break;
-    case chrome::FILE_RESOURCES_MAP:
-      if (!GetDefaultUserDataDirectory(&cur))
-        return false;
-      cur = cur.Append(FILE_PATH_LITERAL("resources.map"));
       break;
 #endif
 

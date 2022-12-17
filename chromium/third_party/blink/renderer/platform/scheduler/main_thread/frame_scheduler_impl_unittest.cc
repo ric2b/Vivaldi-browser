@@ -108,7 +108,6 @@ constexpr TaskType kAllFrameTaskTypes[] = {
     TaskType::kJavascriptTimerDelayedHighNesting,
     TaskType::kInternalLoading,
     TaskType::kNetworking,
-    TaskType::kNetworkingWithURLLoaderAnnotation,
     TaskType::kNetworkingUnfreezable,
     TaskType::kNetworkingControl,
     TaskType::kDOMManipulation,
@@ -636,7 +635,7 @@ class FrameSchedulerImplTestWithIntensiveWakeUpThrottlingBase
 
   const int kNumTasks = 5;
   const base::TimeDelta kGracePeriod =
-      GetIntensiveWakeUpThrottlingGracePeriod();
+      GetIntensiveWakeUpThrottlingGracePeriod(false);
 };
 
 // Test param for FrameSchedulerImplTestWithIntensiveWakeUpThrottling
@@ -879,7 +878,9 @@ void RePostTask(scoped_refptr<base::SingleThreadTaskRunner> task_runner,
 //    - High nesting level: 1 wake up per minute
 // Disable the kStopInBackground feature because it hides the effect of
 // intensive wake up throttling.
-TEST_P(FrameSchedulerImplStopInBackgroundDisabledTest, ThrottledTaskExecution) {
+// Flake test: crbug.com/1328967
+TEST_P(FrameSchedulerImplStopInBackgroundDisabledTest,
+       DISABLED_ThrottledTaskExecution) {
   // This TaskRunner is throttled.
   const scoped_refptr<base::SingleThreadTaskRunner> task_runner =
       frame_scheduler_->GetTaskRunner(GetParam());
@@ -3616,13 +3617,34 @@ TEST_F(FrameSchedulerImplTestWithIntensiveWakeUpThrottlingPolicyOverride,
   // The parameters should be the defaults.
   EXPECT_EQ(
       base::Seconds(kIntensiveWakeUpThrottling_GracePeriodSeconds_Default),
-      GetIntensiveWakeUpThrottlingGracePeriod());
+      GetIntensiveWakeUpThrottlingGracePeriod(false));
 }
 
 TEST_F(FrameSchedulerImplTestWithIntensiveWakeUpThrottlingPolicyOverride,
        PolicyForceDisable) {
   SetPolicyOverride(/* enabled = */ false);
   EXPECT_FALSE(IsIntensiveWakeUpThrottlingEnabled());
+}
+
+class FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled
+    : public FrameSchedulerImplTest {
+ public:
+  FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled()
+      : FrameSchedulerImplTest({kQuickIntensiveWakeUpThrottlingAfterLoading},
+                               {}) {}
+};
+
+TEST_F(FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled,
+       LoadingPageGracePeriod) {
+  EXPECT_EQ(
+      base::Seconds(kIntensiveWakeUpThrottling_GracePeriodSeconds_Default),
+      GetIntensiveWakeUpThrottlingGracePeriod(true));
+}
+
+TEST_F(FrameSchedulerImplTestQuickIntensiveWakeUpThrottlingEnabled,
+       LoadedPageGracePeriod) {
+  EXPECT_EQ(base::Seconds(kIntensiveWakeUpThrottling_GracePeriodSeconds_Loaded),
+            GetIntensiveWakeUpThrottlingGracePeriod(false));
 }
 
 class DeprioritizeDOMTimerTest : public FrameSchedulerImplTest {

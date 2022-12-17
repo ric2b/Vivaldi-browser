@@ -11,8 +11,10 @@
 #include <vector>
 
 #include "chrome/browser/chromeos/extensions/file_manager/logged_extension_function.h"
+#include "chromeos/dbus/cros_disks/cros_disks_client.h"
 #include "components/drive/file_errors.h"
 #include "third_party/ced/src/util/encodings/encodings.h"
+#include "third_party/cros_system_api/dbus/cros-disks/dbus-constants.h"
 
 namespace extensions {
 
@@ -47,6 +49,25 @@ class FileManagerPrivateAddMountFunction : public LoggedExtensionFunction {
   std::vector<std::string> options_;
 };
 
+// Implements chrome.fileManagerPrivate.cancelMounting method.
+// Cancels mounting archive files.
+class FileManagerPrivateCancelMountingFunction
+    : public LoggedExtensionFunction {
+ public:
+  FileManagerPrivateCancelMountingFunction();
+
+  DECLARE_EXTENSION_FUNCTION("fileManagerPrivate.cancelMounting",
+                             FILEMANAGERPRIVATE_CANCELMOUNTING)
+
+ private:
+  ~FileManagerPrivateCancelMountingFunction() override;
+
+  // ExtensionFunction overrides.
+  ResponseAction Run() override;
+
+  void OnCancelled(chromeos::MountError error);
+};
+
 // Implements chrome.fileManagerPrivate.removeMount method.
 // Unmounts selected volume. Expects volume id as an argument.
 class FileManagerPrivateRemoveMountFunction : public LoggedExtensionFunction {
@@ -59,6 +80,10 @@ class FileManagerPrivateRemoveMountFunction : public LoggedExtensionFunction {
 
   // ExtensionFunction overrides.
   ResponseAction Run() override;
+
+  void OnDiskUnmounted(chromeos::MountError error);
+
+  void OnSshFsUnmounted(bool ok);
 };
 
 // Implements chrome.fileManagerPrivate.getVolumeMetadataList method.

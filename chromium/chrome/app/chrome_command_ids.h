@@ -8,6 +8,7 @@
 #include "build/branding_buildflags.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 
 // This file lists all the command IDs understood by e.g. the browser.
 // It is used by Windows RC files, Mac NIB files, and other platforms too.
@@ -122,6 +123,7 @@
 #define IDC_VIRTUAL_CARD_ENROLL         35032
 #define IDC_FOLLOW                      35033
 #define IDC_UNFOLLOW                    35034
+#define IDC_BASIC_PRINT_DEPRECATED      35035
 
 // Page-manipulation commands that target a specified tab, which may not be the
 // active one.
@@ -190,7 +192,6 @@
 #define IDC_BOOKMARKS_MENU              40029
 #define IDC_SHOW_SIGNIN                 40030
 #define IDC_EXTENSION_ERRORS            40031
-#define IDC_SHOW_SIGNIN_ERROR           40032
 #define IDC_SHOW_SETTINGS_CHANGE_FIRST  40033
 #define IDC_SHOW_SETTINGS_CHANGE_LAST   40133
 #define IDC_SHOW_AVATAR_MENU            40134
@@ -447,9 +448,9 @@
 #define IDC_CONTENT_CONTEXT_QUICK_ANSWERS_INLINE_QUERY 52414
 #endif
 
-#if BUILDFLAG(IS_LINUX)
-// Screen AI
-#define IDC_RUN_SCREEN_AI 52420
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+// Screen AI Visual Annotations
+#define IDC_RUN_SCREEN_AI_VISUAL_ANNOTATIONS 52420
 #endif
 
 // Tab Search
@@ -461,6 +462,10 @@
 #define IDC_DEBUG_PRINT_VIEW_TREE 52511
 #define IDC_DEBUG_PRINT_VIEW_TREE_DETAILS 52512
 // Please leave a gap here for new debug commands.
+
+// Autofill context menu commands
+#define IDC_CONTENT_CONTEXT_AUTOFILL_CUSTOM_FIRST 53000
+#define IDC_CONTENT_CONTEXT_AUTOFILL_CUSTOM_LAST 53250
 
 // NOTE: The last valid command value is 57343 (0xDFFF)
 // See http://msdn.microsoft.com/en-us/library/t2zechd4(VS.71).aspx

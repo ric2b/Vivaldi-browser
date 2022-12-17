@@ -42,6 +42,16 @@ SideSearchPageLoadMetricsObserver::CreateIfNeeded(
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+SideSearchPageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class is interested only in events that are preprocessed and
+  // dispatched also to the outermost page at PageLoadTracker. So, this class
+  // doesn't need to forward events for FencedFrames.
+  return STOP_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SideSearchPageLoadMetricsObserver::OnHidden(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   RecordSessionEndHistograms();

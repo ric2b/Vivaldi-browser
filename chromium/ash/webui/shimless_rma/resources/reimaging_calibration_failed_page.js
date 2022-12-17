@@ -73,10 +73,31 @@ export class ReimagingCalibrationFailedPage extends
     };
   }
 
+  static get observers() {
+    return ['updateIsFirstClickableComponent_(componentCheckboxes_.*)'];
+  }
+
   constructor() {
     super();
     /** @private {ShimlessRmaServiceInterface} */
     this.shimlessRmaService_ = getShimlessRmaService();
+
+    /**
+     * The "Skip calibration" button on this page is styled and positioned like
+     * a exit button. So we use the common exit button from shimless_rma.js
+     * This function needs to be public, because it's invoked by
+     * shimless_rma.js as part of the response to the exit button click.
+     * @return {!Promise<!{stateResult: !StateResult}>}
+     */
+    this.onExitButtonClick = () => {
+      if (this.tryingToSkipWithFailedComponents_()) {
+        this.shadowRoot.querySelector('#failedComponentsDialog').showModal();
+        return Promise.reject(
+            new Error('Attempting to skip with failed components.'));
+      }
+
+      return this.skipCalibration_();
+    };
   }
 
   /** @override */
@@ -111,8 +132,8 @@ export class ReimagingCalibrationFailedPage extends
   }
 
   /**
-   * @private
    * @return {!Array<!CalibrationComponentStatus>}
+   * @private
    */
   getComponentsList_() {
     return this.componentCheckboxes_.map(item => {
@@ -125,19 +146,8 @@ export class ReimagingCalibrationFailedPage extends
     });
   }
 
-  /** @return {!Promise<!StateResult>} */
-  onNextButtonClick() {
-    if (this.tryingToSkipWithFailedComponents_()) {
-      this.shadowRoot.querySelector('#failedComponentsDialog').showModal();
-      return Promise.reject(
-          new Error('Attempting to skip with failed components.'));
-    }
-
-    return this.skipCalibration_();
-  }
-
   /**
-   * @return {!Promise<!StateResult>}
+   * @return {!Promise<!{stateResult: !StateResult}>}
    * @private
    */
   skipCalibration_() {
@@ -151,12 +161,9 @@ export class ReimagingCalibrationFailedPage extends
     return this.shimlessRmaService_.startCalibration(skippedComponents);
   }
 
-  /** @private */
-  onRetryCalibrationButtonClicked_() {
-    executeThenTransitionState(
-        this,
-        () => this.shimlessRmaService_.startCalibration(
-            this.getComponentsList_()));
+  /** @return {!Promise<!{stateResult: !StateResult}>} */
+  onNextButtonClick() {
+    return this.shimlessRmaService_.startCalibration(this.getComponentsList_());
   }
 
   /**
@@ -186,6 +193,16 @@ export class ReimagingCalibrationFailedPage extends
   tryingToSkipWithFailedComponents_() {
     return this.componentCheckboxes_.some(
         component => component.failed && !component.checked);
+  }
+
+  /** @private */
+  updateIsFirstClickableComponent_() {
+    const firstClickableComponent =
+        this.componentCheckboxes_.find(component => !component.disabled);
+    this.componentCheckboxes_.forEach(component => {
+      component.isFirstClickableComponent =
+          (component === firstClickableComponent) ? true : false;
+    });
   }
 }
 

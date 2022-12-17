@@ -7,6 +7,7 @@
 #include "base/json/json_writer.h"
 #include "base/json/values_util.h"
 #include "base/rand_util.h"
+#include "base/strings/escape.h"
 #include "base/strings/stringprintf.h"
 #include "base/system/sys_info.h"
 #include "base/task/thread_pool.h"
@@ -16,7 +17,6 @@
 #include "components/metrics/metrics_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/version_info/version_info_values.h"
-#include "net/base/escape.h"
 #include "net/base/load_flags.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "prefs/vivaldi_pref_names.h"
@@ -661,14 +661,14 @@ bool StatsReporterImpl::GeneratePingRequest(
 
   body = base::StringPrintf(
       kReportRequest, kMatomoId,
-      net::EscapeUrlEncodedData(user_agent, true).c_str(), display_size.width(),
+      base::EscapeUrlEncodedData(user_agent, true).c_str(), display_size.width(),
       display_size.height(),
-      net::EscapeUrlEncodedData(architecture, true).c_str(),
-      net::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
-      net::EscapeUrlEncodedData(architecture, true).c_str(),
-      net::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
+      base::EscapeUrlEncodedData(architecture, true).c_str(),
+      base::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
+      base::EscapeUrlEncodedData(architecture, true).c_str(),
+      base::EscapeUrlEncodedData(vivaldi_version, true).c_str(),
       display_size.width(), display_size.height(),
-      net::EscapeUrlEncodedData(user_id, true).c_str(), action_name.c_str(),
+      base::EscapeUrlEncodedData(user_id, true).c_str(), action_name.c_str(),
       kActionUrl, action_name.c_str(), installation_year_and_week.first,
       installation_year_and_week.second,
       earliest_installation_year_and_week.first,

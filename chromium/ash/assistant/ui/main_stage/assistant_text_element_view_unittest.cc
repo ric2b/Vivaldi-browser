@@ -5,6 +5,7 @@
 #include "ash/assistant/ui/main_stage/assistant_text_element_view.h"
 
 #include "ash/assistant/ui/assistant_ui_constants.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/session/session_controller_impl.h"
@@ -26,10 +27,12 @@ using AssistantTextElementViewTest = AshTestBase;
 TEST_F(AssistantTextElementViewTest, DarkAndLightTheme) {
   base::test::ScopedFeatureList scoped_feature_list(
       chromeos::features::kDarkLightMode);
-  AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
-      Shell::Get()->session_controller()->GetActivePrefService());
   ASSERT_TRUE(chromeos::features::IsDarkLightModeEnabled());
-  ASSERT_FALSE(ColorProvider::Get()->IsDarkModeEnabled());
+
+  auto* color_provider = AshColorProvider::Get();
+  color_provider->OnActiveUserPrefServiceChanged(
+      Shell::Get()->session_controller()->GetActivePrefService());
+  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
 
   std::unique_ptr<views::Widget> widget = CreateFramelessTestWidget();
   AssistantTextElementView* text_element_view = widget->SetContentsView(
@@ -39,24 +42,25 @@ TEST_F(AssistantTextElementViewTest, DarkAndLightTheme) {
       static_cast<views::Label*>(text_element_view->children().at(0));
 
   EXPECT_EQ(label->GetEnabledColor(),
-            ColorProvider::Get()->GetContentLayerColor(
+            color_provider->GetContentLayerColor(
                 ColorProvider::ContentLayerType::kTextColorPrimary));
 
-  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
-      prefs::kDarkModeEnabled, true);
-  ASSERT_TRUE(ColorProvider::Get()->IsDarkModeEnabled());
+  // Switch the color mode.
+  color_provider->ToggleColorMode();
+  ASSERT_NE(initial_dark_mode_status, color_provider->IsDarkModeEnabled());
 
   EXPECT_EQ(label->GetEnabledColor(),
-            ColorProvider::Get()->GetContentLayerColor(
+            color_provider->GetContentLayerColor(
                 ColorProvider::ContentLayerType::kTextColorPrimary));
 }
 
 TEST_F(AssistantTextElementViewTest, DarkAndLightModeFlagOff) {
-  ASSERT_FALSE(chromeos::features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   std::unique_ptr<views::Widget> widget = CreateFramelessTestWidget();
   AssistantTextElementView* text_element_view = widget->SetContentsView(

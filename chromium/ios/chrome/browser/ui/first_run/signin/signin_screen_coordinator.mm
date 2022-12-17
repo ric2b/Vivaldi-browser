@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_coordinator.h"
 
+#import "base/strings/sys_string_conversions.h"
 #import "ios/chrome/browser/application_context.h"
 #import "ios/chrome/browser/browser_state/chrome_browser_state.h"
 #import "ios/chrome/browser/first_run/first_run_metrics.h"
@@ -20,8 +21,10 @@
 #import "ios/chrome/browser/ui/authentication/unified_consent/identity_chooser/identity_chooser_coordinator_delegate.h"
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/tos_commands.h"
+#import "ios/chrome/browser/ui/first_run/first_run_constants.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
+#import "ios/chrome/browser/ui/first_run/signin/signin_screen_consumer.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_mediator.h"
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_view_controller.h"
 #import "ios/chrome/browser/ui/first_run/uma/uma_coordinator.h"
@@ -44,8 +47,6 @@
 @property(nonatomic, strong) SigninScreenViewController* viewController;
 // Sign-in screen mediator.
 @property(nonatomic, strong) SigninScreenMediator* mediator;
-// Whether the user tapped on the TOS link.
-@property(nonatomic, assign) BOOL TOSLinkWasTapped;
 // Account manager service.
 @property(nonatomic, assign) ChromeAccountManagerService* accountManagerService;
 // Authentication service.
@@ -199,6 +200,17 @@
   [self.delegate willFinishPresenting];
 }
 
+// Shows the UMA dialog so the user can manage metric reporting.
+- (void)showUMADialog {
+  DCHECK(!self.UMACoordinator);
+  self.UMACoordinator = [[UMACoordinator alloc]
+      initWithBaseViewController:self.viewController
+                         browser:self.browser
+               UMAReportingValue:self.mediator.UMAReportingUserChoice];
+  self.UMACoordinator.delegate = self;
+  [self.UMACoordinator start];
+}
+
 #pragma mark - IdentityChooserCoordinatorDelegate
 
 - (void)identityChooserCoordinatorDidClose:
@@ -248,6 +260,19 @@
   }];
 }
 
+- (void)didTapURLInDisclaimer:(NSURL*)URL {
+  if ([URL.absoluteString isEqualToString:first_run::kTermsOfServiceURL]) {
+    [self showTOSPage];
+  } else if ([URL.absoluteString
+                 isEqualToString:first_run::kMetricReportingURL]) {
+    self.mediator.UMALinkWasTapped = YES;
+    [self showUMADialog];
+  } else {
+    NOTREACHED() << std::string("Unknown URL ")
+                 << base::SysNSStringToUTF8(URL.absoluteString);
+  }
+}
+
 #pragma mark - SigninScreenViewControllerDelegate
 
 - (void)showAccountPickerFromPoint:(CGPoint)point {
@@ -261,21 +286,29 @@
       self.mediator.selectedIdentity;
 }
 
-- (void)showUMADialog {
-  DCHECK(!self.UMACoordinator);
-  self.UMACoordinator = [[UMACoordinator alloc]
-      initWithBaseViewController:self.viewController
-                         browser:self.browser
-               UMAReportingValue:self.mediator.UMAReportingUserChoice];
-  self.UMACoordinator.delegate = self;
-  [self.UMACoordinator start];
+- (void)logScrollButtonVisible:(BOOL)scrollButtonVisible
+            withIdentityPicker:(BOOL)identityPickerVisible
+                     andFooter:(BOOL)footerVisible {
+  first_run::FirstRunScreenType screenType;
+  if (identityPickerVisible && footerVisible) {
+    screenType =
+        first_run::FirstRunScreenType::kSignInScreenWithFooterAndIdentityPicker;
+  } else if (identityPickerVisible) {
+    screenType = first_run::FirstRunScreenType::kSignInScreenWithIdentityPicker;
+  } else if (footerVisible) {
+    screenType = first_run::FirstRunScreenType::kSignInScreenWithFooter;
+  } else {
+    screenType = first_run::FirstRunScreenType::
+        kSignInScreenWithoutFooterOrIdentityPicker;
+  }
+  RecordFirstRunScrollButtonVisibilityMetrics(screenType, scrollButtonVisible);
 }
 
 #pragma mark - TOSCommands
 
 - (void)showTOSPage {
   DCHECK(!self.TOSCoordinator);
-  self.TOSLinkWasTapped = YES;
+  self.mediator.TOSLinkWasTapped = YES;
   self.TOSCoordinator =
       [[TOSCoordinator alloc] initWithBaseViewController:self.viewController
                                                  browser:self.browser];

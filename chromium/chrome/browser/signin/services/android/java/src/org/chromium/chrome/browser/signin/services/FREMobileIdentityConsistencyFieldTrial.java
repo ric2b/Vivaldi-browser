@@ -37,12 +37,12 @@ import org.chromium.build.BuildConfig;
  */
 public class FREMobileIdentityConsistencyFieldTrial {
     private static final Object LOCK = new Object();
-    private static final String ENABLED_GROUP = "Enabled3";
+    private static final String ENABLED_GROUP = "Enabled6";
     @VisibleForTesting
-    public static final String DISABLED_GROUP = "Disabled3";
+    public static final String DISABLED_GROUP = "Disabled6";
     private static final String DEFAULT_GROUP = "Default";
     @VisibleForTesting
-    public static final String OLD_FRE_WITH_UMA_DIALOG_GROUP = "OldFreWithUmaDialog3";
+    public static final String OLD_FRE_WITH_UMA_DIALOG_GROUP = "OldFreWithUmaDialog6";
 
     /**
      * The group variation values should be consecutive starting from zero. WELCOME_TO_CHROME acts
@@ -234,9 +234,9 @@ public class FREMobileIdentityConsistencyFieldTrial {
                 oldFreWithUmaDialogPercent = 10;
                 break;
             case Channel.STABLE:
-                enabledPercent = 1;
-                disabledPercent = 1;
-                oldFreWithUmaDialogPercent = 1;
+                enabledPercent = 10;
+                disabledPercent = 10;
+                oldFreWithUmaDialogPercent = 10;
                 break;
         }
         assert enabledPercent + disabledPercent + oldFreWithUmaDialogPercent <= 100;
@@ -283,9 +283,9 @@ public class FREMobileIdentityConsistencyFieldTrial {
             case Channel.DEFAULT:
             case Channel.CANARY:
             case Channel.DEV:
-            case Channel.BETA:
                 variationsPercentage = 10;
                 break;
+            case Channel.BETA:
             case Channel.STABLE:
         }
         // For A/B testing all experiment groups should have the same percentages.

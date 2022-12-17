@@ -197,8 +197,11 @@ AccountReconcilorFactory::CreateAccountReconcilorDelegate(Profile* profile) {
           IdentityManagerFactory::GetForProfile(profile));
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
       if (base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
-        return std::make_unique<
-            signin::MirrorLandingAccountReconcilorDelegate>();
+        bool is_main_profile = ChromeSigninClientFactory::GetForProfile(profile)
+                                   ->GetInitialPrimaryAccount()
+                                   .has_value();
+        return std::make_unique<signin::MirrorLandingAccountReconcilorDelegate>(
+            IdentityManagerFactory::GetForProfile(profile), is_main_profile);
       }
       return std::make_unique<signin::MirrorAccountReconcilorDelegate>(
           IdentityManagerFactory::GetForProfile(profile));
@@ -212,7 +215,8 @@ AccountReconcilorFactory::CreateAccountReconcilorDelegate(Profile* profile) {
 
     case signin::AccountConsistencyMethod::kDice:
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
-      return std::make_unique<signin::DiceAccountReconcilorDelegate>();
+      return std::make_unique<signin::DiceAccountReconcilorDelegate>(
+          IdentityManagerFactory::GetForProfile(profile));
 #else
       NOTREACHED();
       return nullptr;

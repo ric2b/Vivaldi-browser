@@ -47,9 +47,12 @@ constexpr char kOmniboxAnswerSchema[] = "omnibox_answer://";
 ChromeSearchResult::IconInfo CreateAnswerIconInfo(
     const gfx::VectorIcon& vector_icon) {
   const int dimension = GetAnswerCardIconDimension();
-  const bool dark_mode = ash::features::IsProductivityLauncherEnabled() ||
-                         (ash::features::IsDarkLightModeEnabled() &&
-                          ash::ColorProvider::Get()->IsDarkModeEnabled());
+  // ColorProvider might be nullptr in tests.
+  const bool dark_mode =
+      ash::features::IsProductivityLauncherEnabled() ||
+      (ash::features::IsDarkLightModeEnabled() && ash::ColorProvider::Get() &&
+       ash::ColorProvider::Get()->IsDarkModeEnabled());
+
   const auto icon =
       dark_mode ? gfx::ImageSkiaOperations::CreateImageWithCircleBackground(
                       dimension / 2, gfx::kGoogleBlue300,
@@ -195,13 +198,23 @@ OmniboxAnswerResult::OmniboxAnswerResult(
   } else {
     UpdateClassicTitleAndDetails();
   }
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->AddObserver(this);
 }
 
-OmniboxAnswerResult::~OmniboxAnswerResult() = default;
+OmniboxAnswerResult::~OmniboxAnswerResult() {
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->RemoveObserver(this);
+}
 
 void OmniboxAnswerResult::Open(int event_flags) {
   list_controller_->OpenURL(profile_, match_.destination_url, match_.transition,
                             ui::DispositionFromEventFlags(event_flags));
+}
+
+void OmniboxAnswerResult::OnColorModeChanged(bool dark_mode_enabled) {
+  if (!IsWeatherResult())
+    UpdateIcon();
 }
 
 void OmniboxAnswerResult::UpdateIcon() {
@@ -244,11 +257,15 @@ void OmniboxAnswerResult::UpdateTitleAndDetails() {
       scoring().filter = true;
     }
 
-    // TODO(crbug.com/1250154): Put additional weather text into the title
-    // field instead of match contents, once the information becomes available
-    // from the Suggest server.
-    SetTitleTextVector(
-        MatchFieldsToTextVector(match_.contents, match_.contents_class));
+    if (second_line.accessibility_label()) {
+      SetTitleTextVector(
+          {CreateStringTextItem(*second_line.accessibility_label())});
+    } else {
+      // If the weather condition text is missing, fall back to use
+      // `match_.contents`.
+      SetTitleTextVector(
+          MatchFieldsToTextVector(match_.contents, match_.contents_class));
+    }
 
     std::vector<TextItem> details_vector;
     AppendAdditionalText(second_line, details_vector);

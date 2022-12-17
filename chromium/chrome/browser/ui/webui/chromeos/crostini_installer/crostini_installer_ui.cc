@@ -146,8 +146,7 @@ CrostiniInstallerUI::CrostiniInstallerUI(content::WebUI* web_ui)
   source->AddString("defaultContainerUsername",
                     crostini::DefaultContainerUserNameForProfile(profile));
 
-  source->AddResourcePath("app.rollup.js",
-                          IDR_CROSTINI_INSTALLER_APP_ROLLUP_JS);
+  source->AddResourcePath("app.js", IDR_CROSTINI_INSTALLER_APP_JS);
   source->AddResourcePath("browser_proxy.js",
                           IDR_CROSTINI_INSTALLER_BROWSER_PROXY_JS);
   source->AddResourcePath("crostini_installer.mojom-lite.js",
@@ -174,7 +173,7 @@ bool CrostiniInstallerUI::RequestClosePage() {
 }
 
 void CrostiniInstallerUI::ClickInstallForTesting() {
-  web_ui()->GetWebContents()->GetMainFrame()->ExecuteJavaScriptForTests(
+  web_ui()->GetWebContents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
       u"const app = document.querySelector('crostini-installer-app');"
       // If flag CrostiniUsername or CrostiniDiskResizing is turned on, there
       // will be a "next" button and we should click it to go to the config page

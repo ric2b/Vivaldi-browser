@@ -14,6 +14,7 @@
 #include "base/guid.h"
 #include "base/logging.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/numerics/clamped_math.h"
 #include "base/rand_util.h"
 #include "base/sequence_checker.h"
 #include "base/strings/string_number_conversions.h"
@@ -381,9 +382,6 @@ net::HttpStatusCode LoopbackServer::HandleCommand(
       // Avoid tests waiting too long after throttling is disabled.
       response->mutable_client_command()->set_throttle_delay_seconds(1);
     } else {
-      UMA_HISTOGRAM_ENUMERATION(
-          "Sync.Local.RequestTypeOnError", message.message_contents(),
-          sync_pb::ClientToServerMessage_Contents_Contents_MAX);
       return net::HTTP_INTERNAL_SERVER_ERROR;
     }
   }
@@ -926,9 +924,9 @@ bool LoopbackServer::LoadStateFromFile() {
   if (state_file_error != base::File::FILE_OK) {
     UMA_HISTOGRAM_ENUMERATION("Sync.Local.ReadPlatformFileError",
                               -state_file_error, -base::File::FILE_ERROR_MAX);
-    LOG(ERROR)
-        << "Loopback sync cannot read the persistent state file with error "
-        << base::File::ErrorToString(state_file_error);
+    LOG(ERROR) << "Loopback sync cannot read the persistent state file ("
+               << persistent_file_ << ") with error "
+               << base::File::ErrorToString(state_file_error);
     return false;
   }
 
@@ -938,10 +936,12 @@ bool LoopbackServer::LoadStateFromFile() {
     if (serialized.length() > 0 && proto.ParseFromString(serialized)) {
       return DeSerializeState(proto);
     }
-    LOG(ERROR) << "Loopback sync cannot parse the persistent state file.";
+    LOG(ERROR) << "Loopback sync cannot parse the persistent state file ("
+               << persistent_file_ << ").";
     return false;
   }
-  LOG(ERROR) << "Loopback sync cannot read the persistent state file.";
+  LOG(ERROR) << "Loopback sync cannot read the persistent state file ("
+             << persistent_file_ << ").";
   return false;
 }
 

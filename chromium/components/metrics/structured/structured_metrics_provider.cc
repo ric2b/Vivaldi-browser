@@ -6,6 +6,7 @@
 
 #include <utility>
 
+#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/current_thread.h"
@@ -261,10 +262,18 @@ void StructuredMetricsProvider::OnReportingStateChanged(bool enabled) {
   }
 }
 
+void StructuredMetricsProvider::OnHardwareClassInitialized() {
+  hardware_class_initialized_ = true;
+}
+
 void StructuredMetricsProvider::ProvideCurrentSessionData(
     ChromeUserMetricsExtension* uma_proto) {
   DCHECK(base::CurrentUIThread::IsSet());
-  if (!recording_enabled_ || init_state_ != InitState::kInitialized) {
+  if (!recording_enabled_ || init_state_ != InitState::kInitialized)
+    return;
+
+  if (base::FeatureList::IsEnabled(kDelayUploadUntilHwid) &&
+      !hardware_class_initialized_) {
     return;
   }
 
@@ -291,6 +300,11 @@ bool StructuredMetricsProvider::HasIndependentMetrics() {
     return false;
   }
 
+  if (base::FeatureList::IsEnabled(kDelayUploadUntilHwid) &&
+      !hardware_class_initialized_) {
+    return false;
+  }
+
   return events_.get()->get()->non_uma_events_size() != 0;
 }
 
@@ -300,6 +314,12 @@ void StructuredMetricsProvider::ProvideIndependentMetrics(
     base::HistogramSnapshotManager*) {
   DCHECK(base::CurrentUIThread::IsSet());
   if (!recording_enabled_ || init_state_ != InitState::kInitialized) {
+    std::move(done_callback).Run(false);
+    return;
+  }
+
+  if (base::FeatureList::IsEnabled(kDelayUploadUntilHwid) &&
+      !hardware_class_initialized_) {
     std::move(done_callback).Run(false);
     return;
   }
@@ -391,7 +411,7 @@ void StructuredMetricsProvider::RecordEventFromEventBase(
   switch (event.id_type()) {
     case IdType::kProjectId:
       event_proto->set_profile_event_id(
-          key_data->Id(event.project_name_hash()));
+          key_data->Id(event.project_name_hash(), event.key_rotation_period()));
       break;
     case IdType::kUmaId:
       // TODO(crbug.com/1148168): Unimplemented.
@@ -427,7 +447,8 @@ void StructuredMetricsProvider::RecordEventFromEventBase(
     switch (metric.type) {
       case EventBase::MetricType::kHmac:
         metric_proto->set_value_hmac(key_data->HmacMetric(
-            event.project_name_hash(), metric.name_hash, metric.hmac_value));
+            event.project_name_hash(), metric.name_hash, metric.hmac_value,
+            event.key_rotation_period()));
         break;
       case EventBase::MetricType::kInt:
         metric_proto->set_value_int64(metric.int_value);

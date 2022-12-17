@@ -31,12 +31,10 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
 
   if (loadTimeData.getBoolean('enableSecurityKeysSubpage')) {
     r.SECURITY_KEYS = r.SECURITY.createChild('/securityKeys');
-    if (loadTimeData.getBoolean('enableSecurityKeysPhonesSubpage')) {
-      r.SECURITY_KEYS_PHONES =
-          r.SECURITY_KEYS.createChild('/securityKeys/phones');
-    }
+    r.SECURITY_KEYS_PHONES =
+        r.SECURITY_KEYS.createChild('/securityKeys/phones');
     // <if expr="is_win">
-  } else if (loadTimeData.getBoolean('enableSecurityKeysPhonesSubpage')) {
+  } else {
     r.SECURITY_KEYS_PHONES = r.SECURITY.createChild('/securityKeys/phones');
     // </if>
   }
@@ -88,6 +86,10 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
     r.SITE_SETTINGS_PAYMENT_HANDLER =
         r.SITE_SETTINGS.createChild('paymentHandler');
   }
+  if (loadTimeData.getBoolean('enableFederatedIdentityApiContentSetting')) {
+    r.SITE_SETTINGS_FEDERATED_IDENTITY_API =
+        r.SITE_SETTINGS.createChild('federatedIdentityApi');
+  }
   r.SITE_SETTINGS_VR = r.SITE_SETTINGS.createChild('vr');
   if (loadTimeData.getBoolean('enableExperimentalWebPlatformFeatures')) {
     r.SITE_SETTINGS_BLUETOOTH_SCANNING =
@@ -97,6 +99,9 @@ function addPrivacyChildRoutes(r: SettingsRoutes) {
       r.SITE_SETTINGS.createChild('windowPlacement');
   r.SITE_SETTINGS_FILE_SYSTEM_WRITE = r.SITE_SETTINGS.createChild('filesystem');
   r.SITE_SETTINGS_LOCAL_FONTS = r.SITE_SETTINGS.createChild('localFonts');
+
+  // Vivaldi:
+  r.SITE_SETTINGS_AUTOPLAY = r.SITE_SETTINGS.createChild('autoplay');
 }
 
 /**
@@ -139,7 +144,7 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
   if (visibility.autofill !== false) {
     r.AUTOFILL = r.BASIC.createSection('/autofill', 'autofill');
     r.PASSWORDS = r.AUTOFILL.createChild('/passwords');
-    if (loadTimeData.getBoolean('enablePasswordNotes')) {
+    if (loadTimeData.getBoolean('enablePasswordViewPage')) {
       r.PASSWORD_VIEW = r.PASSWORDS.createChild('view');
     }
     r.CHECK_PASSWORDS = r.PASSWORDS.createChild('check');
@@ -175,11 +180,6 @@ function createBrowserSettingsRoutes(): SettingsRoutes {
     r.LANGUAGES = r.ADVANCED.createSection('/languages', 'languages');
     // <if expr="not chromeos_ash and not is_macosx">
     r.EDIT_DICTIONARY = r.LANGUAGES.createChild('/editDictionary');
-    // </if>
-    // <if expr="not chromeos_ash and not chromeos_lacros">
-    if (loadTimeData.getBoolean('enableDesktopRestructuredLanguageSettings')) {
-      r.LANGUAGE_SETTINGS = r.LANGUAGES.createChild('/languageSettings');
-    }
     // </if>
 
     if (visibility.downloads !== false) {

@@ -111,6 +111,7 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
   std::u16string GetUserDisplayName(const AccountId& account_id) const override;
   void SaveUserDisplayEmail(const AccountId& account_id,
                             const std::string& display_email) override;
+  UserType GetUserType(const AccountId& account_id) override;
   void SaveUserType(const User* user) override;
   void UpdateUserAccountData(const AccountId& account_id,
                              const UserAccountData& account_data) override;
@@ -141,6 +142,9 @@ class USER_MANAGER_EXPORT UserManagerBase : public UserManager {
       UserManager::UserSessionStateObserver* obs) override;
   void NotifyLocalStateChanged() override;
   void NotifyUserImageChanged(const User& user) override;
+  void NotifyUserImageIsEnterpriseManagedChanged(
+      const User& user,
+      bool is_enterprise_managed) override;
   void NotifyUserProfileImageUpdateFailed(const User& user) override;
   void NotifyUserProfileImageUpdated(
       const User& user,

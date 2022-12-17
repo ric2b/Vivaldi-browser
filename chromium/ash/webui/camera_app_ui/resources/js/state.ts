@@ -14,10 +14,12 @@ export enum State {
   CAMERA_CONFIGURING = 'camera-configuring',
   CAMERA_SWITCHING = 'camera-switching',
   CUSTOM_VIDEO_PARAMETERS = 'custom-video-parameters',
+  ENABLE_FPS_PICKER_FOR_BUILTIN = 'enable-fps-picker-for-builtin',
   ENABLE_FULL_SIZED_VIDEO_SNAPSHOT = 'enable-full-sized-video-snapshot',
   ENABLE_GIF_RECORDING = 'enable-gif-recording',
   ENABLE_MULTISTREAM_RECORDING = 'enable-multistream-recording',
   ENABLE_PTZ = 'enable-ptz',
+  ENABLE_PTZ_FOR_BUILTIN = 'enable-ptz-for-builtin',
   ENABLE_SCAN_BARCODE = 'enable-scan-barcode',
   EXPERT = 'expert',
   FPS_30 = 'fps-30',
@@ -35,12 +37,12 @@ export enum State {
   HAS_ZOOM_SUPPORT = 'has-zoom-support',
   INTENT = 'intent',
   IS_NEW_FEATURE_TOAST_SHOWN = 'is-new-feature-toast-shown',
+  KEYBOARD_NAVIGATION = 'keyboard-navigation',
   MAX_WND = 'max-wnd',
   MIC = 'mic',
   MIRROR = 'mirror',
   MODE_SWITCHING = 'mode-switching',
   MULTI_CAMERA = 'multi-camera',
-  NO_RESOLUTION_SETTINGS = 'no-resolution-settings',
   PLAYING_RESULT_VIDEO = 'playing-result-video',
   PRINT_PERFORMANCE_LOGS = 'print-performance-logs',
   RECORD_TYPE_GIF = 'record-type-gif',
@@ -53,6 +55,7 @@ export enum State {
   RECORDING_UI_PAUSED = 'recording-ui-paused',
   SAVE_METADATA = 'save-metadata',
   SHOULD_HANDLE_INTENT_RESULT = 'should-handle-intent-result',
+  SHOW_ALL_RESOLUTIONS = 'show-all-resolutions',
   SHOW_GIF_RECORDING_OPTION = 'show-gif-recording-option',
   SHOW_METADATA = 'show-metadata',
   SHOW_SCAN_MODE = 'show-scan-mode',
@@ -62,7 +65,6 @@ export enum State {
   SUSPEND = 'suspend',
   TABLET = 'tablet',
   TABLET_LANDSCAPE = 'tablet-landscape',
-  TAB_NAVIGATION = 'tab-navigation',
   TAKING = 'taking',
   TALL = 'tall',
   TIMER_10SEC = 'timer-10s',
@@ -84,7 +86,7 @@ export function assertState(s: string): StateUnion {
   return s as StateUnion;
 }
 
-type StateObserver = (val: boolean, perfInfo: PerfInformation) => void;
+export type StateObserver = (val: boolean, perfInfo: PerfInformation) => void;
 
 const allObservers = new Map<StateUnion, Set<StateObserver>>();
 

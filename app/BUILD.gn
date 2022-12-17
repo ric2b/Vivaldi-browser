@@ -25,6 +25,11 @@ group("resources") {
     ":vivaldi_native_strings",
     ":vivaldi_unscaled_native_resources",
   ]
+  if (is_win) {
+    public_deps += [
+      ":vivaldi_installer_strings",
+    ]
+  }
 }
 
 if (generate_untranslated) {
@@ -52,6 +57,9 @@ if (generate_untranslated) {
       vivaldi_extract_untranslated(name) {
         forward_variables_from(_flags, ["no_override_locales"])
 
+        if (defined(_flags.merge_extra_grit_defines)) {
+          grit_defines = _flags.merge_extra_grit_defines
+        }
         source = get_label_info(_target, "dir") +"/"+ _flags.source
         vivaldi_source = _vivaldi_source
         _file_prefix = _flags.pak_file_prefix
@@ -76,6 +84,11 @@ if (generate_untranslated) {
       ":Extract_strings_vivaldi_native_strings",
       ":Extract_strings_vivaldi_android_strings_grd",
     ] + extract_deps
+    if (is_win || (generate_untranslated && !is_android)) {
+      deps += [
+        ":Extract_strings_vivaldi_installer_strings",
+      ]
+    }
   }
 }
 
@@ -84,9 +97,16 @@ vivaldi_strings_grit_action("vivaldi_native_strings") {
   resource_ids = "//vivaldi/app/gritsettings/resource_ids"
 }
 
+if (is_win || (generate_untranslated && !is_android)) {
+  vivaldi_strings_grit_action("vivaldi_installer_strings") {
+    source = "installer/vivaldi_installer_strings.grd"
+    resource_ids = "//vivaldi/app/gritsettings/resource_ids"
+  }
+}
+
 if (is_android) {
   java_strings_grd("vivaldi_android_strings_grd") {
-    defines = chrome_grit_defines + grit_defines
+    defines = chrome_grit_defines + extra_grit_defines
     grd_file = "android/vivaldi_android_strings.grd"
     outputs = [
       "values/vivaldi_android_strings.xml",

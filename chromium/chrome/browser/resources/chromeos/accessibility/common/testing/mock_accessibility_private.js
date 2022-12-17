@@ -20,10 +20,7 @@ var MockAccessibilityPrivate = {
     SOLID: 'solid',
   },
 
-  AccessibilityFeature: {
-    DICTATION_COMMANDS: 'dictation_commands',
-    DICTATION_HINTS: 'dictation_hints',
-  },
+  AccessibilityFeature: {DICTATION_PUMPKIN_PARSING: 'dictationPumpkinParsing'},
 
   DictationBubbleIconType: {
     HIDDEN: 'hidden',
@@ -93,7 +90,7 @@ var MockAccessibilityPrivate = {
      * Adds a listener to onScrollableBoundsForPointRequested.
      * @param {function<number, number>} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockAccessibilityPrivate.boundsListener_ = listener;
     },
 
@@ -101,7 +98,7 @@ var MockAccessibilityPrivate = {
      * Removes the listener.
      * @param {function<number, number>} listener
      */
-    removeListener: (listener) => {
+    removeListener: listener => {
       if (MockAccessibilityPrivate.boundsListener_ === listener) {
         MockAccessibilityPrivate.boundsListener_ = null;
       }
@@ -109,7 +106,7 @@ var MockAccessibilityPrivate = {
   },
 
   onMagnifierBoundsChanged:
-      {addListener: (listener) => {}, removeListener: (listener) => {}},
+      {addListener: listener => {}, removeListener: listener => {}},
 
   onSelectToSpeakPanelAction: {
     /**
@@ -117,7 +114,7 @@ var MockAccessibilityPrivate = {
      * @param {!function(!chrome.accessibilityPrivate.SelectToSpeakPanelAction,
      *     number=)} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockAccessibilityPrivate.selectToSpeakPanelActionListener_ = listener;
     },
   },
@@ -127,7 +124,7 @@ var MockAccessibilityPrivate = {
      * Adds a listener to onToggleDictation.
      * @param {function<boolean>} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockAccessibilityPrivate.dictationToggleListener_ = listener;
     },
 
@@ -135,7 +132,7 @@ var MockAccessibilityPrivate = {
      * Removes the listener.
      * @param {function<boolean>} listener
      */
-    removeListener: (listener) => {
+    removeListener: listener => {
       if (MockAccessibilityPrivate.dictationToggleListener_ === listener) {
         MockAccessibilityPrivate.dictationToggleListener_ = null;
       }
@@ -147,7 +144,7 @@ var MockAccessibilityPrivate = {
      * Adds a listener to onSelectToSpeakStateChangeRequested.
      * @param {!function()} listener
      */
-    addListener: (listener) => {
+    addListener: listener => {
       MockAccessibilityPrivate.selectToSpeakStateChangeListener_ = listener;
     },
   },
@@ -156,13 +153,13 @@ var MockAccessibilityPrivate = {
    * Called when AccessibilityCommon wants to enable mouse events.
    * @param {boolean} enabled
    */
-  enableMouseEvents: (enabled) => {},
+  enableMouseEvents: enabled => {},
 
   /**
    * Called when AccessibilityCommon finds scrollable bounds at a point.
    * @param {!chrome.accessibilityPrivate.ScreenRect} bounds
    */
-  handleScrollableBoundsForPointFound: (bounds) => {
+  handleScrollableBoundsForPointFound: bounds => {
     MockAccessibilityPrivate.scrollableBounds_ = bounds;
     MockAccessibilityPrivate.handleScrollableBoundsForPointFoundCallback_();
   },
@@ -172,7 +169,7 @@ var MockAccessibilityPrivate = {
    * include a specific rect.
    * @param {!chrome.accessibilityPrivate.ScreenRect} rect
    */
-  moveMagnifierToRect: (rect) => {
+  moveMagnifierToRect: rect => {
     if (MockAccessibilityPrivate.moveMagnifierToRectCallback_) {
       MockAccessibilityPrivate.moveMagnifierToRectCallback_(rect);
     }
@@ -182,9 +179,9 @@ var MockAccessibilityPrivate = {
    * Called when AccessibilityCommon wants to set the focus rings. We can
    * assume that it is only setting one set of rings at a time, and safely
    * extract focusRingInfos[0].rects.
-   * @param {!Array<!!chrome.accessibilityPrivate.FocusRingInfo>} focusRingInfos
+   * @param {!Array<!chrome.accessibilityPrivate.FocusRingInfo>} focusRingInfos
    */
-  setFocusRings: (focusRingInfos) => {
+  setFocusRings: focusRingInfos => {
     MockAccessibilityPrivate.focusRings_ = focusRingInfos;
   },
 
@@ -210,12 +207,13 @@ var MockAccessibilityPrivate = {
         .selectToSpeakPanelState_ = {show, anchor, isPaused, speed};
   },
 
-  /**
-   * Called in order to toggle Dictation listening.
-   */
+  /** Called in order to toggle Dictation listening. */
   toggleDictation: () => {
     MockAccessibilityPrivate.dictationActivated_ =
         !MockAccessibilityPrivate.dictationActivated_;
+
+    MockAccessibilityPrivate.callOnToggleDictation(
+        MockAccessibilityPrivate.dictationActivated_);
   },
 
   /**
@@ -260,7 +258,7 @@ var MockAccessibilityPrivate = {
    * moveMagnifierToRectCallback will be called with that desired rect.
    * @param {!function<>} moveMagnifierToRectCallback
    */
-  registerMoveMagnifierToRectCallback: (moveMagnifierToRectCallback) => {
+  registerMoveMagnifierToRectCallback: moveMagnifierToRectCallback => {
     MockAccessibilityPrivate.moveMagnifierToRectCallback_ =
         moveMagnifierToRectCallback;
   },
@@ -331,7 +329,7 @@ var MockAccessibilityPrivate = {
    * occur when the user or a chrome extension toggles Dictation active state.
    * @param {boolean} activated
    */
-  callOnToggleDictation: (activated) => {
+  callOnToggleDictation: activated => {
     MockAccessibilityPrivate.dictationActivated_ = activated;
     if (MockAccessibilityPrivate.dictationToggleListener_) {
       MockAccessibilityPrivate.dictationToggleListener_(activated);

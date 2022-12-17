@@ -19,6 +19,7 @@
 #include "content/browser/isolation_context.h"
 #include "content/browser/process_lock.h"
 #include "content/browser/renderer_host/render_process_host_impl.h"
+#include "content/browser/site_instance_group.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/public/browser/browser_or_resource_context.h"
 #include "content/public/browser/content_browser_client.h"
@@ -46,13 +47,13 @@ constexpr bool kCreateForURLAllowsDefaultSiteInstance = true;
 // This is used to keep same-site scripting working for hosted apps.
 bool ShouldCompareEffectiveURLs(BrowserContext* browser_context,
                                 SiteInstanceImpl* site_instance,
-                                bool for_main_frame,
+                                bool for_outermost_main_frame,
                                 const GURL& dest_url) {
   return site_instance->IsDefaultSiteInstance() ||
          GetContentClient()
              ->browser()
              ->ShouldCompareEffectiveURLsForSiteInstanceSelection(
-                 browser_context, site_instance, for_main_frame,
+                 browser_context, site_instance, for_outermost_main_frame,
                  site_instance->original_url(), dest_url);
 }
 
@@ -110,6 +111,11 @@ SiteInstanceImpl::~SiteInstanceImpl() {
   // (within the same BrowsingInstance) can safely create a new SiteInstance.
   if (has_site_)
     browsing_instance_->UnregisterSiteInstance(this);
+
+  if (has_group()) {
+    group()->RemoveSiteInstance(this);
+    ResetSiteInstanceGroup();
+  }
 }
 
 // static
@@ -212,6 +218,34 @@ scoped_refptr<SiteInstanceImpl> SiteInstanceImpl::CreateForGuest(
 }
 
 // static
+scoped_refptr<SiteInstanceImpl> SiteInstanceImpl::CreateForFencedFrame(
+    SiteInstanceImpl* embedder_site_instance) {
+  DCHECK(embedder_site_instance);
+  BrowserContext* browser_context = embedder_site_instance->GetBrowserContext();
+
+  if (embedder_site_instance->IsGuest()) {
+    return CreateForGuest(browser_context,
+                          embedder_site_instance->GetStoragePartitionConfig());
+  }
+
+  // Give the new fenced frame SiteInstance the same site url as its embedder's
+  // SiteInstance to allow it to reuse its embedder's process. We avoid doing
+  // this in the default SiteInstance case as the url will be invalid; process
+  // reuse will still happen below though, as the embedder's SiteInstance's
+  // process will not be locked to any site.
+  scoped_refptr<SiteInstanceImpl> site_instance =
+      base::WrapRefCounted(new SiteInstanceImpl(new BrowsingInstance(
+          browser_context, embedder_site_instance->GetWebExposedIsolationInfo(),
+          embedder_site_instance->IsGuest())));
+  if (!embedder_site_instance->IsDefaultSiteInstance()) {
+    site_instance->SetSite(embedder_site_instance->GetSiteInfo());
+  }
+  site_instance->ReuseCurrentProcessIfPossible(
+      embedder_site_instance->GetProcess());
+  return site_instance;
+}
+
+// static
 scoped_refptr<SiteInstanceImpl>
 SiteInstanceImpl::CreateReusableInstanceForTesting(
     BrowserContext* browser_context,
@@ -287,7 +321,7 @@ BrowsingInstanceId SiteInstanceImpl::NextBrowsingInstanceId() {
 }
 
 bool SiteInstanceImpl::HasProcess() {
-  if (site_instance_group_ && site_instance_group_->has_process())
+  if (has_group())
     return true;
 
   // If we would use process-per-site for this site, also check if there is an
@@ -302,15 +336,12 @@ bool SiteInstanceImpl::HasProcess() {
 }
 
 RenderProcessHost* SiteInstanceImpl::GetProcess() {
-  // Create a new process if our group's went away or was reused.
+  // Create a new SiteInstanceGroup and RenderProcessHost is there isn't one.
   // All SiteInstances within a SiteInstanceGroup share a process and
-  // AgentSchedulingGroupHost. The process and AgentSchedulingGroupHost may go
-  // away if the SiteInstanceGroup outlives all of its documents and workers. If
-  // needed, make sure the SiteInstanceGroup, process, and
-  // AgentSchedulingGroupHost exist.
-  // TODO(crbug.com/1294045): Update checks and comments when a
-  // SiteInstanceGroup must have a RenderProcessHost and AgentSchedulingGroup.
-  if (!site_instance_group_ || !site_instance_group_->has_process()) {
+  // AgentSchedulingGroupHost. A group must have a process. If the process gets
+  // destructed, `site_instance_group_` will get cleared, and another one with a
+  // new process will be assigned the next time GetProcess() gets called.
+  if (!has_group()) {
     // Check if the ProcessReusePolicy should be updated.
     if (ShouldUseProcessPerSite()) {
       process_reuse_policy_ = ProcessReusePolicy::PROCESS_PER_SITE;
@@ -321,8 +352,6 @@ RenderProcessHost* SiteInstanceImpl::GetProcess() {
         RenderProcessHostImpl::GetProcessHostForSiteInstance(this));
   }
   DCHECK(site_instance_group_);
-  DCHECK(site_instance_group_->has_process());
-  DCHECK(site_instance_group_->has_agent_scheduling_group());
 
   return site_instance_group_->process();
 }
@@ -363,14 +392,7 @@ void SiteInstanceImpl::SetProcessInternal(RenderProcessHost* process) {
     site_instance_group_ =
         browsing_instance_->site_instance_group_manager()
             .GetOrCreateGroupForNewSiteInstance(this, process);
-  } else if (!site_instance_group_->process()) {
-    // TODO(crbug.com/1261963): Remove this clause once the lifetime of
-    // SiteInstanceGroup  is tied to that of `process`.
-    site_instance_group_->SetProcessAndAgentSchedulingGroup(process);
   }
-
-  DCHECK(site_instance_group_->has_process());
-  DCHECK(site_instance_group_->has_agent_scheduling_group());
 
   LockProcessIfNeeded();
 
@@ -510,9 +532,7 @@ void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
   if (should_use_process_per_site)
     process_reuse_policy_ = ProcessReusePolicy::PROCESS_PER_SITE;
 
-  bool has_process =
-      site_instance_group_ && site_instance_group_->has_process();
-  if (has_process) {
+  if (has_group()) {
     LockProcessIfNeeded();
 
     // Ensure the process is registered for this site if necessary.
@@ -526,7 +546,7 @@ void SiteInstanceImpl::SetSiteInfoInternal(const SiteInfo& site_info) {
   // SiteInstance. This must be called after LockProcessIfNeeded() because
   // the SiteInstanceGroupManager does suitability checks that use the lock.
   browsing_instance_->site_instance_group_manager().OnSiteInfoSet(this,
-                                                                  has_process);
+                                                                  has_group());
 }
 
 void SiteInstanceImpl::ConvertToDefaultOrSetSite(const UrlInfo& url_info) {
@@ -638,12 +658,14 @@ scoped_refptr<SiteInstanceImpl> SiteInstanceImpl::GetRelatedSiteInstanceImpl(
 }
 
 AgentSchedulingGroupHost& SiteInstanceImpl::GetOrCreateAgentSchedulingGroup() {
-  if (!site_instance_group_ ||
-      !site_instance_group_->has_agent_scheduling_group()) {
+  if (!site_instance_group_)
     GetProcess();
-  }
 
   return site_instance_group_->agent_scheduling_group();
+}
+
+void SiteInstanceImpl::ResetSiteInstanceGroup() {
+  site_instance_group_.reset();
 }
 
 bool SiteInstanceImpl::IsRelatedSiteInstance(const SiteInstance* instance) {
@@ -905,8 +927,8 @@ bool SiteInstanceImpl::IsOriginalUrlSameSite(
 
 bool SiteInstanceImpl::IsNavigationSameSite(
     const GURL& last_successful_url,
-    const url::Origin last_committed_origin,
-    bool for_main_frame,
+    const url::Origin& last_committed_origin,
+    bool for_outermost_main_frame,
     const UrlInfo& dest_url_info) {
   if (GetSiteInfo().is_sandboxed() != dest_url_info.is_sandboxed)
     return false;
@@ -915,7 +937,7 @@ bool SiteInstanceImpl::IsNavigationSameSite(
   BrowserContext* browser_context = GetBrowserContext();
 
   bool should_compare_effective_urls = ShouldCompareEffectiveURLs(
-      browser_context, this, for_main_frame, dest_url);
+      browser_context, this, for_outermost_main_frame, dest_url);
 
   // If IsSuitableForUrlInfo finds a process type mismatch, return false
   // even if |dest_url| is same-site.  (The URL may have been installed as an
@@ -927,7 +949,7 @@ bool SiteInstanceImpl::IsNavigationSameSite(
   // a process privilege level mismatch.
   bool should_check_for_wrong_process =
       !IsNavigationAllowedToStayInSameProcessDueToEffectiveURLs(
-          browser_context, for_main_frame, dest_url);
+          browser_context, for_outermost_main_frame, dest_url);
   if (should_check_for_wrong_process && !IsSuitableForUrlInfo(dest_url_info))
     return false;
 
@@ -981,10 +1003,10 @@ bool SiteInstanceImpl::IsNavigationSameSite(
 
 bool SiteInstanceImpl::IsNavigationAllowedToStayInSameProcessDueToEffectiveURLs(
     BrowserContext* browser_context,
-    bool for_main_frame,
+    bool for_outermost_main_frame,
     const GURL& dest_url) {
-  if (ShouldCompareEffectiveURLs(browser_context, this, for_main_frame,
-                                 dest_url)) {
+  if (ShouldCompareEffectiveURLs(browser_context, this,
+                                 for_outermost_main_frame, dest_url)) {
     return false;
   }
 
@@ -1215,18 +1237,6 @@ void SiteInstanceImpl::LockProcessIfNeeded() {
   DCHECK_EQ(storage_partition->GetConfig(),
             site_info_.storage_partition_config());
 
-  // From now on, this process should be considered "tainted" for future
-  // process reuse decisions:
-  // (1) If |site_info_| required a dedicated process, this SiteInstance's
-  //     process can only host URLs for the same site.
-  // (2) Even if |site_info_| does not require a dedicated process, this
-  //     SiteInstance's process still cannot be reused to host other sites
-  //     requiring dedicated sites in the future.
-  // We can get here either when we commit a URL into a SiteInstance that does
-  // not yet have a site, or when we create a process for a SiteInstance with a
-  // preassigned site.
-  process->SetIsUsed();
-
   if (site_info_.ShouldLockProcessToSite(GetIsolationContext())) {
     // Sanity check that this won't try to assign an origin lock to a
     // non-site-isolated <webview> process, which can't be locked.
@@ -1275,6 +1285,18 @@ void SiteInstanceImpl::LockProcessIfNeeded() {
           << "Unexpected process lock " << process_lock.ToString();
     }
   }
+
+  // From now on, this process should be considered "tainted" for future
+  // process reuse decisions:
+  // (1) If |site_info_| required a dedicated process, this SiteInstance's
+  //     process can only host URLs for the same site.
+  // (2) Even if |site_info_| does not require a dedicated process, this
+  //     SiteInstance's process still cannot be reused to host other sites
+  //     requiring dedicated sites in the future.
+  // We can get here either when we commit a URL into a SiteInstance that does
+  // not yet have a site, or when we create a process for a SiteInstance with a
+  // preassigned site.
+  process->SetIsUsed();
 
   // Track which isolation contexts use the given process.  This lets
   // ChildProcessSecurityPolicyImpl (e.g. CanAccessDataForOrigin) determine

@@ -6,6 +6,8 @@
 #define THIRD_PARTY_BLINK_RENDERER_PLATFORM_GRAPHICS_PAINT_CLIP_PAINT_PROPERTY_NODE_H_
 
 #include <algorithm>
+
+#include "base/check_op.h"
 #include "base/memory/scoped_refptr.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/platform/geometry/float_rounded_rect.h"
@@ -88,23 +90,26 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
     scoped_refptr<const TransformPaintPropertyNodeOrAlias>
         local_transform_space;
     absl::optional<FloatClipRect> layout_clip_rect_excluding_overlay_scrollbars;
-    scoped_refptr<const RefCountedPath> clip_path;
+    absl::optional<Path> clip_path;
 
     void SetClipRect(const gfx::RectF& layout_clip_rect_arg,
                      const FloatRoundedRect& paint_clip_rect_arg) {
-      layout_clip_rect.SetRect(layout_clip_rect_arg);
+      layout_clip_rect_.SetRect(layout_clip_rect_arg);
       if (paint_clip_rect_arg.IsRounded())
-        layout_clip_rect.SetHasRadius();
-      paint_clip_rect = paint_clip_rect_arg;
+        layout_clip_rect_.SetHasRadius();
+      paint_clip_rect_ = paint_clip_rect_arg;
     }
 
     PaintPropertyChangeType ComputeChange(const State& other) const;
 
-    friend class ClipPaintPropertyNode;
+    bool ClipPathEquals(const absl::optional<Path>& p) const {
+      return (!clip_path && !p) || (clip_path && p && *clip_path == *p);
+    }
 
    private:
-    FloatClipRect layout_clip_rect;
-    FloatRoundedRect paint_clip_rect;
+    friend class ClipPaintPropertyNode;
+    FloatClipRect layout_clip_rect_;
+    FloatRoundedRect paint_clip_rect_;
   };
 
   // This node is really a sentinel, and does not represent a real clip space.
@@ -140,19 +145,22 @@ class PLATFORM_EXPORT ClipPaintPropertyNode
   // The clip rect for painting and compositing. It may be pixel snapped, or
   // not (e.g. for SVG).
   const FloatRoundedRect& PaintClipRect() const {
-    return state_.paint_clip_rect;
+    return state_.paint_clip_rect_;
   }
   // The clip rect used for GeometryMapper to map in layout coordinates.
   const FloatClipRect& LayoutClipRect() const {
-    return state_.layout_clip_rect;
+    return state_.layout_clip_rect_;
   }
   const FloatClipRect& LayoutClipRectExcludingOverlayScrollbars() const {
     return state_.layout_clip_rect_excluding_overlay_scrollbars
                ? *state_.layout_clip_rect_excluding_overlay_scrollbars
-               : state_.layout_clip_rect;
+               : state_.layout_clip_rect_;
   }
 
-  const RefCountedPath* ClipPath() const { return state_.clip_path.get(); }
+  const absl::optional<Path>& ClipPath() const { return state_.clip_path; }
+  bool ClipPathEquals(const absl::optional<Path>& p) const {
+    return state_.ClipPathEquals(p);
+  }
 
   std::unique_ptr<JSONObject> ToJSON() const;
 

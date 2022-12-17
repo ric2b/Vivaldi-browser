@@ -46,6 +46,7 @@
 #include "chrome/browser/ui/webui/signin/inline_login_handler_chromeos.h"
 #include "chrome/grit/arc_account_picker_resources.h"
 #include "chrome/grit/arc_account_picker_resources_map.h"
+#include "components/account_manager_core/pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
@@ -96,6 +97,9 @@ void AddEduStrings(content::WebUIDataSource* source,
   source->AddLocalizedString("eduCoexistenceErrorDescription",
                              IDS_EDU_COEXISTENCE_ERROR_DESCRIPTION);
   source->AddLocalizedString("loadingMessage", IDS_LOGIN_GAIA_LOADING_MESSAGE);
+  source->AddLocalizedString(
+      "addSchoolAccountLabel",
+      IDS_ACCOUNT_MANAGER_DIALOG_ADD_SCHOOL_ACCOUNT_LABEL);
 }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
@@ -126,10 +130,10 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
     {"inline_login_browser_proxy.js", IDR_INLINE_LOGIN_BROWSER_PROXY_JS},
     {"webview_saml_injected.js", IDR_GAIA_AUTH_WEBVIEW_SAML_INJECTED_JS},
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-    {"inline_login_util.js", IDR_INLINE_LOGIN_UTIL_JS},
     {"welcome_page_app.js", IDR_INLINE_LOGIN_WELCOME_PAGE_APP_JS},
     {"signin_blocked_by_policy_page.js",
      IDR_INLINE_LOGIN_SIGNIN_BLOCKED_BY_POLICY_PAGE_JS},
+    {"signin_error_page.js", IDR_INLINE_LOGIN_SIGNIN_ERROR_PAGE_JS},
     {"account_manager_shared_css.js", IDR_ACCOUNT_MANAGER_SHARED_CSS_JS},
     {"gaia_action_buttons.js", IDR_GAIA_ACTION_BUTTONS_JS},
     {"error_screen.js", IDR_ACCOUNT_MANAGER_COMPONENTS_ERROR_SCREEN_JS},
@@ -191,8 +195,14 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
      IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_TITLE},
     {"accountManagerDialogSigninBlockedByPolicyBody",
      IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_BODY},
+    {"accountManagerDialogSigninErrorTitle",
+     IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_ERROR_TITLE},
+    {"accountManagerDialogSigninErrorBody",
+     IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_ERROR_BODY},
     {"accountManagerDialogSigninBlockedByPolicyImageAlt",
      IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_IMAGE_ALT},
+    {"accountManagerDialogSigninSpinnerText",
+     IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_SPINNER_TEXT},
 #else
     {"title", IDS_CHROME_SIGNIN_TITLE},
 #endif
@@ -200,6 +210,10 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
   source->AddLocalizedStrings(kLocalizedStrings);
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  source->AddBoolean(
+      "secondaryGoogleAccountSigninAllowed",
+      profile->GetPrefs()->GetBoolean(
+          ::account_manager::prefs::kSecondaryGoogleAccountSigninAllowed));
   source->AddBoolean(
       "isArcAccountRestrictionsEnabled",
       ash::AccountAppsAvailability::IsArcAccountRestrictionsEnabled());
@@ -276,6 +290,9 @@ content::WebUIDataSource* CreateWebUIDataSource(Profile* profile) {
                     .spec()),
             ui::GetChromeOSDeviceName()));
   }
+
+  source->AddBoolean("isChild",
+                     user_manager::UserManager::Get()->IsLoggedInAsChildUser());
 
   user_manager::User* user =
       ash::ProfileHelper::Get()->GetUserByProfile(profile);

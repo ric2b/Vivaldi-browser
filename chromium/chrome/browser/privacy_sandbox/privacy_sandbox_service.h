@@ -22,6 +22,9 @@
 
 class Browser;
 class PrefService;
+#if !BUILDFLAG(IS_ANDROID)
+class TrustSafetySentimentService;
+#endif
 
 namespace content {
 class BrowsingDataRemover;
@@ -49,9 +52,9 @@ class PrivacySandboxService : public KeyedService,
                               public syncer::SyncServiceObserver,
                               public signin::IdentityManager::Observer {
  public:
-  // Possible types of Privacy Sandbox dialogs that may be shown to the user.
+  // Possible types of Privacy Sandbox prompts that may be shown to the user.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.privacy_sandbox
-  enum class DialogType {
+  enum class PromptType {
     kNone = 0,
     kNotice = 1,
     kConsent = 2,
@@ -59,9 +62,9 @@ class PrivacySandboxService : public KeyedService,
   };
 
   // An exhaustive list of actions related to showing & interacting with the
-  // dialog. Includes actions which do not impact consent / notice state.
+  // prompt. Includes actions which do not impact consent / notice state.
   // GENERATED_JAVA_ENUM_PACKAGE: org.chromium.chrome.browser.privacy_sandbox
-  enum class DialogAction {
+  enum class PromptAction {
     // Notice Interactions:
     kNoticeShown = 0,
     kNoticeOpenSettings = 1,
@@ -83,7 +86,11 @@ class PrivacySandboxService : public KeyedService,
     // has made the decision (accepted or declined the consent).
     kConsentClosedNoDecision = 10,
 
-    kMaxValue = kConsentClosedNoDecision,
+    // Interaction with notice bubble: click on the link to open interests
+    // settings.
+    kNoticeLearnMore = 11,
+
+    kMaxValue = kNoticeLearnMore,
   };
 
   PrivacySandboxService(
@@ -96,24 +103,28 @@ class PrivacySandboxService : public KeyedService,
       content::InterestGroupManager* interest_group_manager,
       profile_metrics::BrowserProfileType profile_type,
       content::BrowsingDataRemover* browsing_data_remover,
-      browsing_topics::BrowsingTopicsService* browsing_topics_service_);
+#if !BUILDFLAG(IS_ANDROID)
+      TrustSafetySentimentService* sentiment_service,
+#endif
+      browsing_topics::BrowsingTopicsService* browsing_topics_service);
+
   ~PrivacySandboxService() override;
 
-  // Returns the dialog type that should be shown to the user. This consults
+  // Returns the prompt type that should be shown to the user. This consults
   // previous consent / notice information stored in preferences, the current
   // state of the Privacy Sandbox settings, and the current location of the
   // user, to determine the appropriate type. This is expected to be called by
-  // UI code locations determining whether a dialog should be shown on startup.
+  // UI code locations determining whether a prompt should be shown on startup.
   // Virtual to allow mocking in tests.
-  virtual DialogType GetRequiredDialogType();
+  virtual PromptType GetRequiredPromptType();
 
-  // Informs the service that |action| occurred with the dialog. This allows
+  // Informs the service that |action| occurred with the prompt. This allows
   // the service to record this information in preferences such that future
-  // calls to GetRequiredDialogType() are correct. This is expected to be
-  // called appropriately by all locations showing the dialog. Metrics shared
+  // calls to GetRequiredPromptType() are correct. This is expected to be
+  // called appropriately by all locations showing the prompt. Metrics shared
   // between platforms will also be recorded.
   // This method is virtual for mocking in tests.
-  virtual void DialogActionOccurred(DialogAction action);
+  virtual void PromptActionOccurred(PromptAction action);
 
   // Returns whether |url| is suitable to display the Privacy Sandbox dialog
   // over. Only about:blank and certain chrome:// URLs are considered suitable.
@@ -133,7 +144,7 @@ class PrivacySandboxService : public KeyedService,
   virtual bool IsDialogOpenForBrowser(Browser* browser);
 
   // Disables the display of the Privacy Sandbox dialog for testing. When
-  // |disabled| is true, GetRequiredDialogType() will only ever return that no
+  // |disabled| is true, GetRequiredPromptType() will only ever return that no
   // dialog is required.
   // NOTE: This is set to true in InProcessBrowserTest::SetUp, disabling the
   // dialog for those tests. If you set this outside of that context, you should
@@ -302,7 +313,7 @@ class PrivacySandboxService : public KeyedService,
                            ManuallyControlledNoDialog);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceDialogTest, NoParamNoDialog);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceDeathTest,
-                           GetRequiredDialogType);
+                           GetRequiredPromptType);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceTest,
                            PrivacySandboxDialogNoticeWaiting);
   FRIEND_TEST_ALL_PREFIXES(PrivacySandboxServiceTest,
@@ -426,12 +437,12 @@ class PrivacySandboxService : public KeyedService,
       base::OnceCallback<void(std::vector<std::string>)> callback,
       std::vector<url::Origin> top_frames);
 
-  // Contains the logic which powers GetRequiredDialogType(). Static to allow
+  // Contains the logic which powers GetRequiredPromptType(). Static to allow
   // EXPECT_DCHECK_DEATH testing, which does not work well with many of the
   // other dependencies of this service. It is also for this reason the 3P
   // cookie block state is passed in, as CookieSettings cannot be used in
   // death tests.
-  static PrivacySandboxService::DialogType GetRequiredDialogTypeInternal(
+  static PrivacySandboxService::PromptType GetRequiredPromptTypeInternal(
       PrefService* pref_service,
       profile_metrics::BrowserProfileType profile_type,
       privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
@@ -447,6 +458,9 @@ class PrivacySandboxService : public KeyedService,
   raw_ptr<content::InterestGroupManager> interest_group_manager_;
   profile_metrics::BrowserProfileType profile_type_;
   raw_ptr<content::BrowsingDataRemover> browsing_data_remover_;
+#if !BUILDFLAG(IS_ANDROID)
+  raw_ptr<TrustSafetySentimentService> sentiment_service_;
+#endif
   raw_ptr<browsing_topics::BrowsingTopicsService> browsing_topics_service_;
 
   base::ScopedObservation<syncer::SyncService, syncer::SyncServiceObserver>
@@ -475,6 +489,11 @@ class PrivacySandboxService : public KeyedService,
        privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY},
       {browsing_topics::Topic(4),
        privacy_sandbox::CanonicalTopic::AVAILABLE_TAXONOMY}};
+
+  // Informs the TrustSafetySentimentService, if it exists, that a
+  // Privacy Sandbox 3 interaction for an area has occurred The area is
+  // determined by |action|. Only a subset of actions has a corresponding area.
+  void InformSentimentService(PrivacySandboxService::PromptAction action);
 
   base::WeakPtrFactory<PrivacySandboxService> weak_factory_{this};
 };

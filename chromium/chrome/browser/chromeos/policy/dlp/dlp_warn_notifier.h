@@ -25,8 +25,6 @@ class DlpWarnNotifier : public views::WidgetObserver {
   ~DlpWarnNotifier() override;
 
   // WidgetObserver:
-  // TODO(crbug.com/1284296): Remove this and use only OnWidgetDestroying().
-  void OnWidgetClosing(views::Widget* widget) override;
   void OnWidgetDestroying(views::Widget* widget) override;
 
   // Shows a warning dialog that informs the user that printing is not
@@ -63,6 +61,8 @@ class DlpWarnNotifier : public views::WidgetObserver {
   int ActiveWarningDialogsCountForTesting() const;
 
  private:
+  friend class MockDlpWarnNotifier;
+
   // Helper method to create and show a warning dialog for a given
   // |restriction|.
   virtual base::WeakPtr<views::Widget> ShowDlpWarningDialog(

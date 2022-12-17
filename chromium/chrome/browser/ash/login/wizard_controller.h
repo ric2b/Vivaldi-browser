@@ -9,6 +9,7 @@
 #include <memory>
 #include <string>
 
+#include "base/containers/flat_map.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
@@ -111,7 +112,9 @@ class WizardController : public OobeUI::Observer {
 
   // Whether to skip any screens that may normally be shown after login
   // (registration, Terms of Service, user image selection).
-  static bool skip_post_login_screens() { return skip_post_login_screens_; }
+  bool skip_post_login_screens() {
+    return wizard_context_->skip_post_login_screens_for_tests;
+  }
 
   // Whether to skip any prompts that may be normally shown during enrollment.
   static bool skip_enrollment_prompts_for_testing() {
@@ -126,7 +129,7 @@ class WizardController : public OobeUI::Observer {
 
   // Skips any screens that may normally be shown after login (registration,
   // Terms of Service, user image selection).
-  static void SkipPostLoginScreensForTesting();
+  void SkipPostLoginScreensForTesting();
 
   // Skips any enrollment prompts that may be normally shown.
   static void SkipEnrollmentPromptsForTesting();
@@ -134,6 +137,9 @@ class WizardController : public OobeUI::Observer {
   // Returns true if OOBE is operating under the Zero-Touch Hands-Off
   // Enrollment flow.
   static bool IsZeroTouchHandsOffOobeFlow();
+
+  // Returns true if the onboarding flow can be resumed from `screen_id`.
+  static bool IsResumablePostLoginScreen(OobeScreenId screen_id);
 
   bool is_initialized() { return is_initialized_; }
 
@@ -185,9 +191,6 @@ class WizardController : public OobeUI::Observer {
   // Returns a pointer to the current screen or nullptr if there's no such
   // screen.
   BaseScreen* current_screen() const { return current_screen_; }
-
-  // Returns true if the current wizard instance has reached the login screen.
-  bool login_screen_started() const { return login_screen_started_; }
 
   // Returns true if a given screen exists.
   bool HasScreen(OobeScreenId screen_id);
@@ -450,25 +453,33 @@ class WizardController : public OobeUI::Observer {
 
   void NotifyScreenChanged();
 
+  // Tries to switch to the screen which was shown before the current screen.
+  // Returns `true` if the screen switched.
+  bool MaybeSetToPreviousScreen();
+
   // Returns auto enrollment controller (lazily initializes one if it doesn't
   // exist already).
   AutoEnrollmentController* GetAutoEnrollmentController();
 
+  // Requests owning TPM for branded builds with --tpm-is-dynamic switch unset
+  // when OobeConsolidatedConsent feature is enabled. When --tpm-is-dynamic
+  // switch is set, pre-enrollment TPM check relies on the TPM being un-owned
+  // until enrollment. b/187429309
+  void MaybeTakeTPMOwnership();
+
   std::unique_ptr<AutoEnrollmentController> auto_enrollment_controller_;
   std::unique_ptr<ScreenManager> screen_manager_;
-  WizardContext* wizard_context_;
 
-  // Whether to skip any screens that may normally be shown after login
-  // (registration, Terms of Service, user image selection).
-  static bool skip_post_login_screens_;
+  // The `BaseScreen*` here point to the objects owned by the `screen_manager_`.
+  // So it should be safe to store the pointers.
+  base::flat_map<BaseScreen*, BaseScreen*> previous_screens_;
+
+  WizardContext* wizard_context_;
 
   static bool skip_enrollment_prompts_for_testing_;
 
   // Screen that's currently active.
   BaseScreen* current_screen_ = nullptr;
-
-  // Screen that was active before, or nullptr for login screen.
-  BaseScreen* previous_screen_ = nullptr;
 
   // True if full OOBE flow should be shown.
   bool is_out_of_box_ = false;
@@ -489,8 +500,6 @@ class WizardController : public OobeUI::Observer {
 
   // Whether OOBE has yet been marked as completed.
   bool oobe_marked_completed_ = false;
-
-  bool login_screen_started_ = false;
 
   // Non-owning pointer to local state used for testing.
   static PrefService* local_state_for_testing_;

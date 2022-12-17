@@ -162,13 +162,13 @@ void VariationsIdsProvider::SetLowEntropySourceValue(
 VariationsIdsProvider::ForceIdsResult VariationsIdsProvider::ForceVariationIds(
     const std::vector<std::string>& variation_ids,
     const std::string& command_line_variation_ids) {
-  default_variation_ids_set_.clear();
+  force_enabled_ids_set_.clear();
 
-  if (!AddVariationIdsToSet(variation_ids, &default_variation_ids_set_))
+  if (!AddVariationIdsToSet(variation_ids, &force_enabled_ids_set_))
     return ForceIdsResult::INVALID_VECTOR_ENTRY;
 
   if (!ParseVariationIdsParameter(command_line_variation_ids,
-                                  &default_variation_ids_set_)) {
+                                  &force_enabled_ids_set_)) {
     return ForceIdsResult::INVALID_SWITCH_ENTRY;
   }
   if (variation_ids_cache_initialized_) {
@@ -212,7 +212,7 @@ void VariationsIdsProvider::ResetForTesting() {
   base::FieldTrialList::RemoveObserver(this);
   variation_ids_cache_initialized_ = false;
   variation_ids_set_.clear();
-  default_variation_ids_set_.clear();
+  force_enabled_ids_set_.clear();
   synthetic_variation_ids_set_.clear();
   force_disabled_ids_set_.clear();
   variations_headers_map_.clear();
@@ -256,13 +256,13 @@ void VariationsIdsProvider::OnSyntheticTrialsChanged(
   synthetic_variation_ids_set_.clear();
   for (const SyntheticTrialGroup& group : groups) {
     VariationID id = GetGoogleVariationIDFromHashes(
-        GOOGLE_WEB_PROPERTIES_ANY_CONTEXT, group.id);
+        GOOGLE_WEB_PROPERTIES_ANY_CONTEXT, group.id());
     if (id != EMPTY_ID) {
       synthetic_variation_ids_set_.insert(
           VariationIDEntry(id, GOOGLE_WEB_PROPERTIES_ANY_CONTEXT));
     }
     id = GetGoogleVariationIDFromHashes(GOOGLE_WEB_PROPERTIES_SIGNED_IN,
-                                        group.id);
+                                        group.id());
     if (id != EMPTY_ID) {
       synthetic_variation_ids_set_.insert(
           VariationIDEntry(id, GOOGLE_WEB_PROPERTIES_SIGNED_IN));
@@ -476,7 +476,7 @@ std::set<VariationsIdsProvider::VariationIDEntry>
 VariationsIdsProvider::GetAllVariationIds() {
   lock_.AssertAcquired();
 
-  std::set<VariationIDEntry> all_variation_ids_set = default_variation_ids_set_;
+  std::set<VariationIDEntry> all_variation_ids_set = force_enabled_ids_set_;
   for (const VariationIDEntry& entry : variation_ids_set_) {
     all_variation_ids_set.insert(entry);
   }

@@ -6,8 +6,10 @@
 #define COMPONENTS_CAST_STREAMING_BROWSER_DEMUXER_STREAM_DATA_PROVIDER_H_
 
 #include "base/callback_forward.h"
+#include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
-#include "components/cast_streaming/public/mojom/cast_streaming_session.mojom.h"
+#include "components/cast_streaming/browser/demuxer_stream_client.h"
+#include "components/cast_streaming/public/mojom/demuxer_connector.mojom.h"
 #include "mojo/public/cpp/bindings/message.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
@@ -40,18 +42,27 @@ class DemuxerStreamDataProvider : public TMojoReceiverType {
   // media::AudioDecoderConfig or media::VideoDecoderConfig).
   typedef decltype(TStreamInfoType::element_type::decoder_config) ConfigType;
 
+  // The callback type which will be used to request a new buffer be read. The
+  // callback is expected to call ProvideBuffer() once a buffer is available.
+  // The callback parameter provided when calling a RequestBufferCB is to be
+  // called if there no buffers available for reading at time of calling.
+  typedef base::RepeatingCallback<void(base::OnceClosure)> RequestBufferCB;
+
   // |request_buffer| is the callback which will be used to request a new
   // buffer be read. The callback is expected to call ProvideBuffer() once a
   // buffer is available.
   DemuxerStreamDataProvider(
       mojo::PendingReceiver<TMojoReceiverType> pending_receiver,
-      base::RepeatingClosure request_buffer,
+      RequestBufferCB request_buffer,
       base::OnceClosure on_mojo_disconnect,
       ConfigType config)
       : config_(std::move(config)),
         request_buffer_(std::move(request_buffer)),
-        receiver_(this, std::move(pending_receiver)) {
-    receiver_.set_disconnect_handler(std::move(on_mojo_disconnect));
+        on_mojo_disconnect_(std::move(on_mojo_disconnect)),
+        receiver_(this, std::move(pending_receiver)),
+        weak_factory_(this) {
+    receiver_.set_disconnect_handler(base::BindOnce(
+        &DemuxerStreamDataProvider::OnFatalError, weak_factory_.GetWeakPtr()));
   }
 
   // Sets the new config to be passed to the renderer process as part of the
@@ -76,10 +87,28 @@ class DemuxerStreamDataProvider : public TMojoReceiverType {
         .Run(std::move(next_stream_info_), std::move(buffer));
   }
 
-  const ConfigType& config() const { return config_; }
+  const ConfigType& config() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return config_;
+  }
+
+  void SetClient(base::WeakPtr<DemuxerStreamClient> client) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    client_ = std::move(client);
+  }
 
  private:
   using GetBufferCallback = typename TMojoReceiverType::GetBufferCallback;
+  using EnableBitstreamConverterCallback =
+      typename TMojoReceiverType::EnableBitstreamConverterCallback;
+
+  void OnFatalError() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (client_) {
+      client_->OnError();
+    }
+    std::move(on_mojo_disconnect_).Run();
+  }
 
   // TMojoReceiverType implementation.
   void GetBuffer(GetBufferCallback callback) override {
@@ -94,7 +123,19 @@ class DemuxerStreamDataProvider : public TMojoReceiverType {
     }
 
     current_callback_ = std::move(callback);
-    request_buffer_.Run();
+    request_buffer_.Run(
+        base::BindOnce(&DemuxerStreamClient::OnNoBuffersAvailable, client_));
+  }
+
+  void EnableBitstreamConverter(
+      EnableBitstreamConverterCallback callback) override {
+    if (client_) {
+      client_->EnableBitstreamConverter(std::move(callback));
+    } else {
+      std::move(callback).Run(false);
+      LOG(WARNING)
+          << "EnableBitstreamConverter() called when no client was available";
+    }
   }
 
   // The most recently set config.
@@ -108,11 +149,20 @@ class DemuxerStreamDataProvider : public TMojoReceiverType {
   GetBufferCallback current_callback_;
 
   // Callback to request a new buffer be read from the receiver.
-  base::RepeatingClosure request_buffer_;
+  RequestBufferCB request_buffer_;
+
+  // Client to use when the associated DemuxerStream requires an action be
+  // performed.
+  base::WeakPtr<DemuxerStreamClient> client_;
+
+  // Callback called upon a mojo disconnection.
+  base::OnceClosure on_mojo_disconnect_;
 
   SEQUENCE_CHECKER(sequence_checker_);
 
   mojo::Receiver<TMojoReceiverType> receiver_;
+
+  base::WeakPtrFactory<DemuxerStreamDataProvider> weak_factory_;
 };
 
 }  // namespace cast_streaming

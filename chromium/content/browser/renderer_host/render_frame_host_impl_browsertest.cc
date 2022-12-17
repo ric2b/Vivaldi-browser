@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
@@ -49,6 +50,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
 #include "content/public/common/page_visibility_state.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -331,7 +333,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
                        MessagesBeforeAndAfterRenderFrameCreated) {
   // Start with a WebContents that hasn't created its main RenderFrame.
   WebContents* web_contents = shell()->web_contents();
-  ASSERT_FALSE(web_contents->GetMainFrame()->IsRenderFrameCreated());
+  ASSERT_FALSE(web_contents->GetMainFrame()->IsRenderFrameLive());
 
   // An attempt to run script via GetAssociatedLocalFrame will do nothing before
   // the RenderFrame is created, since the message sent to the renderer will get
@@ -343,7 +345,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   // Navigating will create the RenderFrame.
   GURL url(embedded_test_server()->GetURL("/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), url));
-  ASSERT_TRUE(web_contents->GetMainFrame()->IsRenderFrameCreated());
+  ASSERT_TRUE(web_contents->GetMainFrame()->IsRenderFrameLive());
 
   // Future attempts to run script via GetAssociatedLocalFrame should succeed.
   // This timed out before the fix, since the message was dropped and no value
@@ -988,7 +990,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
 
   // Navigate main frame cross-site and wait for the beforeunload dialog to be
   // shown from one of the frames.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL cross_site_url(embedded_test_server()->GetURL("e.com", "/title1.html"));
   shell()->LoadURL(cross_site_url);
   dialog_manager()->Wait();
@@ -1026,7 +1028,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
 
   // Navigate and wait for the beforeunload dialog to be shown from one of the
   // frames.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL cross_site_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   shell()->LoadURL(cross_site_url);
   dialog_manager()->Wait();
@@ -1067,7 +1069,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   // Start a same-site renderer-initiated navigation.  The beforeunload dialog
   // from the b.com frame should be shown.  The other two a.com frames should
   // send pings from their beforeunload handlers.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL new_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   TestNavigationManager navigation_manager(web_contents(), new_url);
   // Use ExecuteScriptAsync because a ping may arrive before the script
@@ -1114,7 +1116,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   PrepContentsForBeforeUnloadTest(web_contents());
 
   // Start a renderer-initiated navigation in the middle frame.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL new_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
   TestNavigationManager navigation_manager(web_contents(), new_url);
   // Use ExecuteScriptAsync because a ping may arrive before the script
@@ -1182,7 +1184,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBeforeUnloadBrowserTest,
   PrepContentsForBeforeUnloadTest(web_contents());
 
   // Navigate the main frame.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL new_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), new_url));
 
@@ -2821,21 +2823,16 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
   EXPECT_EQ(0, process->get_media_stream_count_for_testing());
 }
 
-#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
-// ChromeOS and Linux failures are tracked in https://crbug.com/954217
-#define MAYBE_VisibilityScrolledOutOfView DISABLED_VisibilityScrolledOutOfView
-#else
-#define MAYBE_VisibilityScrolledOutOfView VisibilityScrolledOutOfView
-#endif
 // Test that a frame is visible/hidden depending on its WebContents visibility
 // state.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest,
-                       MAYBE_VisibilityScrolledOutOfView) {
+                       DISABLED_VisibilityScrolledOutOfView) {
   GURL main_frame(embedded_test_server()->GetURL("/iframe_out_of_view.html"));
   GURL child_url(embedded_test_server()->GetURL("/hello.html"));
 
   // This will set up the page frame tree as A(A1()).
   ASSERT_TRUE(NavigateToURL(shell(), main_frame));
+  // TODO(crbug.com/954217): Re-enable this test
   FrameTreeNode* root = web_contents()->GetPrimaryFrameTree().root();
   FrameTreeNode* nested_iframe_node = root->child_at(0);
   EXPECT_TRUE(NavigateToURLFromRenderer(nested_iframe_node, child_url));
@@ -4390,7 +4387,9 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplBrowserTest, WebUiReloadAfterCrash) {
   // Execute script in an isolated world to avoid causing a Trusted Types
   // violation due to eval.
   EXPECT_EQ("Graphics Feature Status",
-            EvalJs(main_document, "document.querySelector('h3').textContent",
+            EvalJs(main_document,
+                   "document.querySelector('info-view').shadowRoot"
+                   ".querySelector('h3').textContent",
                    EXECUTE_SCRIPT_DEFAULT_OPTIONS, /*world_id=*/1));
 }
 
@@ -5362,7 +5361,7 @@ class RenderFrameHostImplBrowserTestWithRestrictedApis
     RenderFrameHostImplBrowserTest::SetUpCommandLine(command_line);
 
     mock_cert_verifier_.SetUpCommandLine(command_line);
-    command_line->AppendSwitchASCII(switches::kRestrictedApiOrigins,
+    command_line->AppendSwitchASCII(switches::kIsolatedAppOrigins,
                                     std::string("https://") + kAppHost);
   }
 
@@ -6386,7 +6385,7 @@ class RenderFrameHostImplAnonymousIframeBrowserTest
 };
 
 // This test checks that the initial empty document in an anonymous iframe whose
-// parent document is not anonymous is also not anonymous.
+// parent document is not anonymous is anonymous.
 IN_PROC_BROWSER_TEST_F(RenderFrameHostImplAnonymousIframeBrowserTest,
                        InitialEmptyDocumentInAnonymousIframe) {
   GURL main_url = embedded_test_server()->GetURL("/title1.html");
@@ -6402,14 +6401,14 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplAnonymousIframeBrowserTest,
   WaitForLoadStop(web_contents());
 
   EXPECT_FALSE(main_rfh->anonymous());
-  EXPECT_EQ(false, EvalJs(main_rfh, "window.anonymous"));
+  EXPECT_EQ(false, EvalJs(main_rfh, "window.isAnonymouslyFramed"));
   EXPECT_FALSE(main_rfh->storage_key().nonce().has_value());
 
   EXPECT_EQ(1U, main_rfh->child_count());
   EXPECT_TRUE(main_rfh->child_at(0)->anonymous());
   EXPECT_FALSE(main_rfh->child_at(0)->current_frame_host()->anonymous());
-  EXPECT_EQ(false, EvalJs(main_rfh->child_at(0)->current_frame_host(),
-                          "window.anonymous"));
+  EXPECT_EQ(true, EvalJs(main_rfh->child_at(0)->current_frame_host(),
+                         "window.isAnonymouslyFramed"));
   EXPECT_FALSE(main_rfh->child_at(0)
                    ->current_frame_host()
                    ->storage_key()
@@ -6514,7 +6513,7 @@ IN_PROC_BROWSER_TEST_F(RenderFrameHostImplAnonymousIframeNikBrowserTest,
     EXPECT_EQ(1U, main_rfh->child_count());
     RenderFrameHostImpl* iframe = main_rfh->child_at(0)->current_frame_host();
     EXPECT_EQ(anonymous, iframe->anonymous());
-    EXPECT_EQ(anonymous, EvalJs(iframe, "window.anonymous"));
+    EXPECT_EQ(anonymous, EvalJs(iframe, "window.isAnonymouslyFramed"));
 
     ResetNetworkState();
 
@@ -6716,7 +6715,7 @@ IN_PROC_BROWSER_TEST_F(
   PrepContentsForBeforeUnloadTest(web_contents());
 
   // Navigate the main frame.
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(web_contents());
   GURL new_url(embedded_test_server()->GetURL("c.com", "/title1.html"));
   EXPECT_TRUE(NavigateToURL(shell(), new_url));
 
@@ -6852,5 +6851,183 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostImplBrowserTestWithStoragePartitioning,
               grandchild_rfh_2->storage_key());
   }
 }
+
+// Tests for clearing window.name on cross-site cross-BrowsingInstance
+// navigations, with swapping BrowsingContextState and clearing window.name both
+// enabled and disabled.
+class RenderFrameHostImplBrowsingContextStateNameTest
+    : public RenderFrameHostImplBrowserTest,
+      public testing::WithParamInterface<testing::tuple<bool, bool>> {
+ public:
+  // Provides meaningful param names instead of /0, /1, ...
+  static std::string DescribeParams(
+      const testing::TestParamInfo<ParamType>& info) {
+    auto [enable_browsing_context_state_swap, disable_frame_name_update] =
+        info.param;
+    return base::StringPrintf(
+        "%s_%s",
+        enable_browsing_context_state_swap
+            ? "NewBrowsingContextStateOnBrowsingContextGroupSwap"
+            : "LegacyOneToOneWithFrameTreeNode",
+        disable_frame_name_update
+            ? "DisableFrameNameUpdateOnNonCurrentRenderFrameHost"
+            : "EnableFrameNameUpdateOnNonCurrentRenderFrameHost");
+  }
+
+ protected:
+  void SetUp() override {
+    if (testing::get<0>(GetParam())) {
+      browsing_context_state_feature_list_.InitAndEnableFeature(
+          features::kNewBrowsingContextStateOnBrowsingContextGroupSwap);
+    } else {
+      browsing_context_state_feature_list_.InitAndDisableFeature(
+          features::kNewBrowsingContextStateOnBrowsingContextGroupSwap);
+    }
+
+    if (testing::get<1>(GetParam())) {
+      disable_name_update_feature_list_.InitAndEnableFeature(
+          features::kDisableFrameNameUpdateOnNonCurrentRenderFrameHost);
+    } else {
+      disable_name_update_feature_list_.InitAndDisableFeature(
+          features::kDisableFrameNameUpdateOnNonCurrentRenderFrameHost);
+    }
+
+    RenderFrameHostImplBrowserTest::SetUp();
+  }
+
+ private:
+  base::test::ScopedFeatureList browsing_context_state_feature_list_;
+  base::test::ScopedFeatureList disable_name_update_feature_list_;
+};
+
+// Test that, when the RenderFrameHostImpl is in the BackForwardCache, the
+// name update is blocked if kDisableFrameNameUpdateOnNonCurrentRenderFrameHost
+// is enabled
+//
+// TODO(crbug.com/1326943): Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_BlockNameUpdateForBackForwardCache \
+  DISABLED_BlockNameUpdateForBackForwardCache
+#else
+#define MAYBE_BlockNameUpdateForBackForwardCache \
+  BlockNameUpdateForBackForwardCache
+#endif  // BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_P(RenderFrameHostImplBrowsingContextStateNameTest,
+                       MAYBE_BlockNameUpdateForBackForwardCache) {
+  // Create the RenderFrameHost and store it in the BackForwardCache.
+  GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  RenderFrameHostImpl* render_frame_host = web_contents()->GetMainFrame();
+  EXPECT_TRUE(ExecJs(render_frame_host, "window.name = 'page_name';"));
+  EXPECT_TRUE(ExecJs(render_frame_host, "window.name == 'page_name';"));
+  EXPECT_EQ(render_frame_host->browsing_context_state()->frame_name(),
+            "page_name");
+  EXPECT_EQ(render_frame_host->browsing_context_state()
+                ->current_replication_state()
+                .unique_name,
+            "");
+
+  // Update the name using a pagehide handler to ensure that it occurs while the
+  // RenderFrameHost is in the BackForwardCache. This typically shouldn't occur
+  // and the name update should therefore be blocked.
+  EXPECT_TRUE(ExecJs(
+      render_frame_host,
+      "window.onpagehide = function() { window.name = 'unused_name'; }"));
+
+  // Navigate so that the current RenderFrameHost is cached.
+  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  EXPECT_TRUE(render_frame_host->IsInBackForwardCache());
+
+  std::string frame_name =
+      render_frame_host->browsing_context_state()->frame_name();
+  std::string unique_name = render_frame_host->browsing_context_state()
+                                ->current_replication_state()
+                                .unique_name;
+
+  if (base::FeatureList::IsEnabled(
+          features::kDisableFrameNameUpdateOnNonCurrentRenderFrameHost)) {
+    // Verify that the frame name and unique name haven't been changed, even
+    // though a name change was triggered by the Javascript.
+    EXPECT_EQ(frame_name, "page_name");
+    EXPECT_EQ(unique_name, "");
+  } else {
+    // Verify that the frame name and unique name have been changed, as we are
+    // not disabling the update.
+    EXPECT_EQ(frame_name, "unused_name");
+    EXPECT_EQ(unique_name, "");
+  }
+}
+
+// Test that, when the RenderFrameHostImpl is in a pending delete state, the
+// name update is blocked if kDisableFrameNameUpdateOnNonCurrentRenderFrameHost
+// is enabled
+//
+// TODO(https://crbug.com/1326944): Flaky on Mac.
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_BlockNameUpdateForPendingDelete \
+  DISABLED_BlockNameUpdateForPendingDelete
+#else
+#define MAYBE_BlockNameUpdateForPendingDelete BlockNameUpdateForPendingDelete
+#endif  // BUILDFLAG(IS_MAC)
+IN_PROC_BROWSER_TEST_P(RenderFrameHostImplBrowsingContextStateNameTest,
+                       MAYBE_BlockNameUpdateForPendingDelete) {
+  // Disable BackForwardCache so that a pending delete state can be forced.
+  web_contents()->GetController().GetBackForwardCache().DisableForTesting(
+      content::BackForwardCache::TEST_USES_UNLOAD_EVENT);
+
+  // Create the RenderFrameHost and mark it as a pending delete.
+  GURL url_a(embedded_test_server()->GetURL("a.com", "/title1.html"));
+  GURL url_b(embedded_test_server()->GetURL("b.com", "/title2.html"));
+
+  EXPECT_TRUE(NavigateToURL(shell(), url_a));
+  RenderFrameHostImpl* render_frame_host = web_contents()->GetMainFrame();
+  LeaveInPendingDeletionState(render_frame_host);
+  EXPECT_TRUE(ExecJs(render_frame_host, "window.name = 'page_name';"));
+  EXPECT_TRUE(ExecJs(render_frame_host, "window.name == 'page_name';"));
+  EXPECT_EQ(render_frame_host->browsing_context_state()->frame_name(),
+            "page_name");
+  EXPECT_EQ(render_frame_host->browsing_context_state()
+                ->current_replication_state()
+                .unique_name,
+            "");
+
+  // Update the name using an unload handler to ensure that it occurs while the
+  // RenderFrameHost is in a pending delete state. This typically shouldn't
+  // occur and the name update should therefore be blocked.
+  EXPECT_TRUE(
+      ExecJs(render_frame_host,
+             "window.onunload = function() { window.name = 'unused_name'; }"));
+
+  // Navigate so that the current RenderFrameHost is marked as pending delete.
+  EXPECT_TRUE(NavigateToURL(shell(), url_b));
+  EXPECT_TRUE(render_frame_host->IsPendingDeletion());
+
+  std::string frame_name =
+      render_frame_host->browsing_context_state()->frame_name();
+  std::string unique_name = render_frame_host->browsing_context_state()
+                                ->current_replication_state()
+                                .unique_name;
+
+  if (base::FeatureList::IsEnabled(
+          features::kDisableFrameNameUpdateOnNonCurrentRenderFrameHost)) {
+    // Verify that the frame name and unique name haven't been changed, even
+    // though a name change was triggered by the Javascript.
+    EXPECT_EQ(frame_name, "page_name");
+    EXPECT_EQ(unique_name, "");
+  } else {
+    // Verify that the frame name and unique name have been changed, as we are
+    // not disabling the update.
+    EXPECT_EQ(frame_name, "unused_name");
+    EXPECT_EQ(unique_name, "");
+  }
+}
+
+INSTANTIATE_TEST_SUITE_P(
+    All,
+    RenderFrameHostImplBrowsingContextStateNameTest,
+    testing::Combine(testing::Bool(), testing::Bool()),
+    RenderFrameHostImplBrowsingContextStateNameTest::DescribeParams);
 
 }  // namespace content

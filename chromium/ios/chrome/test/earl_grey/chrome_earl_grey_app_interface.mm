@@ -5,8 +5,10 @@
 #import "ios/chrome/test/earl_grey/chrome_earl_grey_app_interface.h"
 
 #include "base/command_line.h"
+#include "base/files/file_util.h"
 #import "base/ios/ios_util.h"
 #include "base/json/json_string_value_serializer.h"
+#include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
 #import "base/test/ios/wait_util.h"
 #include "base/test/scoped_feature_list.h"
@@ -31,6 +33,7 @@
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/default_promo/default_browser_utils.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
+#import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/thumb_strip/thumb_strip_feature.h"
 #import "ios/chrome/browser/ui/ui_feature_flags.h"
@@ -707,6 +710,14 @@ NSString* SerializedValue(const base::Value* value) {
     return testing::NSErrorWithLocalizedDescription(
         @"Fail to purge cached web view pages.");
   }
+
+  // Attempt to deflake WebKit sometimes still holding on to the browser cache
+  // with a larger hammer.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::FilePath library_dir = base::mac::GetUserLibraryPath();
+  base::FilePath webkit_cache_dir = library_dir.Append("WebKit");
+  DeletePathRecursively(webkit_cache_dir);
+
   web_state->SetWebUsageEnabled(true);
   web_state->GetNavigationManager()->LoadIfNecessary();
 
@@ -985,7 +996,7 @@ NSString* SerializedValue(const base::Value* value) {
       web::GetMainFrame(chrome_test_util::GetCurrentWebState());
 
   if (web_frame) {
-    std::string script = base::SysNSStringToUTF8(javaScript);
+    std::u16string script = base::SysNSStringToUTF16(javaScript);
     web_frame->ExecuteJavaScript(
         script, base::BindOnce(^(const base::Value* value, bool error) {
           handlerCalled = true;
@@ -1108,11 +1119,6 @@ NSString* SerializedValue(const base::Value* value) {
   return base::ios::IsMultipleScenesSupported();
 }
 
-+ (BOOL)isContextMenuInWebViewEnabled {
-  return base::FeatureList::IsEnabled(
-      web::features::kWebViewNativeContextMenuPhase2);
-}
-
 + (BOOL)isNewOverflowMenuEnabled {
   return IsNewOverflowMenuEnabled();
 }
@@ -1124,6 +1130,10 @@ NSString* SerializedValue(const base::Value* value) {
 + (BOOL)isThumbstripEnabledForWindowWithNumber:(int)windowNumber {
   return ShowThumbStripInTraitCollection(
       [self windowWithNumber:windowNumber].traitCollection);
+}
+
++ (BOOL)isWebChannelsEnabled {
+  return base::FeatureList::IsEnabled(kEnableWebChannels);
 }
 
 #pragma mark - ContentSettings

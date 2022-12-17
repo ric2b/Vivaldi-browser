@@ -62,9 +62,8 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     interface ContextualSearchPromoHost extends ContextualSearchPanelSectionHost {
         /**
          * Notifies that the user has opted in.
-         * @param wasMandatory Whether the Promo was mandatory.
          */
-        void onPromoOptIn(boolean wasMandatory);
+        void onPromoOptIn();
 
         /**
          * Notifies that the user has opted out.
@@ -199,9 +198,9 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     public SceneOverlayLayer getUpdatedSceneOverlayTree(
             RectF viewport, RectF visibleViewport, ResourceManager resourceManager, float yOffset) {
         super.getUpdatedSceneOverlayTree(viewport, visibleViewport, resourceManager, yOffset);
-        mSceneLayer.update(resourceManager, this, getSearchBarControl(), getBarBannerControl(),
-                getPromoControl(), getRelatedSearchesInBarControl(),
-                getRelatedSearchesInContentControl(), getImageControl());
+        mSceneLayer.update(resourceManager, this, getSearchBarControl(), getPromoControl(),
+                getRelatedSearchesInBarControl(), getRelatedSearchesInContentControl(),
+                getImageControl());
 
         return mSceneLayer;
     }
@@ -247,25 +246,12 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         mPanelMetrics.onPanelStateChanged(
                 fromState, toState, reason, Profile.getLastUsedRegularProfile());
 
-        if (toState == PanelState.PEEKED
-                && (fromState == PanelState.CLOSED || fromState == PanelState.UNDEFINED)) {
-            // If the Bar Banner is visible, it should animate when the SearchBar peeks.
-            if (getBarBannerControl().isVisible()) {
-                getBarBannerControl().animateAppearance();
-            }
-        }
-
         if (toState == PanelState.CLOSED || toState == PanelState.UNDEFINED) {
             mManagementDelegate.onPanelFinishedShowing();
         }
 
         super.setPanelState(toState, reason);
         mDidStartCollapsing = false;
-    }
-
-    @Override
-    protected boolean isSupportedState(@PanelState int state) {
-        return canDisplayContentInPanel() || state != PanelState.MAXIMIZED;
     }
 
     @Override
@@ -392,7 +378,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         destroyPromoControl();
         destroyInBarRelatedSearchesControl();
         destroyInContentRelatedSearchesControl();
-        destroyBarBannerControl();
         destroySearchBarControl();
     }
 
@@ -418,9 +403,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
 
     @Override
     public void notifyBarTouched(float x) {
-        if (canDisplayContentInPanel()) {
-            getOverlayPanelContent().showContent();
-        }
+        getOverlayPanelContent().showContent();
     }
 
     @Override
@@ -451,12 +434,12 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
 
     @Override
     public float getBarContainerHeight() {
-        return getBarHeight() + getBarBannerControl().getHeightPx();
+        return getBarHeight();
     }
 
     @Override
     protected float getPeekedHeight() {
-        return getBarHeight() + getBarBannerControl().getHeightPeekingPx() * mPxToDp;
+        return getBarHeight();
     }
 
     @Override
@@ -490,7 +473,8 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     }
 
     @Override
-    protected void animatePanelToState(
+    @VisibleForTesting
+    public void animatePanelToState(
             @Nullable @PanelState Integer state, @StateChangeReason int reason, long duration) {
         // If the in bar chip showing animation is running, do not run the new panel animation
         // unless it needs to animate to a different state.
@@ -526,9 +510,9 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
      * @param isActive Whether the promo is active.
      */
     @Override
-    public void setIsPromoActive(boolean isActive, boolean isMandatory) {
+    public void setIsPromoActive(boolean isActive) {
         if (isActive) {
-            getPromoControl().show(isMandatory);
+            getPromoControl().show();
         } else {
             getPromoControl().hide();
         }
@@ -540,28 +524,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     public void clearRelatedSearches() {
         getRelatedSearchesInBarControl().hide();
         getRelatedSearchesInContentControl().hide();
-    }
-
-    /**
-     * Shows the Bar Banner.
-     */
-    public void showBarBanner() {
-        getBarBannerControl().show();
-    }
-
-    /**
-     * Hides the Bar Banner.
-     */
-    public void hideBarBanner() {
-        getBarBannerControl().hide();
-    }
-
-    /**
-     * @return Whether the Bar Banner is visible.
-     */
-    @VisibleForTesting
-    public boolean isBarBannerVisible() {
-        return getBarBannerControl().isVisible();
     }
 
     /**
@@ -862,7 +824,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         getPromoControl().onUpdateFromCloseToPeek(percentage);
         getRelatedSearchesInBarControl().onUpdateFromCloseToPeek(percentage);
         getRelatedSearchesInContentControl().onUpdateFromCloseToPeek(percentage);
-        getBarBannerControl().onUpdateFromCloseToPeek(percentage);
         getSearchBarControl().onUpdateFromCloseToPeek(percentage);
         mDidStartCollapsing = false;
     }
@@ -881,7 +842,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         getPromoControl().onUpdateFromPeekToExpand(percentage);
         getRelatedSearchesInBarControl().onUpdateFromPeekToExpand(percentage);
         getRelatedSearchesInContentControl().onUpdateFromPeekToExpand(percentage);
-        getBarBannerControl().onUpdateFromPeekToExpand(percentage);
         getSearchBarControl().onUpdateFromPeekToExpand(percentage);
     }
 
@@ -892,7 +852,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         getPromoControl().onUpdateFromExpandToMaximize(percentage);
         getRelatedSearchesInBarControl().onUpdateFromExpandToMaximize(percentage);
         getRelatedSearchesInContentControl().onUpdateFromExpandToMaximize(percentage);
-        getBarBannerControl().onUpdateFromExpandToMaximize(percentage);
         getSearchBarControl().onUpdateFromExpandToMaximize(percentage);
     }
 
@@ -906,9 +865,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
         }
         if (getRelatedSearchesInContentControl().isVisible()) {
             getRelatedSearchesInContentControl().invalidate(true);
-        }
-        if (getBarBannerControl().isVisible()) {
-            getBarBannerControl().onResized(this);
         }
 
         // NOTE(pedrosimonetti): We cannot tell where the selection will be after the
@@ -1033,33 +989,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     }
 
     // ============================================================================================
-    // Bar Banner
-    // ============================================================================================
-
-    private ContextualSearchBarBannerControl mBarBannerControl;
-
-    /**
-     * Creates the ContextualSearchBarBannerControl, if needed.
-     */
-    private ContextualSearchBarBannerControl getBarBannerControl() {
-        if (mBarBannerControl == null) {
-            mBarBannerControl = new ContextualSearchBarBannerControl(
-                    this, mContext, mContainerView, mResourceLoader);
-        }
-        return mBarBannerControl;
-    }
-
-    /**
-     * Destroys the ContextualSearchBarBannerControl.
-     */
-    private void destroyBarBannerControl() {
-        if (mBarBannerControl != null) {
-            mBarBannerControl.destroy();
-            mBarBannerControl = null;
-        }
-    }
-
-    // ============================================================================================
     // Promo
     // ============================================================================================
 
@@ -1125,12 +1054,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
                 }
 
                 @Override
-                public void onPromoOptIn(boolean wasMandatory) {
-                    if (wasMandatory) {
-                        getOverlayPanelContent().showContent();
-                        expandPanel(StateChangeReason.OPTIN);
-                    }
-                }
+                public void onPromoOptIn() {}
 
                 @Override
                 public void onPromoOptOut() {
@@ -1320,13 +1244,6 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
     // Panel Content
     // ============================================================================================
 
-    /**
-     * @return Whether the content can be displayed in the panel.
-     */
-    public boolean canDisplayContentInPanel() {
-        return !getPromoControl().isMandatory();
-    }
-
     @Override
     public void onTouchSearchContentViewAck() {
         mHasContentBeenTouched = true;
@@ -1346,7 +1263,7 @@ public class ContextualSearchPanel extends OverlayPanel implements ContextualSea
      * @return Whether the panel content can be displayed in a new tab.
      */
     public boolean canPromoteToNewTab() {
-        return mActivityType == ActivityType.TABBED && canDisplayContentInPanel();
+        return mActivityType == ActivityType.TABBED;
     }
 
     // ============================================================================================

@@ -91,6 +91,7 @@ URLLoaderFactory::URLLoaderFactory(
             params_->isolation_info.request_type());
   DCHECK(!params_->automatically_assign_isolation_info ||
          params_->isolation_info.IsEmpty());
+  DCHECK(cors_url_loader_factory_);
 
   if (!params_->top_frame_id) {
     params_->top_frame_id = base::UnguessableToken::Create();
@@ -323,6 +324,18 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
             url_request.trusted_params->accept_ch_frame_observer));
   }
 
+  // Check for third party cookies being disabled by testing a non-existant
+  // third-party cookie. This will also be false if all cookies are disabled.
+  const auto dummy_cookie = net::CanonicalCookie::Create(
+      GURL("https://does-not-exist./"), "a=n", base::Time::Now(), absl::nullopt,
+      absl::nullopt);
+
+  const bool third_party_cookies_enabled =
+      context_->cookie_manager()->cookie_settings().IsCookieAccessible(
+          *dummy_cookie, GURL("https://also-does-not-exist./"),
+          net::SiteForCookies(net::SchemefulSite(url::Origin())),
+          url::Origin());
+
   auto loader = std::make_unique<URLLoader>(
       *this,
       base::BindOnce(&cors::CorsURLLoaderFactory::DestroyURLLoader,
@@ -333,7 +346,8 @@ void URLLoaderFactory::CreateLoaderAndStartWithSyncClient(
       request_id, keepalive_request_size,
       std::move(keepalive_statistics_recorder), std::move(trust_token_factory),
       std::move(cookie_observer), std::move(url_loader_network_observer),
-      std::move(devtools_observer), std::move(accept_ch_frame_observer));
+      std::move(devtools_observer), std::move(accept_ch_frame_observer),
+      third_party_cookies_enabled);
 
   cors_url_loader_factory_->OnURLLoaderCreated(std::move(loader));
 }

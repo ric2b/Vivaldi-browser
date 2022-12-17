@@ -5,13 +5,13 @@
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_controls.h"
 
 #include "chrome/browser/extensions/extension_context_menu_model.h"
-#include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_button.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_container.h"
 #include "chrome/browser/ui/views/extensions/extensions_toolbar_unittest.h"
 #include "chrome/grit/generated_resources.h"
 #include "content/public/browser/notification_service.h"
 #include "extensions/browser/notification_types.h"
+#include "extensions/common/extension_features.h"
 #include "ui/views/view_utils.h"
 
 class ExtensionsToolbarControlsUnitTest : public ExtensionsToolbarUnitTest {
@@ -38,7 +38,7 @@ class ExtensionsToolbarControlsUnitTest : public ExtensionsToolbarUnitTest {
 
 ExtensionsToolbarControlsUnitTest::ExtensionsToolbarControlsUnitTest() {
   scoped_feature_list_.InitAndEnableFeature(
-      features::kExtensionsMenuAccessControl);
+      extensions_features::kExtensionsMenuAccessControl);
 }
 
 ExtensionsRequestAccessButton*
@@ -161,8 +161,9 @@ TEST_F(ExtensionsToolbarControlsUnitTest,
   // site. Uninstall extension in unit tests is flaky.
 }
 
+// TODO(crbug.com/1321562) Disabled for flakiness.
 TEST_F(ExtensionsToolbarControlsUnitTest,
-       RequestAccessButtonVisibility_NavigationBetweenPages) {
+       DISABLED_RequestAccessButtonVisibility_NavigationBetweenPages) {
   content::WebContentsTester* web_contents_tester =
       AddWebContentsAndGetTester();
   const GURL url_a("http://www.a.com");
@@ -187,8 +188,10 @@ TEST_F(ExtensionsToolbarControlsUnitTest,
   EXPECT_FALSE(IsRequestAccessButtonVisible());
 }
 
-TEST_F(ExtensionsToolbarControlsUnitTest,
-       RequestAccessButtonVisibility_ContextMenuChangesHostPermissions) {
+// TODO(crbug.com/1321562) Disabled for flakiness.
+TEST_F(
+    ExtensionsToolbarControlsUnitTest,
+    DISABLED_RequestAccessButtonVisibility_ContextMenuChangesHostPermissions) {
   content::WebContentsTester* web_contents_tester =
       AddWebContentsAndGetTester();
   const GURL url_a("http://www.a.com");
@@ -238,8 +241,9 @@ TEST_F(ExtensionsToolbarControlsUnitTest,
   }
 }
 
+// TODO(crbug.com/1321562) Disabled for flakiness.
 TEST_F(ExtensionsToolbarControlsUnitTest,
-       RequestAccessButtonVisibility_MultipleExtensions) {
+       DISABLED_RequestAccessButtonVisibility_MultipleExtensions) {
   content::WebContentsTester* web_contents_tester =
       AddWebContentsAndGetTester();
   const GURL url_a("http://www.a.com");
@@ -284,4 +288,21 @@ TEST_F(ExtensionsToolbarControlsUnitTest,
   // TODO(crbug.com/1304959): Remove the only extension that requests access to
   // the current site to verify no extension should have access to the current
   // site. Uninstall extension in unit tests is flaky.
+}
+
+// TODO(crbug.com/3671898): Add a test that checks the correct dialog is open
+// when clicking on request access button.
+
+// Tests that extensions with active tab are not taken into account for the
+// request access button visibility.
+TEST_F(ExtensionsToolbarControlsUnitTest,
+       RequestAccessButtonVisibility_ActiveTabExtensions) {
+  content::WebContentsTester* web_contents_tester =
+      AddWebContentsAndGetTester();
+  const GURL url("http://www.url.com");
+
+  web_contents_tester->NavigateAndCommit(url);
+
+  InstallExtensionWithPermissions("Extension", {"activeTab"});
+  EXPECT_FALSE(IsRequestAccessButtonVisible());
 }

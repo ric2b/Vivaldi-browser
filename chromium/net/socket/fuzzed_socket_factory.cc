@@ -77,14 +77,6 @@ class FailingSSLClientSocket : public SSLClientSocket {
 
   bool GetSSLInfo(SSLInfo* ssl_info) override { return false; }
 
-  void GetConnectionAttempts(ConnectionAttempts* out) const override {
-    out->clear();
-  }
-
-  void ClearConnectionAttempts() override {}
-
-  void AddConnectionAttempts(const ConnectionAttempts& attempts) override {}
-
   int64_t GetTotalReceivedBytes() const override { return 0; }
 
   void GetSSLCertRequestInfo(
@@ -115,7 +107,7 @@ class FailingSSLClientSocket : public SSLClientSocket {
 }  // namespace
 
 FuzzedSocketFactory::FuzzedSocketFactory(FuzzedDataProvider* data_provider)
-    : data_provider_(data_provider), fuzz_connect_result_(true) {}
+    : data_provider_(data_provider) {}
 
 FuzzedSocketFactory::~FuzzedSocketFactory() = default;
 

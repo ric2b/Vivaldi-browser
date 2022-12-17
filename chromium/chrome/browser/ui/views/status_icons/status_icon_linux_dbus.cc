@@ -151,6 +151,7 @@ bool ShouldWriteIconToFile() {
       return true;
     case base::nix::DESKTOP_ENVIRONMENT_OTHER:
     case base::nix::DESKTOP_ENVIRONMENT_CINNAMON:
+    case base::nix::DESKTOP_ENVIRONMENT_DEEPIN:
     case base::nix::DESKTOP_ENVIRONMENT_KDE3:
     case base::nix::DESKTOP_ENVIRONMENT_KDE4:
     case base::nix::DESKTOP_ENVIRONMENT_KDE5:
@@ -515,7 +516,7 @@ void StatusIconLinuxDbus::CleanupIconFile() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   if (!icon_file_.empty()) {
     icon_task_runner_->PostTask(
-        FROM_HERE, (base::BindOnce(base::GetDeletePathRecursivelyCallback(),
-                                   icon_file_.DirName())));
+        FROM_HERE,
+        (base::GetDeletePathRecursivelyCallback(icon_file_.DirName())));
   }
 }

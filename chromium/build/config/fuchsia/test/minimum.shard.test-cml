@@ -6,7 +6,7 @@
   children: [
     {
       name: "build-info-service",
-      url: "fuchsia-pkg://fuchsia.com/build-info-service#meta/build-info.cm"
+      url: "fuchsia-pkg://fuchsia.com/build-info-service#meta/build-info.cm",
     },
     {
       name: "intl_property_manager",
@@ -64,7 +64,6 @@
     },
     {
       protocol: [
-        "fuchsia.boot.ReadOnlyLog",
         "fuchsia.media.ProfileProvider",
         "fuchsia.process.Launcher",
         "fuchsia.sys.Loader",

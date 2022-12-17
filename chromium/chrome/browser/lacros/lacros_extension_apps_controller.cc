@@ -5,6 +5,7 @@
 #include "chrome/browser/lacros/lacros_extension_apps_controller.h"
 
 #include <utility>
+#include <vector>
 
 #include "base/bind.h"
 #include "base/notreached.h"
@@ -17,6 +18,7 @@
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_enable_flow.h"
 #include "chrome/browser/apps/app_service/publishers/extension_apps_util.h"
+#include "chrome/browser/extensions/api/file_browser_handler/file_browser_handler_flow_lacros.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/extensions/extension_util.h"
 #include "chrome/browser/extensions/launch_util.h"
@@ -35,10 +37,23 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/uninstall_reason.h"
+#include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_urls.h"
 #include "ui/base/window_open_disposition.h"
 #include "ui/events/event_constants.h"
+
+namespace {
+
+// Returns true if |launch_params| has all data reqiured by fileBrowserHandler.
+bool CanLaunchWithFileBrowserHandler(
+    const crosapi::mojom::LaunchParams& launch_params) {
+  return launch_params.intent &&
+         launch_params.intent->activity_name.has_value() &&
+         launch_params.intent->files.has_value();
+}
+
+}  // namespace
 
 // static
 std::unique_ptr<LacrosExtensionAppsController>
@@ -285,7 +300,8 @@ void LacrosExtensionAppsController::FinallyLaunch(
   auto params = apps::ConvertCrosapiToLaunchParams(launch_params, profile);
   params.app_id = extension->id();
 
-  if (which_type_.IsChromeApps()) {
+  if (which_type_.IsChromeApps() ||
+      extension_misc::IsQuickOfficeExtension(extension->id())) {
     OpenApplication(profile, std::move(params));
 
     // TODO(https://crbug.com/1225848): Store the resulting instance token,
@@ -294,13 +310,49 @@ void LacrosExtensionAppsController::FinallyLaunch(
     std::move(callback).Run(std::move(result));
 
   } else if (which_type_.IsExtensions()) {
-    // TODO(crbug.com/1275654): Add flow to run extensions. This will involve
-    // an asynchronous step,
-    std::move(callback).Run(std::move(result));
+    // This code path is used only by fileBrowserHandler to open Lacros
+    // extension, and is triggered by user using a Lacros extension to handle
+    // file open. Therefore we check |launch_params| first, and if that passes,
+    // show the (Lacros) browser window, which might not already be open.
+    if (!CanLaunchWithFileBrowserHandler(*launch_params) ||
+        !ShowBrowserForProfile(profile, params)) {
+      // Failure.
+      std::move(callback).Run(std::move(result));
+      return;
+    }
+
+    // Prepare data to be owned by async ExecuteFileBrowserHandlerFlow().
+    std::vector<base::FilePath> entry_paths;
+    std::vector<std::string> mime_types;
+    const std::vector<crosapi::mojom::IntentFilePtr>& intent_files =
+        launch_params->intent->files.value();
+    for (const auto& intent_file : intent_files) {
+      entry_paths.push_back(intent_file->file_path);
+      DCHECK(intent_file->mime_type.has_value());
+      mime_types.push_back(intent_file->mime_type.value());
+    }
+
+    const std::string& task_id = launch_params->intent->activity_name.value();
+    extensions::ExecuteFileBrowserHandlerFlow(
+        profile, extension, task_id, std::move(entry_paths),
+        std::move(mime_types),
+        base::BindOnce(
+            &LacrosExtensionAppsController::OnExecuteFileBrowserHandlerComplete,
+            weak_factory_.GetWeakPtr(), std::move(result),
+            std::move(callback)));
 
   } else {
-    // Unknown case: Just reply with vacuous results (instead of failing) since
-    // the call is over crosapi.
+    NOTREACHED();
     std::move(callback).Run(std::move(result));
   }
+}
+
+void LacrosExtensionAppsController::OnExecuteFileBrowserHandlerComplete(
+    crosapi::mojom::LaunchResultPtr result,
+    LaunchCallback callback,
+    bool /*success*/) {
+  // TODO(https://crbug.com/1225848): Store the resulting instance token,
+  // which will be used to close the instance at a later point in time.
+  result->instance_id = base::UnguessableToken::Create();
+  std::move(callback).Run(std::move(result));
 }

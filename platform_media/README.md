@@ -37,10 +37,8 @@ The media decoding is split into two groups
 ## Subpages
 
 * [**Gpu Channel Manager**][1] : Setting up the IPC channel and initializing the Gpu side
-* [**CoreAudioDemuxer**][2] : Renderer Mac-only audio decoder
 * [**Entry Points**][3] : Platform Media decoding APIs
 * [**Platform Media Pipeline**][4]
-* [**IPCAudioDecoder**][5] : Platform Media WebAudio backend
 * [**IPCDemuxer**][6] : Platform Media container backend
 * [**Linux ffmpeg**][7] : The Proprietary Media solution for Linux
 * [**platform_media**][8] : Layout of the module
@@ -51,10 +49,8 @@ The media decoding is split into two groups
 * [**Renderer decoders**][13] : Platform implementation and the highlevel design of the renderer decoders
 
 [1]: docs/channel_manager.md
-[2]: docs/core_audio_demuxer.md
 [3]: docs/entry_points.md
 [4]: docs/gpu_pipeline.md
-[5]: docs/ipc_audio_decoder.md
 [6]: docs/ipc_demuxer.md
 [7]: docs/linux.md
 [8]: docs/module.md

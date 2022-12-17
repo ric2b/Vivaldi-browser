@@ -16,6 +16,7 @@
 
 namespace ash {
 class DeskTemplate;
+enum class DeskTemplateType;
 }
 
 namespace apps {
@@ -79,9 +80,11 @@ class DeskModel {
   DeskModel& operator=(const DeskModel&) = delete;
   virtual ~DeskModel();
 
-  using GetAllEntriesCallback =
-      base::OnceCallback<void(GetAllEntriesStatus status,
-                              const std::vector<ash::DeskTemplate*>& entries)>;
+  // TODO(crbug.com/1320805): Once DeskSyncBridge is set to support saved desk,
+  // add methods to support operations on both types of templates.
+  using GetAllEntriesCallback = base::OnceCallback<void(
+      GetAllEntriesStatus status,
+      const std::vector<const ash::DeskTemplate*>& entries)>;
   // Returns a vector of entries in the model.
   virtual void GetAllEntries(GetAllEntriesCallback callback) = 0;
 
@@ -137,9 +140,23 @@ class DeskModel {
   virtual std::size_t GetEntryCount() const = 0;
 
   // Gets the maximum number of templates this storage backend could hold.
-  // Adding more templates beyond this limit will result in |kHitMaximumLimit|
+  // Adding more templates beyond this limit will result in `kHitMaximumLimit`
   // error.
   virtual std::size_t GetMaxEntryCount() const = 0;
+
+  // Gets the number of save and recall desks currently saved.
+  virtual std::size_t GetSaveAndRecallDeskEntryCount() const = 0;
+
+  // Gets the number of desk templates currently saved.
+  virtual std::size_t GetDeskTemplateEntryCount() const = 0;
+
+  // Gets the maximum number of save and recall desks entry this storage backend
+  // could hold.
+  virtual std::size_t GetMaxSaveAndRecallDeskEntryCount() const = 0;
+
+  // Gets the maximum number of desk template entry this storage backend
+  // could hold.
+  virtual std::size_t GetMaxDeskTemplateEntryCount() const = 0;
 
   // Returns a vector of desk template UUIDs.
   // This method assumes each implementation has a cache and can return the
@@ -151,6 +168,14 @@ class DeskModel {
 
   // Whether this model is syncing desk templates to server.
   virtual bool IsSyncing() const = 0;
+
+  // Returns another template that shares the same `name` as the template with
+  // the uuid `uuid`. The `uuid` is used to make sure we are not returning the
+  // current entry itself.
+  virtual ash::DeskTemplate* FindOtherEntryWithName(
+      const std::u16string& name,
+      ash::DeskTemplateType type,
+      const base::GUID& uuid) const = 0;
 
   // Observer registration methods. The model will remove all observers upon
   // destruction automatically.
@@ -164,8 +189,8 @@ class DeskModel {
   void RemovePolicyDeskTemplates();
 
  protected:
-  // Finds the admin desk template with the given `uuid`. Returns `nullptr` if
-  // none is found.
+  // Finds the admin desk template with the given `uuid`. Returns `nullptr`
+  // if none is found.
   std::unique_ptr<ash::DeskTemplate> GetAdminDeskTemplateByUUID(
       const std::string& uuid) const;
 

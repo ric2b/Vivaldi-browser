@@ -13,7 +13,6 @@
 #include "base/run_loop.h"
 #include "base/test/scoped_run_loop_timeout.h"
 #include "base/test/task_environment.h"
-#include "base/time/time.h"
 #include "media/audio/clockless_audio_sink.h"
 #include "media/audio/null_audio_sink.h"
 #include "media/base/demuxer.h"
@@ -27,10 +26,6 @@
 #include "media/renderers/audio_renderer_impl.h"
 #include "media/renderers/video_renderer_impl.h"
 #include "testing/gmock/include/gmock/gmock.h"
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/test/platform_pipeline_test_base.h"
-#endif
 
 using ::testing::NiceMock;
 
@@ -58,11 +53,7 @@ extern const char kNullAudioHash[];
 // display or audio device. Both of these devices are simulated since they have
 // little effect on verifying pipeline behavior and allow tests to run faster
 // than real-time.
-class PipelineIntegrationTestBase : public Pipeline::Client
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-        , public PlatformPipelineTestBase
-#endif
-{
+class PipelineIntegrationTestBase : public Pipeline::Client {
  public:
   PipelineIntegrationTestBase();
 
@@ -247,19 +238,11 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   // Return the media start time from |demuxer_|.
   base::TimeDelta GetStartTime();
 
-  std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecodersForTest(
-          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-          MediaLog* media_log,
-          CreateVideoDecodersCB prepend_video_decoders_cb);
-  std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecodersForTest(
-          const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
-          MediaLog* media_log,
-          CreateAudioDecodersCB prepend_audio_decoders_cb);
-
   MOCK_METHOD1(DecryptorAttached, void(bool));
 
   // Pipeline::Client overrides.
   void OnError(PipelineStatus status) override;
+  void OnFallback(PipelineStatus status) override;
   void OnEnded() override;
   MOCK_METHOD1(OnMetadata, void(const PipelineMetadata&));
   MOCK_METHOD2(OnBufferingStateChange,
@@ -277,6 +260,15 @@ class PipelineIntegrationTestBase : public Pipeline::Client
   MOCK_METHOD1(OnAudioPipelineInfoChange, void(const AudioPipelineInfo&));
   MOCK_METHOD1(OnVideoPipelineInfoChange, void(const VideoPipelineInfo&));
   MOCK_METHOD1(OnRemotePlayStateChange, void(MediaStatus::State state));
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  virtual Demuxer* VivaldiCreatePlatformDemuxer(
+      std::unique_ptr<DataSource>& data_source,
+      base::test::TaskEnvironment& task_environment,
+      MediaLog* media_log) {
+    return nullptr;
+  }
+#endif
 
  private:
   // Runs |run_loop| until it is explicitly Quit() by some part of the calling

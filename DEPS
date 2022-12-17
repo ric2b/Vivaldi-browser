@@ -1,7 +1,7 @@
 # DO NOT EDIT EXCEPT FOR LOCAL TESTING.
 
 vars = {
-  "upstream_commit_id": "I20bb8db59029543da89fdc3c91cbce4431fa243b",
+  "upstream_commit_id": "I2c86517abd293003b1fe9850e1ef04c4c858aa6b",
 }
 
 hooks = [
@@ -76,6 +76,7 @@ hooks = [
         'chromium/third_party/blink/renderer/build/scripts',
         'chromium/third_party/blink/tools',  # See http://crbug.com/625877.
         'chromium/third_party/catapult',
+        'chromium/third_party/mako', # Some failures triggered by crrev.com/c/3686969
         'chromium/tools',
     ],
   },

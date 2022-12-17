@@ -46,7 +46,7 @@ bool StubWindow::IsVisible() const {
 
 void StubWindow::PrepareForShutdown() {}
 
-void StubWindow::SetBounds(const gfx::Rect& bounds) {
+void StubWindow::SetBoundsInPixels(const gfx::Rect& bounds) {
   // Even if the pixel bounds didn't change this call to the delegate should
   // still happen. The device scale factor may have changed which effectively
   // changes the bounds.
@@ -54,8 +54,16 @@ void StubWindow::SetBounds(const gfx::Rect& bounds) {
   delegate_->OnBoundsChanged(bounds);
 }
 
-gfx::Rect StubWindow::GetBounds() const {
+gfx::Rect StubWindow::GetBoundsInPixels() const {
   return bounds_;
+}
+
+void StubWindow::SetBoundsInDIP(const gfx::Rect& bounds) {
+  SetBoundsInPixels(delegate_->ConvertRectToPixels(bounds));
+}
+
+gfx::Rect StubWindow::GetBoundsInDIP() const {
+  return delegate_->ConvertRectToDIP(bounds_);
 }
 
 void StubWindow::SetTitle(const std::u16string& title) {}
@@ -107,9 +115,9 @@ void StubWindow::MoveCursorTo(const gfx::Point& location) {}
 
 void StubWindow::ConfineCursorToBounds(const gfx::Rect& bounds) {}
 
-void StubWindow::SetRestoredBoundsInPixels(const gfx::Rect& bounds) {}
+void StubWindow::SetRestoredBoundsInDIP(const gfx::Rect& bounds) {}
 
-gfx::Rect StubWindow::GetRestoredBoundsInPixels() const {
+gfx::Rect StubWindow::GetRestoredBoundsInDIP() const {
   return gfx::Rect();
 }
 

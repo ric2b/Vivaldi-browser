@@ -406,11 +406,6 @@ void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
   target_client_->OnTransferSizeUpdated(transfer_size_diff);
 }
 
-void RequestFilterProxyingURLLoaderFactory::InProgressRequest::
-    OnStartLoadingResponseBody(mojo::ScopedDataPipeConsumerHandle body) {
-  target_client_->OnStartLoadingResponseBody(std::move(body));
-}
-
 void RequestFilterProxyingURLLoaderFactory::InProgressRequest::OnComplete(
     const network::URLLoaderCompletionStatus& status) {
   if (status.error_code != net::OK) {
@@ -1296,4 +1291,5 @@ void RequestFilterProxyingURLLoaderFactory::MaybeRemoveProxy() {
   // Deletes |this|.
   proxies_->RemoveProxy(this);
 }
+
 }  // namespace vivaldi

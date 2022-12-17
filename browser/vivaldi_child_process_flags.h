@@ -16,4 +16,6 @@ void VivaldiAddRendererProcessFlags(content::BrowserContext* browser_context,
 
 void VivaldiAddGpuProcessFlags(base::CommandLine& gpu_command_line);
 
+void VivaldiAddUtilityProcessFlags(base::CommandLine& utility_command_line);
+
 #endif  // BROWSER_VIVALDI_CHILD_PROCESS_FLAGS_H_

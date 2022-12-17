@@ -48,7 +48,7 @@ VERSION_FILE = "VERSION"
 g_archive_inputs = []
 
 
-def BuildVersion(build_dir, vivaldi_version=None, vivaldi_build_version= None):
+def BuildVersion(vivaldi_version=None, vivaldi_build_version= None):
   """Returns the full build version string constructed from information in
   VERSION_FILE.  Any segment not found in that file will default to '0'.
   """
@@ -56,7 +56,10 @@ def BuildVersion(build_dir, vivaldi_version=None, vivaldi_build_version= None):
   minor = 0
   build = 0
   patch = 0
-  for line in open(os.path.join(build_dir, '../../chromium/chrome', VERSION_FILE), 'r'):
+  # The version file is located at the directory ${CHROMIUM_SRC}/chrome.
+  version_file_path = os.path.join(
+      os.path.dirname(__file__), '../../..', VERSION_FILE)
+  for line in open(version_file_path, 'r'):
     line = line.rstrip()
     if line.startswith('MAJOR='):
       major = line[6:]
@@ -67,7 +70,7 @@ def BuildVersion(build_dir, vivaldi_version=None, vivaldi_build_version= None):
     elif line.startswith('PATCH='):
       patch = line[6:]
   if vivaldi_version and vivaldi_build_version:
-    for line in open(os.path.join(build_dir, '../../VIVALDI_VERSION'), 'r'):
+    for line in open(os.path.join(os.path.dirname(__file__),  '../../..', '../..', 'VIVALDI_VERSION'), 'r'):
       line = line.rstrip()
       if line.startswith('VIVALDI_MAJOR='):
         major = line[14:]
@@ -646,7 +649,7 @@ def main(options):
   """Main method that reads input file, creates archive file and writes
   resource input file.
   """
-  current_version = BuildVersion(options.build_dir, vivaldi_version=options.vivaldi_version, vivaldi_build_version= options.vivaldi_build_version)
+  current_version = BuildVersion(vivaldi_version=options.vivaldi_version, vivaldi_build_version= options.vivaldi_build_version)
 
   config = Readconfig(options.input_file, current_version)
 

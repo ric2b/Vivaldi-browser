@@ -40,11 +40,13 @@ class CONTENT_EXPORT RendererSandboxedProcessLauncherDelegateWin
                                               bool is_jit_disabled);
 
   bool PreSpawnTarget(sandbox::TargetPolicy* policy) override;
+  void PostSpawnTarget(base::ProcessHandle process) override;
 
   bool CetCompatible() override;
 
  private:
   const bool renderer_code_integrity_enabled_;
+  const bool renderer_app_container_disabled_;
   bool dynamic_code_can_be_disabled_ = false;
 };
 #endif  // BUILDFLAG(IS_WIN)

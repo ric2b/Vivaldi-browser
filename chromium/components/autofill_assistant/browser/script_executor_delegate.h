@@ -13,6 +13,7 @@
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/details.h"
 #include "components/autofill_assistant/browser/info_box.h"
+#include "components/autofill_assistant/browser/js_flow_devtools_wrapper.h"
 #include "components/autofill_assistant/browser/state.h"
 #include "components/autofill_assistant/browser/tts_button_state.h"
 #include "components/autofill_assistant/browser/user_action.h"
@@ -63,6 +64,10 @@ class ScriptExecutorDelegate {
   virtual password_manager::PasswordChangeSuccessTracker*
   GetPasswordChangeSuccessTracker() = 0;
   virtual content::WebContents* GetWebContents() = 0;
+
+  virtual void SetJsFlowLibrary(const std::string& js_flow_library) = 0;
+  virtual JsFlowDevtoolsWrapper* GetJsFlowDevtoolsWrapper() = 0;
+
   virtual std::string GetEmailAddressForAccessTokenAccount() = 0;
   virtual ukm::UkmRecorder* GetUkmRecorder() = 0;
 
@@ -147,8 +152,12 @@ class ScriptExecutorDelegate {
   // gets attached to the action's response if non empty.
   virtual ProcessedActionStatusDetailsProto& GetLogInfo() = 0;
 
+  // Returns whether or not this instance of Autofill Assistant must use a
+  // backend endpoint to query data.
+  virtual bool MustUseBackendData() const = 0;
+
  protected:
-  virtual ~ScriptExecutorDelegate() {}
+  virtual ~ScriptExecutorDelegate() = default;
 };
 }  // namespace autofill_assistant
 

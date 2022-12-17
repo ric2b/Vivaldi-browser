@@ -8,8 +8,9 @@
 #include <vector>
 
 #include "base/allocator/partition_allocator/page_allocator.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_check.h"
 #include "base/allocator/partition_allocator/random.h"
-#include "base/check_op.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
@@ -136,7 +137,12 @@ void RandomBitCorrelation(int random_bit) {
   if ((mask & (1ULL << random_bit)) == 0)
     return;  // bit is always 0.
 
-#ifdef DEBUG
+#if BUILDFLAG(PA_DCHECK_IS_ON)
+  // Do fewer checks when BUILDFLAG(PA_DCHECK_IS_ON). Exercized code only
+  // changes when the random number generator does, which should be almost
+  // never. However it's expensive to run all the tests. So keep iterations
+  // faster for local development builds, while having the stricter version run
+  // on official build testers.
   constexpr int kHistory = 2;
   constexpr int kRepeats = 1000;
 #else
@@ -184,7 +190,7 @@ void RandomBitCorrelation(int random_bit) {
       // For k=2 probability of Chi^2 < 35 is p=3.338e-9. This condition is
       // tested ~19000 times, so probability of it failing randomly per one
       // base_unittests run is (1 - (1 - p) ^ 19000) ~= 6e-5.
-      CHECK_LE(chi_squared, 35.0);
+      PA_CHECK(chi_squared <= 35.0);
       // If the predictor bit is a fixed 0 or 1 then it makes no sense to
       // repeat the test with a different age.
       if (predictor_bit < 0)
@@ -243,5 +249,31 @@ TEST_RANDOM_BIT(48)
 #endif  // defined(ARCH_CPU_64_BITS)
 
 #undef TEST_RANDOM_BIT
+
+// Checks that we can actually map memory in the requested range.
+// TODO(crbug.com/1318466): Extend to all operating systems once they are fixed.
+#if BUILDFLAG(IS_MAC)
+TEST(PartitionAllocAddressSpaceRandomizationTest, CanMapInAslrRange) {
+  int tries = 0;
+  // This is overly generous, but we really don't want to make the test flaky.
+  constexpr int kMaxTries = 1000;
+
+  for (tries = 0; tries < kMaxTries; tries++) {
+    uintptr_t requested_address = GetRandomPageBase();
+    size_t size = internal::PageAllocationGranularity();
+
+    uintptr_t address = AllocPages(
+        requested_address, size, internal::PageAllocationGranularity(),
+        PageAccessibilityConfiguration::kReadWrite, PageTag::kPartitionAlloc);
+    ASSERT_NE(address, 0u);
+    FreePages(address, size);
+
+    if (address == requested_address)
+      break;
+  }
+
+  EXPECT_LT(tries, kMaxTries);
+}
+#endif  // BUILDFLAG(IS_MAC)
 
 }  // namespace partition_alloc

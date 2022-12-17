@@ -6,13 +6,13 @@
 #define ASH_PUBLIC_CPP_LOGIN_TYPES_H_
 
 #include "ash/components/proximity_auth/public/mojom/auth_type.mojom-forward.h"
-#include "ash/components/security_token_pin/constants.h"
 #include "ash/public/cpp/ash_public_export.h"
 #include "ash/public/cpp/session/user_info.h"
 #include "ash/public/cpp/smartlock_state.h"
 #include "base/callback.h"
 #include "base/time/time.h"
 #include "base/token.h"
+#include "chromeos/components/security_token_pin/constants.h"
 #include "components/account_id/account_id.h"
 
 namespace ash {
@@ -81,6 +81,17 @@ enum class OobeDialogState {
 
   // Showing marketing opt-in screen.
   MARKETING_OPT_IN = 19,
+};
+
+// Modes of the managed device, which is used to update the visibility of
+// license-specific components.
+enum class ManagementDeviceMode {
+  kNone = 0,
+  kChromeEnterprise = 1,
+  kChromeEducation = 2,
+  kKioskSku = 3,
+  kOther = 4,
+  kMaxValue = kOther,
 };
 
 // Supported multi-profile user behavior values.
@@ -163,6 +174,24 @@ struct ASH_PUBLIC_EXPORT EasyUnlockIconInfo {
   // display via a separate EasyUnlockIconsOption update. See
   // LoginScreenClient::HardlockPod.
   bool hardlock_on_click = false;
+};
+
+// Enterprise information about a managed device.
+struct ASH_PUBLIC_EXPORT DeviceEnterpriseInfo {
+  bool operator==(const DeviceEnterpriseInfo& other) const;
+
+  // The name of the entity that manages the device and current account user.
+  //       For standard Dasher domains, this will be the domain name (foo.com).
+  //       For FlexOrgs, this will be the admin's email (user@foo.com).
+  //       For Active Directory or not enterprise enrolled, this will be an
+  //       empty string.
+  std::string enterprise_domain_manager;
+
+  // Whether this is an Active Directory managed enterprise device.
+  bool active_directory_managed = false;
+
+  // Which mode a managed device is enrolled in.
+  ManagementDeviceMode management_device_mode = ManagementDeviceMode::kNone;
 };
 
 // Information of each input method. This is used to populate keyboard layouts
@@ -361,16 +390,16 @@ struct ASH_PUBLIC_EXPORT SecurityTokenPinRequest {
   AccountId account_id;
 
   // Type of the code requested from the user.
-  ash::security_token_pin::CodeType code_type =
-      ash::security_token_pin::CodeType::kPin;
+  chromeos::security_token_pin::CodeType code_type =
+      chromeos::security_token_pin::CodeType::kPin;
 
   // Whether the UI controls that allow user to enter the value should be
   // enabled. MUST be |false| when |attempts_left| is zero.
   bool enable_user_input = true;
 
   // An optional error to be displayed to the user.
-  ash::security_token_pin::ErrorLabel error_label =
-      ash::security_token_pin::ErrorLabel::kNone;
+  chromeos::security_token_pin::ErrorLabel error_label =
+      chromeos::security_token_pin::ErrorLabel::kNone;
 
   // When non-negative, the UI should indicate this number to the user;
   // otherwise must be equal to -1.

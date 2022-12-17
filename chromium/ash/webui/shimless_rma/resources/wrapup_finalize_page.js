@@ -10,8 +10,8 @@ import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_be
 import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {getShimlessRmaService} from './mojo_interface_provider.js';
-import {FinalizationObserverInterface, FinalizationObserverReceiver, FinalizationStatus, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
-import {disableNextButton, enableNextButton, executeThenTransitionState} from './shimless_rma_util.js';
+import {FinalizationError, FinalizationObserverInterface, FinalizationObserverReceiver, FinalizationStatus, ShimlessRmaServiceInterface, StateResult} from './shimless_rma_types.js';
+import {executeThenTransitionState} from './shimless_rma_util.js';
 
 /** @type {!Object<!FinalizationStatus, string>} */
 const finalizationStatusTextKeys = {
@@ -76,8 +76,6 @@ export class WrapupFinalizePage extends WrapupFinalizePageBase {
     super();
     /** @private {ShimlessRmaServiceInterface} */
     this.shimlessRmaService_ = getShimlessRmaService();
-    /** @private {boolean} */
-    this.finalizationComplete_ = false;
     /**
      * Receiver responsible for observing hardware write protection state.
      * @private {?FinalizationObserverReceiver}
@@ -92,38 +90,56 @@ export class WrapupFinalizePage extends WrapupFinalizePageBase {
   /**
    * @param {!FinalizationStatus} status
    * @param {number} progress
+   * @param {!FinalizationError} error
    */
-  onFinalizationUpdated(status, progress) {
-    this.finalizationMessage_ = this.i18n(finalizationStatusTextKeys[status]);
-    this.finalizationComplete_ = status === FinalizationStatus.kComplete ||
+  onFinalizationUpdated(status, progress, error) {
+    const isErrorStatus = status === FinalizationStatus.kFailedBlocking ||
         status === FinalizationStatus.kFailedNonBlocking;
+    const isHardwareWpError =
+        isErrorStatus && error === FinalizationError.kCannotEnableHardwareWp;
 
-    if (this.finalizationComplete_) {
-      enableNextButton(this);
-    } else {
-      disableNextButton(this);
+    this.finalizationMessage_ = this.i18n(
+        isHardwareWpError ? 'finalizePageProgressText' :
+                            finalizationStatusTextKeys[status]);
+
+    if (status === FinalizationStatus.kComplete) {
+      executeThenTransitionState(
+          this, () => this.shimlessRmaService_.finalizationComplete());
+      return;
     }
-    this.shouldShowSpinner_ = status === FinalizationStatus.kInProgress;
-    this.shouldShowRetryButton_ =
-        status === FinalizationStatus.kFailedBlocking ||
-        status === FinalizationStatus.kFailedNonBlocking;
+
+    this.shouldShowSpinner_ =
+        isHardwareWpError || status === FinalizationStatus.kInProgress;
+
+    if (isHardwareWpError) {
+      const dialog = /** @type {!CrDialogElement} */ (
+          this.shadowRoot.querySelector('#hardwareWpDisabledDialog'));
+      dialog.showModal();
+    } else {
+      // For other errors, continue using retry button to handle for now.
+      this.shouldShowRetryButton_ = isErrorStatus;
+    }
   }
 
-  /** @return {!Promise<!StateResult>} */
-  onNextButtonClick() {
-    if (this.finalizationComplete_) {
-      return this.shimlessRmaService_.finalizationComplete();
-    } else {
-      return Promise.reject(new Error('Finalization is not complete.'));
-    }
-  }
-
-  /** @private */
+  /** @protected */
   onRetryFinalizationButtonClicked_() {
     if (!this.shouldShowRetryButton_) {
       console.error('Finalization has not failed.');
       return;
     }
+
+    executeThenTransitionState(
+        this, () => this.shimlessRmaService_.retryFinalization());
+  }
+
+  /**
+   * Handles the try again button on hardwareWpDisabledDialog is clicked.
+   * @protected
+   */
+  onTryAgainButtonClick_() {
+    const dialog = /** @type {!CrDialogElement} */ (
+        this.shadowRoot.querySelector('#hardwareWpDisabledDialog'));
+    dialog.close();
 
     executeThenTransitionState(
         this, () => this.shimlessRmaService_.retryFinalization());

@@ -80,6 +80,7 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   virtual void GetRoutes(
       bool numeric,
       bool ipv6,
+      bool all_tables,
       DBusMethodCallback<std::vector<std::string> /* routes */> callback) = 0;
 
   // Gets information about network status as json.
@@ -91,16 +92,16 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   virtual void GetNetworkInterfaces(
       DBusMethodCallback<std::string> callback) = 0;
 
-  // Runs perf (via quipper) with arguments for |duration| (converted to
-  // seconds) and returns data collected over the passed |file_descriptor|.
+  // Runs perf (via quipper) with |quipper_args| and returns data collected
+  // over the passed |file_descriptor|.
   // |callback| is called on the completion of the D-Bus call.
   // Note that quipper failures may occur after successfully running the D-Bus
   // method. Such errors can be detected by |file_descriptor| and all its
   // duplicates being closed with no data written.
   // This method duplicates |file_descriptor| so it's OK to close the FD without
   // waiting for the result.
-  virtual void GetPerfOutput(base::TimeDelta duration,
-                             const std::vector<std::string>& perf_args,
+  virtual void GetPerfOutput(const std::vector<std::string>& quipper_args,
+                             bool disable_cpu_idle,
                              int file_descriptor,
                              DBusMethodCallback<uint64_t> callback) = 0;
 
@@ -146,7 +147,7 @@ class COMPONENT_EXPORT(DEBUG_DAEMON) DebugDaemonClient
   using KstaledRatioCallback = base::OnceCallback<void(bool)>;
 
   // Sets the kstaled ratio to the provided value, for more information
-  // see chromeos/memory/README.md.
+  // see chromeos/ash/components/memory/README.md.
   virtual void SetKstaledRatio(uint8_t val, KstaledRatioCallback) = 0;
 
   // Called once TestICMP() is complete. Takes an optional string.

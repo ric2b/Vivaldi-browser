@@ -525,6 +525,11 @@ RenderFrameHost* ConvertToRenderFrameHost(WebContents* web_contents);
 void ExecuteScriptAsync(const ToRenderFrameHost& adapter,
                         const std::string& script);
 
+// Same as `content::ExecuteScriptAsync()`, but doesn't send a user gesture to
+// the renderer.
+void ExecuteScriptAsyncWithoutUserGesture(const ToRenderFrameHost& adapter,
+                                          const std::string& script);
+
 // The following methods execute the passed |script| in the specified frame and
 // sets |result| to the value passed to "window.domAutomationController.send" by
 // the executed script. They return true on success, false if the script
@@ -1243,6 +1248,8 @@ class DOMMessageQueue : public NotificationObserver,
   // Constructs a DOMMessageQueue and begins listening for messages from the
   // DOMAutomationController. Do not construct this until the browser has
   // started.
+  // NOTE: Use one of the below constructors if observing messages for a single
+  // WebContents instance.
   DOMMessageQueue();
 
   // Same as the default constructor, but only listens for messages
@@ -1269,17 +1276,25 @@ class DOMMessageQueue : public NotificationObserver,
   // true.  Otherwise (if the queue is empty), returns false.
   [[nodiscard]] bool PopMessage(std::string* message);
 
+  // Returns true if there are currently any messages in the queue.
+  bool HasMessages();
+
   // Overridden NotificationObserver methods.
   void Observe(int type,
                const NotificationSource& source,
                const NotificationDetails& details) override;
 
   // Overridden WebContentsObserver methods.
+  void DomOperationResponse(RenderFrameHost* render_frame_host,
+                            const std::string& json_string) override;
   void PrimaryMainFrameRenderProcessGone(
       base::TerminationStatus status) override;
   void RenderFrameDeleted(RenderFrameHost* render_frame_host) override;
 
  private:
+  // Invoked when a message is received from the DomAutomationController.
+  void OnDomMessageReceived(const std::string& message);
+
   NotificationRegistrar registrar_;
   base::queue<std::string> message_queue_;
   base::OnceClosure quit_closure_;
@@ -1769,7 +1784,7 @@ class TestActivationManager : public WebContentsObserver {
 
   // Set when a matching navigation reaches kBeforeChecks and cleared when the
   // navigation is deleted/finished.
-  NavigationRequest* request_ = nullptr;
+  raw_ptr<NavigationRequest> request_ = nullptr;
 
   // If the navigation is paused in the first or last CommitDeferringCondition
   // (i.e. the one installed by this manager for testing), this will be the

@@ -12,8 +12,6 @@
 
 class PrefRegistrySimple;
 
-class AccountId;
-
 namespace base {
 class FilePath;
 }
@@ -98,6 +96,10 @@ class UserImageManager {
   // Unregisters preference observers before browser process shutdown.
   // Also cancels any profile image download in progress.
   virtual void Shutdown() = 0;
+
+  // Returns true if the user image for the user is managed by
+  // policy and the user is not allowed to change it.
+  virtual bool IsUserImageManaged() const = 0;
 
   // Invoked when an external data reference is set for the user.
   virtual void OnExternalDataSet(const std::string& policy) = 0;

@@ -146,21 +146,6 @@ uint32_t HandleXdgSurfaceConfigureCallback(
   return serial;
 }
 
-struct WaylandXdgSurface {
-  WaylandXdgSurface(std::unique_ptr<XdgShellSurface> shell_surface,
-                    SerialTracker* const serial_tracker)
-      : shell_surface(std::move(shell_surface)),
-        serial_tracker(serial_tracker) {}
-
-  WaylandXdgSurface(const WaylandXdgSurface&) = delete;
-  WaylandXdgSurface& operator=(const WaylandXdgSurface&) = delete;
-
-  std::unique_ptr<XdgShellSurface> shell_surface;
-
-  // Owned by Server, which always outlives this surface.
-  SerialTracker* const serial_tracker;
-};
-
 // Wrapper around shell surface that allows us to handle the case where the
 // xdg surface resource is destroyed before the toplevel resource.
 class WaylandToplevel : public aura::WindowObserver {
@@ -649,9 +634,6 @@ void xdg_surface_get_popup(wl_client* client,
   xdg_popup_send_configure(xdg_popup_resource, position.origin.x(),
                            position.origin.y(), position.size.width(),
                            position.size.height());
-  uint32_t serial = shell_surface_data->serial_tracker->GetNextSerial(
-      SerialTracker::EventType::OTHER_EVENT);
-  xdg_surface_send_configure(resource, serial);
 }
 
 void xdg_surface_set_window_geometry(wl_client* client,
@@ -709,6 +691,8 @@ void xdg_wm_base_get_xdg_surface(wl_client* client,
   // Xdg shell surfaces are initially disabled and needs to be explicitly mapped
   // before they are enabled and can become visible.
   shell_surface->SetEnabled(false);
+
+  shell_surface->SetCapabilities(GetCapabilities(client));
 
   std::unique_ptr<WaylandXdgSurface> wayland_shell_surface =
       std::make_unique<WaylandXdgSurface>(std::move(shell_surface),
@@ -790,6 +774,13 @@ static const struct zxdg_decoration_manager_v1_interface
 };
 
 }  // namespace
+
+WaylandXdgSurface ::WaylandXdgSurface(
+    std::unique_ptr<XdgShellSurface> shell_surface,
+    SerialTracker* const serial_tracker)
+    : shell_surface(std::move(shell_surface)), serial_tracker(serial_tracker) {}
+
+WaylandXdgSurface::~WaylandXdgSurface() = default;
 
 void bind_zxdg_decoration_manager(wl_client* client,
                                   void* data,

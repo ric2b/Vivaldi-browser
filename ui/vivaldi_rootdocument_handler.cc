@@ -109,11 +109,17 @@ VivaldiRootDocumentHandler::DocumentContentsObserver::DocumentContentsObserver(
     content::WebContents* contents)
     : WebContentsObserver(contents), root_doc_handler_(handler) {}
 
-void VivaldiRootDocumentHandler::DocumentContentsObserver::
-    PrimaryMainDocumentElementAvailable() {
-  if (web_contents() == root_doc_handler_->GetWebContents()) {
+void VivaldiRootDocumentHandler::DocumentContentsObserver::DOMContentLoaded(
+    content::RenderFrameHost* render_frame_host) {
+  if (render_frame_host->GetParent()) {
+    // Nothing to do for sub frames here.
+    return;
+  }
+  auto* web_contents = content::WebContents::FromRenderFrameHost(render_frame_host);
+
+  if (web_contents == root_doc_handler_->GetWebContents()) {
     root_doc_handler_->document_loader_is_ready_ = true;
-  } else if (web_contents() == root_doc_handler_->GetOTRWebContents()) {
+  } else if (web_contents == root_doc_handler_->GetOTRWebContents()) {
     root_doc_handler_->otr_document_loader_is_ready_ = true;
   }
   root_doc_handler_->InformObservers();
@@ -167,7 +173,7 @@ void VivaldiRootDocumentHandler::AddObserver(
     VivaldiRootDocumentHandlerObserver* observer) {
   observers_.AddObserver(observer);
 
-  // Check if we already has loaded the document for the same profile and report.
+  // Check if we already loaded the portal-document for the profile and report.
   content::BrowserContext* observercontext =
       observer->GetRootDocumentWebContents()->GetBrowserContext();
   if ((document_loader_is_ready_ &&

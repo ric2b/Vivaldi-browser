@@ -92,6 +92,9 @@ struct RendererContentSettingRules {
   ContentSettingsForOneType popup_redirect_rules;
   ContentSettingsForOneType mixed_content_rules;
   ContentSettingsForOneType auto_dark_content_rules;
+
+  // Vivaldi: No ifdef as this must match content_settings.mojom.
+  ContentSettingsForOneType autoplay_rules;
 };
 
 namespace content_settings {

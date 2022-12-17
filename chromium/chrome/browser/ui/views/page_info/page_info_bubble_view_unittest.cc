@@ -9,6 +9,7 @@
 #include "base/test/values_test_util.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/page_specific_content_settings_delegate.h"
 #include "chrome/browser/history/history_service_factory.h"
@@ -36,6 +37,7 @@
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/content_settings/core/common/pref_names.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/page_info/core/features.h"
 #include "components/permissions/permission_uma_util.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/ukm/test_ukm_recorder.h"
@@ -881,10 +883,14 @@ TEST_F(PageInfoBubbleViewTest, SetPermissionInfoWithPolicySerialPorts) {
 // any extra views to Page Info.
 TEST_F(PageInfoBubbleViewTest, UpdatingSiteDataRetainsLayout) {
 #if BUILDFLAG(IS_WIN) && BUILDFLAG(ENABLE_VR)
-  constexpr size_t kExpectedChildren = 6;
+  size_t kExpectedChildren = 6;
 #else
-  constexpr size_t kExpectedChildren = 5;
+  size_t kExpectedChildren = 5;
 #endif
+  if (page_info::IsAboutThisSiteFeatureEnabled(
+          g_browser_process->GetApplicationLocale())) {
+    ++kExpectedChildren;
+  }
 
   EXPECT_EQ(kExpectedChildren, api_->current_view()->children().size());
 
@@ -923,7 +929,7 @@ TEST_F(PageInfoBubbleViewTest, OpenPageInfoBubbleAfterNavigationStart) {
   std::unique_ptr<content::NavigationSimulator> navigation =
       content::NavigationSimulator::CreateRendererInitiated(
           GURL(kSecureUrl),
-          web_contents_helper_->web_contents()->GetMainFrame());
+          web_contents_helper_->web_contents()->GetPrimaryMainFrame());
   navigation->Start();
   api_->CreateView();
   EXPECT_EQ(kHostname, api_->GetWindowTitle());
@@ -987,7 +993,7 @@ TEST_F(PageInfoBubbleViewTest, CertificateButtonShowsEvCertDetails) {
   std::unique_ptr<content::NavigationSimulator> navigation =
       content::NavigationSimulator::CreateRendererInitiated(
           GURL(kSecureUrl),
-          web_contents_helper_->web_contents()->GetMainFrame());
+          web_contents_helper_->web_contents()->GetPrimaryMainFrame());
   navigation->Start();
   api_->CreateView();
 
@@ -1037,7 +1043,7 @@ TEST_F(PageInfoBubbleViewTest, EvDetailsShowForCertWithStateButNoLocality) {
   std::unique_ptr<content::NavigationSimulator> navigation =
       content::NavigationSimulator::CreateRendererInitiated(
           GURL(kSecureUrl),
-          web_contents_helper_->web_contents()->GetMainFrame());
+          web_contents_helper_->web_contents()->GetPrimaryMainFrame());
   navigation->Start();
   api_->CreateView();
 

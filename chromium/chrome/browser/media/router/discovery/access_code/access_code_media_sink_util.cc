@@ -115,7 +115,7 @@ CreateAccessCodeMediaSink(const DiscoveryDevice& discovery_device) {
   }
   extra_data.capabilities =
       ConvertDeviceCapabilitiesToInt(discovery_device.device_capabilities());
-  extra_data.discovered_by_access_code = true;
+  extra_data.discovery_type = CastDiscoveryType::kAccessCodeManualEntry;
 
   const std::string& processed_uuid =
       MediaSinkInternal::ProcessDeviceUUID(unique_id);
@@ -190,7 +190,7 @@ absl::optional<MediaSinkInternal> ParseValueDictIntoMediaSinkInternal(
   CastSinkExtraData extra_data;
   extra_data.ip_endpoint = net::IPEndPoint(ip_address, port.value());
   extra_data.capabilities = capabilities.value();
-  extra_data.discovered_by_access_code = true;
+  extra_data.discovery_type = CastDiscoveryType::kAccessCodeRememberedDevice;
 
   const auto* sink_dict = value_dict.FindDict(kSinkDictKey);
   if (!sink_dict)
@@ -211,6 +211,43 @@ absl::optional<MediaSinkInternal> ParseValueDictIntoMediaSinkInternal(
   cast_sink.set_cast_data(extra_data);
 
   return cast_sink;
+}
+
+AccessCodeCastAddSinkResult AddSinkResultMetricsHelper(
+    AddSinkResultCode value) {
+  switch (value) {
+    case AddSinkResultCode::UNKNOWN_ERROR:
+      return AccessCodeCastAddSinkResult::kUnknownError;
+    case AddSinkResultCode::OK:
+      return AccessCodeCastAddSinkResult::kOk;
+    case AddSinkResultCode::AUTH_ERROR:
+      return AccessCodeCastAddSinkResult::kAuthError;
+    case AddSinkResultCode::HTTP_RESPONSE_CODE_ERROR:
+      return AccessCodeCastAddSinkResult::kHttpResponseCodeError;
+    case AddSinkResultCode::RESPONSE_MALFORMED:
+      return AccessCodeCastAddSinkResult::kResponseMalformed;
+    case AddSinkResultCode::EMPTY_RESPONSE:
+      return AccessCodeCastAddSinkResult::kEmptyResponse;
+    case AddSinkResultCode::INVALID_ACCESS_CODE:
+      return AccessCodeCastAddSinkResult::kInvalidAccessCode;
+    case AddSinkResultCode::ACCESS_CODE_NOT_FOUND:
+      return AccessCodeCastAddSinkResult::kAccessCodeNotFound;
+    case AddSinkResultCode::TOO_MANY_REQUESTS:
+      return AccessCodeCastAddSinkResult::kTooManyRequests;
+    case AddSinkResultCode::SERVICE_NOT_PRESENT:
+      return AccessCodeCastAddSinkResult::kServiceNotPresent;
+    case AddSinkResultCode::SERVER_ERROR:
+      return AccessCodeCastAddSinkResult::kServerError;
+    case AddSinkResultCode::SINK_CREATION_ERROR:
+      return AccessCodeCastAddSinkResult::kSinkCreationError;
+    case AddSinkResultCode::CHANNEL_OPEN_ERROR:
+      return AccessCodeCastAddSinkResult::kChannelOpenError;
+    case AddSinkResultCode::PROFILE_SYNC_ERROR:
+      return AccessCodeCastAddSinkResult::kProfileSyncError;
+    default:
+      NOTREACHED();
+      return AccessCodeCastAddSinkResult::kUnknownError;
+  }
 }
 
 }  // namespace media_router

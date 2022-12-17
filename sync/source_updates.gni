@@ -25,6 +25,10 @@ update_target("//components/sync/base:base") {
     "//vivaldi/sync/vivaldi_prefs_names.h",
     "//vivaldi/sync/vivaldi_sync_utils.cc",
   ]
+
+  deps += [
+    "//vivaldi/prefs:prefs_files_generator",
+  ]
 }
 
 update_target("//components/sync_sessions:sync_sessions") {

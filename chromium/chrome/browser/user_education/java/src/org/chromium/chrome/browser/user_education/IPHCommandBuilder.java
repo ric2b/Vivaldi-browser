@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
 import org.chromium.base.TraceEvent;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.components.browser_ui.widget.highlight.ViewHighlighter.HighlightParams;
 import org.chromium.components.browser_ui.widget.textbubble.TextBubble;
 import org.chromium.ui.widget.AnchoredPopupWindow;
@@ -207,6 +208,14 @@ public class IPHCommandBuilder {
      * @return an (@see IPHCommand) containing the accumulated state of this builder.
      */
     public IPHCommand build() {
+        if (!ChromeFeatureList.isEnabled(ChromeFeatureList.ENABLE_IPH)) {
+            return null;
+        }
+
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_SCROLL_OPTIMIZATIONS)) {
+            return buildLazy();
+        }
+
         try (TraceEvent te = TraceEvent.scoped("IPHCommandBuilder::build")) {
             if (mOnDismissCallback == null) {
                 mOnDismissCallback = NO_OP_RUNNABLE;
@@ -238,6 +247,26 @@ public class IPHCommandBuilder {
             return new IPHCommand(mFeatureName, mContentString, mAccessibilityText, mDismissOnTouch,
                     mAnchorView, mOnDismissCallback, mOnShowCallback, mOnBlockedCallback,
                     mInsetRect, mAutoDismissTimeout, mViewRectProvider, mHighlightParams,
+                    mAnchorRect, mRemoveArrow, mPreferredVerticalOrientation);
+        }
+    }
+
+    public IPHCommand buildLazy() {
+        try (TraceEvent te = TraceEvent.scoped("IPHCommandBuilder::buildLazy")) {
+            if (mOnDismissCallback == null) {
+                mOnDismissCallback = NO_OP_RUNNABLE;
+            }
+            if (mOnShowCallback == null) {
+                mOnShowCallback = NO_OP_RUNNABLE;
+            }
+
+            if (mOnBlockedCallback == null) {
+                mOnBlockedCallback = NO_OP_RUNNABLE;
+            }
+
+            return new IPHCommand(mResources, mFeatureName, mStringId, mAccessibilityStringId,
+                    mDismissOnTouch, mAnchorView, mOnDismissCallback, mOnShowCallback,
+                    mOnBlockedCallback, mAutoDismissTimeout, mViewRectProvider, mHighlightParams,
                     mAnchorRect, mRemoveArrow, mPreferredVerticalOrientation);
         }
     }

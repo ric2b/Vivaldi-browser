@@ -273,40 +273,59 @@ jlong FeedStream::GetLastFetchTimeMs(
   return feed_stream_api_->GetLastFetchTime(GetStreamType()).ToDoubleT() * 1000;
 }
 
-void FeedStream::ReportNoticeCreated(JNIEnv* env,
-                                     const JavaParamRef<jobject>& obj,
-                                     const JavaParamRef<jstring>& key) {
+void FeedStream::ReportInfoCardTrackViewStarted(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    int info_card_type) {
   if (!feed_stream_api_)
     return;
-  feed_stream_api_->ReportNoticeCreated(
-      GetStreamType(), base::android::ConvertJavaStringToUTF8(env, key));
+  feed_stream_api_->ReportInfoCardTrackViewStarted(GetStreamType(),
+                                                   info_card_type);
 }
 
-void FeedStream::ReportNoticeViewed(JNIEnv* env,
-                                    const JavaParamRef<jobject>& obj,
-                                    const JavaParamRef<jstring>& key) {
+void FeedStream::ReportInfoCardViewed(JNIEnv* env,
+                                      const JavaParamRef<jobject>& obj,
+                                      int info_card_type,
+                                      int minimum_view_interval_seconds) {
   if (!feed_stream_api_)
     return;
-  feed_stream_api_->ReportNoticeViewed(
-      GetStreamType(), base::android::ConvertJavaStringToUTF8(env, key));
+  feed_stream_api_->ReportInfoCardViewed(GetStreamType(), info_card_type,
+                                         minimum_view_interval_seconds);
 }
 
-void FeedStream::ReportNoticeOpenAction(JNIEnv* env,
-                                        const JavaParamRef<jobject>& obj,
-                                        const JavaParamRef<jstring>& key) {
-  if (!feed_stream_api_)
-    return;
-  feed_stream_api_->ReportNoticeOpenAction(
-      GetStreamType(), base::android::ConvertJavaStringToUTF8(env, key));
-}
-
-void FeedStream::ReportNoticeDismissed(JNIEnv* env,
+void FeedStream::ReportInfoCardClicked(JNIEnv* env,
                                        const JavaParamRef<jobject>& obj,
-                                       const JavaParamRef<jstring>& key) {
+                                       int info_card_type) {
   if (!feed_stream_api_)
     return;
-  feed_stream_api_->ReportNoticeDismissed(
-      GetStreamType(), base::android::ConvertJavaStringToUTF8(env, key));
+  feed_stream_api_->ReportInfoCardClicked(GetStreamType(), info_card_type);
+}
+
+void FeedStream::ReportInfoCardDismissedExplicitly(
+    JNIEnv* env,
+    const JavaParamRef<jobject>& obj,
+    int info_card_type) {
+  if (!feed_stream_api_)
+    return;
+  feed_stream_api_->ReportInfoCardDismissedExplicitly(GetStreamType(),
+                                                      info_card_type);
+}
+
+void FeedStream::ResetInfoCardStates(JNIEnv* env,
+                                     const JavaParamRef<jobject>& obj,
+                                     int info_card_type) {
+  if (!feed_stream_api_)
+    return;
+  feed_stream_api_->ResetInfoCardStates(GetStreamType(), info_card_type);
+}
+
+void FeedStream::InvalidateContentCacheFor(JNIEnv* env,
+                                           const JavaParamRef<jobject>& obj,
+                                           jint stream_kind) {
+  if (!feed_stream_api_)
+    return;
+  feed_stream_api_->InvalidateContentCacheFor(
+      (static_cast<StreamKind>(stream_kind)));
 }
 
 }  // namespace android

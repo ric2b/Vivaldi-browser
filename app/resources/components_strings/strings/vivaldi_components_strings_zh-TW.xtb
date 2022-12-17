@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />正在嘗試執行 Windows 網路診斷<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">這個網站含有有害程式</translation>
 <translation id="1916770123977586577">如要將你更新過的設定套用到這個網站，請重新載入這個網頁</translation>
+<translation id="1973351931613083086">自動播放</translation>
 <translation id="1974060860693918893">詳細資料</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />檢查代理和防火牆<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">核發對象：<ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">返回</translation>
 <translation id="2539524384386349900">偵測</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> 傳送的回應無效。</translation>
-<translation id="2609632851001447353">變化版本</translation>
 <translation id="2634124572758952069">找不到 <ph name="HOST_NAME" /> 的伺服器 IP位置。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" />，<ph name="CITY" /></translation>
 <translation id="2650446666397867134">存取檔案遭拒</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">攻擊者可能會試圖從 <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> 竊取你的資訊 (例如密碼、郵件或信用卡資料)。<ph name="BEGIN_LEARN_MORE_LINK" />瞭解詳情<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">系統偵測到網路變更。</translation>
 <translation id="2948083400971632585">你可以在設定頁面中為一個連線停用任意代理配置。</translation>
+<translation id="2953943267837858202">不允許自動播放影音</translation>
 <translation id="2991571918955627853">目前無法造訪 <ph name="SITE" />，因為這個網站使用 HSTS。網路錯誤和攻擊行為通常是暫時性的，因此這個網頁可能稍後就會恢復正常狀態。</translation>
 <translation id="3005723025932146533">顯示儲存的複本</translation>
 <translation id="301521992641321250">已自動封鎖</translation>
@@ -60,6 +61,7 @@
 <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">按下重新載入按鈕，重新提交載入網頁所需的資料。</translation>
 <translation id="3234666976984236645">一律偵測這個網站的重要內容</translation>
+<translation id="3291915639428159043">已封鎖的自動播放</translation>
 <translation id="3308738399950580893">廣告</translation>
 <translation id="3422472998109090673">目前無法連上 <ph name="HOST_NAME" />。</translation>
 <translation id="3427092606871434483">允許 (預設)</translation>
@@ -70,6 +72,7 @@
 <translation id="3566021033012934673">你的連線不是私人連線</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" />，<ph name="STATE" />，<ph name="CITY" /></translation>
 <translation id="3586931643579894722">隱藏詳細資訊</translation>
+<translation id="3620979700683094848">網站可以自動播放影音</translation>
 <translation id="3630155396527302611">如果程式已列在允許存取網路的清單中，
 建議您從清單中將其移除，然後再重新加入。</translation>
 <translation id="3658742229777143148">修訂版本</translation>
@@ -81,6 +84,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> 已遭封鎖</translation>
 <translation id="3987940399970879459">小於 1 MB</translation>
 <translation id="4075732493274867456">用戶端和伺服器不支援一般 SSL 通訊協定版本或加密套件。</translation>
+<translation id="410351446219883937">自動播放</translation>
 <translation id="4116663294526079822">永遠允許在這個網站執行</translation>
 <translation id="4130226655945681476">檢查網路線、數據機和路由器</translation>
 <translation id="4151403195736952345">使用全域預設設定 (偵測)</translation>
@@ -146,6 +150,7 @@
 <translation id="6321917430147971392">檢查 DNS 設定</translation>
 <translation id="6328639280570009161">建議停用網路預測功能</translation>
 <translation id="6328786501058569169">這是詐欺網站</translation>
+<translation id="6348220984832452017">目前的變更</translation>
 <translation id="6358450015545214790">我需要進一步資訊</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> 拒絕連線。</translation>
 <translation id="6447842834002726250">Cookie</translation>
@@ -164,6 +169,7 @@
 <translation id="7113310725918019676">允許來自 <ph name="DOMAIN" /> 的 <ph name="BLOCKED_TYPE" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> 不符合安全性標準。</translation>
 <translation id="7219179957768738017">這個連線使用 <ph name="SSL_VERSION" />。</translation>
+<translation id="7221855153210829124">顯示通知</translation>
 <translation id="7260504762447901703">撤銷存取權</translation>
 <translation id="7353601530677266744">命令列</translation>
 <translation id="7364115444476960850">您嘗試造訪的網頁已遭 Vivaldi 的 <ph name="BLOCKER_NAME" /> 規則封鎖</translation>
@@ -182,11 +188,13 @@
 <translation id="7758069387465995638">防火牆或防毒軟體可能封鎖了連線。</translation>
 <translation id="7800304661137206267">連線採用 <ph name="CIPHER" /> 加密，並設有 <ph name="MAC" /> 訊息驗證及 <ph name="KX" /> 金鑰交換機制。</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> 通常使用加密方式保護您的資訊。但 Vivaldi 這次嘗試連線到 <ph name="SITE" /> 時，該網站傳回了異常且錯誤的憑證。這可能是因為有攻擊者企圖偽裝成 <ph name="SITE" />，或是受到 Wi-Fi 登入畫面影響而造成連線中斷。不過請放心，Vivaldi 已及時停止連線，並未傳輸任何資料，因此您的資訊仍然安全無虞。</translation>
+<translation id="7834693436815575883">已允許的自動播放</translation>
 <translation id="7878562273885520351">你的密碼可能已經外洩</translation>
 <translation id="7951415247503192394">(32 位元)</translation>
 <translation id="8025119109950072390">攻擊者可能會試圖透過這個網站誘使你做一些危險的行為，例如安裝軟體或提供個人資訊 (包括密碼、電話號碼或信用卡資料)。</translation>
 <translation id="8037357227543935929">詢問 (預設)</translation>
 <translation id="8041940743680923270">使用全域預設值 (要求確認)</translation>
+<translation id="8044382196220116469">不允許網站自動播放影音</translation>
 <translation id="808894953321890993">更改密碼</translation>
 <translation id="8119307142152921512">追蹤器及廣告</translation>
 <translation id="8149426793427495338">您的電腦已休眠。</translation>
@@ -204,6 +212,7 @@
 <translation id="8503813439785031346">使用者名稱</translation>
 <translation id="8703575177326907206">你到 <ph name="DOMAIN" /> 的連線未加密。</translation>
 <translation id="8740359287975076522">找不到 <ph name="HOST_NAME" /> 的 &lt;abbr id="dnsDefinition"&gt;DNS位置&lt;/abbr&gt;，正在診斷問題。</translation>
+<translation id="8774017153185436870">網站可能會自動播放影音</translation>
 <translation id="8820817407110198400">書籤</translation>
 <translation id="8940028675168378100">已遭 <ph name="BLOCKER_NAME" /> 封鎖</translation>
 <translation id="8963117664422609631">前往網站設定</translation>
@@ -211,6 +220,7 @@
 <translation id="9008201768610948239">略過</translation>
 <translation id="9025348182339809926">(無效)</translation>
 <translation id="9039213469156557790">此外，這個網頁含有其他不安全的資源。其他人可能會在資源傳輸期間檢視這些資源，攻擊者也可能會修改這些資源，進而變更網頁行為。</translation>
+<translation id="9048224371732578627">允許自動播放影音</translation>
 <translation id="9062620674789239642">檔案可能已遭到移動、編輯或刪除。</translation>
 <translation id="9069693763241529744">依據擴充功能設定封鎖</translation>
 <translation id="9073799351042754113">你已選擇關閉此網站的安全性警告。</translation>

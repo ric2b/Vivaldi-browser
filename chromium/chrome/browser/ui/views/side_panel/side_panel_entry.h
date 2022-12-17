@@ -24,11 +24,14 @@ class SidePanelEntry final {
     // Global Entries
     kReadingList,
     kBookmarks,
+    kHistoryClusters,
     kReadAnything,
     kUserNote,
+    kFeed,
     // Contextual Entries
     kSideSearch,
-    kLens
+    kLens,
+    kAssistant
   };
 
   // TODO(pbos): Add an icon ImageModel here.
@@ -46,9 +49,13 @@ class SidePanelEntry final {
   std::unique_ptr<views::View> GetContent();
   void CacheView(std::unique_ptr<views::View> view);
   void ClearCachedView();
+  views::View* CachedView() {
+    return content_view_ ? content_view_.get() : nullptr;
+  }
 
-  // Called when the entry has been shown in the side panel.
+  // Called when the entry has been shown/hidden in the side panel.
   void OnEntryShown();
+  void OnEntryHidden();
 
   Id id() const { return id_; }
   const std::u16string& name() const { return name_; }
@@ -56,6 +63,10 @@ class SidePanelEntry final {
 
   void AddObserver(SidePanelEntryObserver* observer);
   void RemoveObserver(SidePanelEntryObserver* observer);
+
+  base::WeakPtr<SidePanelEntry> GetWeakPtr() {
+    return weak_factory_.GetWeakPtr();
+  }
 
  private:
   const Id id_;
@@ -67,6 +78,8 @@ class SidePanelEntry final {
       create_content_callback_;
 
   base::ObserverList<SidePanelEntryObserver> observers_;
+
+  base::WeakPtrFactory<SidePanelEntry> weak_factory_{this};
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_SIDE_PANEL_ENTRY_H_

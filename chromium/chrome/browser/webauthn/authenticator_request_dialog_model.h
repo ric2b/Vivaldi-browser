@@ -14,12 +14,14 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
+#include "base/observer_list_types.h"
 #include "base/strings/string_piece.h"
 #include "base/types/strong_alias.h"
 #include "build/build_config.h"
 #include "chrome/browser/webauthn/authenticator_reference.h"
 #include "chrome/browser/webauthn/authenticator_transport.h"
 #include "chrome/browser/webauthn/observable_authenticator_list.h"
+#include "content/public/browser/authenticator_request_client_delegate.h"
 #include "device/fido/fido_constants.h"
 #include "device/fido/fido_request_handler_base.h"
 #include "device/fido/fido_transport_protocol.h"
@@ -124,7 +126,7 @@ class AuthenticatorRequestDialogModel {
 
   // Implemented by the dialog to observe this model and show the UI panels
   // appropriate for the current step.
-  class Observer {
+  class Observer : public base::CheckedObserver {
    public:
     // Called when the user clicks "Try Again" to restart the user flow.
     virtual void OnStartOver() {}
@@ -218,6 +220,24 @@ class AuthenticatorRequestDialogModel {
     CABLE_V1,
     CABLE_V2_SERVER_LINK,
     CABLE_V2_2ND_FACTOR,
+  };
+
+  // ExperimentServerLinkSheet controls the the arms of an experiment to tweak
+  // the behaviour and visibility of buttons on the server-link sheet.
+  enum class ExperimentServerLinkSheet {
+    CONTROL = 1,
+    ARM_2 = 2,
+    ARM_3 = 3,
+    ARM_4 = 4,
+    ARM_5 = 5,
+    ARM_6 = 6,
+  };
+
+  // ExperimentServerLinkTitle enumerates the arms of an experiment to tweak the
+  // title on the server-link sheet.
+  enum class ExperimentServerLinkTitle {
+    CONTROL = 11,
+    UNLOCK_YOUR_PHONE = 12,
   };
 
   explicit AuthenticatorRequestDialogModel(const std::string& relying_party_id);
@@ -425,6 +445,10 @@ class AuthenticatorRequestDialogModel {
 
   void SetRequestCallback(RequestCallback request_callback);
 
+  void SetAccountPreselectedCallback(
+      content::AuthenticatorRequestClientDelegate::AccountPreselectedCallback
+          callback);
+
   void SetBluetoothAdapterPowerOnCallback(
       base::RepeatingClosure bluetooth_adapter_power_on_callback);
 
@@ -484,9 +508,6 @@ class AuthenticatorRequestDialogModel {
 
   void ReplaceCredListForTesting(
       std::vector<device::DiscoverableCredentialMetadata> creds);
-
-  absl::optional<device::PublicKeyCredentialUserEntity>
-  GetPreselectedAccountForTesting();
 
   ObservableAuthenticatorList& saved_authenticators() {
     return ephemeral_state_.saved_authenticators_;
@@ -559,6 +580,11 @@ class AuthenticatorRequestDialogModel {
   bool offer_try_again_in_ui() const { return offer_try_again_in_ui_; }
 
   base::WeakPtr<AuthenticatorRequestDialogModel> GetWeakPtr();
+
+  ExperimentServerLinkTitle experiment_server_link_title_ =
+      ExperimentServerLinkTitle::CONTROL;
+  ExperimentServerLinkSheet experiment_server_link_sheet_ =
+      ExperimentServerLinkSheet::CONTROL;
 
  private:
   // Contains the state that will be reset when calling StartOver(). StartOver()
@@ -656,11 +682,13 @@ class AuthenticatorRequestDialogModel {
   // accepts the interstitial that requests to turn on the BLE adapter.
   base::OnceClosure after_ble_adapter_powered_;
 
-  base::ObserverList<Observer>::Unchecked observers_;
+  base::ObserverList<Observer> observers_;
 
   // This field is only filled out once the UX flow is started.
   TransportAvailabilityInfo transport_availability_;
 
+  content::AuthenticatorRequestClientDelegate::AccountPreselectedCallback
+      account_preselected_callback_;
   RequestCallback request_callback_;
   base::RepeatingClosure bluetooth_adapter_power_on_callback_;
 
@@ -678,7 +706,6 @@ class AuthenticatorRequestDialogModel {
 
   base::OnceCallback<void(device::AuthenticatorGetAssertionResponse)>
       selection_callback_;
-  absl::optional<device::PublicKeyCredentialUserEntity> preselected_account_;
 
   // True if this request should use the non-modal location bar bubble UI
   // instead of the page-modal, regular UI.

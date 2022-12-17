@@ -30,11 +30,11 @@
 #include "ash/search_box/search_box_view_delegate.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/highlight_border.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/notreached.h"
 #include "base/rand_util.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/ui/vector_icons/vector_icons.h"
 #include "components/vector_icons/vector_icons.h"
 #include "ui/accessibility/ax_node_data.h"
@@ -47,12 +47,14 @@
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
 #include "ui/gfx/geometry/insets.h"
+#include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/gfx/paint_vector_icon.h"
 #include "ui/views/border.h"
 #include "ui/views/context_menu_controller.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/textfield/textfield.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/vector_icons.h"
 #include "ui/views/view.h"
@@ -80,10 +82,34 @@ constexpr auto kBorderInsetsForAppListBubble = gfx::Insets::TLBR(4, 4, 4, 0);
 constexpr auto kTextFieldMarginsForAppListBubble =
     gfx::Insets::TLBR(8, 0, 0, 0);
 
+// The default PlaceholderTextTypes used for productivity launcher. Randomly
+// selected when placeholder text would be shown.
+constexpr SearchBoxView::PlaceholderTextType kDefaultPlaceholders[3] = {
+    SearchBoxView::PlaceholderTextType::kShortcuts,
+    SearchBoxView::PlaceholderTextType::kTabs,
+    SearchBoxView::PlaceholderTextType::kSettings,
+};
+
+// PlaceholderTextTypes used for productivity launcher for cloud gaming devices.
+// Randomly selected when placeholder text would be shown.
+constexpr SearchBoxView::PlaceholderTextType kGamingPlaceholders[4] = {
+    SearchBoxView::PlaceholderTextType::kShortcuts,
+    SearchBoxView::PlaceholderTextType::kTabs,
+    SearchBoxView::PlaceholderTextType::kSettings,
+    SearchBoxView::PlaceholderTextType::kGames,
+};
+
 bool IsTrimmedQueryEmpty(const std::u16string& query) {
   std::u16string trimmed_query;
   base::TrimWhitespace(query, base::TrimPositions::TRIM_ALL, &trimmed_query);
   return trimmed_query.empty();
+}
+
+SearchBoxView::PlaceholderTextType SelectPlaceholderText() {
+  if (chromeos::features::IsCloudGamingDeviceEnabled()) {
+    return kGamingPlaceholders[rand() % std::size(kGamingPlaceholders)];
+  }
+  return kDefaultPlaceholders[rand() % std::size(kDefaultPlaceholders)];
 }
 
 }  // namespace
@@ -297,7 +323,7 @@ void SearchBoxView::UpdateSearchIcon() {
   const gfx::VectorIcon& icon =
       search_engine_is_google ? google_icon : kSearchEngineNotGoogleIcon;
   SetSearchIconImage(
-      gfx::CreateVectorIcon(icon, kSearchBoxIconSize,
+      gfx::CreateVectorIcon(icon, GetSearchBoxIconSize(),
                             AppListColorProvider::Get()->GetSearchBoxIconColor(
                                 SkColorSetARGB(0xDE, 0x00, 0x00, 0x00))));
 }
@@ -352,16 +378,17 @@ void SearchBoxView::OnPaintBackground(gfx::Canvas* canvas) {
       gfx::Point icon_origin;
       views::View::ConvertPointToTarget(search_icon(), this, &icon_origin);
       PaintFocusBar(canvas, gfx::Point(0, icon_origin.y()),
-                    /*height=*/kSearchBoxIconSize);
+                    /*height=*/GetSearchBoxIconSize());
     }
   }
 }
 
 void SearchBoxView::OnPaintBorder(gfx::Canvas* canvas) {
   if (should_paint_highlight_border_) {
-    HighlightBorder::PaintBorderToCanvas(
-        canvas, GetContentsBounds(), corner_radius_,
-        HighlightBorder::Type::kHighlightBorder1, false);
+    views::HighlightBorder::PaintBorderToCanvas(
+        canvas, *this, GetContentsBounds(),
+        gfx::RoundedCornersF(corner_radius_),
+        views::HighlightBorder::Type::kHighlightBorder1, false);
   }
 }
 
@@ -398,7 +425,7 @@ void SearchBoxView::SetupCloseButton() {
   views::ImageButton* close = close_button();
   close->SetImage(
       views::ImageButton::STATE_NORMAL,
-      gfx::CreateVectorIcon(views::kIcCloseIcon, kSearchBoxIconSize,
+      gfx::CreateVectorIcon(views::kIcCloseIcon, GetSearchBoxIconSize(),
                             AppListColorProvider::Get()->GetSearchBoxIconColor(
                                 gfx::kGoogleGrey700)));
   close->SetVisible(false);
@@ -555,9 +582,11 @@ void SearchBoxView::UpdateLayout(AppListState target_state,
                                  int target_state_height) {
   // Horizontal margins are selected to match search box icon's vertical
   // margins.
-  const int horizontal_spacing = (target_state_height - kSearchBoxIconSize) / 2;
+  const int horizontal_spacing =
+      (target_state_height - GetSearchBoxIconSize()) / 2;
   const int horizontal_right_padding =
-      horizontal_spacing - (kSearchBoxButtonSizeDip - kSearchBoxIconSize) / 2;
+      horizontal_spacing -
+      (GetSearchBoxButtonSize() - GetSearchBoxIconSize()) / 2;
   box_layout()->set_inside_border_insets(
       gfx::Insets::TLBR(0, horizontal_spacing, 0, horizontal_right_padding));
   box_layout()->set_between_child_spacing(horizontal_spacing);
@@ -686,6 +715,18 @@ bool SearchBoxView::HasValidQuery() {
   return !IsTrimmedQueryEmpty(current_query_);
 }
 
+int SearchBoxView::GetSearchBoxIconSize() {
+  if (features::IsProductivityLauncherEnabled())
+    return kBubbleLauncherSearchBoxIconSize;
+  return kClassicSearchBoxIconSize;
+}
+
+int SearchBoxView::GetSearchBoxButtonSize() {
+  if (features::IsProductivityLauncherEnabled())
+    return kBubbleLauncherSearchBoxButtonSizeDip;
+  return kClassicSearchBoxButtonSizeDip;
+}
+
 void SearchBoxView::UpdateTextColor() {
   if (is_app_list_bubble_) {
     // Bubble launcher uses standard text colors (light-on-dark by default).
@@ -701,11 +742,7 @@ void SearchBoxView::UpdateTextColor() {
 
 void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
   if (features::IsProductivityLauncherEnabled()) {
-    // Randomly select a placeholder text.
-    const PlaceholderTextType placeholder_type = PlaceholderTextType(
-        base::RandInt(0, static_cast<int>(PlaceholderTextType::kMaxValue)));
-
-    switch (placeholder_type) {
+    switch (SelectPlaceholderText()) {
       case PlaceholderTextType::kShortcuts:
         search_box()->SetPlaceholderText(l10n_util::GetStringFUTF16(
             IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
@@ -741,6 +778,18 @@ void SearchBoxView::UpdatePlaceholderTextAndAccessibleName() {
                 : IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE_ACCESSIBILITY_NAME_CLAMSHELL,
             l10n_util::GetStringUTF16(
                 IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_SETTINGS)));
+        break;
+      case PlaceholderTextType::kGames:
+        search_box()->SetPlaceholderText(l10n_util::GetStringFUTF16(
+            IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE,
+            l10n_util::GetStringUTF16(
+                IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_GAMES)));
+        search_box()->SetAccessibleName(l10n_util::GetStringFUTF16(
+            is_tablet_mode_
+                ? IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE_ACCESSIBILITY_NAME_TABLET
+                : IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_TEMPLATE_ACCESSIBILITY_NAME_CLAMSHELL,
+            l10n_util::GetStringUTF16(
+                IDS_APP_LIST_SEARCH_BOX_PLACEHOLDER_GAMES)));
         break;
     }
   } else {
@@ -1085,7 +1134,7 @@ void SearchBoxView::SetupAssistantButton() {
   views::ImageButton* assistant = assistant_button();
   assistant->SetImage(
       views::ImageButton::STATE_NORMAL,
-      gfx::CreateVectorIcon(chromeos::kAssistantIcon, kSearchBoxIconSize,
+      gfx::CreateVectorIcon(chromeos::kAssistantIcon, GetSearchBoxIconSize(),
                             AppListColorProvider::Get()->GetSearchBoxIconColor(
                                 gfx::kGoogleGrey700)));
   std::u16string assistant_button_label(

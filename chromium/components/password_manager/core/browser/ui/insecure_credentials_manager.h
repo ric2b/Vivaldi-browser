@@ -30,6 +30,7 @@
 
 namespace password_manager {
 
+struct CredentialUIEntry;
 class LeakCheckCredential;
 
 enum class InsecureCredentialTypeFlags {
@@ -65,12 +66,13 @@ constexpr InsecureCredentialTypeFlags& operator|=(
   return lhs;
 }
 
-// Unsets the bit responsible for the weak credential in the |flag|.
-constexpr InsecureCredentialTypeFlags UnsetWeakCredentialTypeFlag(
+// Unsets the bits responsible for the reused and weak credential in the |flag|.
+constexpr InsecureCredentialTypeFlags UnsetWeakAndReusedCredentialTypeFlags(
     InsecureCredentialTypeFlags flag) {
   return static_cast<InsecureCredentialTypeFlags>(
       static_cast<int>(flag) &
-      ~(static_cast<int>(InsecureCredentialTypeFlags::kWeakCredential)));
+      ~(static_cast<int>(InsecureCredentialTypeFlags::kWeakCredential |
+                         InsecureCredentialTypeFlags::kReusedCredential)));
 }
 
 // Checks that |flag| contains at least one of insecure types.
@@ -187,17 +189,21 @@ class InsecureCredentialsManager : public SavedPasswordsPresenter::Observer {
 
   // Attempts to mute |credential| from the password store.
   // Returns whether the mute succeeded.
-  bool MuteCredential(const CredentialView& credential);
+  bool MuteCredential(const CredentialUIEntry& credential);
 
   // Attempts to unmute |credential| from the password store.
   // Returns whether the unmute succeeded.
-  bool UnmuteCredential(const CredentialView& credential);
+  bool UnmuteCredential(const CredentialUIEntry& credential);
 
   // Returns a vector of currently insecure credentials.
+  // TODO(crbug.com/1330549): Use CredentialUIEntry only.
   std::vector<CredentialWithPassword> GetInsecureCredentials() const;
+  std::vector<CredentialUIEntry> GetInsecureCredentialEntries() const;
 
   // Returns a vector of currently weak credentials.
+  // TODO(crbug.com/1330549): Use CredentialUIEntry only.
   std::vector<CredentialWithPassword> GetWeakCredentials() const;
+  std::vector<CredentialUIEntry> GetWeakCredentialEntries() const;
 
   // Returns password forms which map to provided insecure credential.
   // In most of the cases vector will have 1 element only.

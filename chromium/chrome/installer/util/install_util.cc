@@ -45,6 +45,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "installer/util/vivaldi_install_util.h"
+#include "installer/vivaldi_install_modes.h"
 
 using base::win::RegKey;
 using installer::ProductState;
@@ -286,6 +287,12 @@ void InstallUtil::AddInstallerResultItems(bool system_install,
         root, state_key, KEY_WOW64_32KEY,
         installer::kInstallerSuccessLaunchCmdLine, *launch_cmd, true);
   }
+
+  std::wstring toastActivatorClsid =
+      base::win::WStringFromGUID(install_static::GetToastActivatorClsid());
+  install_list->AddSetRegValueWorkItem(root, state_key, KEY_WOW64_32KEY,
+                                       installer::kLastUsedToastActivatorClsid,
+                                       toastActivatorClsid, true);
 }
 
 bool InstallUtil::IsPerUserInstall() {
@@ -329,8 +336,9 @@ bool InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled() {
     return false;
   }
 
+  base::FilePath target_exe = vivaldi::GetPathOfCurrentExe();
   if (!::IsEqualCLSID(properties.toast_activator_clsid,
-                      install_static::GetToastActivatorClsid())) {
+                      vivaldi::GetOrGenerateToastActivatorCLSID(&target_exe))) {
     LogStartMenuShortcutStatus(
         StartMenuShortcutStatus::kToastActivatorClsidIncorrect);
 
@@ -342,9 +350,11 @@ bool InstallUtil::IsStartMenuShortcutWithActivatorGuidInstalled() {
 }
 
 // static
-std::wstring InstallUtil::GetToastActivatorRegistryPath() {
+std::wstring InstallUtil::GetToastActivatorRegistryPath(
+    base::FilePath* target) {
   return L"Software\\Classes\\CLSID\\" +
-         base::win::WStringFromGUID(install_static::GetToastActivatorClsid());
+         base::win::WStringFromGUID(
+             ::vivaldi::GetOrGenerateToastActivatorCLSID(target));
 }
 
 // static
@@ -392,6 +402,7 @@ void InstallUtil::AppendModeAndChannelSwitches(
     command_line->AppendSwitchNative(installer::switches::kChannel,
                                      install_details.channel_override());
   }
+  vivaldi::AppendInstallChildProcessSwitches(*command_line);
 }
 
 // static
@@ -442,23 +453,29 @@ InstallUtil::GetCloudManagementEnrollmentTokenRegistryPaths() {
 }
 
 // static
-std::pair<base::win::RegKey, std::wstring>
-InstallUtil::GetCloudManagementDmTokenLocation(
-    ReadOnly read_only,
-    BrowserLocation browser_location) {
-  // The location dictates the path and WoW bit.
-  REGSAM wow_access = 0;
-  std::wstring key_path(L"SOFTWARE\\");
+std::pair<std::wstring, std::wstring>
+InstallUtil::GetCloudManagementDmTokenPath(BrowserLocation browser_location) {
+  std::wstring key_path = L"SOFTWARE\\";
   if (browser_location) {
-    wow_access |= KEY_WOW64_64KEY;
     install_static::AppendChromeInstallSubDirectory(
         install_static::InstallDetails::Get().mode(), /*include_suffix=*/false,
         &key_path);
   } else {
-    wow_access |= KEY_WOW64_32KEY;
     key_path.append(install_static::kCompanyPathName);
   }
   key_path.append(L"\\Enrollment");
+
+  return {key_path, L"dmtoken"};
+}
+
+// static
+std::pair<base::win::RegKey, std::wstring>
+InstallUtil::GetCloudManagementDmTokenLocation(
+    ReadOnly read_only,
+    BrowserLocation browser_location) {
+  // The location dictates the WoW bit.
+  REGSAM wow_access = browser_location ? KEY_WOW64_64KEY : KEY_WOW64_32KEY;
+  auto [key_path, value_name] = GetCloudManagementDmTokenPath(browser_location);
 
   base::win::RegKey key;
   if (read_only) {
@@ -474,7 +491,7 @@ InstallUtil::GetCloudManagementDmTokenLocation(
     }
   }
 
-  return {std::move(key), L"dmtoken"};
+  return {std::move(key), value_name};
 }
 
 // static

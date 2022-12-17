@@ -14,6 +14,7 @@
 
 #include "ash/app_list/app_list_controller_impl.h"
 #include "ash/app_list/app_list_metrics.h"
+#include "ash/app_list/apps_grid_row_change_animator.h"
 #include "ash/app_list/model/app_list_folder_item.h"
 #include "ash/app_list/model/app_list_item.h"
 #include "ash/app_list/model/app_list_model.h"
@@ -62,6 +63,7 @@
 #include "base/test/bind.h"
 #include "base/test/icu_test_util.h"
 #include "base/test/metrics/histogram_tester.h"
+#include "base/test/metrics/user_action_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -71,6 +73,7 @@
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/events/event_utils.h"
 #include "ui/events/keycodes/keyboard_codes_posix.h"
+#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/label.h"
 #include "ui/views/controls/menu/menu_item_view.h"
 #include "ui/views/controls/menu/submenu_view.h"
@@ -671,6 +674,12 @@ class AppsGridViewTest : public AshTestBase {
         ui::HapticTouchpadEffectStrength::kMedium);
   }
 
+  // Get the number of item layer copies used for the between row animation.
+  int GetNumberOfRowChangeLayersForTest() {
+    return apps_grid_view_->row_change_animator_
+        ->GetNumberOfRowChangeLayersForTest();
+  }
+
   // May be a PagedAppsGridView or a ScrollableAppsGridView depending on the
   // ProductivityLauncher flag and tablet mode.
   AppsGridView* apps_grid_view_ = nullptr;
@@ -720,6 +729,11 @@ class AppsGridViewTest : public AshTestBase {
 class AppsGridViewNonBubbleTest : public AppsGridViewTest {
  public:
   AppsGridViewNonBubbleTest() { is_productivity_launcher_enabled_ = false; }
+};
+
+class AppsGridViewBubbleTest : public AppsGridViewTest {
+ public:
+  AppsGridViewBubbleTest() { is_productivity_launcher_enabled_ = true; }
 };
 
 // Test suite for clamshell mode, parameterized by feature ProductivityLauncher.
@@ -960,6 +974,159 @@ TEST_F(AppsGridViewTest, MoveItemAcrossRowDoesNotCauseAnimation) {
   // The item should be repositioned immediately when the widget is not visible.
   EXPECT_FALSE(apps_grid_view_->IsAnimatingView(view0));
   EXPECT_EQ(view0->bounds(), GetItemRectOnCurrentPageAt(1, 2));
+}
+
+// Test that when dragging an item between pages/rows, the apps grid items
+// animate between rows correctly. Items should not animate vertically when the
+// reorder placeholder is changed during drag.
+TEST_P(AppsGridViewTabletTest, BetweenRowsAnimationOnDragToPreviousPage) {
+  ASSERT_TRUE(paged_apps_grid_view_);
+  model_->PopulateApps(GetTilesPerPage(0) + 15);
+  UpdateLayout();
+
+  GetPaginationModel()->SelectPage(1 /*page*/, false /*animate*/);
+  EXPECT_EQ(1, GetSelectedPage(paged_apps_grid_view_));
+  EXPECT_EQ(0, GetNumberOfRowChangeLayersForTest());
+
+  // Begin dragging the third item of the second page.
+  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 2,
+                                     apps_grid_view_);
+
+  // Drag the current item to flip to the first page.
+  gfx::Point point_in_page_flip_buffer =
+      gfx::Point(paged_apps_grid_view_->bounds().width() / 2, 0);
+  UpdateDrag(AppsGridView::MOUSE, point_in_page_flip_buffer,
+             paged_apps_grid_view_, 10 /*steps*/);
+  while (HasPendingPageFlip(paged_apps_grid_view_)) {
+    page_flip_waiter_->Wait();
+  }
+  EXPECT_EQ(0, GetSelectedPage(paged_apps_grid_view_));
+
+  // Move dragged item to the second slot on the first page.
+  gfx::Point to;
+  if (is_rtl_) {
+    to = GetItemRectOnCurrentPageAt(0, 0).left_center();
+  } else {
+    to = GetItemRectOnCurrentPageAt(0, 0).right_center();
+  }
+  UpdateDrag(AppsGridView::MOUSE, to, paged_apps_grid_view_, 5 /*steps*/);
+
+  ASSERT_TRUE(paged_apps_grid_view_->reorder_timer_for_test()->IsRunning());
+  paged_apps_grid_view_->reorder_timer_for_test()->FireNow();
+
+  const views::ViewModelT<AppListItemView>* view_model =
+      apps_grid_view_->view_model();
+
+  // The reorder placeholder should be after the first item. This will cause the
+  // following items to animate one slot over, overflowing to the second page.
+  EXPECT_EQ(GridIndex(0, 1), paged_apps_grid_view_->reorder_placeholder());
+
+  // Four items should have a layer copy used for animating between rows.
+  EXPECT_EQ(4, GetNumberOfRowChangeLayersForTest());
+
+  for (int i = 1; i < view_model->view_size(); i++) {
+    AppListItemView* item_view = view_model->view_at(i);
+    // The first item and items off screen on the second page should not
+    // animate.
+    if (i == 0 || i > GetTilesPerPage(0) + 1) {
+      EXPECT_FALSE(apps_grid_view_->IsAnimatingView(item_view));
+      continue;
+    }
+
+    // Check that none of the items are animating vertically, because any items
+    // moving vertically should instead use a between rows animation, which is
+    // purely horizontal.
+    EXPECT_TRUE(apps_grid_view_->IsAnimatingView(item_view));
+    gfx::Rect target_bounds =
+        apps_grid_view_->bounds_animator_for_testing()->GetTargetBounds(
+            item_view);
+    EXPECT_EQ(item_view->bounds().y(), target_bounds.y());
+    EXPECT_NE(item_view->bounds().x(), target_bounds.x());
+  }
+
+  // End the drag and check that no more item layer copies remain.
+  EndDrag(apps_grid_view_, false /*cancel*/);
+  test_api_->WaitForItemMoveAnimationDone();
+  EXPECT_EQ(0, GetNumberOfRowChangeLayersForTest());
+}
+
+// Test dragging an app item from the first row to second row, and then back to
+// the first row. This causes the between rows animation to reverse.
+TEST_P(AppsGridViewTabletTest, BetweenRowsAnimationReversal) {
+  ASSERT_TRUE(paged_apps_grid_view_);
+  model_->PopulateApps(GetTilesPerPage(0));
+  UpdateLayout();
+
+  EXPECT_EQ(0, GetNumberOfRowChangeLayersForTest());
+
+  // Begin dragging the first item.
+  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 0,
+                                     apps_grid_view_);
+
+  // Move dragged item to the middle slot on the second row.
+  gfx::Point to;
+  if (is_rtl_) {
+    to = GetItemRectOnCurrentPageAt(0, 7).left_center();
+  } else {
+    to = GetItemRectOnCurrentPageAt(0, 7).right_center();
+  }
+  UpdateDrag(AppsGridView::MOUSE, to, paged_apps_grid_view_, 5 /*steps*/);
+
+  ASSERT_TRUE(paged_apps_grid_view_->reorder_timer_for_test()->IsRunning());
+  paged_apps_grid_view_->reorder_timer_for_test()->FireNow();
+
+  // The reorder placeholder should be on the second row.
+  EXPECT_EQ(GridIndex(0, 7), paged_apps_grid_view_->reorder_placeholder());
+
+  const views::ViewModelT<AppListItemView>* view_model =
+      apps_grid_view_->view_model();
+
+  // View at index 0, 5 should be animating from second row to the first.
+  AppListItemView* item_view = view_model->view_at(5);
+
+  const int first_row_y = GetItemRectOnCurrentPageAt(0, 0).y();
+  const int second_row_y = GetItemRectOnCurrentPageAt(0, 6).y();
+  EXPECT_GT(second_row_y, first_row_y);
+  EXPECT_EQ(1, GetNumberOfRowChangeLayersForTest());
+
+  // The item in slot 5 should now be on animating into the first row position.
+  EXPECT_EQ(item_view->bounds().y(), first_row_y);
+  EXPECT_TRUE(apps_grid_view_->IsAnimatingView(item_view));
+  gfx::Rect target_bounds =
+      apps_grid_view_->bounds_animator_for_testing()->GetTargetBounds(
+          item_view);
+  EXPECT_GT(item_view->bounds().x(), target_bounds.x());
+
+  // Update drag to move placeholder back to the first row.
+  if (is_rtl_) {
+    to = GetItemRectOnCurrentPageAt(0, 0).left_center();
+  } else {
+    to = GetItemRectOnCurrentPageAt(0, 0).right_center();
+  }
+  UpdateDrag(AppsGridView::MOUSE, to, paged_apps_grid_view_, 5 /*steps*/);
+
+  ASSERT_TRUE(paged_apps_grid_view_->reorder_timer_for_test()->IsRunning());
+  paged_apps_grid_view_->reorder_timer_for_test()->FireNow();
+
+  // The reorder placeholder should now be on the first row.
+  EXPECT_EQ(GridIndex(0, 1), paged_apps_grid_view_->reorder_placeholder());
+
+  // The item in slot 5 should now be animating from first row to the second.
+  EXPECT_EQ(item_view->bounds().y(), second_row_y);
+  EXPECT_TRUE(apps_grid_view_->IsAnimatingView(item_view));
+
+  // Item should be moving from offscreen into target position on second row.
+  target_bounds =
+      apps_grid_view_->bounds_animator_for_testing()->GetTargetBounds(
+          item_view);
+  EXPECT_LT(item_view->bounds().x(), target_bounds.x());
+  EXPECT_EQ(target_bounds.y(), second_row_y);
+  EXPECT_EQ(1, GetNumberOfRowChangeLayersForTest());
+
+  // End the drag and check that no more item layer copies remain.
+  EndDrag(apps_grid_view_, false /*cancel*/);
+  test_api_->WaitForItemMoveAnimationDone();
+  EXPECT_EQ(0, GetNumberOfRowChangeLayersForTest());
 }
 
 // Tests that control + arrow while a suggested chip is focused does not crash.
@@ -1764,6 +1931,69 @@ TEST_P(AppsGridViewClamshellTest, CheckFolderWithMultiplePagesContents) {
     EXPECT_EQ(0, GetSelectedPage(folder_apps_grid_view()));
   }
   EXPECT_TRUE(folder_apps_grid_view()->IsInFolder());
+}
+
+TEST_F(AppsGridViewTest, CreatingFolderRecordsUserAction) {
+  base::UserActionTester user_actions;
+
+  // Create two apps, then drag the second on top of the first to create a
+  // folder.
+  model_->PopulateApps(2);
+  UpdateLayout();
+  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, /*row=*/0,
+                                     /*column=*/1, apps_grid_view_);
+  gfx::Point to = GetItemRectOnCurrentPageAt(0, 0).CenterPoint();
+  UpdateDrag(AppsGridView::MOUSE, to, apps_grid_view_, /*steps=*/10);
+  EndDrag(apps_grid_view_, /*cancel=*/false);
+
+  // Both items are in the folder.
+  AppListItem* item_0 = model_->FindItem("Item 0");
+  AppListItem* item_1 = model_->FindItem("Item 1");
+  EXPECT_TRUE(item_0->IsInFolder());
+  EXPECT_TRUE(item_1->IsInFolder());
+
+  // User action was recorded.
+  EXPECT_EQ(1, user_actions.GetActionCount("AppList_CreateFolder"));
+}
+
+TEST_F(AppsGridViewTest, DeletingFolderRecordsUserAction) {
+  base::UserActionTester user_actions;
+
+  // Create a single-item folder and open it.
+  AppListFolderItem* folder =
+      model_->CreateSingleItemFolder("folder_id", "Item 0");
+  std::string folder_id = folder->id();
+  test_api_->Update();
+  test_api_->PressItemAt(0);
+
+  // Drag the app out of the folder.
+  AppsGridViewTestApi folder_grid_test_api(folder_apps_grid_view());
+  AppListItemView* drag_view = InitiateDragForItemAtCurrentPageAt(
+      AppsGridView::MOUSE, 0, 0, folder_apps_grid_view());
+  gfx::Point empty_space =
+      app_list_folder_view()->GetLocalBounds().bottom_center() +
+      gfx::Vector2d(0, drag_view->height());
+  UpdateDrag(AppsGridView::MOUSE, empty_space, folder_apps_grid_view(),
+             /*steps=*/10);
+  // Fire the reparent timer that should be started when an item is dragged out
+  // of folder bounds.
+  ASSERT_TRUE(folder_apps_grid_view()->FireFolderItemReparentTimerForTest());
+
+  // Calculate the coordinates for the drop point. Note that we we are dropping
+  // into the app list view not the folder view. The (0,1) spot is empty.
+  gfx::Point drop_point = GetItemRectOnCurrentPageAt(0, 1).CenterPoint();
+  views::View::ConvertPointToTarget(apps_grid_view_, folder_apps_grid_view(),
+                                    &drop_point);
+  UpdateDrag(AppsGridView::MOUSE, drop_point, folder_apps_grid_view(),
+             /*steps=*/5);
+  EndDrag(folder_apps_grid_view(), /*cancel=*/false);
+
+  // Item is in top-level grid and folder is deleted.
+  EXPECT_EQ("Item 0", model_->GetModelContent());
+  EXPECT_FALSE(model_->FindFolderItem(folder_id));
+
+  // User action was recorded.
+  EXPECT_EQ(1, user_actions.GetActionCount("AppList_DeleteFolder"));
 }
 
 TEST_P(AppsGridViewDragTest, MouseDragItemOutOfFolder) {
@@ -5108,6 +5338,90 @@ TEST_P(AppsGridViewDragNonBubbleTest,
   EXPECT_EQ(2, GetHapticTickEventsCount());
 }
 
+TEST_F(AppsGridViewBubbleTest, DragItemVisibleAfterDragInScrolledView) {
+  const int kRootGridItems = 39;
+  model_->PopulateApps(kRootGridItems);
+  apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
+
+  // Start dragging the first item in the grid.
+  InitiateDragForItemAtCurrentPageAt(AppsGridView::MOUSE, 0, 0,
+                                     apps_grid_view_);
+
+  // Scroll the bubble launcher apps grid so the last item is visible.
+  test_api_->GetViewAtIndex(GridIndex(0, kRootGridItems - 1))
+      ->ScrollViewToVisible();
+  apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
+
+  // Calculate the coordinates for the drop point - the drop point is the first
+  // empty slot in the root apps grid.
+  gfx::Point drop_point =
+      test_api_->GetItemTileRectAtVisualIndex(0, kRootGridItems).CenterPoint();
+
+  UpdateDrag(AppsGridView::MOUSE, drop_point, apps_grid_view_, /*steps=*/5);
+
+  EndDrag(apps_grid_view_, /*cancel=*/false);
+  EXPECT_EQ(1, GetHapticTickEventsCount());
+
+  // Verify that the dragged item was dropped into the last slot in the grid,
+  // and that it's within the visible apps grid bounds.
+  AppListItemView* dropped_view =
+      test_api_->GetViewAtIndex(GridIndex(0, kRootGridItems - 1));
+  ASSERT_TRUE(dropped_view);
+  EXPECT_EQ("Item 0", dropped_view->item()->id());
+  EXPECT_TRUE(apps_grid_view_->GetWidget()->GetWindowBoundsInScreen().Contains(
+      dropped_view->GetBoundsInScreen()));
+}
+
+TEST_F(AppsGridViewBubbleTest, DragItemVisibleAfterReparentDragInScrolledView) {
+  model_->CreateAndPopulateFolderWithApps(2);
+  const int kRootGridItems = 41;
+  model_->PopulateApps(kRootGridItems - 1);
+  apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
+
+  // Open the folder view.
+  test_api_->PressItemAt(0);
+
+  // Drag the first folder child out of the folder.
+  AppListItemView* drag_view = InitiateDragForItemAtCurrentPageAt(
+      AppsGridView::MOUSE, 0, 0, folder_apps_grid_view());
+  ASSERT_EQ("Item 0", drag_view->item()->id());
+  EXPECT_EQ(1, GetHapticTickEventsCount());
+  gfx::Point point_outside_folder =
+      app_list_folder_view()->GetLocalBounds().bottom_center() +
+      gfx::Vector2d(0, drag_view->height());
+  UpdateDrag(AppsGridView::MOUSE, point_outside_folder, folder_apps_grid_view(),
+             10 /*steps*/);
+  // Fire the reparent timer that should be started when an item is dragged out
+  // of folder bounds.
+  ASSERT_TRUE(folder_apps_grid_view()->FireFolderItemReparentTimerForTest());
+
+  // Scroll the bubble launcher apps grid so the last item is visible.
+  test_api_->GetViewAtIndex(GridIndex(0, kRootGridItems - 1))
+      ->ScrollViewToVisible();
+  apps_grid_view_->GetWidget()->LayoutRootViewIfNecessary();
+
+  // Calculate the coordinates for the drop point - the drop point is the first
+  // empty slot in the root apps grid.
+  gfx::Point drop_point =
+      GetItemRectOnCurrentPageAt(0, kRootGridItems).CenterPoint();
+  views::View::ConvertPointToTarget(apps_grid_view_, folder_apps_grid_view(),
+                                    &drop_point);
+  UpdateDrag(AppsGridView::MOUSE, drop_point, folder_apps_grid_view(),
+             5 /*steps*/);
+  EndDrag(folder_apps_grid_view(), false /*cancel*/);
+  EXPECT_EQ(1, GetHapticTickEventsCount());
+  EXPECT_FALSE(GetAppListTestHelper()->IsInFolderView());
+
+  // Verify that the dragged item was dropped into the last slot in the grid,
+  // and that it's within the visible apps grid bounds.
+  AppListItemView* dropped_view =
+      test_api_->GetViewAtIndex(GridIndex(0, kRootGridItems));
+  ASSERT_TRUE(dropped_view);
+  EXPECT_EQ("Item 0", dropped_view->item()->id());
+  EXPECT_TRUE(apps_grid_view_->GetWidget()->GetWindowBoundsInScreen().Contains(
+      dropped_view->GetBoundsInScreen()));
+}
+
 TEST_P(AppsGridViewCardifiedStateTest, AppsGridIsCardifiedDuringDrag) {
   ASSERT_TRUE(paged_apps_grid_view_);
 
@@ -5235,7 +5549,7 @@ TEST_P(AppsGridViewAppSortTest,
   // Cache the current context menu view.
   views::MenuItemView* reorder_option =
       context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
-  ASSERT_TRUE(reorder_option->title() == u"Name");
+  ASSERT_EQ(reorder_option->title(), u"Name");
 
   // Open the Reorder by Name submenu.
   const gfx::Point reorder_option_point =
@@ -5251,7 +5565,7 @@ TEST_P(AppsGridViewAppSortTest,
 
   reorder_option =
       context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(2);
-  ASSERT_TRUE(reorder_option->title() == u"Color");
+  ASSERT_EQ(reorder_option->title(), u"Color");
 
   const gfx::Point color_option =
       reorder_option->GetBoundsInScreen().CenterPoint();
@@ -5283,7 +5597,7 @@ TEST_P(AppsGridViewAppSortTest,
   // Cache the current context menu view.
   views::MenuItemView* reorder_submenu =
       context_menu->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
-  ASSERT_TRUE(reorder_submenu->title() == u"Sort by");
+  ASSERT_EQ(reorder_submenu->title(), u"Sort by");
 
   // Open the Sort by submenu.
   gfx::Point reorder_submenu_point =
@@ -5292,7 +5606,7 @@ TEST_P(AppsGridViewAppSortTest,
 
   views::MenuItemView* reorder_option =
       reorder_submenu->GetSubmenu()->GetMenuItemAt(0);
-  ASSERT_TRUE(reorder_option->title() == u"Name");
+  ASSERT_EQ(reorder_option->title(), u"Name");
   gfx::Point reorder_option_point =
       reorder_option->GetBoundsInScreen().CenterPoint();
   SimulateLeftClickOrTapAt(reorder_option_point);
@@ -5312,14 +5626,14 @@ TEST_P(AppsGridViewAppSortTest,
 
   reorder_submenu =
       context_menu->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
-  ASSERT_TRUE(reorder_submenu->title() == u"Sort by");
+  ASSERT_EQ(reorder_submenu->title(), u"Sort by");
 
   // Open the Sort by submenu.
   reorder_submenu_point = reorder_submenu->GetBoundsInScreen().CenterPoint();
   SimulateLeftClickOrTapAt(reorder_submenu_point);
 
   reorder_option = reorder_submenu->GetSubmenu()->GetMenuItemAt(1);
-  ASSERT_TRUE(reorder_option->title() == u"Color");
+  ASSERT_EQ(reorder_option->title(), u"Color");
   reorder_option_point = reorder_option->GetBoundsInScreen().CenterPoint();
   SimulateLeftClickOrTapAt(reorder_option_point);
 
@@ -5328,6 +5642,67 @@ TEST_P(AppsGridViewAppSortTest,
   EXPECT_EQ(
       Shell::GetPrimaryRootWindowController()->menu_model_adapter_for_testing(),
       nullptr);
+}
+
+TEST_P(AppsGridViewAppSortTest,
+       NoSortOptionsWhenSearchPageIsShownInTabletMode) {
+  // This test checks the context menu on root window in tablet mode.
+  if (!create_as_tablet_mode_)
+    return;
+
+  model_->PopulateApps(1);
+  EXPECT_EQ(AppListSortOrder::kCustom, model_->requested_sort_order());
+
+  // Get a point in `apps_grid_view_` that doesn't have an item on it.
+  const gfx::Point empty_space =
+      apps_grid_view_->GetBoundsInScreen().CenterPoint();
+
+  // Open the menu to test the alphabetical sort option.
+  SimulateRightClickOrLongPressAt(empty_space);
+  AppMenuModelAdapter* context_menu =
+      Shell::GetPrimaryRootWindowController()->menu_model_adapter_for_testing();
+  EXPECT_TRUE(context_menu->IsShowingMenu());
+
+  // Cache the current context menu view.
+  views::MenuItemView* reorder_submenu =
+      context_menu->root_for_testing()->GetSubmenu()->GetMenuItemAt(2);
+  ASSERT_EQ(reorder_submenu->title(), u"Sort by");
+
+  // Open the Sort by submenu.
+  gfx::Point reorder_submenu_point =
+      reorder_submenu->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(reorder_submenu_point);
+
+  views::MenuItemView* reorder_option =
+      reorder_submenu->GetSubmenu()->GetMenuItemAt(0);
+  ASSERT_EQ(reorder_option->title(), u"Name");
+  gfx::Point reorder_option_point =
+      reorder_option->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(reorder_option_point);
+
+  // Check that the apps are sorted and the menu is closed.
+  EXPECT_EQ(AppListSortOrder::kNameAlphabetical,
+            model_->requested_sort_order());
+  EXPECT_EQ(
+      Shell::GetPrimaryRootWindowController()->menu_model_adapter_for_testing(),
+      nullptr);
+
+  // Activate the search box.
+  gfx::Point search_box_point =
+      search_box_view_->GetBoundsInScreen().CenterPoint();
+  SimulateLeftClickOrTapAt(search_box_point);
+
+  // Open the menu again.
+  SimulateRightClickOrLongPressAt(empty_space);
+  context_menu =
+      Shell::GetPrimaryRootWindowController()->menu_model_adapter_for_testing();
+  EXPECT_TRUE(context_menu->IsShowingMenu());
+
+  // Verify that the sort option is removed and there are only 2 options in the
+  // menu.
+  int context_menu_size =
+      context_menu->root_for_testing()->GetSubmenu()->GetMenuItems().size();
+  EXPECT_LT(context_menu_size, 3);
 }
 
 TEST_P(AppsGridViewAppSortTest, ContextMenuOnFolderItemSortAllApps) {
@@ -5358,7 +5733,7 @@ TEST_P(AppsGridViewAppSortTest, ContextMenuOnFolderItemSortAllApps) {
   // Cache the current context menu view.
   views::MenuItemView* reorder_option =
       context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(1);
-  ASSERT_TRUE(reorder_option->title() == u"Name");
+  ASSERT_EQ(reorder_option->title(), u"Name");
 
   // Open the Reorder by Name submenu.
   gfx::Point reorder_option_point =
@@ -5374,7 +5749,7 @@ TEST_P(AppsGridViewAppSortTest, ContextMenuOnFolderItemSortAllApps) {
 
   reorder_option =
       context_menu->root_menu_item_view()->GetSubmenu()->GetMenuItemAt(2);
-  ASSERT_TRUE(reorder_option->title() == u"Color");
+  ASSERT_EQ(reorder_option->title(), u"Color");
 
   const gfx::Point color_option =
       reorder_option->GetBoundsInScreen().CenterPoint();

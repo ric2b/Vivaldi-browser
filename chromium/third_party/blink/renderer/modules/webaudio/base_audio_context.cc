@@ -92,13 +92,9 @@ BaseAudioContext::BaseAudioContext(Document* document,
       InspectorHelperMixin(*AudioGraphTracer::FromDocument(*document),
                            String()),
       destination_node_(nullptr),
-      is_resolving_resume_promises_(false),
       task_runner_(document->GetTaskRunner(TaskType::kInternalMedia)),
-      is_cleared_(false),
-      has_posted_cleanup_task_(false),
       deferred_task_handler_(DeferredTaskHandler::Create(
           document->GetTaskRunner(TaskType::kInternalMedia))),
-      context_state_(kSuspended),
       periodic_wave_sine_(nullptr),
       periodic_wave_square_(nullptr),
       periodic_wave_sawtooth_(nullptr),
@@ -126,7 +122,7 @@ void BaseAudioContext::Initialize() {
     destination_node_->Handler().Initialize();
     // TODO(crbug.com/863951).  The audio thread needs some things from the
     // destination handler like the currentTime.  But the audio thread
-    // shouldn't access the |destination_node_| since it's an Oilpan object.
+    // shouldn't access the `destination_node_` since it's an Oilpan object.
     // Thus, get the destination handler, a non-oilpan object, so we can get
     // the items directly from the handler instead of through the destination
     // node.
@@ -327,9 +323,6 @@ ScriptPromise BaseAudioContext::decodeAudioData(
     return ScriptPromise();
   }
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
-
   v8::Isolate* isolate = script_state->GetIsolate();
   ArrayBufferContents buffer_contents;
   // Detach the audio array buffer from the main thread and start
@@ -338,36 +331,44 @@ ScriptPromise BaseAudioContext::decodeAudioData(
       audio_data->Transfer(isolate, buffer_contents)) {
     DOMArrayBuffer* audio = DOMArrayBuffer::Create(buffer_contents);
 
+    auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
+    ScriptPromise promise = resolver->Promise();
     decode_audio_resolvers_.insert(resolver);
 
     audio_decoder_.DecodeAsync(audio, sampleRate(), success_callback,
-                               error_callback, resolver, this);
-  } else {
-    // If audioData is already detached (neutered) we need to reject the
-    // promise with an error.
-    auto* error = MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kDataCloneError,
-        "Cannot decode detached ArrayBuffer");
-    resolver->Reject(error);
-    if (error_callback) {
-      error_callback->InvokeAndReportException(this, error);
-    }
+                               error_callback, resolver, this, exception_state);
+    return promise;
   }
 
-  return promise;
+  // If audioData is already detached (neutered) we need to reject the
+  // promise with an error.
+  exception_state.ThrowDOMException(DOMExceptionCode::kDataCloneError,
+                                    "Cannot decode detached ArrayBuffer");
+  v8::Local<v8::Value> error = exception_state.GetException();
+  if (error_callback) {
+    error_callback->InvokeAndReportException(
+        this, NativeValueTraits<DOMException>::NativeValue(
+                  script_state->GetIsolate(), error, exception_state));
+  }
+
+  return ScriptPromise();
 }
 
 void BaseAudioContext::HandleDecodeAudioData(
     AudioBuffer* audio_buffer,
     ScriptPromiseResolver* resolver,
     V8DecodeSuccessCallback* success_callback,
-    V8DecodeErrorCallback* error_callback) {
+    V8DecodeErrorCallback* error_callback,
+    ExceptionContext exception_context) {
   DCHECK(IsMainThread());
+  DCHECK(resolver);
 
-  if (!GetExecutionContext()) {
-    // Nothing to do if the execution context is gone.
+  ScriptState* resolver_script_state = resolver->GetScriptState();
+  if (!IsInParallelAlgorithmRunnable(resolver->GetExecutionContext(),
+                                     resolver_script_state)) {
     return;
   }
+  ScriptState::Scope script_state_scope(resolver_script_state);
 
   if (audio_buffer) {
     // Resolve promise successfully and run the success callback
@@ -377,11 +378,20 @@ void BaseAudioContext::HandleDecodeAudioData(
     }
   } else {
     // Reject the promise and run the error callback
-    auto* error = MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kEncodingError, "Unable to decode audio data");
+    ExceptionState exception_state(resolver_script_state->GetIsolate(),
+                                   exception_context);
+    // Create DOM exception from the exception state since it gives more info
+    // and return it using resolver as it's expected by interface specification.
+    exception_state.ThrowDOMException(DOMExceptionCode::kEncodingError,
+                                      "Unable to decode audio data");
+    v8::Local<v8::Value> error = exception_state.GetException();
+    exception_state.ClearException();
     resolver->Reject(error);
     if (error_callback) {
-      error_callback->InvokeAndReportException(this, error);
+      error_callback->InvokeAndReportException(
+          this,
+          NativeValueTraits<DOMException>::NativeValue(
+              resolver_script_state->GetIsolate(), error, exception_state));
     }
   }
 
@@ -852,7 +862,7 @@ void BaseAudioContext::NotifyWorkletIsReady() {
   DCHECK(audioWorklet()->IsReady());
 
   {
-    // |audio_worklet_thread_| is constantly peeked by the rendering thread,
+    // `audio_worklet_thread_` is constantly peeked by the rendering thread,
     // So we protect it with the graph lock.
     GraphAutoLocker locker(this);
 
@@ -875,7 +885,7 @@ void BaseAudioContext::UpdateWorkletGlobalScopeOnRenderingThread() {
   DCHECK(!IsMainThread());
 
   if (TryLock()) {
-    // Even when |audio_worklet_thread_| is successfully assigned, the current
+    // Even when `audio_worklet_thread_` is successfully assigned, the current
     // render thread could still be a thread of AudioOutputDevice.  Updates the
     // the global scope only when the thread affinity is correct.
     if (audio_worklet_thread_ && audio_worklet_thread_->IsCurrentThread()) {

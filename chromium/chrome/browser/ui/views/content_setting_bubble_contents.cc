@@ -13,7 +13,6 @@
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/layout_constants.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
@@ -366,9 +365,6 @@ ContentSettingBubbleContents::ContentSettingBubbleContents(
     : content::WebContentsObserver(web_contents),
       BubbleDialogDelegateView(anchor_view, arrow),
       content_setting_bubble_model_(std::move(content_setting_bubble_model)) {
-  chrome::RecordDialogCreation(
-      chrome::DialogIdentifier::CONTENT_SETTING_CONTENTS);
-
   // Although other code in this class treats content_setting_bubble_model_ as
   // though it's optional, in fact it can only become null if
   // WebContentsDestroyed() is called, which can't happen until the constructor
@@ -408,13 +404,6 @@ ContentSettingBubbleContents::~ContentSettingBubbleContents() {
 
 void ContentSettingBubbleContents::WindowClosing() {
   if (content_setting_bubble_model_) {
-    if (GetWidget()->closed_reason() ==
-            views::Widget::ClosedReason::kEscKeyPressed ||
-        GetWidget()->closed_reason() ==
-            views::Widget::ClosedReason::kCloseButtonClicked) {
-      content_setting_bubble_model_->OnBubbleDismissedByUser();
-    }
-
     content_setting_bubble_model_->CommitChanges();
   }
 }
@@ -456,14 +445,6 @@ std::u16string ContentSettingBubbleContents::GetWindowTitle() const {
 
 bool ContentSettingBubbleContents::ShouldShowCloseButton() const {
   return true;
-}
-
-void ContentSettingBubbleContents::OnWidgetDestroying(views::Widget* widget) {
-  if (widget->closed_reason() == views::Widget::ClosedReason::kEscKeyPressed ||
-      widget->closed_reason() ==
-          views::Widget::ClosedReason::kCloseButtonClicked) {
-    content_setting_bubble_model_->OnBubbleDismissedByUser();
-  }
 }
 
 void ContentSettingBubbleContents::Init() {

@@ -243,8 +243,8 @@ void OverviewItemView::MaybeActivateHighlightedView() {
     overview_item_->OnHighlightedViewActivated();
 }
 
-void OverviewItemView::MaybeCloseHighlightedView() {
-  if (overview_item_)
+void OverviewItemView::MaybeCloseHighlightedView(bool primary_action) {
+  if (overview_item_ && primary_action)
     overview_item_->OnHighlightedViewClosed();
 }
 
@@ -327,6 +327,11 @@ void OverviewItemView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
       ax::mojom::StringAttribute::kDescription,
       l10n_util::GetStringUTF8(
           IDS_ASH_OVERVIEW_CLOSABLE_HIGHLIGHT_ITEM_A11Y_EXTRA_TIP));
+}
+
+void OverviewItemView::OnThemeChanged() {
+  WindowMiniView::OnThemeChanged();
+  UpdateBorderState(IsViewHighlighted());
 }
 
 BEGIN_METADATA(OverviewItemView, WindowMiniView)

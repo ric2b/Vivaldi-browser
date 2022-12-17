@@ -416,8 +416,8 @@ void Tab::Layout() {
   }
   title_->SetVisible(show_title);
 
-  if (views::FocusRing::Get(this))
-    views::FocusRing::Get(this)->Layout();
+  if (auto* focus_ring = views::FocusRing::Get(this); focus_ring)
+    focus_ring->Layout();
 }
 
 bool Tab::OnKeyPressed(const ui::KeyEvent& event) {
@@ -570,7 +570,7 @@ void Tab::OnMouseMoved(const ui::MouseEvent& event) {
   // subsequently moves the mouse, we need to then hover the tab.
   //
   // Either way, this is effectively a no-op if the tab is already in a hovered
-  // state.
+  // state (crbug.com/1326272).
   MaybeUpdateHoverStatus(event);
 }
 
@@ -1074,6 +1074,9 @@ void Tab::UpdateForegroundColors() {
   title_->SetEnabledColor(colors.foreground_color);
   close_button_->SetColors(colors);
   alert_indicator_button_->OnParentTabButtonColorChanged();
+  // There may be no focus ring when the tab is closing.
+  if (auto* focus_ring = views::FocusRing::Get(this); focus_ring)
+    focus_ring->SetColor(colors.focus_ring_color);
   SchedulePaint();
 }
 

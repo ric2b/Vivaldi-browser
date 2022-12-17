@@ -5,8 +5,9 @@
 /**
  * @fileoverview Handles page loading sounds based on automation events.
  */
-import {BaseAutomationHandler} from './base_automation_handler.js';
-import {ChromeVoxEvent} from './custom_automation_event.js';
+import {BaseAutomationHandler} from '/chromevox/background/base_automation_handler.js';
+import {ChromeVoxState, ChromeVoxStateObserver} from '/chromevox/background/chromevox_state.js';
+import {ChromeVoxEvent} from '/chromevox/common/custom_automation_event.js';
 
 const ActionType = chrome.automation.ActionType;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -17,8 +18,9 @@ const StateType = chrome.automation.StateType;
 
 /** @implements {ChromeVoxStateObserver} */
 export class PageLoadSoundHandler extends BaseAutomationHandler {
+  /** @private */
   constructor() {
-    super(undefined);
+    super(null);
 
     /** @private {boolean} */
     this.didRequestLoadSound_ = false;
@@ -31,6 +33,13 @@ export class PageLoadSoundHandler extends BaseAutomationHandler {
 
       ChromeVoxState.addObserver(this);
     });
+  }
+
+  static init() {
+    if (PageLoadSoundHandler.instance) {
+      throw 'Error: Trying to create two instances of singleton PageLoadSoundHandler';
+    }
+    PageLoadSoundHandler.instance = new PageLoadSoundHandler();
   }
 
   /**
@@ -81,3 +90,6 @@ export class PageLoadSoundHandler extends BaseAutomationHandler {
     // the docLoadingProgress < 1.
   }
 }
+
+/** @type {PageLoadSoundHandler} */
+PageLoadSoundHandler.instance;

@@ -55,10 +55,16 @@ objc_library(
 
 objc_library(
     name = "TFLSegmentationResult",
+    srcs = [
+        "sources/TFLSegmentationResult.m",
+    ],
     hdrs = [
         "sources/TFLSegmentationResult.h",
     ],
     module_name = "TFLSegmentationResult",
+    deps = [
+        "//tensorflow_lite_support/ios:TFLCommonUtils",
+    ],
 )
 
 objc_library(
@@ -127,6 +133,9 @@ objc_library(
 
 objc_library(
     name = "TFLSegmentationResultHelpers",
+    srcs = [
+        "sources/TFLSegmentationResult+Helpers.m",
+    ],
     hdrs = [
         "sources/TFLSegmentationResult+Helpers.h",
     ],

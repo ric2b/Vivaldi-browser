@@ -284,8 +284,7 @@ void BlockingGarbageCollect(
   }
 
   file_access_runner->PostTask(
-      FROM_HERE, base::BindOnce(base::GetDeletePathRecursivelyCallback(),
-                                trash_directory));
+      FROM_HERE, base::GetDeletePathRecursivelyCallback(trash_directory));
 }
 
 }  // namespace

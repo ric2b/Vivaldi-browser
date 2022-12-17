@@ -61,12 +61,19 @@ if (is_win) {
       "//vivaldi/installer/util/vivaldi_static_install_helpers.cc",
       "//vivaldi/installer/util/vivaldi_static_install_helpers.h",
     ]
+    libs += [
+      "rpcrt4.lib"
+    ]
+    public_configs = [ "//third_party/abseil-cpp:absl_include_config" ]
   }
 
   # We do not include //chrome/install_static:install_static_unittests in the
   # vivaldi build, so add out test to a related test set that we do include. We
   # also add the source files to simplify dependency management.
   update_target("//components:components_unittests") {
+    if (!defined(sources)) {
+      sources = []
+    }
     sources += [
       "//vivaldi/installer/util/vivaldi_install_constants.cc",
       "//vivaldi/installer/util/vivaldi_install_constants.h",
@@ -75,10 +82,8 @@ if (is_win) {
       "//vivaldi/installer/util/vivaldi_static_install_helpers_unittest.cc",
     ]
   }
-}
 
-update_target("//chrome/installer/util:with_no_strings") {
-  if (is_win) {
+  update_target("//chrome/installer/util:with_no_strings") {
     sources += [
       "//vivaldi/installer/util/marker_file_work_item.cc",
       "//vivaldi/installer/util/marker_file_work_item.h",

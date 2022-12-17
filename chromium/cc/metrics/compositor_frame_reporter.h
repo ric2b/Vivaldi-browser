@@ -31,14 +31,16 @@ struct FrameTimingDetails;
 }
 
 namespace cc {
-class FrameSequenceTrackerCollection;
 class DroppedFrameCounter;
+class EventLatencyTracker;
+class FrameSequenceTrackerCollection;
 class LatencyUkmReporter;
 
 struct GlobalMetricsTrackers {
-  DroppedFrameCounter* dropped_frame_counter = nullptr;
-  LatencyUkmReporter* latency_ukm_reporter = nullptr;
-  FrameSequenceTrackerCollection* frame_sequence_trackers = nullptr;
+  raw_ptr<DroppedFrameCounter> dropped_frame_counter = nullptr;
+  raw_ptr<LatencyUkmReporter> latency_ukm_reporter = nullptr;
+  raw_ptr<FrameSequenceTrackerCollection> frame_sequence_trackers = nullptr;
+  raw_ptr<EventLatencyTracker> event_latency_tracker = nullptr;
 };
 
 // This is used for tracing and reporting the duration of pipeline stages within
@@ -121,12 +123,13 @@ class CC_EXPORT CompositorFrameReporter {
     kAnimate = 1,
     kStyleUpdate = 2,
     kLayoutUpdate = 3,
-    kPrepaint = 4,
-    kCompositingInputs = 5,
-    kPaint = 6,
-    kCompositeCommit = 7,
-    kUpdateLayers = 8,
-    kBeginMainSentToStarted = 9,
+    kAccessibility = 4,
+    kPrepaint = 5,
+    kCompositingInputs = 6,
+    kPaint = 7,
+    kCompositeCommit = 8,
+    kUpdateLayers = 9,
+    kBeginMainSentToStarted = 10,
     kBreakdownCount
   };
 
@@ -159,7 +162,7 @@ class CC_EXPORT CompositorFrameReporter {
       base::TimeDelta GetLatency() const;
 
      private:
-      const ProcessedBlinkBreakdown* owner_;
+      raw_ptr<const ProcessedBlinkBreakdown> owner_;
 
       size_t index_ = 0;
     };
@@ -197,7 +200,7 @@ class CC_EXPORT CompositorFrameReporter {
       base::TimeDelta GetDuration() const;
 
      private:
-      const ProcessedVizBreakdown* owner_;
+      raw_ptr<const ProcessedVizBreakdown> owner_;
       const bool skip_swap_start_to_swap_end_;
 
       size_t index_ = 0;
@@ -228,7 +231,7 @@ class CC_EXPORT CompositorFrameReporter {
 
   CompositorFrameReporter(const ActiveTrackers& active_trackers,
                           const viz::BeginFrameArgs& args,
-                          bool should_report_metrics,
+                          bool should_report_histograms,
                           SmoothThread smooth_thread,
                           FrameInfo::SmoothEffectDrivingThread scrolling_thread,
                           int layer_tree_host_id,
@@ -269,6 +272,8 @@ class CC_EXPORT CompositorFrameReporter {
   void SetVizBreakdown(const viz::FrameTimingDetails& viz_breakdown);
 
   void AddEventsMetrics(EventMetrics::List events_metrics);
+
+  // Erase and return all EventMetrics objects from our list.
   EventMetrics::List TakeEventsMetrics();
 
   size_t stage_history_size_for_testing() const {
@@ -350,7 +355,7 @@ class CC_EXPORT CompositorFrameReporter {
   void TerminateReporter();
   void EndCurrentStage(base::TimeTicks end_time);
 
-  void ReportCompositorLatencyHistograms() const;
+  void ReportCompositorLatencyMetrics() const;
   void ReportStageHistogramWithBreakdown(
       const StageData& stage,
       FrameSequenceTrackerType frame_sequence_tracker_type =
@@ -366,7 +371,7 @@ class CC_EXPORT CompositorFrameReporter {
       absl::optional<BlinkBreakdown> blink_breakdown,
       base::TimeDelta time_delta) const;
 
-  void ReportEventLatencyHistograms() const;
+  void ReportEventLatencyMetrics() const;
   void ReportCompositorLatencyTraceEvents(const FrameInfo& info) const;
   void ReportEventLatencyTraceEvents() const;
 
@@ -389,7 +394,13 @@ class CC_EXPORT CompositorFrameReporter {
 
   base::WeakPtr<CompositorFrameReporter> GetWeakPtr();
 
-  const bool should_report_metrics_;
+  // Erase and return only the EventMetrics objects which depend on main thread
+  // updates (see comments on EventMetrics::requires_main_thread_update_).
+  EventMetrics::List TakeMainBlockedEventsMetrics();
+
+  // Whether UMA histograms should be reported or not.
+  const bool should_report_histograms_;
+
   const viz::BeginFrameArgs args_;
 
   StageData current_stage_;

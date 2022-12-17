@@ -4,36 +4,30 @@
 
 package org.chromium.components.webauthn;
 
-import org.chromium.base.annotations.CalledByNative;
-
 /**
  * Describes a WebAuthn credential available on the authenticator.
  */
-public class WebAuthnCredentialDetails {
+public final class WebAuthnCredentialDetails {
+    /**
+     * Username associated with the credential.
+     */
     public String mUserName;
+
+    /**
+     * Display name associated with the credential.
+     */
     public String mUserDisplayName;
+
+    /**
+     * Unique identifier associated with the user account that the credential
+     * signs in to.
+     */
     public byte[] mUserId;
+
+    /**
+     * Identifier for the credential itself.
+     */
     public byte[] mCredentialId;
 
     public WebAuthnCredentialDetails() {}
-
-    @CalledByNative
-    public String getUserName() {
-        return mUserName;
-    }
-
-    @CalledByNative
-    public String getUserDisplayName() {
-        return mUserDisplayName;
-    }
-
-    @CalledByNative
-    public byte[] getUserId() {
-        return mUserId;
-    }
-
-    @CalledByNative
-    public byte[] getCredentialId() {
-        return mCredentialId;
-    }
 }

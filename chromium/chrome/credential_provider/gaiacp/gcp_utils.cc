@@ -11,9 +11,6 @@
 #include <winternl.h>
 
 #define _NTDEF_  // Prevent redefition errors, must come after <winternl.h>
-#include <atlbase.h>
-#include <atlcom.h>
-#include <atlcomcli.h>
 #include <malloc.h>
 #include <memory.h>
 #include <ntsecapi.h>  // For LsaLookupAuthenticationPackage()
@@ -40,6 +37,7 @@
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/win/atl.h"
 #include "base/win/current_module.h"
 #include "base/win/embedded_i18n/language_selector.h"
 #include "base/win/win_util.h"
@@ -843,6 +841,7 @@ HRESULT LookupLocalizedNameForWellKnownSid(WELL_KNOWN_SID_TYPE sid_type,
 }
 
 bool WriteToStartupSentinel() {
+  LOGFN(VERBOSE);
   // Always try to write to the startup sentinel file. If writing or opening
   // fails for any reason (file locked, no access etc) consider this a failure.
   // If no sentinel file path can be found this probably means that we are
@@ -885,6 +884,8 @@ bool WriteToStartupSentinel() {
       return false;
     }
 
+    LOGFN(VERBOSE) << "Writing to sentinel. Current length="
+                   << startup_sentinel.GetLength();
     return startup_sentinel.WriteAtCurrentPos("0", 1) == 1;
   }
 
@@ -896,6 +897,7 @@ void DeleteStartupSentinel() {
 }
 
 void DeleteStartupSentinelForVersion(const std::wstring& version) {
+  LOGFN(VERBOSE) << "Deleting sentinel for version " << version;
   base::FilePath startup_sentinel_path = GetStartupSentinelLocation(version);
   if (base::PathExists(startup_sentinel_path) &&
       !base::DeleteFile(startup_sentinel_path)) {
@@ -903,10 +905,11 @@ void DeleteStartupSentinelForVersion(const std::wstring& version) {
   }
 }
 
-std::wstring GetStringResource(int base_message_id) {
+std::wstring GetStringResource(UINT base_message_id) {
   std::wstring localized_string;
 
-  int message_id = base_message_id + GetLanguageSelector().offset();
+  UINT message_id =
+      static_cast<UINT>(base_message_id + GetLanguageSelector().offset());
   const ATLSTRINGRESOURCEIMAGE* image =
       AtlGetStringResourceImage(_AtlBaseModule.GetModuleInstance(), message_id);
   if (image) {
@@ -918,7 +921,7 @@ std::wstring GetStringResource(int base_message_id) {
   return localized_string;
 }
 
-std::wstring GetStringResource(int base_message_id,
+std::wstring GetStringResource(UINT base_message_id,
                                const std::vector<std::wstring>& subst) {
   std::wstring format_string = GetStringResource(base_message_id);
   std::wstring formatted =

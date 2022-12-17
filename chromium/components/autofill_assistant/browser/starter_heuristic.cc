@@ -74,8 +74,8 @@ void StarterHeuristic::InitFromTrialParams() {
     return;
   }
   url_matcher::URLMatcherConditionSet::Vector condition_sets;
-  base::flat_map<url_matcher::URLMatcherConditionSet::ID, std::string> mapping;
-  url_matcher::URLMatcherConditionSet::ID next_condition_set_id = 0;
+  base::flat_map<base::MatcherStringPattern::ID, std::string> mapping;
+  base::MatcherStringPattern::ID next_condition_set_id = 0;
   for (const auto& heuristic : heuristics->GetListDeprecated()) {
     auto* intent =
         heuristic.FindKeyOfType(kHeuristicIntentKey, base::Value::Type::STRING);
@@ -87,11 +87,9 @@ void StarterHeuristic::InitFromTrialParams() {
     }
 
     std::string error;
-    const auto& url_conditions_dict =
-        base::Value::AsDictionaryValue(*url_conditions);
     condition_sets.emplace_back(
         url_matcher::URLMatcherFactory::CreateFromURLFilterDictionary(
-            url_matcher_.condition_factory(), &url_conditions_dict,
+            url_matcher_.condition_factory(), url_conditions->GetDict(),
             next_condition_set_id, &error));
     if (!error.empty()) {
       VLOG(1) << "Error pasing url conditions: " << error;
@@ -132,8 +130,7 @@ base::flat_set<std::string> StarterHeuristic::IsHeuristicMatch(
     return matching_intents;
   }
 
-  std::set<url_matcher::URLMatcherConditionSet::ID> matches =
-      url_matcher_.MatchURL(url);
+  std::set<base::MatcherStringPattern::ID> matches = url_matcher_.MatchURL(url);
   for (const auto& match : matches) {
     auto intent = matcher_id_to_intent_map_.find(match);
     if (intent == matcher_id_to_intent_map_.end()) {

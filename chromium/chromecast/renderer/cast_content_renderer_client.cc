@@ -49,6 +49,7 @@
 #include "third_party/blink/public/web/web_view.h"
 
 #if BUILDFLAG(IS_ANDROID)
+#include "base/android/bundle_utils.h"
 #include "chromecast/media/audio/cast_audio_device_factory.h"
 #include "media/base/android/media_codec_util.h"
 #else
@@ -162,10 +163,6 @@ void CastContentRendererClient::RenderFrameCreated(
 
   // Lifetime is tied to |render_frame| via content::RenderFrameObserver.
   if (render_frame->IsMainFrame()) {
-    if (main_frame_feature_manager_on_associated_interface_) {
-      LOG(DFATAL) << "main_frame_feature_manager_on_associated_interface_ gets "
-                     "overwritten.";
-    }
     main_frame_feature_manager_on_associated_interface_ =
         new FeatureManagerOnAssociatedInterface(render_frame);
   } else {
@@ -402,7 +399,8 @@ absl::optional<::media::AudioRendererAlgorithmParameters>
 CastContentRendererClient::GetAudioRendererAlgorithmParameters(
     ::media::AudioParameters audio_parameters) {
 #if BUILDFLAG(IS_ANDROID)
-  if (base::FeatureList::IsEnabled(kEnableCastAudioOutputDevice)) {
+  if (base::android::BundleUtils::IsBundle() ||
+      base::FeatureList::IsEnabled(kEnableCastAudioOutputDevice)) {
     return absl::nullopt;
   }
   ::media::AudioRendererAlgorithmParameters parameters;

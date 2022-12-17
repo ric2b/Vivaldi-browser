@@ -29,15 +29,6 @@ namespace enterprise_connectors {
 // ConnectorsManager.
 extern const base::Feature kEnterpriseConnectorsEnabled;
 
-// For the moment, service provider configurations are static and only support
-// google endpoints.  Therefore the configuration is placed here directly.
-// Once the configuration becomes more dynamic this static string will be
-// removed and replaced with a service to keep it up to date.
-extern const char kServiceProviderConfig[];
-
-// Accessor for the ServiceProviderConfig.
-ServiceProviderConfig* GetServiceProviderConfig();
-
 // A keyed service to access ConnectorsManager, which tracks Connector policies.
 class ConnectorsService : public KeyedService {
  public:
@@ -67,6 +58,9 @@ class ConnectorsService : public KeyedService {
                                                   const std::string& tag);
   absl::optional<GURL> GetLearnMoreUrl(AnalysisConnector connector,
                                        const std::string& tag);
+  absl::optional<bool> GetBypassJustificationRequired(
+      AnalysisConnector connector,
+      const std::string& tag);
   bool HasCustomInfoToDisplay(AnalysisConnector connector,
                               const std::string& tag);
 

@@ -4,7 +4,10 @@
 
 #include "ash/capture_mode/capture_mode_test_util.h"
 
+#include "ash/capture_mode/capture_mode_bar_view.h"
 #include "ash/capture_mode/capture_mode_controller.h"
+#include "ash/capture_mode/capture_mode_session_test_api.h"
+#include "ash/capture_mode/capture_mode_source_view.h"
 #include "ash/capture_mode/test_capture_mode_delegate.h"
 #include "ash/public/cpp/capture_mode/capture_mode_test_api.h"
 #include "ash/public/cpp/projector/projector_controller.h"
@@ -134,6 +137,32 @@ void ClickOrTapView(const views::View* view,
     ClickOnView(view, event_generator);
 }
 
+CaptureModeBarView* GetCaptureModeBarView() {
+  auto* session = CaptureModeController::Get()->capture_mode_session();
+  DCHECK(session);
+  return CaptureModeSessionTestApi(session).GetCaptureModeBarView();
+}
+
+CaptureModeToggleButton* GetFullscreenToggleButton() {
+  auto* controller = CaptureModeController::Get();
+  DCHECK(controller->IsActive());
+  return GetCaptureModeBarView()
+      ->capture_source_view()
+      ->fullscreen_toggle_button();
+}
+
+CaptureModeToggleButton* GetRegionToggleButton() {
+  auto* controller = CaptureModeController::Get();
+  DCHECK(controller->IsActive());
+  return GetCaptureModeBarView()->capture_source_view()->region_toggle_button();
+}
+
+UserNudgeController* GetUserNudgeController() {
+  auto* session = CaptureModeController::Get()->capture_mode_session();
+  DCHECK(session);
+  return CaptureModeSessionTestApi(session).GetUserNudgeController();
+}
+
 // -----------------------------------------------------------------------------
 // ProjectorCaptureModeIntegrationHelper:
 
@@ -167,6 +196,14 @@ void ProjectorCaptureModeIntegrationHelper::StartProjectorModeSession() {
   EXPECT_TRUE(projector_session->is_active());
   auto* controller = CaptureModeController::Get();
   EXPECT_EQ(controller->source(), CaptureModeSource::kFullscreen);
+}
+
+bool IsLayerStackedRightBelow(ui::Layer* layer, ui::Layer* sibling) {
+  DCHECK_EQ(layer->parent(), sibling->parent());
+  const auto& children = layer->parent()->children();
+  const int sibling_index =
+      std::find(children.begin(), children.end(), sibling) - children.begin();
+  return sibling_index > 0 && children[sibling_index - 1] == layer;
 }
 
 }  // namespace ash

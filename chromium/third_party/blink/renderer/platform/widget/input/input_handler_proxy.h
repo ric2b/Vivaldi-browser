@@ -202,6 +202,11 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   void SynchronouslyZoomBy(float magnify_delta,
                            const gfx::Point& anchor);
 
+  // Defers posting BeginMainFrame tasks. This is used during the main thread
+  // hit test for a GestureScrollBegin, to avoid posting a frame before the
+  // compositor thread has had a chance to update the scroll offset.
+  void SetDeferBeginMainFrame(bool defer_begin_main_frame) const;
+
   // cc::InputHandlerClient implementation.
   void WillShutdown() override;
   void Animate(base::TimeTicks time) override;
@@ -254,7 +259,7 @@ class PLATFORM_EXPORT InputHandlerProxy : public cc::InputHandlerClient,
   EventDisposition HandleGestureScrollUpdate(
       const blink::WebGestureEvent& event,
       const blink::WebInputEventAttribution& original_attribution,
-      const cc::EventMetrics* original_metrics);
+      cc::EventMetrics* metrics);
   EventDisposition HandleGestureScrollEnd(const blink::WebGestureEvent& event);
   EventDisposition HandleTouchStart(EventWithCallback* event_with_callback);
   EventDisposition HandleTouchMove(EventWithCallback* event_with_callback);

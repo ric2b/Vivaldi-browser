@@ -218,12 +218,22 @@ UseCounterPageLoadMetricsObserver::GetAllowedUkmFeatures() {
           WebFeature::kWebCodecsVideoTrackReader,
           WebFeature::kWebCodecsImageDecoder,
           WebFeature::kWebCodecsAudioEncoder,
-          WebFeature::kWebCodecsVideoFrameDefaultTimestamp,
           WebFeature::kWebCodecsVideoFrameFromImage,
           WebFeature::kWebCodecsVideoFrameFromBuffer,
           WebFeature::kOpenWebDatabaseInsecureContext,
           WebFeature::kPrivateNetworkAccessIgnoredPreflightError,
           WebFeature::kWebBluetoothGetAvailability,
+          WebFeature::kCookieHasNotBeenRefreshedIn201To300Days,
+          WebFeature::kCookieHasNotBeenRefreshedIn301To350Days,
+          WebFeature::kCookieHasNotBeenRefreshedIn351To400Days,
+          WebFeature::kPartitionedCookies,
+          WebFeature::kScriptSchedulingType_Defer,
+          WebFeature::kScriptSchedulingType_ParserBlocking,
+          WebFeature::kScriptSchedulingType_ParserBlockingInline,
+          WebFeature::kScriptSchedulingType_InOrder,
+          WebFeature::kScriptSchedulingType_Async,
+          WebFeature::kClientHintsMetaHTTPEquivAcceptCH,
+          WebFeature::kClientHintsMetaNameAcceptCH,
       }));
   return *opt_in_features;
 }

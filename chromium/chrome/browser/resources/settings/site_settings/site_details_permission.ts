@@ -10,7 +10,7 @@
 import 'chrome://resources/cr_elements/md_select_css.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
 import '../settings_shared_css.js';
-import '../settings_vars_css.js';
+import '../settings_vars.css.js';
 import '../i18n_setup.js';
 
 import {assert, assertNotReached} from 'chrome://resources/js/assert_ts.js';
@@ -237,8 +237,11 @@ export class SiteDetailsPermissionElement extends
                // Set all permission info string arguments as null. This is OK
                // because there is no need to know what the information string
                // will be, just whether there is one or not.
-               null, null, null, null, null, null, null, null, null, null, null,
-               null) !== '';
+               null, null, null, null, null, null,
+               // <if expr="is_win and _google_chrome">
+               null,
+               // </if>
+               null, null, null, null, null, null) !== '';
   }
 
   /**
@@ -351,9 +354,13 @@ export class SiteDetailsPermissionElement extends
       setting: ContentSetting, allowlistString: string|null,
       adsBlacklistString: string|null, adsBlockString: string|null,
       embargoString: string|null, insecureOriginString: string|null,
-      killSwitchString: string|null, extensionAllowString: string|null,
-      extensionBlockString: string|null, extensionAskString: string|null,
-      policyAllowString: string|null, policyBlockString: string|null,
+      killSwitchString: string|null,
+      // <if expr="is_win and _google_chrome">
+      protectedContentIdentifierAllowedString: string|null,
+      // </if>
+      extensionAllowString: string|null, extensionBlockString: string|null,
+      extensionAskString: string|null, policyAllowString: string|null,
+      policyBlockString: string|null,
       policyAskString: string|null): (string|null) {
     if (source === undefined || category === undefined ||
         setting === undefined) {
@@ -400,6 +407,12 @@ export class SiteDetailsPermissionElement extends
       return killSwitchString;
     } else if (source === SiteSettingSource.POLICY) {
       return policyStrings[setting];
+      // <if expr="is_win and _google_chrome">
+    } else if (
+        category === ContentSettingsTypes.PROTECTED_CONTENT &&
+        setting === ContentSetting.ALLOW) {
+      return protectedContentIdentifierAllowedString;
+      // </if>
     } else if (
         source === SiteSettingSource.DEFAULT ||
         source === SiteSettingSource.PREFERENCE) {

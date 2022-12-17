@@ -4,35 +4,6 @@
 #   filemap in app/resources/po2xtb_batch.py
 CHROMIUM_VIVALDI_RESOURCE_LIST = [
   [
-    "//chrome/app:generated_resources",
-    "//vivaldi/app/resources/generated/vivaldi_generated_resources.grd",
-    {
-      pak_file_prefix="generated_resources_"
-      source = "generated_resources.grd"
-      translation_dir_setting = "resources"
-      vivaldi_translation_dir_setting = "strings"
-    },
-  ],
-  [
-    "//chrome/app:chromium_strings",
-    "//vivaldi/app/resources/strings/vivaldi_strings.grd",
-    {
-      have_strings_flag = false
-      merge_extra_grit_defines = ["-D", "vivaldi_chromium_file"]
-    },
-  ],
-  [
-    "//chrome/app:google_chrome_strings",
-    "//vivaldi/app/resources/strings/vivaldi_strings.grd",
-    {
-      translation_dir_setting = "resources"
-      pak_file_prefix="google_chrome_strings_"
-      source = "google_chrome_strings.grd"
-      vivaldi_translation_dir_setting = "strings"
-      vivaldi_file_prefix="vivaldi_strings_"
-    },
-  ],
-  [
     "//ui/strings:ui_strings",
     "//vivaldi/app/resources/ui_strings/vivaldi_ui_strings.grd",
     {
@@ -44,54 +15,11 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//chrome/app/resources:locale_settings",
-    "//vivaldi/app/resources/locale/vivaldi_locale_strings.grd",
-    {
-      have_strings_flag = false
-    },
-  ],
-  [
-    "//chrome/renderer:resources",
-    "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
-    {
-      have_strings_flag = false
-    },
-  ],
-  [
-    "//chrome/app/resources:platform_locale_settings",
-    "//vivaldi/app/resources/platform_locale_settings/vivaldi_platform_locale_settings.grd",
-    {
-      have_strings_flag = false
-      pak_file_prefix="platform_locale_settings_"
-      add_mobile_locales = true
-    },
-  ],
-  [
-    "//chrome/app/theme:theme_resources",
-    "//vivaldi/app/resources/theme/vivaldi_theme.grd",
-    {
-      have_strings_flag = false
-    },
-  ],
-  [
-    "//chrome/app/theme:chrome_unscaled_resources",
-    "//vivaldi/app/resources/theme/vivaldi_unscaled_resources.grd",
-    {
-      have_strings_flag = false
-    },
-  ],
-  [
     "//components/resources:components_resources",
     "//vivaldi/app/resources/components_resources/vivaldi_components.grd",
     {
       have_strings_flag = false
-    },
-  ],
-  [
-    "//ui/resources:ui_resources_grd",
-    "//vivaldi/app/resources/ui/vivaldi_ui_resources.grd",
-    {
-      have_strings_flag = false
+      merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=false"]
     },
   ],
   [
@@ -104,18 +32,11 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
     },
   ],
   [
-    "//components/strings:components_chromium_strings",
-    "//vivaldi/app/resources/components/vivaldi_components.grd",
-    {
-      have_strings_flag = false
-      merge_extra_grit_defines = ["-D", "vivaldi_chromium_file"]
-    },
-  ],
-  [
     "//components/strings:components_google_chrome_strings",
     "//vivaldi/app/resources/components/vivaldi_components.grd",
     {
       translation_dir_setting = "strings"
+      merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=false"]
       pak_file_prefix="components_google_chrome_strings_"
       source = "../components_google_chrome_strings.grd"
       vivaldi_file_prefix="vivaldi_components_"
@@ -138,18 +59,105 @@ CHROMIUM_VIVALDI_RESOURCE_LIST = [
       have_strings_flag = false
     },
   ],
-  [
-    "//third_party/blink/public/strings:strings",
-    "//vivaldi/app/resources/content/vivaldi_content_strings.grd",
-    {
-      translation_dir_setting = "translations"
-      pak_file_prefix="blink_strings_"
-      source = "blink_strings.grd"
-      vivaldi_translation_dir_setting = "strings"
-      vivaldi_file_prefix="vivaldi_content_strings_"
-    },
-  ],
 ]
+
+if(!is_ios) {
+  CHROMIUM_VIVALDI_RESOURCE_LIST += [
+    [
+      "//chrome/app:generated_resources",
+      "//vivaldi/app/resources/generated/vivaldi_generated_resources.grd",
+      {
+        pak_file_prefix="generated_resources_"
+        source = "generated_resources.grd"
+        translation_dir_setting = "resources"
+        vivaldi_translation_dir_setting = "strings"
+      },
+    ],
+    [
+      "//chrome/app:chromium_strings",
+      "//vivaldi/app/resources/strings/vivaldi_strings.grd",
+      {
+        have_strings_flag = false
+        merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=true"]
+      },
+    ],
+    [
+      "//chrome/app:google_chrome_strings",
+      "//vivaldi/app/resources/strings/vivaldi_strings.grd",
+      {
+        merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=false"]
+        translation_dir_setting = "resources"
+        pak_file_prefix="google_chrome_strings_"
+        source = "google_chrome_strings.grd"
+        vivaldi_translation_dir_setting = "strings"
+        vivaldi_file_prefix="vivaldi_strings_"
+      },
+    ],
+    [
+      "//chrome/app/resources:locale_settings",
+      "//vivaldi/app/resources/locale/vivaldi_locale_strings.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
+      "//chrome/app/resources:platform_locale_settings",
+      "//vivaldi/app/resources/platform_locale_settings/vivaldi_platform_locale_settings.grd",
+      {
+        have_strings_flag = false
+        pak_file_prefix="platform_locale_settings_"
+        add_mobile_locales = true
+      },
+    ],
+    [
+      "//chrome/app/theme:chrome_unscaled_resources",
+      "//vivaldi/app/resources/theme/vivaldi_unscaled_resources.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
+      "//chrome/app/theme:theme_resources",
+      "//vivaldi/app/resources/theme/vivaldi_theme.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
+      "//chrome/renderer:resources",
+      "//vivaldi/app/resources/renderer/vivaldi_renderer_resources.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
+      "//ui/resources:ui_resources_grd",
+      "//vivaldi/app/resources/ui/vivaldi_ui_resources.grd",
+      {
+        have_strings_flag = false
+      },
+    ],
+    [
+      "//components/strings:components_chromium_strings",
+      "//vivaldi/app/resources/components/vivaldi_components.grd",
+      {
+        have_strings_flag = false
+        merge_extra_grit_defines = ["-D", "vivaldi_chromium_file=true"]
+      },
+    ],
+    [
+      "//third_party/blink/public/strings:strings",
+      "//vivaldi/app/resources/content/vivaldi_content_strings.grd",
+      {
+        translation_dir_setting = "translations"
+        pak_file_prefix="blink_strings_"
+        source = "blink_strings.grd"
+        vivaldi_translation_dir_setting = "strings"
+        vivaldi_file_prefix="vivaldi_content_strings_"
+      },
+    ],
+  ]
+}
 
 ANDROID_VIVALDI_RESOURCE_LIST = [
   [

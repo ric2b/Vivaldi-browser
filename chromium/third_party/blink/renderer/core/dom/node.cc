@@ -40,6 +40,7 @@
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_document_state.h"
 #include "third_party/blink/renderer/core/display_lock/display_lock_utilities.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_utils.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/attribute.h"
 #include "third_party/blink/renderer/core/dom/child_list_mutation_scope.h"
@@ -102,7 +103,6 @@
 #include "third_party/blink/renderer/core/html/custom/custom_element.h"
 #include "third_party/blink/renderer/core/html/html_dialog_element.h"
 #include "third_party/blink/renderer/core/html/html_frame_owner_element.h"
-#include "third_party/blink/renderer/core/html/html_popup_element.h"
 #include "third_party/blink/renderer/core/html/html_slot_element.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/input/event_handler.h"
@@ -184,8 +184,7 @@ struct SameSizeAsNode : EventTarget {
   Member<NodeData> member_;
   // Increasing size of Member increases size of Node.
   static_assert(kBlinkMemberGCHasDebugChecks ||
-                    ::WTF::internal::SizesEqual<sizeof(Member<NodeData>),
-                                                sizeof(void*)>::value,
+                    sizeof(Member<NodeData>) <= sizeof(void*),
                 "Member<NodeData> should stay small");
 };
 
@@ -1337,6 +1336,7 @@ void Node::MarkAncestorsWithChildNeedsReattachLayoutTree() {
 
 void Node::SetNeedsReattachLayoutTree() {
   DCHECK(GetDocument().InStyleRecalc());
+  DCHECK(GetDocument().GetStyleEngine().MarkReattachAllowed());
   DCHECK(IsElementNode() || IsTextNode());
   DCHECK(InActiveDocument());
   SetFlag(kNeedsReattachLayoutTree);
@@ -1369,8 +1369,25 @@ void Node::SetNeedsStyleRecalc(StyleChangeType change_type,
 
   // NOTE: If we are being called from SetNeedsAnimationStyleRecalc(), the
   // AnimationStyleChange bit may be reset to 'true'.
-  if (auto* this_element = DynamicTo<Element>(this))
+  if (auto* this_element = DynamicTo<Element>(this)) {
     this_element->SetAnimationStyleChange(false);
+
+    // The style walk for the pseudo tree created for a DocumentTransition is
+    // done after resolving style for the author DOM. See
+    // StyleEngine::RecalcTransitionPseudoStyle.
+    // Since the dirty bits from the originating element (root element) are not
+    // propagated to these pseudo elements during the default walk, we need to
+    // invalidate style for these elements here.
+    if (this_element->IsDocumentElement()) {
+      auto update_style_change = [](PseudoElement* pseudo_element) {
+        pseudo_element->SetNeedsStyleRecalc(
+            kLocalStyleChange, StyleChangeReasonForTracing::Create(
+                                   style_change_reason::kDocumentTransition));
+      };
+      DocumentTransitionUtils::ForEachTransitionPseudo(GetDocument(),
+                                                       update_style_change);
+    }
+  }
 
   if (auto* svg_element = DynamicTo<SVGElement>(this))
     svg_element->SetNeedsStyleRecalcForInstances(change_type, reason);
@@ -1684,6 +1701,17 @@ bool Node::CanStartSelection() const {
   }
   ContainerNode* parent = FlatTreeTraversal::Parent(*this);
   return parent ? parent->CanStartSelection() : true;
+}
+
+bool Node::IsRichlyEditableForAccessibility() const {
+#if DCHECK_IS_ON()  // Required in order to get Lifecycle().ToString()
+  DCHECK_GE(GetDocument().Lifecycle().GetState(),
+            DocumentLifecycle::kStyleClean)
+      << "Unclean document style at lifecycle state "
+      << GetDocument().Lifecycle().ToString();
+#endif  // DCHECK_IS_ON()
+
+  return HasRichlyEditableStyle(*this);
 }
 
 void Node::NotifyPriorityScrollAnchorStatusChanged() {
@@ -2864,15 +2892,9 @@ void Node::NotifyMutationObserversNodeWillDetach() {
 }
 
 void Node::HandleLocalEvents(Event& event) {
-  if (UNLIKELY(IsDocumentNode())) {
-    if (GetDocument().PopupShowing() &&
-        (event.eventPhase() == Event::kCapturingPhase ||
-         event.eventPhase() == Event::kAtTarget)) {
-      DCHECK(RuntimeEnabledFeatures::HTMLPopupElementEnabled());
-      // There is a popup visible - check if this event should "light dismiss"
-      // one or more popups.
-      Element::HandlePopupLightDismiss(event);
-    }
+  if (UNLIKELY(IsDocumentNode() && GetDocument().PopupOrHintShowing())) {
+    // Check if this event should "light dismiss" one or more popups.
+    Element::HandlePopupLightDismiss(event);
   }
 
   if (!HasEventTargetData())

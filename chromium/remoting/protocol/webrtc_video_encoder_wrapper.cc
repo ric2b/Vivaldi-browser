@@ -18,9 +18,11 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "remoting/base/constants.h"
+#include "remoting/codec/webrtc_video_encoder_av1.h"
 #include "remoting/codec/webrtc_video_encoder_vpx.h"
 #include "remoting/protocol/video_channel_state_observer.h"
 #include "remoting/protocol/webrtc_video_frame_adapter.h"
+#include "third_party/webrtc/api/video_codecs/sdp_video_format.h"
 #include "third_party/webrtc/api/video_codecs/vp9_profile.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_frame.h"
 #include "third_party/webrtc/modules/video_coding/include/video_codec_interface.h"
@@ -30,8 +32,7 @@
 #include "remoting/codec/webrtc_video_encoder_gpu.h"
 #endif
 
-namespace remoting {
-namespace protocol {
+namespace remoting::protocol {
 
 namespace {
 
@@ -101,9 +102,10 @@ WebrtcVideoEncoderWrapper::WebrtcVideoEncoderWrapper(
       encoder_ = WebrtcVideoEncoderVpx::CreateForVP8();
       break;
     case webrtc::kVideoCodecVP9: {
-      const auto iter = format.parameters.find(webrtc::kVP9FmtpProfileId);
-      bool lossless_color =
-          iter != format.parameters.end() && iter->second == "1";
+      absl::optional<webrtc::VP9Profile> profile =
+          webrtc::ParseSdpForVP9Profile(format.parameters);
+      bool lossless_color = profile.has_value() &&
+                            profile.value() == webrtc::VP9Profile::kProfile1;
       VLOG(0) << "Creating VP9 encoder, lossless_color="
               << (lossless_color ? "true" : "false");
       encoder_ = WebrtcVideoEncoderVpx::CreateForVP9();
@@ -117,6 +119,10 @@ WebrtcVideoEncoderWrapper::WebrtcVideoEncoderWrapper(
 #else
       NOTIMPLEMENTED();
 #endif
+      break;
+    case webrtc::kVideoCodecAV1:
+      VLOG(0) << "Creating AV1 encoder.";
+      encoder_ = std::make_unique<WebrtcVideoEncoderAV1>();
       break;
     default:
       LOG(FATAL) << "Unknown codec type: " << codec_type_;
@@ -394,6 +400,8 @@ WebrtcVideoEncoderWrapper::ReturnEncodedFrame(
 #else
     NOTREACHED();
 #endif
+  } else if (frame.codec == webrtc::kVideoCodecAV1) {
+    // TODO(joedow): Set codec specific params for AV1 here.
   } else {
     NOTREACHED();
   }
@@ -502,5 +510,4 @@ bool WebrtcVideoEncoderWrapper::ShouldDropQualityForLargeFrame(
   return should_drop_quality;
 }
 
-}  // namespace protocol
-}  // namespace remoting
+}  // namespace remoting::protocol

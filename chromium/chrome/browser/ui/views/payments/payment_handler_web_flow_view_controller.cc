@@ -248,8 +248,9 @@ std::unique_ptr<views::View>
 PaymentHandlerWebFlowViewController::CreateHeaderContentView(
     views::View* header_view) {
   const url::Origin origin =
-      web_contents() ? web_contents()->GetMainFrame()->GetLastCommittedOrigin()
-                     : url::Origin::Create(target_);
+      web_contents()
+          ? web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin()
+          : url::Origin::Create(target_);
   std::unique_ptr<views::Background> background =
       GetHeaderBackground(header_view);
   return std::make_unique<ReadOnlyOriginView>(
@@ -294,11 +295,6 @@ void PaymentHandlerWebFlowViewController::VisibleSecurityStateChanged(
   }
 }
 
-void PaymentHandlerWebFlowViewController::PrimaryPageChanged(
-    content::Page& page) {
-  UpdateHeaderView();
-}
-
 void PaymentHandlerWebFlowViewController::AddNewContents(
     content::WebContents* source,
     std::unique_ptr<content::WebContents> new_contents,
@@ -331,19 +327,18 @@ void PaymentHandlerWebFlowViewController::DidFinishNavigation(
   if (!is_active())
     return;
 
-  if (navigation_handle->IsSameDocument())
+  // Ignore non-primary main frame or same page navigations which aren't
+  // relevant to below.
+  if (navigation_handle->IsSameDocument() ||
+      !navigation_handle->IsInPrimaryMainFrame())
     return;
 
   // Checking uncommitted navigations (e.g., Network errors) is unnecessary
   // because the new pages have no chance to be loaded, rendered nor execute js.
-  // TODO(crbug.com/1198274): Only main frame is checked because unsafe iframes
-  // are blocked by the MixContentNavigationThrottle. But this design is
+  // TODO(crbug.com/1198274): Only primary main frame is checked because unsafe
+  // iframes are blocked by the MixContentNavigationThrottle. But this design is
   // fragile.
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
   if (navigation_handle->HasCommitted() &&
-      navigation_handle->IsInPrimaryMainFrame() &&
       !SslValidityChecker::IsValidPageInPaymentHandlerWindow(
           navigation_handle->GetWebContents())) {
     AbortPayment();
@@ -352,8 +347,8 @@ void PaymentHandlerWebFlowViewController::DidFinishNavigation(
 
   if (first_navigation_complete_callback_) {
     std::move(first_navigation_complete_callback_)
-        .Run(true, web_contents()->GetMainFrame()->GetProcess()->GetID(),
-             web_contents()->GetMainFrame()->GetRoutingID());
+        .Run(true, web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+             web_contents()->GetPrimaryMainFrame()->GetRoutingID());
   }
 
   UpdateHeaderView();

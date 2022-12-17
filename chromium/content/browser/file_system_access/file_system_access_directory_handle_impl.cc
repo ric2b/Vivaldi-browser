@@ -5,6 +5,7 @@
 #include "content/browser/file_system_access/file_system_access_directory_handle_impl.h"
 
 #include "base/i18n/file_util_icu.h"
+#include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -14,7 +15,6 @@
 #include "content/browser/file_system_access/file_system_access_transfer_token_impl.h"
 #include "content/browser/file_system_access/file_system_access_write_lock_manager.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
-#include "net/base/escape.h"
 #include "net/base/filename_util.h"
 #include "storage/browser/file_system/file_system_context.h"
 #include "storage/browser/file_system/file_system_operation_runner.h"
@@ -49,12 +49,14 @@ FileSystemAccessDirectoryHandleImpl::~FileSystemAccessDirectoryHandleImpl() =
 void FileSystemAccessDirectoryHandleImpl::GetPermissionStatus(
     bool writable,
     GetPermissionStatusCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DoGetPermissionStatus(writable, std::move(callback));
 }
 
 void FileSystemAccessDirectoryHandleImpl::RequestPermission(
     bool writable,
     RequestPermissionCallback callback) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   DoRequestPermission(writable, std::move(callback));
 }
 
@@ -260,6 +262,8 @@ void FileSystemAccessDirectoryHandleImpl::Resolve(
 void FileSystemAccessDirectoryHandleImpl::ResolveImpl(
     ResolveCallback callback,
     FileSystemAccessTransferTokenImpl* possible_child) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (!possible_child) {
     std::move(callback).Run(
         file_system_access_error::FromStatus(
@@ -522,6 +526,8 @@ blink::mojom::FileSystemAccessErrorPtr
 FileSystemAccessDirectoryHandleImpl::GetChildURL(
     const std::string& basename,
     storage::FileSystemURL* result) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (!IsSafePathComponent(basename)) {
     return file_system_access_error::FromStatus(
         FileSystemAccessStatus::kInvalidArgument, "Name is not allowed.");
@@ -542,6 +548,8 @@ FileSystemAccessEntryPtr FileSystemAccessDirectoryHandleImpl::CreateEntry(
     const std::string& basename,
     const storage::FileSystemURL& url,
     HandleType handle_type) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
   if (handle_type == HandleType::kDirectory) {
     return FileSystemAccessEntry::New(
         FileSystemAccessHandle::NewDirectory(
@@ -556,6 +564,7 @@ FileSystemAccessEntryPtr FileSystemAccessDirectoryHandleImpl::CreateEntry(
 
 base::WeakPtr<FileSystemAccessHandleBase>
 FileSystemAccessDirectoryHandleImpl::AsWeakPtr() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   return weak_factory_.GetWeakPtr();
 }
 

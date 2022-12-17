@@ -8,13 +8,11 @@
 
 #include <ostream>
 
-#include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/notreached.h"
 #include "base/ranges/algorithm.h"
 #include "base/strings/string_split.h"
 #include "base/values.h"
-#include "components/sync/base/features.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 
 namespace syncer {
@@ -161,6 +159,9 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
     {WORKSPACE_DESK, "WORKSPACE_DESK", "workspace_desk", "Workspace Desk",
      sync_pb::EntitySpecifics::kWorkspaceDeskFieldNumber,
      ModelTypeForHistograms::kWorkspaceDesk},
+    {HISTORY, "HISTORY", "history", "History",
+     sync_pb::EntitySpecifics::kHistoryFieldNumber,
+     ModelTypeForHistograms::kHistory},
     {NOTES, "NOTES", "vivaldi_notes", "Notes",
      sync_pb::EntitySpecifics::kNotesFieldNumber,
      ModelTypeForHistograms::kNotes},
@@ -175,11 +176,11 @@ const ModelTypeInfo kModelTypeInfoMap[] = {
 static_assert(std::size(kModelTypeInfoMap) == GetNumModelTypes(),
               "kModelTypeInfoMap should have GetNumModelTypes() elements");
 
-static_assert(38 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(39 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, update enum SyncModelTypes in enums.xml "
               "and suffix SyncModelType in histograms.xml.");
 
-static_assert(38 + 1 /* notes */ == syncer::GetNumModelTypes(),
+static_assert(39 + 1 /* notes */ == syncer::GetNumModelTypes(),
               "When adding a new type, update kAllocatorDumpNameAllowlist in "
               "base/trace_event/memory_infra_background_allowlist.cc.");
 
@@ -301,6 +302,10 @@ void AddDefaultFieldValue(ModelType type, sync_pb::EntitySpecifics* specifics) {
     case SHARING_MESSAGE:
       specifics->mutable_sharing_message();
       break;
+    case HISTORY:
+      specifics->mutable_history();
+      break;
+
     // <Vivaldi
     case NOTES:
       specifics->mutable_notes();
@@ -325,7 +330,7 @@ int GetSpecificsFieldNumberFromModelType(ModelType model_type) {
 }
 
 ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
-  static_assert(38 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(39 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "When adding new protocol types, the following type lookup "
                 "logic must be updated.");
   if (specifics.has_bookmark())
@@ -400,6 +405,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
     return AUTOFILL_WALLET_OFFER;
   if (specifics.has_workspace_desk())
     return WORKSPACE_DESK;
+  if (specifics.has_history())
+    return HISTORY;
 
   if (specifics.has_notes())
     return NOTES;
@@ -409,19 +416,8 @@ ModelType GetModelTypeFromSpecifics(const sync_pb::EntitySpecifics& specifics) {
   return UNSPECIFIED;
 }
 
-// TODO(crbug.com/1299833): Once the feature toggle is removed, make this
-// constexpr and inline it in the header again.
-ModelTypeSet AlwaysPreferredUserTypes() {
-  ModelTypeSet types(DEVICE_INFO, USER_CONSENTS, SECURITY_EVENTS,
-                     SUPERVISED_USER_SETTINGS, SHARING_MESSAGE);
-  if (base::FeatureList::IsEnabled(kDecoupleSendTabToSelfAndSyncSettings)) {
-    types.Put(SEND_TAB_TO_SELF);
-  }
-  return types;
-}
-
 ModelTypeSet EncryptableUserTypes() {
-  static_assert(38 + 1 /* notes */ == syncer::GetNumModelTypes(),
+  static_assert(39 + 1 /* notes */ == syncer::GetNumModelTypes(),
                 "If adding an unencryptable type, remove from "
                 "encryptable_user_types below.");
   ModelTypeSet encryptable_user_types = UserTypes();
@@ -431,6 +427,7 @@ ModelTypeSet EncryptableUserTypes() {
   // Commit-only types are never encrypted since they are consumed server-side.
   encryptable_user_types.RemoveAll(CommitOnlyTypes());
   // Other types that are never encrypted because consumed server-side.
+  encryptable_user_types.Remove(HISTORY);
   encryptable_user_types.Remove(HISTORY_DELETE_DIRECTIVES);
   encryptable_user_types.Remove(DEVICE_INFO);
   // Never encrypted because also written server-side.

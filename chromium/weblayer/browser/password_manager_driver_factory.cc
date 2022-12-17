@@ -72,9 +72,13 @@ class PasswordManagerDriverFactory::PasswordManagerDriver
                                const std::u16string& typed_username,
                                int options,
                                const gfx::RectF& bounds) override {}
+
+#if BUILDFLAG(IS_ANDROID)
   void ShowTouchToFill(
       autofill::mojom::SubmissionReadinessState submission_readiness) override {
   }
+#endif
+
   void CheckSafeBrowsingReputation(const GURL& form_action,
                                    const GURL& frame_url) override {}
   void FocusedInputChanged(
@@ -120,7 +124,7 @@ PasswordManagerDriverFactory::GetDriverForFrame(
     content::RenderFrameHost* render_frame_host) {
   DCHECK_EQ(web_contents(),
             content::WebContents::FromRenderFrameHost(render_frame_host));
-  DCHECK(render_frame_host->IsRenderFrameCreated());
+  DCHECK(render_frame_host->IsRenderFrameLive());
 
   auto [it, inserted] =
       frame_driver_map_.try_emplace(render_frame_host, render_frame_host);

@@ -13,6 +13,7 @@
 #include <input-timestamps-unstable-v1-server-protocol.h>
 #include <keyboard-configuration-unstable-v1-server-protocol.h>
 #include <keyboard-extension-unstable-v1-server-protocol.h>
+#include <keyboard-shortcuts-inhibit-unstable-v1-server-protocol.h>
 #include <linux-explicit-synchronization-unstable-v1-server-protocol.h>
 #include <notification-shell-unstable-v1-server-protocol.h>
 #include <overlay-prioritizer-server-protocol.h>
@@ -52,6 +53,7 @@
 #include "build/chromeos_buildflags.h"
 #include "components/exo/buildflags.h"
 #include "components/exo/capabilities.h"
+#include "components/exo/common_utils.h"
 #include "components/exo/display.h"
 #include "components/exo/wayland/overlay_prioritizer.h"
 #include "components/exo/wayland/serial_tracker.h"
@@ -97,6 +99,7 @@
 #include "components/exo/wayland/zcr_touchpad_haptics.h"
 #include "components/exo/wayland/zwp_idle_inhibit_manager.h"
 #include "components/exo/wayland/zwp_input_timestamps_manager.h"
+#include "components/exo/wayland/zwp_keyboard_shortcuts_inhibit_manager.h"
 #include "components/exo/wayland/zwp_pointer_constraints.h"
 #include "components/exo/wayland/zwp_pointer_gestures.h"
 #include "components/exo/wayland/zwp_relative_pointer_manager.h"
@@ -139,18 +142,6 @@ const char kWaylandSocketGroup[] = "wayland";
 // Directory name where all custom wayland sockets will live.
 constexpr base::FilePath::CharType kCustomServerDir[] =
     FILE_PATH_LITERAL("wayland");
-
-bool IsDrmAtomicAvailable() {
-#if defined(USE_OZONE)
-  auto& host_properties =
-      ui::OzonePlatform::GetInstance()->GetPlatformRuntimeProperties();
-  return host_properties.supports_overlays;
-#else
-  LOG(WARNING) << "Ozone disabled, cannot determine whether DrmAtomic is "
-                  "present. Assuming it is not";
-  return false;
-#endif
-}
 
 void wayland_log(const char* fmt, va_list argp) {
   LOG(WARNING) << "libwayland: " << base::StringPrintV(fmt, argp);
@@ -334,7 +325,7 @@ void Server::Initialize() {
                    bind_shell);
   wl_global_create(wl_display_.get(), &zcr_cursor_shapes_v1_interface, 1,
                    display_, bind_cursor_shapes);
-  wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 2,
+  wl_global_create(wl_display_.get(), &zcr_gaming_input_v2_interface, 3,
                    display_, bind_gaming_input);
   wl_global_create(wl_display_.get(), &zcr_keyboard_configuration_v1_interface,
                    zcr_keyboard_configuration_v1_interface.version, display_,
@@ -375,10 +366,8 @@ void Server::Initialize() {
                    display_, bind_extended_drag);
   wl_global_create(wl_display_.get(), &zxdg_output_manager_v1_interface, 3,
                    display_, bind_zxdg_output_manager);
-  if (ash::features::IsIdleInhibitEnabled()) {
-    wl_global_create(wl_display_.get(), &zwp_idle_inhibit_manager_v1_interface,
-                     1, display_, bind_zwp_idle_inhibit_manager);
-  }
+  wl_global_create(wl_display_.get(), &zwp_idle_inhibit_manager_v1_interface, 1,
+                   display_, bind_zwp_idle_inhibit_manager);
 
   weston_test_holder_ = std::make_unique<WestonTest>(this);
 
@@ -387,6 +376,10 @@ void Server::Initialize() {
   wl_global_create(wl_display_.get(), &zcr_keyboard_extension_v1_interface, 2,
                    zcr_keyboard_extension_data_.get(), bind_keyboard_extension);
 
+  wl_global_create(wl_display_.get(),
+                   &zwp_keyboard_shortcuts_inhibit_manager_v1_interface, 1,
+                   display_, bind_keyboard_shortcuts_inhibit_manager);
+
   zwp_text_manager_data_ = std::make_unique<WaylandTextInputManager>(
       display_->seat()->xkb_tracker(), serial_tracker_.get());
   wl_global_create(wl_display_.get(), &zwp_text_input_manager_v1_interface, 1,
@@ -394,7 +387,7 @@ void Server::Initialize() {
 
   zcr_text_input_extension_data_ =
       std::make_unique<WaylandTextInputExtension>();
-  wl_global_create(wl_display_.get(), &zcr_text_input_extension_v1_interface, 1,
+  wl_global_create(wl_display_.get(), &zcr_text_input_extension_v1_interface, 2,
                    zcr_text_input_extension_data_.get(),
                    bind_text_input_extension);
 

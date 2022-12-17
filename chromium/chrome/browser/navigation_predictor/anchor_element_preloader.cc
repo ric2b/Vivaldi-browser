@@ -7,15 +7,17 @@
 #include "chrome/browser/predictors/loading_predictor.h"
 #include "chrome/browser/predictors/loading_predictor_factory.h"
 #include "chrome/browser/prefetch/prefetch_prefs.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 #include "third_party/blink/public/common/features.h"
+#include "url/scheme_host_port.h"
 
 const char kPreloadingAnchorElementPreloaderPreloadingTriggered[] =
     "Preloading.AnchorElementPreloader.PreloadingTriggered";
+
+AnchorElementPreloader::~AnchorElementPreloader() = default;
 
 AnchorElementPreloader::AnchorElementPreloader(
     content::RenderFrameHost* render_frame_host,
@@ -39,6 +41,13 @@ void AnchorElementPreloader::OnPointerDown(const GURL& target) {
                ->GetPrefs())) {
     return;
   }
+  url::SchemeHostPort scheme_host_port(target);
+  if (preconnected_targets_.find(scheme_host_port) !=
+      preconnected_targets_.end()) {
+    // We've already preconnected to that origin.
+    return;
+  }
+  preconnected_targets_.insert(scheme_host_port);
 
   RecordUmaPreloadedTriggered(AnchorElementPreloaderType::kPreconnect);
 
@@ -72,8 +81,7 @@ void AnchorElementPreloader::RecordUmaPreloadedTriggered(
 
 void AnchorElementPreloader::RecordUkmPreloadType(
     AnchorElementPreloaderType type) {
-  ukm::SourceId source_id = ukm::GetSourceIdForWebContentsDocument(
-      content::WebContents::FromRenderFrameHost(render_frame_host()));
+  ukm::SourceId source_id = render_frame_host()->GetPageUkmSourceId();
 
   ukm::UkmRecorder* ukm_recorder = ukm::UkmRecorder::Get();
   ukm::builders::Preloading_AnchorInteraction(source_id)

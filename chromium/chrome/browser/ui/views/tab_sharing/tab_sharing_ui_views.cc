@@ -33,6 +33,7 @@
 #include "extensions/common/constants.h"
 #include "net/base/url_util.h"
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/views/border.h"
 
@@ -59,7 +60,7 @@ bool g_apply_dlp_for_all_users_for_testing_ = false;
 std::u16string GetTabName(WebContents* tab) {
   const std::u16string formatted_origin =
       url_formatter::FormatOriginForSecurityDisplay(
-          tab->GetMainFrame()->GetLastCommittedOrigin());
+          tab->GetPrimaryMainFrame()->GetLastCommittedOrigin());
   return formatted_origin.empty() ? tab->GetTitle() : formatted_origin;
 }
 
@@ -67,7 +68,7 @@ GlobalRenderFrameHostId GetGlobalId(WebContents* web_contents) {
   if (!web_contents) {
     return GlobalRenderFrameHostId();
   }
-  auto* const main_frame = web_contents->GetMainFrame();
+  auto* const main_frame = web_contents->GetPrimaryMainFrame();
   return main_frame ? main_frame->GetGlobalId() : GlobalRenderFrameHostId();
 }
 
@@ -191,7 +192,7 @@ void TabSharingUIViews::StartSharing(infobars::InfoBar* infobar) {
   DCHECK(shared_tab);
   DCHECK_EQ(infobars_[shared_tab], infobar);
 
-  RenderFrameHost* main_frame = shared_tab->GetMainFrame();
+  RenderFrameHost* main_frame = shared_tab->GetPrimaryMainFrame();
   DCHECK(main_frame);
   source_callback_.Run(content::DesktopMediaID(
       content::DesktopMediaID::TYPE_WEB_CONTENTS,
@@ -414,7 +415,7 @@ void TabSharingUIViews::CreateInfobarForWebContents(WebContents* contents) {
   bool is_sharing_allowed_by_policy =
       !capturer_restricted_to_same_origin_ ||
       capturer_origin_.IsSameOriginWith(
-          contents->GetMainFrame()->GetLastCommittedOrigin());
+          contents->GetPrimaryMainFrame()->GetLastCommittedOrigin());
 
 #if BUILDFLAG(IS_CHROMEOS)
   // Check if dlp policies allow sharing.
@@ -464,9 +465,11 @@ void TabSharingUIViews::CreateTabCaptureIndicator() {
   if (!shared_tab_)
     return;
 
+  blink::mojom::StreamDevices devices;
+  devices.video_device = device;
   tab_capture_indicator_ui_ = MediaCaptureDevicesDispatcher::GetInstance()
                                   ->GetMediaStreamCaptureIndicator()
-                                  ->RegisterMediaStream(shared_tab_, {device});
+                                  ->RegisterMediaStream(shared_tab_, devices);
   tab_capture_indicator_ui_->OnStarted(
       base::RepeatingClosure(), content::MediaStreamUI::SourceCallback(),
       /*label=*/std::string(), /*screen_capture_ids=*/{},

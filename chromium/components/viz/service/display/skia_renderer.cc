@@ -45,7 +45,6 @@
 #include "components/viz/service/display/renderer_utils.h"
 #include "components/viz/service/display/resource_fence.h"
 #include "components/viz/service/display/skia_output_surface.h"
-#include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/command_buffer/client/shared_image_interface.h"
 #include "gpu/command_buffer/common/shared_image_usage.h"
 #include "gpu/command_buffer/common/sync_token.h"
@@ -575,8 +574,7 @@ class SkiaRenderer::ScopedSkImageBuilder {
                        bool maybe_concurrent_reads,
                        SkAlphaType alpha_type = kPremul_SkAlphaType,
                        GrSurfaceOrigin origin = kTopLeft_GrSurfaceOrigin,
-                       const absl::optional<gfx::ColorSpace>&
-                           override_colorspace = absl::nullopt,
+                       sk_sp<SkColorSpace> override_color_space = nullptr,
                        bool raw_draw_if_possible = false);
 
   ScopedSkImageBuilder(const ScopedSkImageBuilder&) = delete;
@@ -586,12 +584,12 @@ class SkiaRenderer::ScopedSkImageBuilder {
 
   const SkImage* sk_image() const { return sk_image_; }
   const cc::PaintOpBuffer* paint_op_buffer() const { return paint_op_buffer_; }
-  const absl::optional<SkColor>& clear_color() const { return clear_color_; }
+  const absl::optional<SkColor4f>& clear_color() const { return clear_color_; }
 
  private:
   raw_ptr<const SkImage> sk_image_ = nullptr;
   raw_ptr<const cc::PaintOpBuffer> paint_op_buffer_ = nullptr;
-  absl::optional<SkColor> clear_color_;
+  absl::optional<SkColor4f> clear_color_;
 };
 
 SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
@@ -600,7 +598,7 @@ SkiaRenderer::ScopedSkImageBuilder::ScopedSkImageBuilder(
     bool maybe_concurrent_reads,
     SkAlphaType alpha_type,
     GrSurfaceOrigin origin,
-    const absl::optional<gfx::ColorSpace>& override_color_space,
+    sk_sp<SkColorSpace> override_color_space,
     bool raw_draw_if_possible) {
   if (!resource_id)
     return;
@@ -702,27 +700,70 @@ class SkiaRenderer::ScopedYUVSkImageBuilder {
   sk_sp<SkImage> sk_image_;
 };
 
-class SkiaRenderer::FrameResourceFence : public ResourceFence {
+// A read lock based fence that is signaled after gpu commands are completed
+// meaning the resource has been read.
+class SkiaRenderer::FrameResourceGpuCommandsCompletedFence
+    : public ResourceFence {
  public:
-  FrameResourceFence() = default;
-
-  FrameResourceFence(const FrameResourceFence&) = delete;
-  FrameResourceFence& operator=(const FrameResourceFence&) = delete;
+  FrameResourceGpuCommandsCompletedFence() = default;
+  FrameResourceGpuCommandsCompletedFence(
+      const FrameResourceGpuCommandsCompletedFence&) = delete;
+  FrameResourceGpuCommandsCompletedFence& operator=(
+      const FrameResourceGpuCommandsCompletedFence&) = delete;
 
   // ResourceFence implementation.
   void Set() override { set_ = true; }
   bool HasPassed() override { return event_.IsSignaled(); }
+  gfx::GpuFenceHandle GetGpuFenceHandle() override {
+    NOTREACHED();
+    return gfx::GpuFenceHandle();
+  }
 
   bool WasSet() { return set_; }
   void Signal() { event_.Signal(); }
 
  private:
-  ~FrameResourceFence() override = default;
+  ~FrameResourceGpuCommandsCompletedFence() override = default;
 
   // Accessed only from compositor thread.
   bool set_ = false;
 
   base::WaitableEvent event_;
+};
+
+// FrameResourceFence that gets a ReleaseFence which is later set to returned
+// resources.
+class SkiaRenderer::FrameResourceReleaseFence : public ResourceFence {
+ public:
+  FrameResourceReleaseFence() = default;
+  FrameResourceReleaseFence(const FrameResourceReleaseFence&) = delete;
+  FrameResourceReleaseFence& operator=(const FrameResourceReleaseFence&) =
+      delete;
+
+  // ResourceFence implementation:
+  void Set() override { set_ = true; }
+  // If the fence handle has been set, |this| has passed aka the callback has
+  // been called.
+  bool HasPassed() override { return release_fence_.has_value(); }
+  gfx::GpuFenceHandle GetGpuFenceHandle() override {
+    return HasPassed() ? release_fence_.value().Clone() : gfx::GpuFenceHandle();
+  }
+
+  bool WasSet() { return set_; }
+  void SetReleaseFenceCallback(gfx::GpuFenceHandle release_fence) {
+    release_fence_ = std::move(release_fence);
+  }
+
+ private:
+  ~FrameResourceReleaseFence() override = default;
+
+  // Accessed only from compositor thread.
+  bool set_ = false;
+
+  // This is made optional so that the value is set after
+  // SetReleaseFenceCallback is called. Otherwise, there is no way to know if
+  // the fence has been set and a null handle is a "valid" handle.
+  absl::optional<gfx::GpuFenceHandle> release_fence_;
 };
 
 SkiaRenderer::SkiaRenderer(const RendererSettings* settings,
@@ -741,9 +782,17 @@ SkiaRenderer::SkiaRenderer(const RendererSettings* settings,
   DCHECK(skia_output_surface_);
   lock_set_for_external_use_.emplace(resource_provider, skia_output_surface_);
 
-  current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
-  this->resource_provider()->SetReadLockFence(
-      current_frame_resource_fence_.get());
+  // There can be different synchronization types requested for different
+  // resources. Some of them may require SyncToken, others - ReadLockFence, and
+  // others may need ReleaseFence. SyncTokens are set when the output surface
+  // is flushed and external resources are released. However, other resources
+  // require additional setup, which helps to handle that.
+  current_gpu_commands_completed_fence_ =
+      base::MakeRefCounted<FrameResourceGpuCommandsCompletedFence>();
+  current_release_fence_ = base::MakeRefCounted<FrameResourceReleaseFence>();
+  this->resource_provider()->SetGpuCommandsCompletedFence(
+      current_gpu_commands_completed_fence_.get());
+  this->resource_provider()->SetReleaseFence(current_release_fence_.get());
 
 #if OS_ANDROID
   use_real_color_space_for_stream_video_ =
@@ -760,7 +809,8 @@ bool SkiaRenderer::CanPartialSwap() {
 void SkiaRenderer::BeginDrawingFrame() {
   TRACE_EVENT0("viz", "SkiaRenderer::BeginDrawingFrame");
 
-  DCHECK(!current_frame_resource_fence_->WasSet());
+  DCHECK(!current_gpu_commands_completed_fence_->WasSet());
+  DCHECK(!current_release_fence_->WasSet());
 }
 
 void SkiaRenderer::FinishDrawingFrame() {
@@ -808,6 +858,16 @@ void SkiaRenderer::SwapBuffers(SwapFrameData swap_frame_data) {
   swap_buffer_rect_ = gfx::Rect();
 
   FlushOutputSurface();
+
+#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+  // Delete render pass overlay backings from the previous frame that will not
+  // be used again.
+  for (auto& backing : available_render_pass_overlay_backings_) {
+    skia_output_surface_->GetSharedImageInterface()->DestroySharedImage(
+        gpu::SyncToken(), backing.mailbox);
+  }
+  available_render_pass_overlay_backings_.clear();
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
 }
 
 void SkiaRenderer::SwapBuffersSkipped() {
@@ -828,13 +888,13 @@ void SkiaRenderer::SwapBuffersComplete(gfx::GpuFenceHandle release_fence) {
   auto read_fence_lock_iter = committed_overlay_locks_.end();
 
   if (!release_fence.is_null()) {
-    // Set release fences for returning for last frame overlay resources.
+    // Set release fences to return overlay resources for last frame.
     for (auto& lock : committed_overlay_locks_) {
       lock.SetReleaseFence(release_fence.Clone());
     }
-    // Find all locks that have a read-lock fence associated with them.
-    // If we have a release fence, it's not safe to release them here.
-    // Release them later in BuffersPresented.
+    // Find all locks that have a read-lock fence associated with them and move
+    // them to the back of locks. If we have a release fence, it's not safe to
+    // release them here. Release them later in BuffersPresented().
     read_fence_lock_iter = std::partition(
         committed_overlay_locks_.begin(), committed_overlay_locks_.end(),
         [](auto& lock) { return !lock.HasReadLockFence(); });
@@ -846,7 +906,7 @@ void SkiaRenderer::SwapBuffersComplete(gfx::GpuFenceHandle release_fence) {
 
   // Right now, only macOS and Ozone need to return mailboxes of released
   // overlays, so we should not release |committed_overlay_locks_| here. The
-  // resources in it will be released by DidReceiveReleasedOverlays() later.
+  // resources in it will be released in DidReceiveReleasedOverlays() later.
 #if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
   for (auto lock_iter = committed_overlay_locks_.begin();
        lock_iter != read_fence_lock_iter; ++lock_iter) {
@@ -854,6 +914,8 @@ void SkiaRenderer::SwapBuffersComplete(gfx::GpuFenceHandle release_fence) {
   }
 #endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
 
+  // Current pending locks should have been committed by the next time
+  // SwapBuffers() is completed.
   committed_overlay_locks_.clear();
   std::swap(committed_overlay_locks_, pending_overlay_locks_.front());
   pending_overlay_locks_.pop_front();
@@ -869,19 +931,38 @@ void SkiaRenderer::DidReceiveReleasedOverlays(
   // This method is only called on macOS and Ozone right now.
 #if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
   for (const auto& mailbox : released_overlays) {
-    auto it = awaiting_release_overlay_locks_.find(mailbox);
-    if (it == awaiting_release_overlay_locks_.end()) {
-    // TODO(crbug.com/1299794): Re-enable this DCHECK on Ozone.
+    // If this mailbox is for render pass overlay, mark the released render pass
+    // overlay backing as available to be re-used.
+    auto backing_iter =
+        std::find_if(in_flight_render_pass_overlay_backings_.begin(),
+                     in_flight_render_pass_overlay_backings_.end(),
+                     [&mailbox](const RenderPassBacking& backing) {
+                       return backing.mailbox == mailbox;
+                     });
+    if (backing_iter != in_flight_render_pass_overlay_backings_.end()) {
+      available_render_pass_overlay_backings_.push_back(
+          std::move(*backing_iter));
+      in_flight_render_pass_overlay_backings_.erase(backing_iter);
+    }
+
+    auto iter = std::find_if(awaiting_release_overlay_locks_.begin(),
+                             awaiting_release_overlay_locks_.end(),
+                             [&mailbox](const OverlayLock& lock) {
+                               return lock.mailbox() == mailbox;
+                             });
+    if (iter == awaiting_release_overlay_locks_.end()) {
+// TODO(crbug.com/1299794): Re-enable this DCHECK on Ozone.
 #if !defined(USE_OZONE)
+      // The released overlay should always be found as awaiting to be released.
       DLOG(FATAL) << "Got an unexpected mailbox";
 #endif  // !defined(USE_OZONE)
       continue;
     }
-    awaiting_release_overlay_locks_.erase(it);
+    awaiting_release_overlay_locks_.erase(iter);
   }
 #else
   NOTREACHED();
-#endif  // !(BUILDFLAG(IS_APPLE) || defined (USE_OZONE))
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
 }
 
 bool SkiaRenderer::FlippedFramebuffer() const {
@@ -899,8 +980,6 @@ void SkiaRenderer::EnsureScissorTestDisabled() {
 }
 
 void SkiaRenderer::BindFramebufferToOutputSurface() {
-  DCHECK(!output_surface_->HasExternalStencilTest());
-
   root_canvas_ = skia_output_surface_->BeginPaintCurrentFrame();
   current_canvas_ = root_canvas_;
   current_surface_ = root_surface_.get();
@@ -915,7 +994,8 @@ void SkiaRenderer::BindFramebufferToTexture(
   RenderPassBacking& backing = iter->second;
   current_canvas_ = skia_output_surface_->BeginPaintRenderPass(
       render_pass_id, backing.size, backing.format, backing.generate_mipmap,
-      backing.color_space.ToSkColorSpace(), backing.mailbox);
+      RenderPassBackingSkColorSpace(backing), /*is_overlay=*/false,
+      backing.mailbox);
 }
 
 void SkiaRenderer::SetScissorTestRect(const gfx::Rect& scissor_rect) {
@@ -941,9 +1021,13 @@ void SkiaRenderer::ClearFramebuffer() {
   if (current_frame()->current_render_pass->has_transparent_background) {
     ClearCanvas(SkColorSetARGB(0, 0, 0, 0));
   } else {
-#if DCHECK_IS_ON()
+#if DCHECK_IS_ON() && !BUILDFLAG(IS_LINUX)
     // On DEBUG builds, opaque render passes are cleared to blue
     // to easily see regions that were not drawn on the screen.
+    // ClearCavas() call causes slight pixel difference, so linux-ref and
+    // linux-blink-ref bots cannot share the same baseline for webtest.
+    // So remove this ClearCanvas() call for dcheck on build for now.
+    // TODO(crbug.com/1330278): add it back.
     ClearCanvas(SkColorSetARGB(255, 0, 0, 255));
 #endif
   }
@@ -1889,10 +1973,11 @@ void SkiaRenderer::DrawSingleImage(const SkImage* image,
       constraint);
 }
 
-void SkiaRenderer::DrawPaintOpBuffer(const cc::PaintOpBuffer* buffer,
-                                     const absl::optional<SkColor>& clear_color,
-                                     const TileDrawQuad* quad,
-                                     const DrawQuadParams* params) {
+void SkiaRenderer::DrawPaintOpBuffer(
+    const cc::PaintOpBuffer* buffer,
+    const absl::optional<SkColor4f>& clear_color,
+    const TileDrawQuad* quad,
+    const DrawQuadParams* params) {
   TRACE_EVENT0("viz", "SkiaRenderer::DrawPaintOpBuffer");
   if (!batched_quads_.empty())
     FlushBatchedQuads();
@@ -2024,7 +2109,7 @@ void SkiaRenderer::DrawPictureQuad(const PictureDrawQuad* quad,
 void SkiaRenderer::DrawSolidColorQuad(const SolidColorDrawQuad* quad,
                                       const DrawRPDQParams* rpdq_params,
                                       DrawQuadParams* params) {
-  DrawColoredQuad(SkColor4f::FromColor(quad->color), rpdq_params, params);
+  DrawColoredQuad(quad->color, rpdq_params, params);
 }
 
 void SkiaRenderer::DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
@@ -2033,13 +2118,12 @@ void SkiaRenderer::DrawStreamVideoQuad(const StreamVideoDrawQuad* quad,
   TRACE_EVENT0("viz", "SkiaRenderer::DrawStreamVideoQuad");
   DCHECK(!MustFlushBatchedQuads(quad, rpdq_params, *params));
 
-  absl::optional<gfx::ColorSpace> override_color_space;
+  sk_sp<SkColorSpace> override_color_space;
 
   // Force SRGB color space if we don't want real color space from media
   // decoder.
-  if (!use_real_color_space_for_stream_video_) {
-    override_color_space = gfx::ColorSpace::CreateSRGB();
-  }
+  if (!use_real_color_space_for_stream_video_)
+    override_color_space = SkColorSpace::MakeSRGB();
 
   ScopedSkImageBuilder builder(this, quad->resource_id(),
                                /*maybe_concurrent_reads=*/true,
@@ -2079,17 +2163,17 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
   const bool needs_color_conversion_filter =
       quad->is_video_frame && src_color_space.IsHDR();
 
-  absl::optional<gfx::ColorSpace> override_color_space;
+  sk_sp<SkColorSpace> override_color_space;
   if (needs_color_conversion_filter)
-    override_color_space = CurrentRenderPassColorSpace();
+    override_color_space = CurrentRenderPassSkColorSpace();
 
-  // TODO(b/221643955): Some Chrome OS tests rely on the old GLRenderer
-  // behavior of skipping color space conversions if the quad's color space is
-  // invalid. Once these tests are migrated, we can remove the override here
-  // and revert to Skia's default behavior of assuming sRGB on invalid.
+    // TODO(b/221643955): Some Chrome OS tests rely on the old GLRenderer
+    // behavior of skipping color space conversions if the quad's color space is
+    // invalid. Once these tests are migrated, we can remove the override here
+    // and revert to Skia's default behavior of assuming sRGB on invalid.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (!src_color_space.IsValid())
-    override_color_space = CurrentRenderPassColorSpace();
+    override_color_space = CurrentRenderPassSkColorSpace();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
   ScopedSkImageBuilder builder(
@@ -2118,7 +2202,7 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
   // 2. The vertex opacities are not all 1s.
   // 3. The quad contains video which might need special white level adjustment.
   const bool blend_background =
-      quad->background_color != SK_ColorTRANSPARENT && !image->isOpaque();
+      quad->background_color != SkColors::kTransparent && !image->isOpaque();
   const bool vertex_alpha =
       quad->vertex_opacity[0] < 1.f || quad->vertex_opacity[1] < 1.f ||
       quad->vertex_opacity[2] < 1.f || quad->vertex_opacity[3] < 1.f;
@@ -2204,8 +2288,9 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
   if (blend_background) {
     // Add a color filter that does DstOver blending between texture and the
     // background color. Then, modulate by quad's opacity *after* blending.
-    sk_sp<SkColorFilter> cf =
-        SkColorFilters::Blend(quad->background_color, SkBlendMode::kDstOver);
+    // TODO(crbug/1308932) remove toSkColor and make all SkColor4f
+    sk_sp<SkColorFilter> cf = SkColorFilters::Blend(
+        quad->background_color.toSkColor(), SkBlendMode::kDstOver);
     if (quad_alpha < 1.f) {
       cf = MakeOpacityFilter(quad_alpha, std::move(cf));
       quad_alpha = 1.f;
@@ -2220,7 +2305,7 @@ void SkiaRenderer::DrawTextureQuad(const TextureDrawQuad* quad,
     // Skia won't perform color conversion.
     const gfx::ColorSpace dst_color_space = CurrentRenderPassColorSpace();
     DCHECK(SkColorSpace::Equals(image->colorSpace(),
-                                dst_color_space.ToSkColorSpace().get()));
+                                CurrentRenderPassSkColorSpace().get()));
     sk_sp<SkColorFilter> color_filter =
         GetColorSpaceConversionFilter(src_color_space, dst_color_space);
     paint.setColorFilter(color_filter->makeComposed(paint.refColorFilter()));
@@ -2254,7 +2339,7 @@ void SkiaRenderer::DrawTileDrawQuad(const TileDrawQuad* quad,
       this, quad->resource_id(), /*maybe_concurrent_reads=*/false,
       quad->is_premultiplied ? kPremul_SkAlphaType : kUnpremul_SkAlphaType,
       /*origin=*/kTopLeft_GrSurfaceOrigin,
-      /*override_colorspace=*/absl::nullopt, raw_draw_if_possible);
+      /*override_color_space=*/nullptr, raw_draw_if_possible);
 
   params->vis_tex_coords = cc::MathUtil::ScaleRectProportional(
       quad->tex_coord_rect, gfx::RectF(quad->rect), params->visible_rect);
@@ -2322,8 +2407,7 @@ void SkiaRenderer::DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
   // color space we lie and say the SkImage destination color space is always
   // the same as the rest of the frame. Otherwise the two color space
   // adjustments combined will produce the wrong result.
-  const gfx::ColorSpace& frame_color_space = CurrentRenderPassColorSpace();
-  gfx::ColorSpace dst_color_space = frame_color_space;
+  gfx::ColorSpace dst_color_space = CurrentRenderPassColorSpace();
 
 #if BUILDFLAG(IS_WIN)
   // Force sRGB output on Windows for overlay candidate video quads to match
@@ -2344,12 +2428,11 @@ void SkiaRenderer::DrawYUVVideoQuad(const YUVVideoDrawQuad* quad,
 #endif
 
   DCHECK(resource_provider());
-  // Pass in |frame_color_space| here instead of |dst_color_space| so the color
-  // space transform going from SkImage to SkSurface is identity. The
-  // SkColorFilter already handles color space conversion so this avoids
+  // Pass in |CurrentRenderPassSkColorSpace()| here instead of |dst_color_space|
+  // so the color space transform going from SkImage to SkSurface is identity.
+  // The SkColorFilter already handles color space conversion so this avoids
   // applying the conversion twice.
-  ScopedYUVSkImageBuilder builder(this, quad,
-                                  frame_color_space.ToSkColorSpace());
+  ScopedYUVSkImageBuilder builder(this, quad, CurrentRenderPassSkColorSpace());
   const SkImage* image = builder.sk_image();
   if (!image)
     return;
@@ -2384,9 +2467,14 @@ void SkiaRenderer::DrawUnsupportedQuad(const DrawQuad* quad,
 }
 
 void SkiaRenderer::ScheduleOverlays() {
-  DCHECK(!current_frame_resource_fence_->WasSet());
+  DCHECK(!current_gpu_commands_completed_fence_->WasSet());
+  DCHECK(!current_release_fence_->WasSet());
 
+  // Always add an empty set of locks to be used in either SwapBuffersSkipped()
+  // or SwapBuffersComplete().
   pending_overlay_locks_.emplace_back();
+  [[maybe_unused]] auto& locks = pending_overlay_locks_.back();
+
   if (current_frame()->overlay_list.empty())
     return;
 
@@ -2401,7 +2489,6 @@ void SkiaRenderer::ScheduleOverlays() {
   // switched over to OverlayProcessor.
   // TODO(weiliangc): Remove this when CrOS and Android SurfaceControl switch
   // to OverlayProcessor as well.
-  auto& locks = pending_overlay_locks_.back();
   for (auto& overlay : current_frame()->overlay_list) {
     // Resources will be unlocked after the next SwapBuffers() is completed.
     locks.emplace_back(resource_provider(), overlay.resource_id);
@@ -2416,7 +2503,6 @@ void SkiaRenderer::ScheduleOverlays() {
     DCHECK(!overlay.mailbox.IsZero());
   }
 #elif BUILDFLAG(IS_WIN)
-  auto& locks = pending_overlay_locks_.back();
   for (auto& dc_layer_overlay : current_frame()->overlay_list) {
     for (size_t i = 0; i < DCLayerOverlay::kNumResources; ++i) {
       ResourceId resource_id = dc_layer_overlay.resources[i];
@@ -2437,10 +2523,10 @@ void SkiaRenderer::ScheduleOverlays() {
     DCHECK(!dc_layer_overlay.mailbox[0].IsZero());
   }
 #elif BUILDFLAG(IS_APPLE)
-  auto& locks = pending_overlay_locks_.back();
   for (CALayerOverlay& ca_layer_overlay : current_frame()->overlay_list) {
     if (ca_layer_overlay.rpdq) {
       PrepareRenderPassOverlay(&ca_layer_overlay);
+      locks.emplace_back(ca_layer_overlay.mailbox);
       continue;
     }
     // Some overlays are for solid-color layers.
@@ -2465,15 +2551,14 @@ void SkiaRenderer::ScheduleOverlays() {
   }
 #elif defined(USE_OZONE)
   // Only Wayland uses this code path.
-  auto& locks = pending_overlay_locks_.back();
   for (auto& overlay : current_frame()->overlay_list) {
     if (overlay.rpdq) {
       PrepareRenderPassOverlay(&overlay);
-      // The output will be attached via mailbox when overlays are scheduled.
+      locks.emplace_back(overlay.mailbox);
       continue;
     }
     // Solid Color quads do not have associated resource buffers.
-    if (overlay.solid_color.has_value())
+    if (overlay.is_solid_color)
       continue;
 
     // Resources will be unlocked after the next SwapBuffers() is completed.
@@ -2495,17 +2580,11 @@ void SkiaRenderer::ScheduleOverlays() {
   NOTREACHED();
 #endif  // BUILDFLAG(IS_ANDROID)
 
-  base::OnceClosure on_finished_callback;
-  if (current_frame_resource_fence_->WasSet()) {
-    on_finished_callback = base::BindOnce(
-        &FrameResourceFence::Signal, std::move(current_frame_resource_fence_));
-    current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
-    resource_provider()->SetReadLockFence(current_frame_resource_fence_.get());
-  }
+  DCHECK(!current_gpu_commands_completed_fence_->WasSet());
+  DCHECK(!current_release_fence_->WasSet());
 
   skia_output_surface_->ScheduleOverlays(
-      std::move(current_frame()->overlay_list), std::move(sync_tokens),
-      std::move(on_finished_callback));
+      std::move(current_frame()->overlay_list), std::move(sync_tokens));
 }
 
 sk_sp<SkColorFilter> SkiaRenderer::GetColorSpaceConversionFilter(
@@ -2513,13 +2592,8 @@ sk_sp<SkColorFilter> SkiaRenderer::GetColorSpaceConversionFilter(
     const gfx::ColorSpace& dst,
     float resource_offset,
     float resource_multiplier) {
-  // If the input color space is HDR, and it did not specify a white level,
-  // override it with the frame's white level.
-  gfx::ColorSpace adjusted_src = src.GetWithSDRWhiteLevel(
-      current_frame()->display_color_spaces.GetSDRMaxLuminanceNits());
-
   return color_filter_cache_.Get(
-      adjusted_src, dst, resource_offset, resource_multiplier,
+      src, dst, resource_offset, resource_multiplier,
       current_frame()->display_color_spaces.GetSDRMaxLuminanceNits(),
       current_frame()->display_color_spaces.GetHDRMaxLuminanceRelative());
 }
@@ -2768,7 +2842,7 @@ void SkiaRenderer::DrawRenderPassQuad(const AggregatedRenderPassDrawQuad* quad,
   sk_sp<SkImage> content_image =
       skia_output_surface_->MakePromiseSkImageFromRenderPass(
           quad->render_pass_id, backing.size, backing.format,
-          backing.generate_mipmap, backing.color_space.ToSkColorSpace(),
+          backing.generate_mipmap, RenderPassBackingSkColorSpace(backing),
           backing.mailbox);
   DLOG_IF(ERROR, !content_image)
       << "MakePromiseSkImageFromRenderPass() failed for render pass";
@@ -2852,16 +2926,7 @@ void SkiaRenderer::FinishDrawingQuadList() {
   if (is_root_render_pass && UsingSkiaForDelegatedInk())
     DrawDelegatedInkTrail();
 
-  base::OnceClosure on_finished_callback;
-  // Signal |current_frame_resource_fence_| when the root render pass is
-  // finished.
-  if (current_frame_resource_fence_->WasSet()) {
-    on_finished_callback = base::BindOnce(
-        &FrameResourceFence::Signal, std::move(current_frame_resource_fence_));
-    current_frame_resource_fence_ = base::MakeRefCounted<FrameResourceFence>();
-    resource_provider()->SetReadLockFence(current_frame_resource_fence_.get());
-  }
-  skia_output_surface_->EndPaint(std::move(on_finished_callback));
+  EndPaint(/*failed=*/false);
 
   // Defer flushing drawing task for root render pass, to avoid extra
   // MakeCurrent() call. It is expensive on GL.
@@ -2927,9 +2992,17 @@ void SkiaRenderer::AllocateRenderPassResourceIfNeeded(
   // TODO(penghuang): check supported format correctly.
   gpu::Capabilities caps;
   caps.texture_format_bgra8888 = true;
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // TODO(crbug.com/1317015): add support RGBA_F16 in LaCrOS.
+  auto format = color_space.IsHDR()
+                    ? RGBA_1010102
+                    : PlatformColor::BestSupportedTextureFormat(caps);
+#else
   auto format = color_space.IsHDR()
                     ? RGBA_F16
                     : PlatformColor::BestSupportedTextureFormat(caps);
+#endif
   uint32_t usage = gpu::SHARED_IMAGE_USAGE_DISPLAY;
   if (requirements.generate_mipmap)
     usage |= gpu::SHARED_IMAGE_USAGE_MIPMAP;
@@ -3058,7 +3131,7 @@ void SkiaRenderer::PrepareRenderPassOverlay(
   ResourceFormat buffer_format{};
   gfx::ColorSpace color_space;
 
-  RenderPassBacking* backing = nullptr;
+  RenderPassBacking* src_quad_backing = nullptr;
   auto bypass = render_pass_bypass_quads_.find(quad->render_pass_id);
   BypassMode bypass_mode = BypassMode::kSkip;
   // When Render Pass has a single quad inside we would draw that directly.
@@ -3077,9 +3150,9 @@ void SkiaRenderer::PrepareRenderPassOverlay(
     DCHECK(render_pass_backings_.end() != it);
     // This function is called after AllocateRenderPassResourceIfNeeded, so
     // there should be backing ready.
-    backing = &it->second;
-    buffer_format = backing->format;
-    color_space = backing->color_space;
+    src_quad_backing = &it->second;
+    buffer_format = src_quad_backing->format;
+    color_space = src_quad_backing->color_space;
   }
 
   // Adjust the overlay |buffer_size| to reduce memory fragmentation. It also
@@ -3090,16 +3163,50 @@ void SkiaRenderer::PrepareRenderPassOverlay(
   // TODO(petermcneeley) : Support buffer rounding by dynamically changing
   // texture uvs.
   constexpr int kBufferMultiple = 1;
-#endif
+#endif  // BUILDFLAG(IS_APPLE)
   gfx::Size buffer_size(
       cc::MathUtil::CheckedRoundUp(filter_bounds.width(), kBufferMultiple),
       cc::MathUtil::CheckedRoundUp(filter_bounds.height(), kBufferMultiple));
 
-  current_canvas_ = skia_output_surface_->BeginPaintRenderPassOverlay(
-      buffer_size, buffer_format, /*mipmap=*/false,
-      color_space.ToSkColorSpace());
+  auto it = std::find_if(available_render_pass_overlay_backings_.begin(),
+                         available_render_pass_overlay_backings_.end(),
+                         [&buffer_format, &buffer_size,
+                          &color_space](const RenderPassBacking& backing) {
+                           return backing.format == buffer_format &&
+                                  backing.size == buffer_size &&
+                                  backing.color_space == color_space;
+                         });
+
+  if (it == available_render_pass_overlay_backings_.end()) {
+    // Allocate the image for render pass overlay if there is no existing
+    // available one.
+    constexpr auto kOverlayUsage = gpu::SHARED_IMAGE_USAGE_SCANOUT |
+                                   gpu::SHARED_IMAGE_USAGE_DISPLAY |
+                                   gpu::SHARED_IMAGE_USAGE_RASTER;
+    auto mailbox =
+        skia_output_surface_->GetSharedImageInterface()->CreateSharedImage(
+            buffer_format, buffer_size, color_space, kTopLeft_GrSurfaceOrigin,
+            kPremul_SkAlphaType, kOverlayUsage, gpu::kNullSurfaceHandle);
+    in_flight_render_pass_overlay_backings_.push_back(
+        RenderPassBacking{buffer_size, /*generate_mipmap=*/false, color_space,
+                          buffer_format, mailbox});
+    overlay->mailbox = std::move(mailbox);
+  } else {
+    overlay->mailbox = std::move(it->mailbox);
+    in_flight_render_pass_overlay_backings_.push_back(std::move(*it));
+    available_render_pass_overlay_backings_.erase(it);
+  }
+  const RenderPassBacking& dst_overlay_backing =
+      in_flight_render_pass_overlay_backings_.back();
+
+  current_canvas_ = skia_output_surface_->BeginPaintRenderPass(
+      quad->render_pass_id, dst_overlay_backing.size,
+      dst_overlay_backing.format, /*mipmap=*/false,
+      RenderPassBackingSkColorSpace(dst_overlay_backing), /*is_overlay=*/true,
+      overlay->mailbox);
   if (!current_canvas_) {
-    DLOG(ERROR) << "BeginPaintRenderPassOverlay() failed.";
+    DLOG(ERROR)
+        << "BeginPaintRenderPass() in PrepareRenderPassOverlay() failed.";
     return;
   }
 
@@ -3126,19 +3233,20 @@ void SkiaRenderer::PrepareRenderPassOverlay(
       NOTREACHED();
     }
   } else {
-    DCHECK(backing);
+    DCHECK(src_quad_backing);
     auto content_image = skia_output_surface_->MakePromiseSkImageFromRenderPass(
-        quad->render_pass_id, backing->size, backing->format,
-        backing->generate_mipmap, backing->color_space.ToSkColorSpace(),
-        backing->mailbox);
+        quad->render_pass_id, src_quad_backing->size, src_quad_backing->format,
+        src_quad_backing->generate_mipmap,
+        RenderPassBackingSkColorSpace(*src_quad_backing),
+        src_quad_backing->mailbox);
     if (!content_image) {
-      DLOG(ERROR)
-          << "MakePromiseSkImageFromRenderPass() failed for render pass";
-      skia_output_surface_->EndPaintRenderPassOverlay();
+      DLOG(ERROR) << "MakePromiseSkImageFromRenderPass() in "
+                     "PrepareRenderPassOverlay() failed.";
+      EndPaint(/*failed=*/true);
       return;
     }
 
-    if (backing->generate_mipmap)
+    if (src_quad_backing->generate_mipmap)
       params.sampling =
           SkSamplingOptions(SkFilterMode::kLinear, SkMipmapMode::kLinear);
 
@@ -3153,19 +3261,47 @@ void SkiaRenderer::PrepareRenderPassOverlay(
   }
 
   current_canvas_ = nullptr;
-  auto ddl = skia_output_surface_->EndPaintRenderPassOverlay();
-  DCHECK(ddl);
 
-  // Put overlay related information in CALayerOverlay,
-  // so SkiaOutputSurfaceImplOnGpu can use the DDL to create overlay buffer and
-  // play the DDL back to it accordingly.
-  overlay->ddl = std::move(ddl);
+  EndPaint(/*failed=*/false);
 
   // Adjust |bounds_rect| to contain the whole buffer and at the right location.
   overlay->bounds_rect.set_origin(gfx::PointF(filter_bounds.origin()));
   overlay->bounds_rect.set_size(gfx::SizeF(buffer_size));
 }
-#endif
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+
+void SkiaRenderer::EndPaint(bool failed) {
+  base::OnceClosure on_finished_callback;
+  base::OnceCallback<void(gfx::GpuFenceHandle)> on_return_release_fence_cb;
+  // If SkiaRenderer has not failed, prepare callbacks and pass them to
+  // SkiaOutputSurface.
+  if (!failed) {
+    // Signal |current_frame_resource_fence_| when the root render pass is
+    // finished.
+    if (current_gpu_commands_completed_fence_->WasSet()) {
+      on_finished_callback =
+          base::BindOnce(&FrameResourceGpuCommandsCompletedFence::Signal,
+                         std::move(current_gpu_commands_completed_fence_));
+      current_gpu_commands_completed_fence_ =
+          base::MakeRefCounted<FrameResourceGpuCommandsCompletedFence>();
+      resource_provider()->SetGpuCommandsCompletedFence(
+          current_gpu_commands_completed_fence_.get());
+    }
+
+    // Return a release fence to the |current_release_fence_|
+    // when the root render pass is finished.
+    if (current_release_fence_->WasSet()) {
+      on_return_release_fence_cb =
+          base::BindOnce(&FrameResourceReleaseFence::SetReleaseFenceCallback,
+                         std::move(current_release_fence_));
+      current_release_fence_ =
+          base::MakeRefCounted<FrameResourceReleaseFence>();
+      resource_provider()->SetReleaseFence(current_release_fence_.get());
+    }
+  }
+  skia_output_surface_->EndPaint(std::move(on_finished_callback),
+                                 std::move(on_return_release_fence_cb));
+}
 
 bool SkiaRenderer::IsRenderPassResourceAllocated(
     const AggregatedRenderPassId& render_pass_id) const {
@@ -3223,23 +3359,42 @@ bool SkiaRenderer::UsingSkiaForDelegatedInk() const {
   return delegated_ink_handler_ && delegated_ink_handler_->GetInkRenderer();
 }
 
+SkiaRenderer::OverlayLock::OverlayLock(
+    DisplayResourceProvider* resource_provider,
+    ResourceId resource_id) {
+  resource_lock.emplace(resource_provider, resource_id);
+}
+
+SkiaRenderer::OverlayLock::~OverlayLock() = default;
+
+SkiaRenderer::OverlayLock::OverlayLock(SkiaRenderer::OverlayLock&& other) {
+  resource_lock = std::move(other.resource_lock);
+
 #if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
-bool SkiaRenderer::ScopedReadLockComparator::operator()(
-    const DisplayResourceProviderSkia::ScopedReadLockSharedImage& lhs,
-    const DisplayResourceProviderSkia::ScopedReadLockSharedImage& rhs) const {
+  render_pass_lock = std::move(other.render_pass_lock);
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+}
+
+SkiaRenderer::OverlayLock& SkiaRenderer::OverlayLock::OverlayLock::operator=(
+    SkiaRenderer::OverlayLock&& other) {
+  resource_lock = std::move(other.resource_lock);
+
+#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+  render_pass_lock = std::move(other.render_pass_lock);
+#endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+
+  return *this;
+}
+
+#if BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
+SkiaRenderer::OverlayLock::OverlayLock(gpu::Mailbox mailbox) {
+  render_pass_lock.emplace(mailbox);
+}
+
+bool SkiaRenderer::OverlayLockComparator::operator()(
+    const OverlayLock& lhs,
+    const OverlayLock& rhs) const {
   return lhs.mailbox() < rhs.mailbox();
-}
-
-bool SkiaRenderer::ScopedReadLockComparator::operator()(
-    const DisplayResourceProviderSkia::ScopedReadLockSharedImage& lhs,
-    const gpu::Mailbox& rhs) const {
-  return lhs.mailbox() < rhs;
-}
-
-bool SkiaRenderer::ScopedReadLockComparator::operator()(
-    const gpu::Mailbox& lhs,
-    const DisplayResourceProviderSkia::ScopedReadLockSharedImage& rhs) const {
-  return lhs < rhs.mailbox();
 }
 #endif  // BUILDFLAG(IS_APPLE) || defined(USE_OZONE)
 

@@ -63,14 +63,14 @@
 #include "chrome/browser/prefs/browser_prefs.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile_manager.h"
+#include "chromeos/ash/components/network/proxy/proxy_config_handler.h"
+#include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/dbus/dbus_thread_manager.h"  // nogncheck
 #include "chromeos/dbus/power/power_manager_client.h"
 #include "chromeos/dbus/shill/shill_service_client.h"
 #include "chromeos/network/network_handler_test_helper.h"
 #include "chromeos/network/network_metadata_store.h"
 #include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/proxy/proxy_config_handler.h"
-#include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/system/fake_statistics_provider.h"
 #include "components/account_id/account_id.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
@@ -373,6 +373,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     bool managed_device;
     std::string device_domain;
     base::FilePath crostini_ansible_playbook_filepath;
+    bool insights_extension_enabled;
   };
 
   void ResetTestConfig() { ResetTestConfig(true); }
@@ -394,6 +395,7 @@ class ManagementUIHandlerTests : public TestingBaseClass {
     setup_config_.managed_account = true;
     setup_config_.managed_device = false;
     setup_config_.device_domain = "devicedomain.com";
+    setup_config_.insights_extension_enabled = false;
   }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -462,6 +464,10 @@ class ManagementUIHandlerTests : public TestingBaseClass {
         crostini::prefs::kCrostiniAnsiblePlaybookFilePath,
         GetTestConfig().crostini_ansible_playbook_filepath);
     crostini_features()->set_is_allowed_now(true);
+
+    profile_->GetPrefs()->SetBoolean(
+        ::prefs::kInsightsExtensionEnabled,
+        GetTestConfig().insights_extension_enabled);
 
     const policy::SystemLogUploader system_log_uploader(
         /*syslog_delegate=*/nullptr,
@@ -1090,6 +1096,19 @@ TEST_F(ManagementUIHandlerTests, AllDisabledDeviceReportingInfo) {
                       expected_elements);
 }
 
+TEST_F(ManagementUIHandlerTests,
+       DeviceReportingInfoWhenInsightsExtensionEnabled) {
+  ResetTestConfig(false);
+  GetTestConfig().insights_extension_enabled = true;
+  const base::Value info = SetUpForReportingInfo();
+  const std::map<std::string, std::string> expected_elements = {
+      {kManagementReportActivityTimes, "device activity"},
+      {kManagementReportNetworkData, "device"}};
+
+  ASSERT_PRED_FORMAT2(ReportingElementsToBeEQ, info.GetListDeprecated(),
+                      expected_elements);
+}
+
 TEST_F(ManagementUIHandlerTests, ShowProxyServerDisclosure) {
   ResetTestConfig();
   // Set pref to use a proxy.
@@ -1123,9 +1142,7 @@ TEST_F(ManagementUIHandlerTests, ProxyServerDisclosureDeviceOffline) {
                              0,      // no limit to number of results
                              &networks);
   chromeos::ShillServiceClient::TestInterface* service =
-      chromeos::DBusThreadManager::Get()
-          ->GetShillServiceClient()
-          ->GetTestInterface();
+      chromeos::ShillServiceClient::Get()->GetTestInterface();
   for (const auto* const network : networks) {
     service->SetServiceProperty(network->path(), shill::kStateProperty,
                                 base::Value(shill::kStateOffline));

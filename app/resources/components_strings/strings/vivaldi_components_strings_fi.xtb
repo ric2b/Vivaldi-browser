@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Kokeile diagnosoida Windowsin verkkoasetukset<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Sivustolla on haittaa aiheuttavia ohjelmia</translation>
 <translation id="1916770123977586577">Päivitä tämä sivu, niin uudet asetukset otetaan käyttöön</translation>
+<translation id="1973351931613083086">automaattitoista</translation>
 <translation id="1974060860693918893">Lisäasetukset</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />tarkistaa välityspalvelin- ja palomuuriasetukset<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Myönnetty: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Palaa takaisin</translation>
 <translation id="2539524384386349900">Tunnista</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> lähetti virheellisen vastauksen.</translation>
-<translation id="2609632851001447353">Muunnelmat</translation>
 <translation id="2634124572758952069">Sivuston <ph name="HOST_NAME" /> palvelimen IP-osoitetta ei löytynyt.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Tiedoston käyttöoikeus evättiin</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Sivustolle <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> hyökkäävä voi yrittää varastaa tietojasi (esimerkiksi salasanoja, viestejä tai luottokorttitietoja). <ph name="BEGIN_LEARN_MORE_LINK" />Lisätietoja<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Verkossa havaittiin muutos.</translation>
 <translation id="2948083400971632585">Voit poistaa yhteydelle asetut välityspalvelimet käytöstä asetussivulla.</translation>
+<translation id="2953943267837858202">Videon automaattitoistoa ei ole sallittu</translation>
 <translation id="2991571918955627853"><ph name="SITE" /> ei ole juuri nyt käytettävissä, koska se käyttää HSTS:ää. Verkkovirheet ja hyökkäykset ovat yleensä väliaikaisia, joten sivu luultavasti toimii myöhemmin.</translation>
 <translation id="3005723025932146533">Näytä tallennettu kopio</translation>
 <translation id="301521992641321250">Estetty automaattisesti</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Lähetä tiedoston lataukseen tarvittavat tiedot uudelleen painamalla päivityspainiketta.</translation>
 <translation id="3234666976984236645">Tunnista aina tärkeä sisältö tällä sivustolla</translation>
+<translation id="3291915639428159043">Automaattitoisto estetty</translation>
 <translation id="3308738399950580893">mainokset</translation>
 <translation id="3422472998109090673">Sivustoon <ph name="HOST_NAME" /> ei saada tällä hetkellä yhteyttä.</translation>
 <translation id="3427092606871434483">Salli (oletus)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Yhteytesi ei ole yksityinen</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Piilota lisätiedot</translation>
+<translation id="3620979700683094848">Sivustot voivat automaattitoistaa videoita</translation>
 <translation id="3630155396527302611">Jos sillä on jo verkon käyttöoikeus, kokeile sen poistamista
       sallittujen ohjelmien luettelosta ja lisäämistä sitten uudelleen.</translation>
 <translation id="3658742229777143148">Päivitetty versio</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> on estetty</translation>
 <translation id="3987940399970879459">Alle 1 Mt</translation>
 <translation id="4075732493274867456">Asiakassovellus ja palvelin eivät tue samaa SSL-yhteyskäytäntöversiota tai salaustekniikkaa.</translation>
+<translation id="410351446219883937">Automaattitoisto</translation>
 <translation id="4116663294526079822">Salli aina tällä sivustolla</translation>
 <translation id="4130226655945681476">tarkistaa verkkojohdot, modeemi ja reititin</translation>
 <translation id="4151403195736952345">Käytä yleistä oletusta (havaitse)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Tarkista DNS-asetukset</translation>
 <translation id="6328639280570009161">Kokeile verkon ennakoinnin poistamista käytöstä</translation>
 <translation id="6328786501058569169">Sivusto on harhaanjohtava</translation>
+<translation id="6348220984832452017">Aktiiviset muunnelmat</translation>
 <translation id="6358450015545214790">Mitä tämä tarkoittaa?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> kieltäytyi muodostamasta yhteyttä.</translation>
 <translation id="6447842834002726250">Evästeet</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Salli <ph name="BLOCKED_TYPE" /> alueelta <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> ei noudata tietoturvastandardeja.</translation>
 <translation id="7219179957768738017">Yhteys käyttää salauksen versiota <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Näytä ilmoitukset</translation>
 <translation id="7260504762447901703">Peru käyttöoikeus</translation>
 <translation id="7353601530677266744">Komentorivi</translation>
 <translation id="7364115444476960850">Vivaldin <ph name="BLOCKER_NAME" /> on estänyt sivun, jolle yrität päästä</translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Palomuuri tai virustorjuntaohjelmisto on saattanut estää yhteyden.</translation>
 <translation id="7800304661137206267">Yhteyden salausmenetelmä on <ph name="CIPHER" />, viestien todennusmenetelmä <ph name="MAC" /> ja avainvaihtomekanismi <ph name="KX" />.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> suojaa tietosi normaalisti salaamalla ne. Nyt kuitenkin Vivaldin yrittäessä yhdistää sivustoon <ph name="SITE" /> sivusto palautti epätavalliset ja virheelliset tunnistautumistiedot. Hyökkääjä saattaa esiintyä sivustona <ph name="SITE" /> tai langattoman verkon kirjautumisruutu on keskeyttänyt yhteyden. Tietosi ovat edelleen turvassa, sillä Vivaldi katkaisi yhteyden, ennen kuin tietoja vaihdettiin.</translation>
+<translation id="7834693436815575883">Automaattitoisto sallittu</translation>
 <translation id="7878562273885520351">Salasanasi on voinut vaarantua</translation>
 <translation id="7951415247503192394">(32-bittinen)</translation>
 <translation id="8025119109950072390">Sivustolle hyökännyt taho voi yrittää huijata sinua tekemään jotain vaarallista kuten asentamaan ohjelmia tai paljastamaan henkilötietojasi (esimerkiksi salasanasi, puhelinnumerosi tai luottokorttitietosi).</translation>
 <translation id="8037357227543935929">Kysy (oletus)</translation>
 <translation id="8041940743680923270">Käytä yleistä oletusasetusta (kysy)</translation>
+<translation id="8044382196220116469">Älä salli sivustojen automaattitoistaa videoita</translation>
 <translation id="808894953321890993">Vaihda salasana</translation>
 <translation id="8119307142152921512">jäljitys ja mainokset</translation>
 <translation id="8149426793427495338">Tietokoneesi siirtyi nukkumaan.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Käyttäjätunnus</translation>
 <translation id="8703575177326907206">Yhteyttäsi verkkotunnukseen <ph name="DOMAIN" /> ei ole salattu.</translation>
 <translation id="8740359287975076522">Sivuston <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-osoitetta&lt;/abbr&gt; ei löydy. Ongelmaa diagnosoidaan.</translation>
+<translation id="8774017153185436870">Sivustot saattavat automaattitoistaa videoita</translation>
 <translation id="8820817407110198400">Kirjanmerkit</translation>
 <translation id="8940028675168378100">Estää <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Siirry sivustoasetuksiin</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Ohita</translation>
 <translation id="9025348182339809926">(Virheellinen)</translation>
 <translation id="9039213469156557790">Sivulla on kuitenkin osia, joita ei ole suojattu. Muut voivat tarkastella näitä osia siirrettäessä, ja hyökkääjä voi muuttaa sivun käyttäytymistä muokkaamalla niitä.</translation>
+<translation id="9048224371732578627">Videon automaattitoisto sallittu</translation>
 <translation id="9062620674789239642">Se on voitu siirtää tai poistaa tai sitä on muutettu.</translation>
 <translation id="9069693763241529744">Laajennuksen estämä</translation>
 <translation id="9073799351042754113">Olet poistanut tietoturvavaroitukset käytöstä tällä sivustolla.</translation>

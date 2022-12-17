@@ -51,6 +51,7 @@
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/json/json_parser.h"
+#include "third_party/blink/renderer/platform/network/content_security_policy_parsers.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 
 namespace blink {
@@ -240,7 +241,8 @@ void HTMLIFrameElement::ParseAttribute(
       UseCounter::Count(GetDocument(), WebFeature::kIFrameCSPAttribute);
     }
   } else if (name == html_names::kAnonymousAttr &&
-             RuntimeEnabledFeatures::AnonymousIframeEnabled()) {
+             RuntimeEnabledFeatures::AnonymousIframeEnabled(
+                 GetExecutionContext())) {
     bool new_value = !value.IsNull();
     if (anonymous_ != new_value) {
       anonymous_ = new_value;

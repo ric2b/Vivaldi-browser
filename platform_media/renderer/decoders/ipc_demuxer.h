@@ -36,7 +36,13 @@ struct PlatformVideoConfig;
 // source for the IPCMediaPipelineHost.
 class MEDIA_EXPORT IPCDemuxer : public Demuxer {
  public:
-  using StartIPCResult = base::OnceCallback<void(bool success)>;
+  static bool IsEnabled();
+
+  // Checks if the content is supported by this demuxer. Return an empty string
+  // if this is not possible or adjusted mime type.
+  static std::string CanPlayType(const std::string& content_type,
+                                 const GURL& url);
+  static bool CanPlayType(const std::string& content_type);
 
   IPCDemuxer(scoped_refptr<base::SequencedTaskRunner> media_task_runner,
              MediaLog* media_log);
@@ -44,16 +50,12 @@ class MEDIA_EXPORT IPCDemuxer : public Demuxer {
   IPCDemuxer(const IPCDemuxer&) = delete;
   IPCDemuxer& operator=(const IPCDemuxer&) = delete;
 
-  // THis must be called on media_task_runner.
+  using StartIPCResult = base::OnceCallback<void(bool success)>;
+
+  // This must be called on media_task_runner.
   void StartIPC(DataSource* data_source,
                 std::string mimetype,
                 StartIPCResult callback);
-
-  // Checks if the content is supported by this demuxer. Return an empty string
-  // if this is not possible or adjusted mime type.
-  static std::string CanPlayType(const std::string& content_type,
-                                 const GURL& url);
-  static bool CanPlayType(const std::string& content_type);
 
   // Demuxer implementation.
   //

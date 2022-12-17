@@ -5,24 +5,22 @@
 #include "chrome/browser/ash/app_restore/full_restore_service.h"
 
 #include "ash/constants/ash_switches.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/public/cpp/notification_utils.h"
+#include "base/command_line.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/strings/string_util.h"
 #include "chrome/app/vector_icons/vector_icons.h"
-#include "chrome/browser/apps/app_service/app_service_proxy.h"
-#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
-#include "chrome/browser/apps/app_service/browser_app_instance_registry.h"
 #include "chrome/browser/ash/app_restore/app_restore_arc_task_handler.h"
 #include "chrome/browser/ash/app_restore/full_restore_app_launch_handler.h"
 #include "chrome/browser/ash/app_restore/full_restore_data_handler.h"
 #include "chrome/browser/ash/app_restore/full_restore_prefs.h"
 #include "chrome/browser/ash/app_restore/full_restore_service_factory.h"
-#include "chrome/browser/ash/app_restore/lacros_window_handler.h"
 #include "chrome/browser/ash/app_restore/new_user_restore_pref_handler.h"
 #include "chrome/browser/ash/policy/scheduled_task_handler/reboot_notifications_scheduler.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/first_run/first_run.h"
+#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/notifications/notification_display_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
@@ -37,12 +35,13 @@
 #include "components/app_restore/full_restore_utils.h"
 #include "components/prefs/pref_service.h"
 #include "components/strings/grit/components_strings.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_service.h"
-#include "content/public/browser/notification_source.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/chromeos/devicetype_utils.h"
 #include "ui/message_center/public/cpp/notification.h"
+
+// Enable VLOG level 1.
+#undef ENABLED_VLOG_LEVEL
+#define ENABLED_VLOG_LEVEL 1
 
 namespace ash {
 namespace full_restore {
@@ -113,8 +112,9 @@ FullRestoreService::FullRestoreService(Profile* profile)
           /*should_init_service=*/true)),
       restore_data_handler_(
           std::make_unique<FullRestoreDataHandler>(profile_)) {
-  notification_registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
-                              content::NotificationService::AllSources());
+  on_app_terminating_subscription_ =
+      browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
+          &FullRestoreService::OnAppTerminating, base::Unretained(this)));
 
   PrefService* prefs = profile_->GetPrefs();
   DCHECK(prefs);
@@ -138,14 +138,6 @@ FullRestoreService::FullRestoreService(Profile* profile)
       user_manager::UserManager::Get()->GetPrimaryUser()) {
     ::full_restore::FullRestoreSaveHandler::GetInstance()
         ->SetPrimaryProfilePath(profile_->GetPath());
-
-    auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile_);
-    if (proxy && proxy->BrowserAppInstanceRegistry() &&
-        ::full_restore::features::IsFullRestoreForLacrosEnabled()) {
-      lacros_window_handler_ =
-          std::make_unique<app_restore::LacrosWindowHandler>(
-              *proxy->BrowserAppInstanceRegistry());
-    }
 
     // In Multi-Profile mode, only set for the primary user. For other users,
     // active profile path is set when switch users.
@@ -319,10 +311,7 @@ void FullRestoreService::Click(const absl::optional<int>& button_index,
   MaybeCloseNotification();
 }
 
-void FullRestoreService::Observe(int type,
-                                 const content::NotificationSource& source,
-                                 const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type);
+void FullRestoreService::OnAppTerminating() {
   if (auto* arc_task_handler =
           app_restore::AppRestoreArcTaskHandler::GetForProfile(profile_)) {
     arc_task_handler->Shutdown();
@@ -465,7 +454,7 @@ void FullRestoreService::MaybeShowRestoreNotification(const std::string& id,
       l10n_util::GetStringUTF16(IDS_RESTORE_NOTIFICATION_DISPLAY_SOURCE),
       GURL(),
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
-                                 id),
+                                 id, NotificationCatalogName::kFullRestore),
       notification_data,
       base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
           weak_ptr_factory_.GetWeakPtr()),

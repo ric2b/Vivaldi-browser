@@ -14,6 +14,7 @@
 #include "base/feature_list.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/json_writer.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -37,7 +38,6 @@
 #include "components/variations/variations_associated_data.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
-#include "net/base/escape.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -249,7 +249,6 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
   std::string caption;
   std::string quick_action_uri;
   QuickActionCategory quick_action_category = QUICK_ACTION_CATEGORY_NONE;
-  int64_t logged_event_id = 0;
   std::string search_url_full;
   std::string search_url_preload;
   int coca_card_tag = 0;
@@ -259,7 +258,7 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
       json_string, &search_term, &display_text, &alternate_term, &mid,
       &prevent_preload, &mention_start, &mention_end, &context_language,
       &thumbnail_url, &caption, &quick_action_uri, &quick_action_category,
-      &logged_event_id, &search_url_full, &search_url_preload, &coca_card_tag,
+      &search_url_full, &search_url_preload, &coca_card_tag,
       &related_searches_json);
   if (mention_start != 0 || mention_end != 0) {
     // Sanity check that our selection is non-zero and it is less than
@@ -282,8 +281,8 @@ ContextualSearchDelegate::GetResolvedSearchTermFromJson(
       is_invalid, response_code, search_term, display_text, alternate_term, mid,
       prevent_preload == kDoPreventPreloadValue, start_adjust, end_adjust,
       context_language, thumbnail_url, caption, quick_action_uri,
-      quick_action_category, logged_event_id, search_url_full,
-      search_url_preload, coca_card_tag, related_searches_json);
+      quick_action_category, search_url_full, search_url_preload, coca_card_tag,
+      related_searches_json);
 }
 
 std::string ContextualSearchDelegate::BuildRequestUrl(
@@ -437,7 +436,6 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
     std::string* caption,
     std::string* quick_action_uri,
     QuickActionCategory* quick_action_category,
-    int64_t* logged_event_id,
     std::string* search_url_full,
     std::string* search_url_preload,
     int* coca_card_tag,
@@ -540,13 +538,6 @@ void ContextualSearchDelegate::DecodeSearchTermFromJsonResponse(
   } else {
     DVLOG(0) << "The Contextual Cards backend response: ";
     DVLOG(0) << contextual_cards_diagnostic;
-  }
-
-  // Get the Event ID to use for sending event outcomes back to the server.
-  std::string logged_event_id_string;
-  dict->GetString("logged_event_id", &logged_event_id_string);
-  if (!logged_event_id_string.empty()) {
-    *logged_event_id = std::stoll(logged_event_id_string, nullptr);
   }
 
   // Extract an arbitrary Related Searches payload as JSON and return to Java

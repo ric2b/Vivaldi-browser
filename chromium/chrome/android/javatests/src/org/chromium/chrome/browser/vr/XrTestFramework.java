@@ -62,7 +62,10 @@ public abstract class XrTestFramework {
             new HashSet(Arrays.asList("bullhead" /* Nexus 5X */, "marlin" /* Pixel 1 */
                     ));
     public static final int PAGE_LOAD_TIMEOUT_S = 10;
-    public static final int POLL_CHECK_INTERVAL_SHORT_MS = 50;
+    // These two were originally different values, but the short one was bumped up to increase
+    // test harness reliability. The long version might also want to be bumped up at some point, or
+    // the two could be merged.
+    public static final int POLL_CHECK_INTERVAL_SHORT_MS = 100;
     public static final int POLL_CHECK_INTERVAL_LONG_MS = 100;
     public static final int POLL_TIMEOUT_SHORT_MS = getShortPollTimeout();
     public static final int POLL_TIMEOUT_LONG_MS = getLongPollTimeout();
@@ -125,7 +128,8 @@ public abstract class XrTestFramework {
     /**
      * Checks whether a request for the given permission would trigger a permission prompt.
      *
-     * @param permission The name of the permission to check.
+     * @param permission The name of the permission to check. Must come from PermissionName enum
+     *         (see third_party/blink/renderer/modules/permissions/permission_descriptor.idl).
      * @param webContents The WebContents to run the JavaScript in.
      * @return True if the permission request would trigger a prompt, false otherwise.
      */
@@ -495,7 +499,8 @@ public abstract class XrTestFramework {
     /**
      * Helper method to run permissionRequestWouldTriggerPrompt with the current tab's WebContents.
      *
-     * @param permission The name of the permission to check.
+     * @param permission The name of the permission to check. Must come from PermissionName enum
+     *         (see third_party/blink/renderer/modules/permissions/permission_descriptor.idl).
      * @return True if the permission request would trigger a prompt, false otherwise.
      */
     public boolean permissionRequestWouldTriggerPrompt(String permission) {

@@ -4,7 +4,7 @@
 
 #include "media/gpu/v4l2/test/vp9_decoder.h"
 
-#include <linux/media/vp9-ctrls.h>
+#include <linux/media/vp9-ctrls-upstream.h>
 #include <sys/ioctl.h>
 
 #include "base/bits.h"
@@ -27,10 +27,9 @@ static_assert(kNumberOfBuffersInCaptureQueue <= 16,
 
 #define SET_IF(bit_field, cond, mask) (bit_field) |= ((cond) ? (mask) : 0)
 
-inline void conditionally_set_flag(
-    struct v4l2_ctrl_vp9_frame_decode_params& params,
-    bool condition,
-    enum v4l2_vp9_frame_flags flag) {
+inline void conditionally_set_flag(struct v4l2_ctrl_vp9_frame& params,
+                                   const bool condition,
+                                   const __u32 flag) {
   params.flags |= condition ? flag : 0;
 }
 
@@ -47,39 +46,6 @@ void FillV4L2VP9QuantizationParams(
       base::checked_cast<__s8>(vp9_quant_params.delta_q_uv_ac);
 }
 
-void FillV4L2VP9MvProbsParams(const Vp9FrameContext& vp9_ctx,
-                              struct v4l2_vp9_mv_probabilities* v4l2_mv_probs) {
-  SafeArrayMemcpy(v4l2_mv_probs->joint, vp9_ctx.mv_joint_probs);
-  SafeArrayMemcpy(v4l2_mv_probs->sign, vp9_ctx.mv_sign_prob);
-  SafeArrayMemcpy(v4l2_mv_probs->class_, vp9_ctx.mv_class_probs);
-  SafeArrayMemcpy(v4l2_mv_probs->class0_bit, vp9_ctx.mv_class0_bit_prob);
-  SafeArrayMemcpy(v4l2_mv_probs->bits, vp9_ctx.mv_bits_prob);
-  SafeArrayMemcpy(v4l2_mv_probs->class0_fr, vp9_ctx.mv_class0_fr_probs);
-  SafeArrayMemcpy(v4l2_mv_probs->fr, vp9_ctx.mv_fr_probs);
-  SafeArrayMemcpy(v4l2_mv_probs->class0_hp, vp9_ctx.mv_class0_hp_prob);
-  SafeArrayMemcpy(v4l2_mv_probs->hp, vp9_ctx.mv_hp_prob);
-}
-
-void FillV4L2VP9ProbsParams(const Vp9FrameContext& vp9_ctx,
-                            struct v4l2_vp9_probabilities* v4l2_probs) {
-  SafeArrayMemcpy(v4l2_probs->tx8, vp9_ctx.tx_probs_8x8);
-  SafeArrayMemcpy(v4l2_probs->tx16, vp9_ctx.tx_probs_16x16);
-  SafeArrayMemcpy(v4l2_probs->tx32, vp9_ctx.tx_probs_32x32);
-  SafeArrayMemcpy(v4l2_probs->coef, vp9_ctx.coef_probs);
-  SafeArrayMemcpy(v4l2_probs->skip, vp9_ctx.skip_prob);
-  SafeArrayMemcpy(v4l2_probs->inter_mode, vp9_ctx.inter_mode_probs);
-  SafeArrayMemcpy(v4l2_probs->interp_filter, vp9_ctx.interp_filter_probs);
-  SafeArrayMemcpy(v4l2_probs->is_inter, vp9_ctx.is_inter_prob);
-  SafeArrayMemcpy(v4l2_probs->comp_mode, vp9_ctx.comp_mode_prob);
-  SafeArrayMemcpy(v4l2_probs->single_ref, vp9_ctx.single_ref_prob);
-  SafeArrayMemcpy(v4l2_probs->comp_ref, vp9_ctx.comp_ref_prob);
-  SafeArrayMemcpy(v4l2_probs->y_mode, vp9_ctx.y_mode_probs);
-  SafeArrayMemcpy(v4l2_probs->uv_mode, vp9_ctx.uv_mode_probs);
-  SafeArrayMemcpy(v4l2_probs->partition, vp9_ctx.partition_probs);
-
-  FillV4L2VP9MvProbsParams(vp9_ctx, &v4l2_probs->mv);
-}
-
 void FillV4L2VP9LoopFilterParams(const Vp9LoopFilterParams& vp9_lf_params,
                                  struct v4l2_vp9_loop_filter* v4l2_lf) {
   SET_IF(v4l2_lf->flags, vp9_lf_params.delta_enabled,
@@ -92,7 +58,6 @@ void FillV4L2VP9LoopFilterParams(const Vp9LoopFilterParams& vp9_lf_params,
   v4l2_lf->sharpness = vp9_lf_params.sharpness;
   SafeArrayMemcpy(v4l2_lf->ref_deltas, vp9_lf_params.ref_deltas);
   SafeArrayMemcpy(v4l2_lf->mode_deltas, vp9_lf_params.mode_deltas);
-  SafeArrayMemcpy(v4l2_lf->level_lookup, vp9_lf_params.lvl);
 }
 
 void FillV4L2VP9SegmentationParams(const Vp9SegmentationParams& vp9_seg_params,
@@ -112,7 +77,7 @@ void FillV4L2VP9SegmentationParams(const Vp9SegmentationParams& vp9_seg_params,
   SafeArrayMemcpy(v4l2_seg->pred_probs, vp9_seg_params.pred_probs);
 
   static_assert(static_cast<size_t>(Vp9SegmentationParams::SEG_LVL_MAX) ==
-                    static_cast<size_t>(V4L2_VP9_SEGMENT_FEATURE_CNT),
+                    static_cast<size_t>(V4L2_VP9_SEG_LVL_MAX),
                 "mismatch in number of segmentation features");
 
   for (size_t j = 0;
@@ -129,127 +94,63 @@ void FillV4L2VP9SegmentationParams(const Vp9SegmentationParams& vp9_seg_params,
   SafeArrayMemcpy(v4l2_seg->feature_data, vp9_seg_params.feature_data);
 }
 
-// Detiles a single MM21 plane. MM21 is an NV12-like pixel format that is stored
-// in 16x32 tiles in the Y plane and 16x16 tiles in the UV plane (since it's
-// 4:2:0 subsampled, but UV are interlaced). This function converts a single
-// MM21 plane into its equivalent NV12 plane.
-void DetilePlane(std::vector<char>& dest,
-                 char* src,
-                 gfx::Size size,
-                 gfx::Size tile_size) {
-  // Tile size in bytes.
-  const int tile_len = tile_size.GetArea();
-  // |width| rounded down to the nearest multiple of |tile_width|.
-  const int aligned_width =
-      base::bits::AlignDown(size.width(), tile_size.width());
-  // |width| rounded up to the nearest multiple of |tile_width|.
-  const int padded_width = base::bits::AlignUp(size.width(), tile_size.width());
-  // |height| rounded up to the nearest multiple of |tile_height|.
-  const int padded_height =
-      base::bits::AlignUp(size.height(), tile_size.height());
-  // Size of one row of tiles in bytes.
-  const int src_row_size = padded_width * tile_size.height();
-  // Size of the entire coded image.
-  const int coded_image_num_pixels = padded_width * padded_height;
-
-  // Index in bytes to the start of the current tile row.
-  int src_tile_row_start = 0;
-  // Offset in pixels from top of the screen of the current tile row.
-  int y_offset = 0;
-
-  // Iterates over each row of tiles.
-  while (src_tile_row_start < coded_image_num_pixels) {
-    // Maximum relative y-axis value that we should process for the given tile
-    // row. Important for cropping.
-    const int max_in_tile_row_index =
-        size.height() - y_offset < tile_size.height()
-            ? (size.height() - y_offset)
-            : tile_size.height();
-
-    // Offset in bytes into the current tile row to start reading data for the
-    // next pixel row.
-    int src_row_start = 0;
-
-    // Iterates over each row of pixels within the tile row.
-    for (int in_tile_row_index = 0; in_tile_row_index < max_in_tile_row_index;
-         in_tile_row_index++) {
-      int src_index = src_tile_row_start + src_row_start;
-
-      // Iterates over each pixel in the row of pixels.
-      for (int col_index = 0; col_index < aligned_width;
-           col_index += tile_size.width()) {
-        dest.insert(dest.end(), src + src_index,
-                    src + src_index + tile_size.width());
-        src_index += tile_len;
-      }
-      // Finish last partial tile in the row.
-      dest.insert(dest.end(), src + src_index,
-                  src + src_index + size.width() - aligned_width);
-
-      // Shift to the next pixel row in the tile row.
-      src_row_start += tile_size.width();
-    }
-
-    src_tile_row_start += src_row_size;
-    y_offset += tile_size.height();
-  }
-}
-
-// Unpacks an NV12 UV plane into separate U and V planes.
-void UnpackUVPlane(std::vector<char>& dest_u,
-                   std::vector<char>& dest_v,
-                   std::vector<char>& src_uv,
-                   gfx::Size size) {
-  dest_u.reserve(size.GetArea() / 4);
-  dest_v.reserve(size.GetArea() / 4);
-  for (int i = 0; i < size.GetArea() / 4; i++) {
-    dest_u.push_back(src_uv[2 * i]);
-    dest_v.push_back(src_uv[2 * i + 1]);
-  }
-}
-
-void ConvertMM21ToYUV(std::vector<char>& dest_y,
-                      std::vector<char>& dest_u,
-                      std::vector<char>& dest_v,
-                      char* src_y,
-                      char* src_uv,
-                      gfx::Size size) {
-  // Detile MM21's luma plane.
-  constexpr int kMM21TileWidth = 16;
-  constexpr int kMM21TileHeight = 32;
-  constexpr gfx::Size kYTileSize(kMM21TileWidth, kMM21TileHeight);
-  dest_y.reserve(size.GetArea());
-  DetilePlane(dest_y, src_y, size, kYTileSize);
-
-  // Detile MM21's chroma plane in a temporary |detiled_uv|.
-  std::vector<char> detiled_uv;
-  const gfx::Size uv_size(size.width(), size.height() / 2);
-  constexpr gfx::Size kUVTileSize(kMM21TileWidth, kMM21TileHeight / 2);
-  detiled_uv.reserve(size.GetArea() / 2);
-  DetilePlane(detiled_uv, src_uv, uv_size, kUVTileSize);
-
-  // Unpack NV12's UV plane into separate U and V planes.
-  UnpackUVPlane(dest_u, dest_v, detiled_uv, size);
-}
-
+// TODO(b/228876644): assert that |parsing_compressed_header| is indeed false.
 Vp9Decoder::Vp9Decoder(std::unique_ptr<IvfParser> ivf_parser,
                        std::unique_ptr<V4L2IoctlShim> v4l2_ioctl,
                        std::unique_ptr<V4L2Queue> OUTPUT_queue,
                        std::unique_ptr<V4L2Queue> CAPTURE_queue)
-    : VideoDecoder::VideoDecoder(std::move(ivf_parser),
-                                 std::move(v4l2_ioctl),
+    : VideoDecoder::VideoDecoder(std::move(v4l2_ioctl),
                                  std::move(OUTPUT_queue),
                                  std::move(CAPTURE_queue)),
+      ivf_parser_(std::move(ivf_parser)),
       vp9_parser_(
-          std::make_unique<Vp9Parser>(/*parsing_compressed_header=*/false)) {}
+          std::make_unique<Vp9Parser>(/*parsing_compressed_header=*/false)) {
+  DCHECK(v4l2_ioctl_);
+
+  // TODO(b/230021497): add change in SetExtCtrls function.
+  CHECK(!v4l2_ioctl_->QueryCtrl(V4L2_CID_STATELESS_VP9_COMPRESSED_HDR))
+      << "VP9 compressed header not supported with current platform decoding "
+         "code.";
+
+  // MTK8192, MTK8195 don't support V4L2_CID_STATELESS_VP9_COMPRESSED_HDR.
+  LOG(INFO) << "VIDIOC_QUERYCTRL ioctl failure with "
+               "V4L2_CID_STATELESS_VP9_COMPRESSED_HDR is expected because VP9 "
+               "compressed header is not supported on current platform. VP9 "
+               "compressed header support is optional.";
+
+  // This control was landed in v5.17 and is pretty much a marker that the
+  // driver supports the stable API.
+  DCHECK(v4l2_ioctl_->QueryCtrl(V4L2_CID_STATELESS_VP9_FRAME));
+}
 
 Vp9Decoder::~Vp9Decoder() = default;
 
 // static
 std::unique_ptr<Vp9Decoder> Vp9Decoder::Create(
-    std::unique_ptr<IvfParser> ivf_parser,
-    const media::IvfFileHeader& file_header) {
+    const base::MemoryMappedFile& stream) {
   constexpr uint32_t kDriverCodecFourcc = V4L2_PIX_FMT_VP9_FRAME;
+
+  VLOG(2) << "Attempting to create decoder with codec "
+          << media::FourccToString(kDriverCodecFourcc);
+
+  // Set up video parser.
+  auto ivf_parser = std::make_unique<media::IvfParser>();
+  media::IvfFileHeader file_header{};
+
+  if (!ivf_parser->Initialize(stream.data(), stream.length(), &file_header)) {
+    LOG(ERROR) << "Couldn't initialize IVF parser";
+    return nullptr;
+  }
+
+  const auto driver_codec_fourcc =
+      media::v4l2_test::FileFourccToDriverFourcc(file_header.fourcc);
+
+  if (driver_codec_fourcc != kDriverCodecFourcc) {
+    VLOG(2) << "File fourcc (" << media::FourccToString(driver_codec_fourcc)
+            << ") does not match expected fourcc("
+            << media::FourccToString(kDriverCodecFourcc) << ").";
+    return nullptr;
+  }
 
   // MM21 is an uncompressed opaque format that is produced by MediaTek
   // video decoders.
@@ -382,7 +283,7 @@ Vp9Parser::Result Vp9Decoder::ReadNextFrame(Vp9FrameHeader& vp9_frame_header,
 
 void Vp9Decoder::SetupFrameParams(
     const Vp9FrameHeader& frame_hdr,
-    struct v4l2_ctrl_vp9_frame_decode_params* v4l2_frame_params) {
+    struct v4l2_ctrl_vp9_frame* v4l2_frame_params) {
   conditionally_set_flag(*v4l2_frame_params,
                          frame_hdr.frame_type == Vp9FrameHeader::KEYFRAME,
                          V4L2_VP9_FRAME_FLAG_KEY_FRAME);
@@ -436,14 +337,13 @@ void Vp9Decoder::SetupFrameParams(
   v4l2_frame_params->interpolation_filter = frame_hdr.interpolation_filter;
   v4l2_frame_params->tile_cols_log2 = frame_hdr.tile_cols_log2;
   v4l2_frame_params->tile_rows_log2 = frame_hdr.tile_rows_log2;
-  v4l2_frame_params->tx_mode = frame_hdr.compressed_header.tx_mode;
   v4l2_frame_params->reference_mode =
       frame_hdr.compressed_header.reference_mode;
-  static_assert(VP9_FRAME_LAST + (V4L2_REF_ID_CNT - 1) <
+  static_assert(Vp9RefType::VP9_FRAME_MAX - VP9_FRAME_LAST <
                     std::extent<decltype(frame_hdr.ref_frame_sign_bias)>::value,
                 "array sizes are incompatible");
-  for (size_t i = 0; i < V4L2_REF_ID_CNT; i++) {
-    v4l2_frame_params->ref_frame_sign_biases |=
+  for (size_t i = 0; i < Vp9RefType::VP9_FRAME_MAX - VP9_FRAME_LAST; i++) {
+    v4l2_frame_params->ref_frame_sign_bias |=
         (frame_hdr.ref_frame_sign_bias[i + VP9_FRAME_LAST] ? (1 << i) : 0);
   }
   v4l2_frame_params->frame_width_minus_1 = frame_hdr.frame_width - 1;
@@ -458,12 +358,6 @@ void Vp9Decoder::SetupFrameParams(
 
     LOG_ASSERT(idx < kVp9NumRefFrames) << "Invalid reference frame index.\n";
 
-    static_assert(
-        std::extent<decltype(frame_hdr.ref_frame_idx)>::value ==
-            std::extent<decltype(v4l2_frame_params->refs)>::value,
-        "The number of reference frames in |Vp9FrameHeader| does not match "
-        "|v4l2_ctrl_vp9_frame_decode_params|. Fix |Vp9FrameHeader|.");
-
     // We need to convert a reference frame's frame_number() (in  microseconds)
     // to reference ID (in nanoseconds). Technically, v4l2_timeval_to_ns() is
     // suggested to be used to convert timestamp to nanoseconds, but multiplying
@@ -473,15 +367,30 @@ void Vp9Decoder::SetupFrameParams(
     // https://www.kernel.org/doc/html/v5.10/userspace-api/media/v4l/dev-stateless-decoder.html#buffer-management-while-decoding
     constexpr size_t kTimestampToNanoSecs = 1000;
 
-    v4l2_frame_params->refs[i] =
+    const auto reference_id =
         ref_frames_[idx]
             ? ref_frames_[idx]->frame_number() * kTimestampToNanoSecs
             : kInvalidSurface;
+
+    // Only partially/indirectly documented in the VP9 spec, but this array
+    // contains LAST, GOLDEN, and ALT, in that order.
+    switch (i) {
+      case 0:
+        v4l2_frame_params->last_frame_ts = reference_id;
+        break;
+      case 1:
+        v4l2_frame_params->golden_frame_ts = reference_id;
+        break;
+      case 2:
+        v4l2_frame_params->alt_frame_ts = reference_id;
+        break;
+      default:
+        NOTREACHED() << "Invalid reference frame index";
+    }
   }
-  // TODO(stevecho): fill in the rest of |v4l2_frame_params| fields.
+
   FillV4L2VP9QuantizationParams(frame_hdr.quant_params,
                                 &v4l2_frame_params->quant);
-  FillV4L2VP9ProbsParams(frame_hdr.frame_context, &v4l2_frame_params->probs);
 
   const Vp9Parser::Context& context = vp9_parser_->context();
   const Vp9LoopFilterParams& lf_params = context.loop_filter();
@@ -491,7 +400,7 @@ void Vp9Decoder::SetupFrameParams(
   FillV4L2VP9SegmentationParams(segm_params, &v4l2_frame_params->seg);
 }
 
-bool Vp9Decoder::CopyFrameData(const Vp9FrameHeader& frame_hdr,
+void Vp9Decoder::CopyFrameData(const Vp9FrameHeader& frame_hdr,
                                std::unique_ptr<V4L2Queue>& queue) {
   LOG_ASSERT(queue->num_buffers() == 1)
       << "Only 1 buffer is expected to be used for OUTPUT queue for now.";
@@ -501,8 +410,8 @@ bool Vp9Decoder::CopyFrameData(const Vp9FrameHeader& frame_hdr,
 
   scoped_refptr<MmapedBuffer> buffer = queue->GetBuffer(0);
 
-  return memcpy(static_cast<uint8_t*>(buffer->mmaped_planes()[0].start_addr),
-                frame_hdr.data, frame_hdr.frame_size);
+  memcpy(static_cast<uint8_t*>(buffer->mmaped_planes()[0].start_addr),
+         frame_hdr.data, frame_hdr.frame_size);
 }
 
 VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
@@ -529,8 +438,7 @@ VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
   VLOG_IF(2, !frame_hdr.show_frame) << "not displaying frame";
   last_decoded_frame_visible_ = frame_hdr.show_frame;
 
-  if (!CopyFrameData(frame_hdr, OUTPUT_queue_))
-    LOG(FATAL) << "Failed to copy the frame data into the V4L2 buffer.";
+  CopyFrameData(frame_hdr, OUTPUT_queue_);
 
   LOG_ASSERT(OUTPUT_queue_->num_buffers() == 1)
       << "Too many buffers in OUTPUT queue. It is currently designed to "
@@ -541,12 +449,16 @@ VideoDecoder::Result Vp9Decoder::DecodeNextFrame(std::vector<char>& y_plane,
   if (!v4l2_ioctl_->QBuf(OUTPUT_queue_, 0))
     LOG(FATAL) << "VIDIOC_QBUF failed for OUTPUT queue.";
 
-  struct v4l2_ctrl_vp9_frame_decode_params v4l2_frame_params;
+  struct v4l2_ctrl_vp9_frame v4l2_frame_params;
   memset(&v4l2_frame_params, 0, sizeof(v4l2_frame_params));
 
   SetupFrameParams(frame_hdr, &v4l2_frame_params);
 
-  if (!v4l2_ioctl_->SetExtCtrls(OUTPUT_queue_, v4l2_frame_params))
+  struct v4l2_ext_control ext_ctrl = {.id = V4L2_CID_STATELESS_VP9_FRAME,
+                                      .size = sizeof(v4l2_frame_params),
+                                      .ptr = &v4l2_frame_params};
+
+  if (!v4l2_ioctl_->SetExtCtrls(OUTPUT_queue_, ext_ctrl))
     LOG(FATAL) << "VIDIOC_S_EXT_CTRLS failed.";
 
   if (!v4l2_ioctl_->MediaRequestIocQueue(OUTPUT_queue_))

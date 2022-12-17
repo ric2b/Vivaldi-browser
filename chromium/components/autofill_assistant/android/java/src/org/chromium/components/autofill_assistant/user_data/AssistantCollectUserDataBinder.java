@@ -8,10 +8,12 @@ import android.app.Activity;
 import android.view.View;
 import android.view.ViewGroup;
 
+import androidx.annotation.Nullable;
+
 import org.chromium.base.task.PostTask;
 import org.chromium.components.autofill_assistant.AssistantAddressEditorGms;
-import org.chromium.components.autofill_assistant.AssistantContactEditorAccount;
 import org.chromium.components.autofill_assistant.AssistantEditor.AssistantAddressEditor;
+import org.chromium.components.autofill_assistant.AssistantEditor.AssistantContactEditor;
 import org.chromium.components.autofill_assistant.AssistantEditor.AssistantPaymentInstrumentEditor;
 import org.chromium.components.autofill_assistant.AssistantEditorFactory;
 import org.chromium.components.autofill_assistant.AssistantOptionModel.AddressModel;
@@ -61,6 +63,7 @@ class AssistantCollectUserDataBinder
         private final ViewGroup mGenericUserInterfaceContainerAppended;
         private final Object mDividerTag;
         private final Activity mActivity;
+        @Nullable
         private final AssistantEditorFactory mEditorFactory;
         private final WindowAndroid mWindowAndroid;
 
@@ -77,7 +80,7 @@ class AssistantCollectUserDataBinder
                 AssistantDataOriginNotice dataOriginNotice,
                 ViewGroup genericUserInterfaceContainerPrepended,
                 ViewGroup genericUserInterfaceContainerAppended, Object dividerTag,
-                Activity activity, AssistantEditorFactory editorFactory,
+                Activity activity, @Nullable AssistantEditorFactory editorFactory,
                 WindowAndroid windowAndroid) {
             mRootView = rootView;
             mPaymentRequestExpanderAccordion = accordion;
@@ -107,12 +110,12 @@ class AssistantCollectUserDataBinder
             AssistantCollectUserDataModel model, ViewHolder view, PropertyKey propertyKey) {
         boolean handled = updateEditors(model, propertyKey, view);
         handled = updateRootVisibility(model, propertyKey, view) || handled;
-        handled = updateSectionVisibility(model, propertyKey, view) || handled;
         handled = updateSectionTitles(model, propertyKey, view) || handled;
         handled = updateSectionContents(model, propertyKey, view) || handled;
         handled = updateSectionSelectedItem(model, propertyKey, view) || handled;
-        /* Update section paddings *after* updating section visibility. */
-        handled = updateSectionPaddings(model, propertyKey, view) || handled;
+        handled = updateUiState(model, propertyKey, view) || handled;
+        // Update section visibility/padding *after* updating editors and content.
+        handled = updateVisibilityAndPaddings(model, propertyKey, view) || handled;
 
         if (propertyKey == AssistantCollectUserDataModel.DELEGATE) {
             AssistantCollectUserDataDelegate collectUserDataDelegate =
@@ -324,71 +327,24 @@ class AssistantCollectUserDataBinder
             view.mContactDetailsSection.setContactFullOptions(
                     model.get(AssistantCollectUserDataModel.CONTACT_FULL_DESCRIPTION_OPTIONS));
             return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATA_ORIGIN_LINK_TEXT) {
-            view.mDataOriginNotice.setDataOriginLinkText(
-                    model.get(AssistantCollectUserDataModel.DATA_ORIGIN_LINK_TEXT));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_TITLE) {
-            view.mDataOriginNotice.setDataOriginDialogTitle(
-                    model.get(AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_TITLE));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_TEXT) {
-            view.mDataOriginNotice.setDataOriginDialogText(
-                    model.get(AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_TEXT));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_BUTTON_TEXT) {
-            view.mDataOriginNotice.setDataOriginDialogButtonText(
-                    model.get(AssistantCollectUserDataModel.DATA_ORIGIN_DIALOG_BUTTON_TEXT));
+        } else if (propertyKey == AssistantCollectUserDataModel.DATA_ORIGIN_NOTICE_CONFIGURATION) {
+            AssistantCollectUserDataModel.DataOriginNoticeConfiguration configuration =
+                    model.get(AssistantCollectUserDataModel.DATA_ORIGIN_NOTICE_CONFIGURATION);
+            view.mDataOriginNotice.setLinkText(configuration.getLinkText());
+            view.mDataOriginNotice.setDialogTitle(configuration.getTitle());
+            view.mDataOriginNotice.setDialogText(configuration.getText());
+            view.mDataOriginNotice.setDialogButtonText(configuration.getButtonText());
             return true;
         } else if (propertyKey == AssistantCollectUserDataModel.ACCOUNT_EMAIL) {
             view.mDataOriginNotice.setAccountEmail(
                     model.get(AssistantCollectUserDataModel.ACCOUNT_EMAIL));
             return true;
-        } else if (model.get(AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS)) {
+        } else if (model.get(AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS)) {
             view.mTermsAsCheckboxSection.useBackgroundlessPrivacyNotice();
             view.mTermsSection.useBackgroundlessPrivacyNotice();
             return true;
         }
 
-        return false;
-    }
-
-    /**
-     * Updates visibility of PR sections.
-     * @return whether the property key was handled.
-     */
-    private boolean updateSectionVisibility(
-            AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
-        if (propertyKey == AssistantCollectUserDataModel.REQUEST_NAME
-                || propertyKey == AssistantCollectUserDataModel.REQUEST_EMAIL
-                || propertyKey == AssistantCollectUserDataModel.REQUEST_PHONE) {
-            view.mContactDetailsSection.setVisible(shouldShowContactDetails(model));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.REQUEST_PHONE_NUMBER_SEPARATELY) {
-            view.mPhoneNumberSection.setVisible(
-                    model.get(AssistantCollectUserDataModel.REQUEST_PHONE_NUMBER_SEPARATELY));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS) {
-            view.mShippingAddressSection.setVisible(
-                    model.get(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.REQUEST_PAYMENT) {
-            view.mPaymentMethodSection.setVisible(shouldShowPaymentInstruments(model));
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX) {
-            if (model.get(AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX)) {
-                view.mTermsSection.getView().setVisibility(View.GONE);
-                view.mTermsAsCheckboxSection.getView().setVisibility(View.VISIBLE);
-            } else {
-                view.mTermsSection.getView().setVisibility(View.VISIBLE);
-                view.mTermsAsCheckboxSection.getView().setVisibility(View.GONE);
-            }
-            return true;
-        } else if (propertyKey == AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE) {
-            view.mLoginSection.setVisible(
-                    model.get(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE));
-            return true;
-        }
         return false;
     }
 
@@ -486,25 +442,88 @@ class AssistantCollectUserDataBinder
         return false;
     }
 
+    private boolean updateUiState(
+            AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
+        if (propertyKey == AssistantCollectUserDataModel.ENABLE_UI_INTERACTIONS) {
+            boolean enabled = model.get(AssistantCollectUserDataModel.ENABLE_UI_INTERACTIONS);
+            view.mContactDetailsSection.setEnabled(enabled);
+            view.mPhoneNumberSection.setEnabled(enabled);
+            view.mShippingAddressSection.setEnabled(enabled);
+            view.mPaymentMethodSection.setEnabled(enabled);
+            view.mLoginSection.setEnabled(enabled);
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.MARK_CONTACTS_LOADING) {
+            view.mContactDetailsSection.setLoading(
+                    model.get(AssistantCollectUserDataModel.MARK_CONTACTS_LOADING));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.MARK_PHONE_NUMBERS_LOADING) {
+            view.mPhoneNumberSection.setLoading(
+                    model.get(AssistantCollectUserDataModel.MARK_PHONE_NUMBERS_LOADING));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.MARK_SHIPPING_ADDRESSES_LOADING) {
+            view.mShippingAddressSection.setLoading(
+                    model.get(AssistantCollectUserDataModel.MARK_SHIPPING_ADDRESSES_LOADING));
+            return true;
+        } else if (propertyKey == AssistantCollectUserDataModel.MARK_PAYMENT_METHODS_LOADING) {
+            view.mPaymentMethodSection.setLoading(
+                    model.get(AssistantCollectUserDataModel.MARK_PAYMENT_METHODS_LOADING));
+            return true;
+        }
+        return false;
+    }
+
+    private boolean updateVisibilityAndPaddings(
+            AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
+        updateSectionVisibility(model, view);
+        updateSectionPaddings(model, view);
+
+        return propertyKey == AssistantCollectUserDataModel.REQUEST_NAME
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_EMAIL
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_PHONE
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_PHONE_NUMBER_SEPARATELY
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_PAYMENT
+                || propertyKey == AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX
+                || propertyKey == AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE
+                || propertyKey == AssistantCollectUserDataModel.EXPANDED_SECTION
+                || propertyKey == AssistantCollectUserDataModel.PREPENDED_SECTIONS
+                || propertyKey == AssistantCollectUserDataModel.APPENDED_SECTIONS
+                || propertyKey == AssistantCollectUserDataModel.WEB_CONTENTS
+                || propertyKey == AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS
+                || propertyKey == AssistantCollectUserDataModel.ADD_PAYMENT_INSTRUMENT_ACTION_TOKEN
+                || propertyKey == AssistantCollectUserDataModel.INITIALIZE_ADDRESS_COLLECTION_PARAMS
+                || propertyKey == AssistantCollectUserDataModel.AVAILABLE_CONTACTS
+                || propertyKey == AssistantCollectUserDataModel.AVAILABLE_PHONE_NUMBERS
+                || propertyKey == AssistantCollectUserDataModel.AVAILABLE_PAYMENT_INSTRUMENTS
+                || propertyKey == AssistantCollectUserDataModel.AVAILABLE_SHIPPING_ADDRESSES
+                || propertyKey == AssistantCollectUserDataModel.AVAILABLE_LOGINS;
+    }
+
+    /**
+     * Updates visibility of user data sections.
+     */
+    private void updateSectionVisibility(AssistantCollectUserDataModel model, ViewHolder view) {
+        view.mContactDetailsSection.setVisible(shouldShowContactDetails(model));
+        view.mPhoneNumberSection.setVisible(
+                model.get(AssistantCollectUserDataModel.REQUEST_PHONE_NUMBER_SEPARATELY));
+        view.mShippingAddressSection.setVisible(
+                model.get(AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS));
+        view.mPaymentMethodSection.setVisible(shouldShowPaymentInstruments(model));
+        if (model.get(AssistantCollectUserDataModel.SHOW_TERMS_AS_CHECKBOX)) {
+            view.mTermsSection.setVisible(false);
+            view.mTermsAsCheckboxSection.setVisible(true);
+        } else {
+            view.mTermsSection.setVisible(true);
+            view.mTermsAsCheckboxSection.setVisible(false);
+        }
+        view.mLoginSection.setVisible(
+                model.get(AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE));
+    }
+
     /**
      * Updates the paddings between sections and section dividers.
-     * @return whether the property key was handled.
      */
-    private boolean updateSectionPaddings(
-            AssistantCollectUserDataModel model, PropertyKey propertyKey, ViewHolder view) {
-        if ((propertyKey != AssistantCollectUserDataModel.REQUEST_SHIPPING_ADDRESS)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_NAME)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_EMAIL)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_PHONE)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_PHONE_NUMBER_SEPARATELY)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_PAYMENT)
-                && (propertyKey != AssistantCollectUserDataModel.REQUEST_LOGIN_CHOICE)
-                && (propertyKey != AssistantCollectUserDataModel.EXPANDED_SECTION)
-                && (propertyKey != AssistantCollectUserDataModel.PREPENDED_SECTIONS)
-                && (propertyKey != AssistantCollectUserDataModel.APPENDED_SECTIONS)) {
-            return false;
-        }
-
+    private void updateSectionPaddings(AssistantCollectUserDataModel model, ViewHolder view) {
         // Update section paddings such that the first and last section are flush to the top/bottom,
         // and all other sections have the same amount of padding in-between them.
 
@@ -586,7 +605,6 @@ class AssistantCollectUserDataBinder
                 prevSectionIsExpandedOrInvisible = false;
             }
         }
-        return true;
     }
 
     /**
@@ -601,7 +619,7 @@ class AssistantCollectUserDataBinder
                 && propertyKey != AssistantCollectUserDataModel.REQUEST_PHONE
                 && propertyKey != AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS
                 && propertyKey != AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES
-                && propertyKey != AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS
+                && propertyKey != AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS
                 && propertyKey != AssistantCollectUserDataModel.ACCOUNT_EMAIL
                 && propertyKey != AssistantCollectUserDataModel.ADD_PAYMENT_INSTRUMENT_ACTION_TOKEN
                 && propertyKey
@@ -621,7 +639,7 @@ class AssistantCollectUserDataBinder
         if (shouldShowContactDetails(model)) {
             updateContactEditor(model, view, webContents);
         }
-        updatePhoneNumberEditor(model, view);
+        updatePhoneNumberEditor(model, view, webContents);
         updateAddressEditor(model, view, webContents);
         updatePaymentEditor(model, view, webContents);
 
@@ -630,41 +648,45 @@ class AssistantCollectUserDataBinder
 
     private void updateContactEditor(
             AssistantCollectUserDataModel model, ViewHolder view, WebContents webContents) {
-        if (model.get(AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS)) {
-            view.mContactDetailsSection.setRequestReloadOnChange(true);
-            view.mContactDetailsSection.setEditor(new AssistantContactEditorAccount(view.mActivity,
-                    view.mWindowAndroid, model.get(AssistantCollectUserDataModel.ACCOUNT_EMAIL),
-                    model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
-                    /* requestPhone= */ false));
-        } else {
-            view.mContactDetailsSection.setRequestReloadOnChange(false);
-            view.mContactDetailsSection.setEditor(view.mEditorFactory.createContactEditor(
-                    webContents, view.mActivity,
-                    model.get(AssistantCollectUserDataModel.REQUEST_NAME),
-                    model.get(AssistantCollectUserDataModel.REQUEST_PHONE),
-                    model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
-                    model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES)));
-        }
+        assert !model.get(AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS)
+                || !model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES);
+
+        // TODO(b/232484145): Create non-Autofill editors.
+        // All flows reaching here must have access to Chrome dependent editors. Otherwise the
+        // flow was configured wrongly.
+        assert view.mEditorFactory != null;
+        AssistantContactEditor editor = view.mEditorFactory.createContactEditor(webContents,
+                view.mActivity, model.get(AssistantCollectUserDataModel.REQUEST_NAME),
+                model.get(AssistantCollectUserDataModel.REQUEST_PHONE),
+                model.get(AssistantCollectUserDataModel.REQUEST_EMAIL),
+                model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES));
+
+        view.mContactDetailsSection.setEditor(editor);
     }
 
-    private void updatePhoneNumberEditor(AssistantCollectUserDataModel model, ViewHolder view) {
-        if (model.get(AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS)) {
-            view.mPhoneNumberSection.setRequestReloadOnChange(true);
-            view.mPhoneNumberSection.setEditor(new AssistantContactEditorAccount(view.mActivity,
-                    view.mWindowAndroid, model.get(AssistantCollectUserDataModel.ACCOUNT_EMAIL),
-                    /* requestEmail= */ false, /* requestPhone= */ true));
-        } else {
-            view.mPhoneNumberSection.setRequestReloadOnChange(false);
-            // Separate phone number section is only supposed to be used with backend data, we
-            // do not offer an Autofill editor in this case.
-            view.mPhoneNumberSection.setEditor(null);
-        }
+    private void updatePhoneNumberEditor(
+            AssistantCollectUserDataModel model, ViewHolder view, WebContents webContents) {
+        assert !model.get(AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS)
+                || !model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES);
+
+        // TODO(b/232484145): Create non-Autofill editors.
+        // All flows reaching here must have access to Chrome dependent editors. Otherwise the
+        // flow was configured wrongly.
+        assert view.mEditorFactory != null;
+        AssistantContactEditor editor =
+                view.mEditorFactory.createContactEditor(webContents, view.mActivity,
+                        /* requestName= */ false,
+                        /* requestPhone= */ true,
+                        /* requestEmail= */ false,
+                        model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES));
+
+        view.mPhoneNumberSection.setEditor(editor);
     }
 
     private void updateAddressEditor(
             AssistantCollectUserDataModel model, ViewHolder view, WebContents webContents) {
         AssistantAddressEditor editor = null;
-        if (model.get(AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS)) {
+        if (model.get(AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS)) {
             view.mShippingAddressSection.setRequestReloadOnChange(true);
             byte[] initializeAddressCollectionParams =
                     model.get(AssistantCollectUserDataModel.INITIALIZE_ADDRESS_COLLECTION_PARAMS);
@@ -676,6 +698,9 @@ class AssistantCollectUserDataBinder
             }
         } else {
             view.mShippingAddressSection.setRequestReloadOnChange(false);
+            // All flows reaching here must have access to Chrome dependent editors. Otherwise the
+            // flow was configured wrongly.
+            assert view.mEditorFactory != null;
             editor = view.mEditorFactory.createAddressEditor(webContents, view.mActivity,
                     model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES));
         }
@@ -686,7 +711,7 @@ class AssistantCollectUserDataBinder
     private void updatePaymentEditor(
             AssistantCollectUserDataModel model, ViewHolder view, WebContents webContents) {
         AssistantPaymentInstrumentEditor editor = null;
-        if (model.get(AssistantCollectUserDataModel.USE_GMS_CORE_EDIT_DIALOGS)) {
+        if (model.get(AssistantCollectUserDataModel.USE_ALTERNATIVE_EDIT_DIALOGS)) {
             view.mPaymentMethodSection.setRequestReloadOnChange(true);
             byte[] addInstrumentActionToken =
                     model.get(AssistantCollectUserDataModel.ADD_PAYMENT_INSTRUMENT_ACTION_TOKEN);
@@ -697,6 +722,9 @@ class AssistantCollectUserDataBinder
             }
         } else {
             view.mPaymentMethodSection.setRequestReloadOnChange(false);
+            // All flows reaching here must have access to Chrome dependent editors. Otherwise the
+            // flow was configured wrongly.
+            assert view.mEditorFactory != null;
             editor = view.mEditorFactory.createPaymentInstrumentEditor(webContents, view.mActivity,
                     model.get(AssistantCollectUserDataModel.SUPPORTED_BASIC_CARD_NETWORKS),
                     model.get(AssistantCollectUserDataModel.SHOULD_STORE_USER_DATA_CHANGES));

@@ -6,10 +6,11 @@
 #define BASE_ALLOCATOR_PARTITION_ALLOCATOR_STARSCAN_STATS_REPORTER_H_
 
 #include "base/allocator/partition_allocator/starscan/stats_collector.h"
-#include "base/threading/platform_thread.h"
-#include "base/time/time.h"
 
 namespace partition_alloc {
+
+static_assert(sizeof(uint32_t) >= sizeof(internal::base::PlatformThreadId),
+              "sizeof(tid) must be larger than sizeof(PlatformThreadId)");
 
 // StatsReporter is a wrapper to invoke TRACE_EVENT_BEGIN/END, TRACE_COUNTER1,
 // and UmaHistogramTimes. It is used to just remove trace_log and uma
@@ -17,19 +18,19 @@ namespace partition_alloc {
 class StatsReporter {
  public:
   virtual void ReportTraceEvent(internal::StatsCollector::ScannerId id,
-                                const base::PlatformThreadId tid,
-                                base::TimeTicks start_time,
-                                base::TimeTicks end_time) {}
+                                uint32_t tid,
+                                int64_t start_time_ticks_internal_value,
+                                int64_t end_time_ticks_internal_value) {}
   virtual void ReportTraceEvent(internal::StatsCollector::MutatorId id,
-                                const base::PlatformThreadId tid,
-                                base::TimeTicks start_time,
-                                base::TimeTicks end_time) {}
+                                uint32_t tid,
+                                int64_t start_time_ticks_internal_value,
+                                int64_t end_time_ticks_internal_value) {}
 
   virtual void ReportSurvivedQuarantineSize(size_t survived_size) {}
 
   virtual void ReportSurvivedQuarantinePercent(double survivied_rate) {}
 
-  virtual void ReportStats(const char* stats_name, base::TimeDelta sample) {}
+  virtual void ReportStats(const char* stats_name, int64_t sample_in_usec) {}
 };
 
 }  // namespace partition_alloc

@@ -6,7 +6,8 @@
 
 #include "ash/public/cpp/desks_templates_delegate.h"
 #include "ash/shell.h"
-#include "ash/wm/desks/templates/desks_templates_dialog_controller.h"
+#include "ash/wm/desks/templates/saved_desk_dialog_controller.h"
+#include "ash/wm/desks/templates/saved_desk_util.h"
 #include "ash/wm/mru_window_tracker.h"
 #include "ash/wm/overview/overview_controller.h"
 #include "ash/wm/window_restore/window_restore_util.h"
@@ -53,8 +54,11 @@ void RestoreDataCollector::CaptureActiveDeskAsTemplate(
       shell->mru_window_tracker()->BuildMruWindowList(kActiveDesk);
   auto* delegate = shell->desks_templates_delegate();
   for (auto* window : mru_windows) {
-    if (!delegate->IsWindowSupportedForDeskTemplate(window) &&
-        !wm::GetTransientParent(window)) {
+    // Skip transient windows without reporting.
+    if (wm::GetTransientParent(window))
+      continue;
+
+    if (!delegate->IsWindowSupportedForDeskTemplate(window)) {
       call.unsupported_apps.push_back(window);
       continue;
     }
@@ -132,9 +136,9 @@ void RestoreDataCollector::SendDeskTemplate(uint32_t serial) {
 
   auto desk_template = std::make_unique<DeskTemplate>(
       base::GUID::GenerateRandomV4().AsLowercaseString(),
-      DeskTemplateSource::kUser, call.template_name, base::Time::Now());
+      DeskTemplateSource::kUser, call.template_name, base::Time::Now(),
+      call.template_type);
   desk_template->set_desk_restore_data(std::move(call.data));
-  desk_template->set_type(call.template_type);
 
   if (!call.unsupported_apps.empty() &&
       Shell::Get()->overview_controller()->InOverviewSession()) {
@@ -148,7 +152,7 @@ void RestoreDataCollector::SendDeskTemplate(uint32_t serial) {
 
     // There were some unsupported apps in the active desk so open up a dialog
     // to let the user know.
-    DesksTemplatesDialogController::Get()->ShowUnsupportedAppsDialog(
+    saved_desk_util::GetSavedDeskDialogController()->ShowUnsupportedAppsDialog(
         root_window_to_show, std::move(call.unsupported_apps),
         std::move(call.callback), std::move(desk_template));
   } else {

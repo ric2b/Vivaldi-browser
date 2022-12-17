@@ -85,10 +85,10 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
     // Model selector buttons constants.
     private static final float MODEL_SELECTOR_BUTTON_Y_OFFSET_DP = 10.f;
-    private static final float MODEL_SELECTOR_BUTTON_END_PADDING_DP = 11.f;
-    private static final float MODEL_SELECTOR_BUTTON_START_PADDING_DP = 3.f;
+    private static final float MODEL_SELECTOR_BUTTON_PADDING_DP = 12.f;
     private static final float MODEL_SELECTOR_BUTTON_WIDTH_DP = 24.f;
     private static final float MODEL_SELECTOR_BUTTON_HEIGHT_DP = 24.f;
+    private static final float MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP = 12.f;
 
     // External influences
     private TabModelSelector mTabModelSelector;
@@ -319,6 +319,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 R.drawable.location_bar_incognito_badge);
         }
         mModelSelectorButton.setY(MODEL_SELECTOR_BUTTON_Y_OFFSET_DP);
+        mModelSelectorButton.setClickSlop(MODEL_SELECTOR_BUTTON_CLICK_SLOP_DP);
 
         Resources res = context.getResources();
         mHeight = res.getDimension(R.dimen.tab_strip_height) / res.getDisplayMetrics().density;
@@ -438,6 +439,10 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
         Tab selectedTab = mTabModelSelector.getCurrentModel().getTabAt(
                 mTabModelSelector.getCurrentModel().index());
+        // Note(david@vivaldi.com): We show a loading text while restoring tabs.
+        if (selectedTab != null)
+            mTabStripTreeProvider.updateLoadingState(
+                    resourceManager, this, getBackgroundStripColor(selectedTab.getThemeColor()));
         int selectedTabId = selectedTab == null ? TabModel.INVALID_TAB_INDEX : selectedTab.getId();
         mTabStripTreeProvider.pushAndUpdateStrip(this, mLayerTitleCacheSupplier.get(),
                 resourceManager, getActiveStripLayoutHelper().getStripLayoutTabsToRender(), yOffset,
@@ -461,12 +466,16 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     public void onSizeChanged(
             float width, float height, float visibleViewportOffsetY, int orientation) {
         mWidth = width;
-        mOrientation = orientation;
+        boolean orientationChanged = false;
+        if (mOrientation != orientation) {
+            mOrientation = orientation;
+            orientationChanged = true;
+        }
         if (!LocalizationUtils.isLayoutRtl()) {
             mModelSelectorButton.setX(
-                    mWidth - MODEL_SELECTOR_BUTTON_WIDTH_DP - MODEL_SELECTOR_BUTTON_END_PADDING_DP);
+                    mWidth - MODEL_SELECTOR_BUTTON_WIDTH_DP - MODEL_SELECTOR_BUTTON_PADDING_DP);
         } else {
-            mModelSelectorButton.setX(MODEL_SELECTOR_BUTTON_END_PADDING_DP);
+            mModelSelectorButton.setX(MODEL_SELECTOR_BUTTON_PADDING_DP);
         }
 
         updateStripScrim();
@@ -476,8 +485,9 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             mNormalHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
             mIncognitoHelper.onSizeChanged(mWidth, mHeight, visibleViewportOffsetY, orientation);
         } else {
-        mNormalHelper.onSizeChanged(mWidth, mHeight);
-        mIncognitoHelper.onSizeChanged(mWidth, mHeight);
+        mNormalHelper.onSizeChanged(mWidth, mHeight, orientationChanged, LayoutManagerImpl.time());
+        mIncognitoHelper.onSizeChanged(
+                mWidth, mHeight, orientationChanged, LayoutManagerImpl.time());
         }
 
         // Note(david@vivaldi.com): Apply the correct clicking area for all possible scenarios.
@@ -514,12 +524,18 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
     }
 
     private float getModelSelectorButtonWidthWithPadding() {
-        return MODEL_SELECTOR_BUTTON_WIDTH_DP + MODEL_SELECTOR_BUTTON_END_PADDING_DP
-                + MODEL_SELECTOR_BUTTON_START_PADDING_DP;
+        return MODEL_SELECTOR_BUTTON_WIDTH_DP + (MODEL_SELECTOR_BUTTON_PADDING_DP * 2);
     }
 
     public TintedCompositorButton getNewTabButton() {
         return getActiveStripLayoutHelper().getNewTabButton();
+    }
+
+    /**
+     * @return The touch target offset to be applied to the new tab button.
+     */
+    public float getNewTabBtnTouchTargetOffset() {
+        return getActiveStripLayoutHelper().getNewTabButtonTouchTargetOffset();
     }
 
     public CompositorButton getModelSelectorButton() {
@@ -694,12 +710,12 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
 
             @Override
             public void willCloseAllTabs(boolean incognito) {
-                getStripLayoutHelper(incognito).allTabsClosed();
+                getStripLayoutHelper(incognito).willCloseAllTabs();
                 updateModelSwitcherButton();
             }
 
             @Override
-            public void allTabsClosureCommitted() {
+            public void allTabsClosureCommitted(boolean incognito) {
                 if (mLayerTitleCacheSupplier.hasValue()) {
                     mLayerTitleCacheSupplier.get().clearExcept(Tab.INVALID_TAB_ID);
                 }
@@ -708,7 +724,8 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             @Override
             public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
                 if (tab.getId() == lastId) return;
-                getStripLayoutHelper(tab.isIncognito()).tabSelected(time(), tab.getId(), lastId);
+                getStripLayoutHelper(tab.isIncognito())
+                        .tabSelected(time(), tab.getId(), lastId, false);
                 // Vivaldi
                 updateTitleForTab(tab);
             }
@@ -718,8 +735,8 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
                 boolean selected = type != TabLaunchType.FROM_LONGPRESS_BACKGROUND
                         || (mTabModelSelector.isIncognitoSelected() && tab.isIncognito());
                 getStripLayoutHelper(tab.isIncognito())
-                        .tabCreated(
-                                time(), tab.getId(), mTabModelSelector.getCurrentTabId(), selected);
+                        .tabCreated(time(), tab.getId(), mTabModelSelector.getCurrentTabId(),
+                                selected, false);
                 // Vivaldi
                 updateModelSwitcherButton();
             }
@@ -735,7 +752,7 @@ public class StripLayoutHelperManager implements SceneOverlay, PauseResumeWithNa
             }
         };
 
-        mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(modelSelector) {
+        mTabModelSelectorTabObserver = new TabModelSelectorTabObserver(mTabModelSelector) {
             @Override
             public void onLoadUrl(Tab tab, LoadUrlParams params, int loadType) {
                 if (params.getTransitionType() == PageTransition.HOME_PAGE

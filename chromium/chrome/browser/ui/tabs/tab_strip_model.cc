@@ -1978,7 +1978,7 @@ bool TabStripModel::CloseWebContentses(
       if (ShouldRunUnloadListenerBeforeClosing(contents))
         continue;
       content::RenderProcessHost* process =
-          contents->GetMainFrame()->GetProcess();
+          contents->GetPrimaryMainFrame()->GetProcess();
       ++processes[process];
     }
 
@@ -2080,6 +2080,20 @@ TabStripSelectionChange TabStripModel::SetSelection(
   if (!triggered_by_other_operation &&
       (selection.active_tab_changed() || selection.selection_changed())) {
     if (selection.active_tab_changed()) {
+      // Start measuring the tab switch compositing time. This must be the first
+      // thing in this block so that the start time is saved before any changes
+      // that might affect compositing.
+      if (selection.new_contents) {
+        auto input_event_timestamp =
+            tab_switch_event_latency_recorder_.input_event_timestamp();
+        // input_event_timestamp may be null in some cases, e.g. in tests.
+        selection.new_contents->SetTabSwitchStartTime(
+            !input_event_timestamp.is_null() ? input_event_timestamp
+                                             : base::TimeTicks::Now(),
+            resource_coordinator::ResourceCoordinatorTabHelper::IsLoaded(
+                selection.new_contents));
+      }
+
       if (base::FeatureList::IsEnabled(media::kEnableTabMuting)) {
         // Show the in-product help dialog pointing users to the tab mute button
         // if the user backgrounds an audible tab.
@@ -2093,17 +2107,11 @@ TabStripSelectionChange TabStripModel::SetSelection(
         }
       }
 
-      auto now = base::TimeTicks::Now();
-      if (selection.new_contents) {
-        auto input_event_timestamp =
-            tab_switch_event_latency_recorder_.input_event_timestamp();
-        // input_event_timestamp may be null in some cases, e.g. in tests.
-        selection.new_contents->SetTabSwitchStartTime(
-            !input_event_timestamp.is_null() ? input_event_timestamp : now,
-            resource_coordinator::ResourceCoordinatorTabHelper::IsLoaded(
-                selection.new_contents));
-      }
-      tab_switch_event_latency_recorder_.OnWillChangeActiveTab(now);
+      // Record the time to this point. This must be the last thing in this
+      // block so that all work done when the active tab changes is included in
+      // the measurement.
+      tab_switch_event_latency_recorder_.OnWillChangeActiveTab(
+          base::TimeTicks::Now());
     }
     TabStripModelChange change;
     auto visibility_tracker = InstallRenderWigetVisibilityTracker(selection);
@@ -2145,15 +2153,19 @@ void TabStripModel::MoveTabRelative(TabRelativeDirection direction) {
       GetTabGroupForTab(current_index);
 
   const int first_non_pinned_tab_index = IndexOfFirstNonPinnedTab();
-  int first_valid_index =
+  const int first_valid_index =
       IsTabPinned(current_index) ? 0 : first_non_pinned_tab_index;
-  int last_valid_index =
+  const int last_valid_index =
       IsTabPinned(current_index) ? first_non_pinned_tab_index - 1 : count() - 1;
   int target_index = std::max(
       std::min(current_index + offset, last_valid_index), first_valid_index);
 
-  absl::optional<tab_groups::TabGroupId> target_group =
-      GetTabGroupForTab(target_index);
+  // If the target index is the same as the current index, then the tab is at a
+  // min/max boundary and being moved further in that direction. In that case,
+  // the tab could still be ungrouped to move one more slot.
+  const absl::optional<tab_groups::TabGroupId> target_group =
+      (target_index == current_index) ? absl::nullopt
+                                      : GetTabGroupForTab(target_index);
 
   // If the tab is at a group boundary and the group is expanded, instead of
   // actually moving the tab just change its group membership.
@@ -2289,6 +2301,14 @@ void TabStripModel::AddToNewGroupImpl(const std::vector<int>& indices,
   }
 
   MoveTabsAndSetGroupImpl(indices, destination_index, new_group);
+
+  // Excluding the active tab, deselect all tabs being added to the group.
+  // See crbug/1301846 for more info.
+  const gfx::Range tab_indices =
+      group_model()->GetTabGroup(new_group)->ListTabs();
+  for (auto index = tab_indices.start(); index < tab_indices.end(); ++index)
+    if (active_index() != static_cast<int>(index) && IsTabSelected(index))
+      ToggleSelectionAt(index);
 }
 
 void TabStripModel::AddToExistingGroupImpl(
@@ -2531,18 +2551,31 @@ void TabStripModel::SetSitesMuted(const std::vector<int>& indices,
     } else {
       Profile* profile =
           Profile::FromBrowserContext(web_contents->GetBrowserContext());
-      HostContentSettingsMap* settings =
+      HostContentSettingsMap* map =
           HostContentSettingsMapFactory::GetForProfile(profile);
       ContentSetting setting =
           mute ? CONTENT_SETTING_BLOCK : CONTENT_SETTING_ALLOW;
 
-      if (!profile->IsIncognitoProfile() &&
-          setting == settings->GetDefaultContentSetting(
-                         ContentSettingsType::SOUND, nullptr)) {
-        setting = CONTENT_SETTING_DEFAULT;
+      // The goal is to only add the site URL to the exception list if
+      // the request behavior differs from the default value or if there is an
+      // existing less specific rule (i.e. wildcards) in the exception list.
+      if (!profile->IsIncognitoProfile()) {
+        // Using default setting value below clears the setting from the
+        // exception list for the site URL if it exists.
+        map->SetContentSettingDefaultScope(url, url, ContentSettingsType::SOUND,
+                                           CONTENT_SETTING_DEFAULT);
+
+        // If the current setting matches the desired setting after clearing the
+        // site URL from the exception list we can simply return otherwise we
+        // will add the site URL to the exception list.
+        if (setting ==
+            map->GetContentSetting(url, url, ContentSettingsType::SOUND)) {
+          return;
+        }
       }
-      settings->SetContentSettingDefaultScope(
-          url, url, ContentSettingsType::SOUND, setting);
+      // Adds the site URL to the exception list for the setting.
+      map->SetContentSettingDefaultScope(url, url, ContentSettingsType::SOUND,
+                                         setting);
     }
   }
 }

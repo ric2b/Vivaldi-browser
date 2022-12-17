@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Copyright (c) 2016 Vivaldi Technologies AS. All rights reserved
 
 import sys, os
@@ -27,6 +27,7 @@ filemap = {
   "vivaldi_components": "components",
   "vivaldi_content_strings": "content",
   "vivaldi_generated_resources": "generated",
+  "vivaldi_installer_strings": os.path.join("..", "installer"),
   "vivaldi_native_strings": os.path.join("..", "native_resources"),
   "vivaldi_strings": "strings",
   "vivaldi_ui_strings": "ui_strings",
@@ -34,7 +35,7 @@ filemap = {
 
 for name_prefix, dir in filemap.items():
   for locale in options.locales:
-    subprocess.check_call(["python",
+    subprocess.check_call(["python3",
       os.path.join(scriptdir, "po2xtb.py"),
       "--locale", locale if locale != "nb" else "no",
       "--vivaldi-file", name_prefix,

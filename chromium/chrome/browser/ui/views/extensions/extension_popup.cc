@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/extensions/extension_popup.h"
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/devtools/devtools_window.h"
 #include "chrome/browser/extensions/extension_view_host.h"
 #include "chrome/browser/ui/browser.h"
@@ -22,7 +23,6 @@
 #include "ui/views/widget/widget.h"
 
 #if defined(USE_AURA)
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "ui/aura/window.h"
 #include "ui/wm/core/window_animations.h"
 #include "ui/wm/public/activation_client.h"
@@ -30,6 +30,9 @@
 
 constexpr gfx::Size ExtensionPopup::kMinSize;
 constexpr gfx::Size ExtensionPopup::kMaxSize;
+
+// The most recently constructed popup; used for testing purposes.
+ExtensionPopup* g_last_popup_for_testing = nullptr;
 
 // A helper class to scope the observation of DevToolsAgentHosts. We can't just
 // use base::ScopedObservation here because that requires a specific source
@@ -54,8 +57,13 @@ class ExtensionPopup::ScopedDevToolsAgentHostObservation {
   }
 
  private:
-  content::DevToolsAgentHostObserver* observer_;
+  raw_ptr<content::DevToolsAgentHostObserver> observer_;
 };
+
+// static
+ExtensionPopup* ExtensionPopup::last_popup_for_testing() {
+  return g_last_popup_for_testing;
+}
 
 // static
 void ExtensionPopup::ShowPopup(
@@ -84,8 +92,6 @@ void ExtensionPopup::ShowPopup(
   // a base::ScopedObservation for this, since the activation client may be
   // deleted without a call back to this class.
   wm::GetActivationClient(native_view->GetRootWindow())->AddObserver(popup);
-
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::EXTENSION_POPUP_AURA);
 #endif
 }
 
@@ -94,6 +100,9 @@ ExtensionPopup::~ExtensionPopup() {
   // through the callback.
   if (shown_callback_)
     std::move(shown_callback_).Run(nullptr);
+
+  if (g_last_popup_for_testing == this)
+    g_last_popup_for_testing = nullptr;
 }
 
 gfx::Size ExtensionPopup::CalculatePreferredSize() const {
@@ -252,6 +261,7 @@ ExtensionPopup::ExtensionPopup(
       host_(std::move(host)),
       show_action_(show_action),
       shown_callback_(std::move(callback)) {
+  g_last_popup_for_testing = this;
   SetButtons(ui::DIALOG_BUTTON_NONE);
   set_use_round_corners(false);
 
@@ -292,6 +302,9 @@ ExtensionPopup::ExtensionPopup(
 
 void ExtensionPopup::ShowBubble() {
   GetWidget()->Show();
+  // StackAboveWidget() stacks this widget *directly* above the anchor view
+  // widget. This prevents it from covering other UI.
+  GetWidget()->StackAboveWidget(GetAnchorView()->GetWidget());
 
   // Focus on the host contents when the bubble is first shown.
   host_->host_contents()->Focus();

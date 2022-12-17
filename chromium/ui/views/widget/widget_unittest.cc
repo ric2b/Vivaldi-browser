@@ -1680,7 +1680,8 @@ class DesktopAuraTestValidPaintWidget : public Widget, public WidgetObserver {
     quit_closure_.Reset();
   }
 
-  void OnWidgetClosing(Widget* widget) override { expect_paint_ = false; }
+  // WidgetObserver:
+  void OnWidgetDestroying(Widget* widget) override { expect_paint_ = false; }
 
   void OnNativeWidgetPaint(const ui::PaintContext& context) override {
     received_paint_ = true;
@@ -1692,7 +1693,6 @@ class DesktopAuraTestValidPaintWidget : public Widget, public WidgetObserver {
       std::move(quit_closure_).Run();
   }
 
-  // WidgetObserver:
   void OnWidgetVisibilityChanged(Widget* widget, bool visible) override {
     expect_paint_ = visible;
   }
@@ -4198,6 +4198,57 @@ TEST_F(WidgetTest, CloseNowFollowedByCloseDoesntCallOnWidgetClosingTwice) {
   widget->RemoveObserver(&observer);
   widget.reset();
   // Assertions are in CloseFromClosingObserver.
+}
+
+namespace {
+
+class TestSaveWindowPlacementWidgetDelegate : public TestDesktopWidgetDelegate {
+ public:
+  TestSaveWindowPlacementWidgetDelegate() = default;
+  TestSaveWindowPlacementWidgetDelegate(
+      const TestSaveWindowPlacementWidgetDelegate&) = delete;
+  TestSaveWindowPlacementWidgetDelegate operator=(
+      const TestSaveWindowPlacementWidgetDelegate&) = delete;
+  ~TestSaveWindowPlacementWidgetDelegate() override = default;
+
+  void set_should_save_window_placement(bool should_save) {
+    should_save_window_placement_ = should_save;
+  }
+
+  int save_window_placement_count() const {
+    return save_window_placement_count_;
+  }
+
+  // ViewsDelegate:
+  std::string GetWindowName() const final { return GetWidget()->GetName(); }
+  bool ShouldSaveWindowPlacement() const final {
+    return should_save_window_placement_;
+  }
+  void SaveWindowPlacement(const gfx::Rect& bounds,
+                           ui::WindowShowState show_state) override {
+    save_window_placement_count_++;
+  }
+
+ private:
+  bool should_save_window_placement_ = true;
+  int save_window_placement_count_ = 0;
+};
+
+}  // namespace
+
+TEST_F(WidgetTest, ShouldSaveWindowPlacement) {
+  for (bool save : {false, true}) {
+    SCOPED_TRACE(save ? "ShouldSave" : "ShouldNotSave");
+    TestSaveWindowPlacementWidgetDelegate widget_delegate;
+    widget_delegate.set_should_save_window_placement(save);
+    Widget::InitParams params = CreateParams(Widget::InitParams::TYPE_WINDOW);
+    params.ownership = Widget::InitParams::WIDGET_OWNS_NATIVE_WIDGET;
+    params.name = "TestWidget";
+    widget_delegate.InitWidget(std::move(params));
+    auto* widget = widget_delegate.GetWidget();
+    widget->Close();
+    EXPECT_EQ(save ? 1 : 0, widget_delegate.save_window_placement_count());
+  }
 }
 
 class WidgetShadowTest : public WidgetTest {

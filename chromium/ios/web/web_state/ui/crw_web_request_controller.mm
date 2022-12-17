@@ -303,13 +303,9 @@ enum class BackForwardNavigationType {
       self.navigationManagerImpl->UpdatePendingItemUrl(requestURL);
     }
   } else {
-    BOOL isPostNavigation = NO;
-    if (base::FeatureList::IsEnabled(
-            web::features::kCreatePendingItemForPostFormSubmission)) {
-      isPostNavigation =
-          [self.navigationHandler.pendingNavigationInfo.HTTPMethod
-              isEqual:@"POST"];
-    }
+    BOOL isPostNavigation =
+        [self.navigationHandler.pendingNavigationInfo.HTTPMethod
+            isEqual:@"POST"];
     self.navigationManagerImpl->AddPendingItem(
         requestURL, referrer, transition,
         rendererInitiated ? web::NavigationInitiationType::RENDERER_INITIATED
@@ -392,6 +388,14 @@ enum class BackForwardNavigationType {
     } else {
       UMA_HISTOGRAM_MEDIUM_TIMES("PLT.iOS.BrowserInitiatedPageLoadTime2",
                                  context->GetElapsedTimeSinceCreation());
+    }
+
+    // Use the Session Restoration User Agent as it is the only way to know if
+    // it is automatic or not.
+    if (self.webState->GetUserAgentForSessionRestoration() ==
+        web::UserAgentType::AUTOMATIC) {
+      web::GetWebClient()->LogDefaultUserAgent(self.webState,
+                                               context->GetUrl());
     }
   }
 }

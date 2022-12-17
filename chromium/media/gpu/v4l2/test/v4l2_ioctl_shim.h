@@ -5,21 +5,18 @@
 #ifndef MEDIA_GPU_V4L2_TEST_V4L2_IOCTL_SHIM_H_
 #define MEDIA_GPU_V4L2_TEST_V4L2_IOCTL_SHIM_H_
 
-#include <linux/media/vp9-ctrls.h>
 #include <linux/videodev2.h>
 
 #include "base/files/memory_mapped_file.h"
 #include "base/memory/ref_counted.h"
-#include "media/filters/vp9_parser.h"
+#include "ui/gfx/geometry/size.h"
 
 namespace media {
 
 namespace v4l2_test {
 
 // MmapedBuffer maintains |mmaped_planes_| for each buffer as well as
-// |reference_id_|. Reference ID is computed from buffer ID, which is an
-// index used for VIDIOC_REQBUFS ioctl call. Reference ID is needed to use
-// previously decoded frames from reference frames list.
+// |buffer_id_|. |buffer_id_| is an index used for VIDIOC_REQBUFS ioctl call.
 class MmapedBuffer : public base::RefCounted<MmapedBuffer> {
  public:
   MmapedBuffer(const base::PlatformFile decode_fd,
@@ -100,6 +97,8 @@ class V4L2Queue {
   uint32_t num_planes() const { return num_planes_; }
   void set_num_planes(uint32_t num_planes) { num_planes_ = num_planes; }
 
+  // TODO(stevecho): change naming from |last_queued_buffer_index| to
+  // |last_queued_buffer_id|
   uint32_t last_queued_buffer_index() const {
     return last_queued_buffer_index_;
   }
@@ -142,6 +141,9 @@ class V4L2IoctlShim {
   V4L2IoctlShim& operator=(const V4L2IoctlShim&) = delete;
   ~V4L2IoctlShim();
 
+  // Queries whether the given |ctrl_id| is supported on current platform.
+  [[nodiscard]] bool QueryCtrl(const uint32_t ctrl_id) const;
+
   // Enumerates all frame sizes that the device supports
   // via VIDIOC_ENUM_FRAMESIZES.
   [[nodiscard]] bool EnumFrameSizes(uint32_t fourcc) const;
@@ -177,11 +179,10 @@ class V4L2IoctlShim {
   // Starts streaming |queue| (via VIDIOC_STREAMON).
   [[nodiscard]] bool StreamOn(const enum v4l2_buf_type type) const;
 
-  // Sets the value of a control which specifies VP9 decoding parameters
+  // Sets the value of a control which specifies decoding parameters
   // for each frame.
-  [[nodiscard]] bool SetExtCtrls(
-      const std::unique_ptr<V4L2Queue>& queue,
-      v4l2_ctrl_vp9_frame_decode_params& frame_params) const;
+  [[nodiscard]] bool SetExtCtrls(const std::unique_ptr<V4L2Queue>& queue,
+                                 v4l2_ext_control& ext_ctrl) const;
 
   // Allocates requests (likely one per OUTPUT buffer) via
   // MEDIA_IOC_REQUEST_ALLOC on the media device.

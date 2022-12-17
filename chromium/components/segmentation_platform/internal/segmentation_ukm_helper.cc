@@ -8,15 +8,20 @@
 #include "base/metrics/field_trial_params.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
+#include "base/time/clock.h"
+#include "components/segmentation_platform/internal/constants.h"
+#include "components/segmentation_platform/internal/selection/segmentation_result_prefs.h"
 #include "components/segmentation_platform/internal/stats.h"
 #include "components/segmentation_platform/public/config.h"
 #include "components/segmentation_platform/public/features.h"
+#include "components/segmentation_platform/public/local_state_helper.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 #define CALL_MEMBER_FN(obj, func) ((obj).*(func))
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof(x)[0])
 
+using segmentation_platform::proto::SegmentId;
 using ukm::builders::Segmentation_ModelExecution;
 
 namespace {
@@ -63,8 +68,7 @@ const UkmMemberFn kSegmentationUkmOutputMethods[] = {
     &Segmentation_ModelExecution::SetActualResult5,
     &Segmentation_ModelExecution::SetActualResult6};
 
-// Gets a set of segment IDs that are allowed to upload metrics.
-base::flat_set<int> GetSegmentIdsAllowedForReporting() {
+base::flat_set<SegmentId> GetSegmentIdsAllowedForReporting() {
   std::vector<std::string> segment_ids = base::SplitString(
       base::GetFieldTrialParamValueByFeature(
           segmentation_platform::features::
@@ -72,11 +76,11 @@ base::flat_set<int> GetSegmentIdsAllowedForReporting() {
           segmentation_platform::kSegmentIdsAllowedForReportingKey),
       ",;", base::WhitespaceHandling::TRIM_WHITESPACE,
       base::SplitResult::SPLIT_WANT_NONEMPTY);
-  base::flat_set<int> result;
+  base::flat_set<SegmentId> result;
   for (const auto& id : segment_ids) {
     int segment_id;
     if (base::StringToInt(id, &segment_id))
-      result.emplace(segment_id);
+      result.emplace(static_cast<SegmentId>(segment_id));
   }
   return result;
 }
@@ -102,7 +106,7 @@ SegmentationUkmHelper* SegmentationUkmHelper::GetInstance() {
 }
 
 ukm::SourceId SegmentationUkmHelper::RecordModelExecutionResult(
-    OptimizationTarget segment_id,
+    SegmentId segment_id,
     int64_t model_version,
     const std::vector<float>& input_tensor,
     float result) {
@@ -121,11 +125,13 @@ ukm::SourceId SegmentationUkmHelper::RecordModelExecutionResult(
 }
 
 ukm::SourceId SegmentationUkmHelper::RecordTrainingData(
-    OptimizationTarget segment_id,
+    SegmentId segment_id,
     int64_t model_version,
     const std::vector<float>& input_tensor,
     const std::vector<float>& outputs,
-    const std::vector<int>& output_indexes) {
+    const std::vector<int>& output_indexes,
+    absl::optional<proto::PredictionResult> prediction_result,
+    absl::optional<SelectedSegment> selected_segment) {
   ukm::SourceId source_id = ukm::NoURLSourceId();
   ukm::builders::Segmentation_ModelExecution execution_result(source_id);
   if (!AddInputsToUkm(&execution_result, segment_id, model_version,
@@ -137,13 +143,23 @@ ukm::SourceId SegmentationUkmHelper::RecordTrainingData(
     return ukm::kInvalidSourceId;
   }
 
+  if (prediction_result.has_value()) {
+    execution_result.SetPredictionResult(
+        FloatToInt64(prediction_result->result()));
+  }
+  if (selected_segment.has_value()) {
+    execution_result.SetSelectionResult(selected_segment->segment_id);
+    execution_result.SetOutputDelaySec(
+        (base::Time::Now() - selected_segment->selection_time).InSeconds());
+  }
+
   execution_result.Record(ukm::UkmRecorder::Get());
   return source_id;
 }
 
 bool SegmentationUkmHelper::AddInputsToUkm(
     ukm::builders::Segmentation_ModelExecution* ukm_builder,
-    OptimizationTarget segment_id,
+    SegmentId segment_id,
     int64_t model_version,
     const std::vector<float>& input_tensor) {
   if (!allowed_segment_ids_.contains(static_cast<int>(segment_id)))
@@ -189,7 +205,21 @@ bool SegmentationUkmHelper::AddOutputsToUkm(
 // static
 int64_t SegmentationUkmHelper::FloatToInt64(float f) {
   // Encode the float number in IEEE754 double precision.
-  return bit_cast<int64_t>(static_cast<double>(f));
+  return base::bit_cast<int64_t>(static_cast<double>(f));
+}
+
+// static
+bool SegmentationUkmHelper::AllowedToUploadData(
+    base::TimeDelta signal_storage_length,
+    base::Clock* clock) {
+  base::Time most_recent_allowed = LocalStateHelper::GetInstance().GetPrefTime(
+      kSegmentationUkmMostRecentAllowedTimeKey);
+  // If the local state is never set, return false.
+  if (most_recent_allowed.is_null() ||
+      most_recent_allowed == base::Time::Max()) {
+    return false;
+  }
+  return most_recent_allowed + signal_storage_length < clock->Now();
 }
 
 }  // namespace segmentation_platform

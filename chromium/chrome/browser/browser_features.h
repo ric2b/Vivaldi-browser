@@ -33,8 +33,11 @@ extern const char kBrowserCommandIdParam[];
 extern const base::Feature kUseManagementService;
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-extern const base::Feature kDoubleTapToZoomInTabletMode;
 extern const base::Feature kQuickSettingsPWANotifications;
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+extern const base::Feature kDoubleTapToZoomInTabletMode;
 #endif
 
 #if BUILDFLAG(IS_MAC)
@@ -44,10 +47,6 @@ extern const base::Feature kEnableUniveralLinks;
 #if !BUILDFLAG(IS_ANDROID)
 extern const base::Feature kCopyLinkToText;
 extern const base::Feature kMuteNotificationSnoozeAction;
-#endif
-
-#if BUILDFLAG(IS_WIN)
-extern const base::Feature kPrewarmSearchResultsPageFonts;
 #endif
 
 extern const base::Feature kSandboxExternalProtocolBlocked;

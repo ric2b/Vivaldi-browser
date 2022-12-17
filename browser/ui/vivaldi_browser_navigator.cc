@@ -17,6 +17,11 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
   content::NavigationControllerImpl* controller =
       &contentsimpl->GetController();
 
+  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
+      target_contents->GetMainFrame());
+
+  bool rewrite_virtual_urls = rfhi->frame_tree_node()->IsOutermostMainFrame();
+
   std::unique_ptr<content::NavigationEntryImpl> entry =
       content::NavigationEntryImpl::FromNavigationEntry(
           controller->CreateNavigationEntry(
@@ -24,7 +29,7 @@ void LoadURLAsPendingEntry(WebContents* target_contents,
               nullptr /* source_site_instance */, params->transition,
               params->is_renderer_initiated, params->extra_headers,
               controller->GetBrowserContext(),
-              nullptr /* blob_url_loader_factory */));
+              nullptr /* blob_url_loader_factory */, rewrite_virtual_urls));
 
   controller->SetPendingEntry(std::move(entry));
   controller->SetNeedsReload();

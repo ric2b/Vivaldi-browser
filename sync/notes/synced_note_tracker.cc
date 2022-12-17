@@ -224,8 +224,6 @@ void SyncedNoteTracker::Update(const SyncedNoteTrackerEntity* entity,
       specifics.notes().unique_position();
   HashSpecifics(specifics,
                 mutable_entity->metadata()->mutable_specifics_hash());
-  // TODO(crbug.com/516866): in case of conflict, the entity might exist in
-  // |ordered_local_tombstones_| as well if it has been locally deleted.
 }
 
 void SyncedNoteTracker::UpdateServerVersion(
@@ -285,8 +283,6 @@ void SyncedNoteTracker::IncrementSequenceNumber(
   DCHECK(entity);
   DCHECK(!entity->note_node() || !entity->note_node()->is_permanent_node());
 
-  // TODO(crbug.com/516866): Update base hash specifics here if the entity is
-  // not already out of sync.
   AsMutableEntity(entity)->metadata()->set_sequence_number(
       entity->metadata()->sequence_number() + 1);
 }
@@ -553,8 +549,9 @@ SyncedNoteTracker::ReorderUnsyncedEntitiesExceptDeletions(
   // Remove those who are direct children of another node.
   for (const SyncedNoteTrackerEntity* entity : entities) {
     const vivaldi::NoteNode* node = entity->note_node();
-    for (const auto& child : node->children())
+    for (const auto& child : node->children()) {
       nodes.erase(child.get());
+    }
   }
   // |nodes| contains only roots of all trees in the forest all of which are
   // ready to be processed because their parents have no pending updates.
@@ -644,7 +641,6 @@ void SyncedNoteTracker::UpdateUponCommitResponse(
     const std::string& sync_id,
     int64_t server_version,
     int64_t acked_sequence_number) {
-  // TODO(crbug.com/516866): Update specifics if we decide to keep it.
   DCHECK(entity);
 
   SyncedNoteTrackerEntity* mutable_entity = AsMutableEntity(entity);
@@ -736,26 +732,18 @@ size_t SyncedNoteTracker::TrackedEntitiesCountForTest() const {
 
 void SyncedNoteTracker::CheckAllNodesTracked(
     const vivaldi::NotesModel* notes_model) const {
-  // TODO(crbug.com/516866): The method is added to debug some crashes.
-  // Since it's relatively expensive, it should run on debug enabled
-  // builds only after the root cause is found.
-  CHECK(GetEntityForNoteNode(notes_model->main_node()));
-  CHECK(GetEntityForNoteNode(notes_model->other_node()));
-  CHECK(GetEntityForNoteNode(notes_model->trash_node()));
+#if DCHECK_IS_ON()
+  DCHECK(GetEntityForNoteNode(notes_model->main_node()));
+  DCHECK(GetEntityForNoteNode(notes_model->other_node()));
+  DCHECK(GetEntityForNoteNode(notes_model->trash_node()));
 
   ui::TreeNodeIterator<const vivaldi::NoteNode> iterator(
       notes_model->root_node());
   while (iterator.has_next()) {
     const vivaldi::NoteNode* node = iterator.Next();
-    // Root node is usually tracked, unless the sync data has been provided by
-    // the USS migrator.
-    if (node == notes_model->root_node()) {
-      continue;
-    }
-    // TODO(crbug.com/516866): The below CHECK is added to debug some crashes.
-    // Should be converted to a DCHECK after the root cause if found.
-    CHECK(GetEntityForNoteNode(node));
+    DCHECK(GetEntityForNoteNode(node));
   }
+#endif  // DCHECK_IS_ON()
 }
 
 }  // namespace sync_notes

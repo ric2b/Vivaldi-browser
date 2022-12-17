@@ -199,8 +199,8 @@ ClientMapEntryUpdater::ClientMapEntryUpdater(JNIEnv* env,
   DCHECK(web_contents);
   DCHECK(jdelegate);
 
-  if (web_contents->GetMainFrame())
-    RenderFrameCreated(web_contents->GetMainFrame());
+  if (web_contents->GetPrimaryMainFrame())
+    RenderFrameCreated(web_contents->GetPrimaryMainFrame());
 }
 
 void ClientMapEntryUpdater::RenderFrameCreated(RenderFrameHost* rfh) {
@@ -372,8 +372,9 @@ std::unique_ptr<AwWebResourceInterceptResponse> RunShouldInterceptRequest(
       "shouldInterceptRequest");
   ScopedJavaLocalRef<jobject> java_ref =
       Java_AwContentsBackgroundThreadClient_shouldInterceptRequestFromNative(
-          env, obj, java_web_resource_request.jurl, request.is_main_frame,
-          request.has_user_gesture, java_web_resource_request.jmethod,
+          env, obj, java_web_resource_request.jurl,
+          request.is_outermost_main_frame, request.has_user_gesture,
+          java_web_resource_request.jmethod,
           java_web_resource_request.jheader_names,
           java_web_resource_request.jheader_values);
 

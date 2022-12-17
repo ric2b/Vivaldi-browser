@@ -9,6 +9,7 @@
 
 #include "base/command_line.h"
 #include "base/logging.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/strings/string_util.h"
 #include "base/version.h"
 #include "build/build_config.h"
@@ -18,6 +19,7 @@
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/extensions/activity_log/activity_log.h"
 #include "chrome/browser/extensions/api/chrome_extensions_api_client.h"
+#include "chrome/browser/extensions/api/favicon/favicon_util.h"
 #include "chrome/browser/extensions/api/runtime/chrome_runtime_api_delegate.h"
 #include "chrome/browser/extensions/chrome_component_extension_resource_manager.h"
 #include "chrome/browser/extensions/chrome_extension_host_delegate.h"
@@ -187,6 +189,13 @@ std::string ChromeExtensionsBrowserClient::GetUserIdHashFromContext(
     content::BrowserContext* context) {
   return ash::ProfileHelper::GetUserIdHashFromProfile(
       static_cast<Profile*>(context));
+}
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+bool ChromeExtensionsBrowserClient::IsFromMainProfile(
+    content::BrowserContext* browser_context) {
+  return Profile::FromBrowserContext(browser_context)->IsMainProfile();
 }
 #endif
 
@@ -376,7 +385,7 @@ ChromeExtensionsBrowserClient::GetComponentExtensionResourceManager() {
 void ChromeExtensionsBrowserClient::BroadcastEventToRenderers(
     events::HistogramValue histogram_value,
     const std::string& event_name,
-    std::unique_ptr<base::ListValue> args,
+    base::Value::List args,
     bool dispatch_to_off_the_record_profiles) {
   g_browser_process->extension_event_router_forwarder()
       ->BroadcastEventToRenderers(histogram_value, event_name, std::move(args),
@@ -650,7 +659,8 @@ void ChromeExtensionsBrowserClient::NotifyExtensionRemoteHostContacted(
   auto* telemetry_service =
       safe_browsing::ExtensionTelemetryServiceFactory::GetForProfile(
           Profile::FromBrowserContext(context));
-  if (!telemetry_service || !telemetry_service->enabled()) {
+  if (!telemetry_service || !telemetry_service->enabled() ||
+      !IsExtensionTelemetryRemoteHostContactedSignalEnabled()) {
     return;
   }
   auto remote_host_signal =
@@ -681,6 +691,17 @@ bool ChromeExtensionsBrowserClient::IsUsbDeviceAllowedByPolicy(
   // Check against WebUsbAllowDevicesForUrls.
   return usb_chooser_context->usb_policy_allowed_devices().IsDeviceAllowed(
       origin, {vendor_id, product_id});
+}
+
+void ChromeExtensionsBrowserClient::GetFavicon(
+    content::BrowserContext* browser_context,
+    const Extension* extension,
+    const GURL& url,
+    base::CancelableTaskTracker* tracker,
+    base::OnceCallback<void(scoped_refptr<base::RefCountedMemory> bitmap_data)>
+        callback) const {
+  favicon_util::GetFaviconForExtensionRequest(browser_context, extension, url,
+                                              tracker, std::move(callback));
 }
 
 }  // namespace extensions

@@ -43,7 +43,6 @@
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/html/html_marquee_element.h"
-#include "third_party/blink/renderer/core/html/shadow/shadow_element_names.h"
 #include "third_party/blink/renderer/core/html_names.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_box.h"
 #include "third_party/blink/renderer/core/layout/api/line_layout_item.h"
@@ -287,35 +286,13 @@ void LayoutBlock::StyleDidChange(StyleDifference diff,
     // See SVGLayoutSupport::CalculateScreenFontSizeScalingFactor().
     if (old_squared_scale != new_affine_transform.XScaleSquared() +
                                  new_affine_transform.YScaleSquared()) {
-      for (LayoutBox* box : *View()->SvgTextDescendantsMap().at(this)) {
-        box->SetNeedsLayout(layout_invalidation_reason::kStyleChange,
-                            kMarkContainerChain);
+      for (LayoutBox* box : *View()->SvgTextDescendantsMap().at(this))
         To<LayoutNGSVGText>(box)->SetNeedsTextMetricsUpdate();
-      }
     }
   }
 }
 
-void LayoutBlock::UpdateFromStyle() {
-  NOT_DESTROYED();
-  LayoutBox::UpdateFromStyle();
-
-  bool should_clip_overflow = (!StyleRef().IsOverflowVisibleAlongBothAxes() ||
-                               ShouldApplyPaintContainment()) &&
-                              AllowsNonVisibleOverflow();
-  if (should_clip_overflow != HasNonVisibleOverflow()) {
-    if (GetScrollableArea())
-      GetScrollableArea()->InvalidateAllStickyConstraints();
-    // The overflow clip paint property depends on whether overflow clip is
-    // present so we need to update paint properties if this changes.
-    SetNeedsPaintPropertyUpdate();
-    if (Layer())
-      Layer()->SetNeedsCompositingInputsUpdate();
-  }
-  SetHasNonVisibleOverflow(should_clip_overflow);
-}
-
-bool LayoutBlock::AllowsNonVisibleOverflow() const {
+bool LayoutBlock::RespectsCSSOverflow() const {
   NOT_DESTROYED();
   // If overflow has been propagated to the viewport, it has no effect here.
   return GetNode() != GetDocument().ViewportDefiningElement();
@@ -536,21 +513,6 @@ void LayoutBlock::AddLayoutOverflowFromChildren() {
     To<LayoutBlockFlow>(this)->AddLayoutOverflowFromInlineChildren();
   else
     AddLayoutOverflowFromBlockChildren();
-}
-
-OverflowClipAxes LayoutBlock::ComputeOverflowClipAxes() const {
-  const OverflowClipAxes layout_box_clip_axes =
-      LayoutBox::ComputeOverflowClipAxes();
-  if (layout_box_clip_axes != kNoOverflowClip)
-    return layout_box_clip_axes;
-  if (!HasNonVisibleOverflow())
-    return kNoOverflowClip;
-  if (IsScrollContainer())
-    return kOverflowClipBothAxis;
-  return (StyleRef().OverflowX() == EOverflow::kVisible ? kNoOverflowClip
-                                                        : kOverflowClipX) |
-         (StyleRef().OverflowY() == EOverflow::kVisible ? kNoOverflowClip
-                                                        : kOverflowClipY);
 }
 
 void LayoutBlock::ComputeVisualOverflow(bool) {
@@ -2087,40 +2049,32 @@ LayoutUnit LayoutBlock::InlineBlockBaseline(
   return LayoutUnit(-1);
 }
 
-const LayoutBlock* LayoutBlock::EnclosingFirstLineStyleBlock() const {
+const LayoutBlock* LayoutBlock::FirstLineStyleParentBlock() const {
   NOT_DESTROYED();
-  auto* element = DynamicTo<Element>(GetNode());
-  if (element && element->ShadowPseudoId() ==
-                     shadow_element_names::kPseudoInternalInputSuggested) {
-    // Disable ::first-line style for autofill previews. See
-    // crbug.com/1227170.
-    return nullptr;
-  }
   const LayoutBlock* first_line_block = this;
-  bool has_pseudo = false;
-  while (true) {
-    has_pseudo =
-        first_line_block->StyleRef().HasPseudoElementStyle(kPseudoIdFirstLine);
-    if (has_pseudo)
-      break;
-    LayoutObject* parent_block = first_line_block->Parent();
-    if (first_line_block->IsAtomicInlineLevel() ||
-        first_line_block->IsFloatingOrOutOfFlowPositioned() || !parent_block ||
-        !parent_block->BehavesLikeBlockContainer())
-      break;
-    auto* parent_layout_block = DynamicTo<LayoutBlock>(parent_block);
-    const LayoutObject* first_child = parent_layout_block->FirstChild();
-    while (first_child->IsFloatingOrOutOfFlowPositioned())
-      first_child = first_child->NextSibling();
-    if (first_child != first_line_block)
-      break;
-    first_line_block = parent_layout_block;
-  }
-
-  if (!has_pseudo)
+  // Inline blocks do not get ::first-line style from its containing blocks.
+  if (IsAtomicInlineLevel())
+    return nullptr;
+  // Floats and out of flow blocks do not get ::first-line style from its
+  // containing blocks.
+  if (IsFloatingOrOutOfFlowPositioned())
     return nullptr;
 
-  return first_line_block;
+  LayoutObject* parent_block = first_line_block->Parent();
+  if (!parent_block || !parent_block->BehavesLikeBlockContainer())
+    return nullptr;
+
+  const LayoutBlock* parent_layout_block = To<LayoutBlock>(parent_block);
+
+  // If we are not the first in-flow child of our parent, we cannot get
+  // ::first-line style from our ancestors.
+  const LayoutObject* first_child = parent_layout_block->FirstChild();
+  while (first_child->IsFloatingOrOutOfFlowPositioned())
+    first_child = first_child->NextSibling();
+  if (first_child != first_line_block)
+    return nullptr;
+
+  return parent_layout_block;
 }
 
 LayoutBlockFlow* LayoutBlock::NearestInnerBlockWithFirstLine() {
@@ -2321,6 +2275,9 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
     case EDisplay::kFlowRoot:
       new_display = EDisplay::kFlowRoot;
       break;
+    case EDisplay::kBlockMath:
+      new_display = EDisplay::kBlockMath;
+      break;
     default:
       new_display = EDisplay::kBlock;
       break;
@@ -2339,6 +2296,9 @@ LayoutBlock* LayoutBlock::CreateAnonymousWithParentAndDisplay(
                                                           *new_style, legacy);
   } else if (new_display == EDisplay::kGrid) {
     layout_block = LayoutObjectFactory::CreateGrid(parent->GetDocument(),
+                                                   *new_style, legacy);
+  } else if (new_display == EDisplay::kBlockMath) {
+    layout_block = LayoutObjectFactory::CreateMath(parent->GetDocument(),
                                                    *new_style, legacy);
   } else {
     DCHECK(new_display == EDisplay::kBlock ||

@@ -21,6 +21,7 @@
 #include "remoting/host/file_transfer/ipc_file_operations.h"
 #include "remoting/host/mojom/desktop_session.mojom.h"
 #include "remoting/host/mojom/remoting_host.mojom.h"
+#include "remoting/protocol/desktop_capturer.h"
 
 namespace base {
 class SingleThreadTaskRunner;
@@ -58,10 +59,8 @@ class IpcDesktopEnvironment : public DesktopEnvironment {
   std::unique_ptr<AudioCapturer> CreateAudioCapturer() override;
   std::unique_ptr<InputInjector> CreateInputInjector() override;
   std::unique_ptr<ScreenControls> CreateScreenControls() override;
-  std::unique_ptr<webrtc::DesktopCapturer> CreateVideoCapturer(
-      std::unique_ptr<DesktopDisplayInfoMonitor> monitor) override;
-  std::unique_ptr<DesktopDisplayInfoMonitor> CreateDisplayInfoMonitor()
-      override;
+  std::unique_ptr<DesktopCapturer> CreateVideoCapturer() override;
+  DesktopDisplayInfoMonitor* GetDisplayInfoMonitor() override;
   std::unique_ptr<webrtc::MouseCursorMonitor> CreateMouseCursorMonitor()
       override;
   std::unique_ptr<KeyboardLayoutMonitor> CreateKeyboardLayoutMonitor(
@@ -74,8 +73,9 @@ class IpcDesktopEnvironment : public DesktopEnvironment {
   void SetCapabilities(const std::string& capabilities) override;
   uint32_t GetDesktopSessionId() const override;
   std::unique_ptr<DesktopAndCursorConditionalComposer>
-  CreateComposingVideoCapturer(
-      std::unique_ptr<DesktopDisplayInfoMonitor> monitor) override;
+  CreateComposingVideoCapturer() override;
+  std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
+  CreateRemoteWebAuthnStateChangeNotifier() override;
 
  private:
   scoped_refptr<DesktopSessionProxy> desktop_session_proxy_;

@@ -27,6 +27,8 @@
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_thread_scheduler.h"
 #include "third_party/blink/public/platform/scheduler/web_widget_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/agent_group_scheduler.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/widget/frame_widget.h"
 #include "third_party/blink/renderer/platform/widget/input/elastic_overscroll_controller.h"
 #include "third_party/blink/renderer/platform/widget/input/main_thread_event_queue.h"
@@ -185,13 +187,15 @@ scoped_refptr<WidgetInputHandlerManager> WidgetInputHandlerManager::Create(
     base::WeakPtr<mojom::blink::FrameWidgetInputHandler>
         frame_widget_input_handler,
     bool never_composited,
-    scheduler::WebThreadScheduler* compositor_thread_scheduler,
-    scheduler::WebThreadScheduler* main_thread_scheduler,
-    bool uses_input_handler) {
+    ThreadScheduler* compositor_thread_scheduler,
+    AgentGroupScheduler& agent_group_scheduler,
+    bool uses_input_handler,
+    bool allow_scroll_resampling) {
   scoped_refptr<WidgetInputHandlerManager> manager =
       new WidgetInputHandlerManager(
           std::move(widget), std::move(frame_widget_input_handler),
-          never_composited, compositor_thread_scheduler, main_thread_scheduler);
+          never_composited, compositor_thread_scheduler, agent_group_scheduler,
+          allow_scroll_resampling);
   if (uses_input_handler)
     manager->InitInputHandler();
 
@@ -211,22 +215,25 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
     base::WeakPtr<mojom::blink::FrameWidgetInputHandler>
         frame_widget_input_handler,
     bool never_composited,
-    scheduler::WebThreadScheduler* compositor_thread_scheduler,
-    scheduler::WebThreadScheduler* main_thread_scheduler)
+    ThreadScheduler* compositor_thread_scheduler,
+    AgentGroupScheduler& agent_group_thread_scheduler,
+    bool allow_scroll_resampling)
     : widget_(std::move(widget)),
       frame_widget_input_handler_(std::move(frame_widget_input_handler)),
 
-      widget_scheduler_(main_thread_scheduler->CreateWidgetScheduler()),
-      main_thread_scheduler_(main_thread_scheduler),
+      widget_scheduler_(agent_group_thread_scheduler.GetMainThreadScheduler()
+                            .CreateWidgetScheduler()),
+      main_thread_scheduler_(
+          &agent_group_thread_scheduler.GetMainThreadScheduler()),
       input_event_queue_(base::MakeRefCounted<MainThreadEventQueue>(
           this,
           widget_scheduler_->InputTaskRunner(),
-          main_thread_scheduler,
+          main_thread_scheduler_,
           /*allow_raf_aligned_input=*/!never_composited)),
       main_thread_task_runner_(widget_scheduler_->InputTaskRunner()),
       compositor_thread_default_task_runner_(
           compositor_thread_scheduler
-              ? compositor_thread_scheduler->DefaultTaskRunner()
+              ? compositor_thread_scheduler->CompositorTaskRunner()
               : nullptr),
       compositor_thread_input_blocking_task_runner_(
           compositor_thread_scheduler
@@ -234,7 +241,8 @@ WidgetInputHandlerManager::WidgetInputHandlerManager(
               : nullptr),
       response_power_mode_voter_(
           power_scheduler::PowerModeArbiter::GetInstance()->NewVoter(
-              "PowerModeVoter.Response")) {
+              "PowerModeVoter.Response")),
+      allow_scroll_resampling_(allow_scroll_resampling) {
 #if BUILDFLAG(IS_ANDROID)
   if (compositor_thread_default_task_runner_) {
     synchronous_compositor_registry_ =
@@ -789,6 +797,9 @@ void WidgetInputHandlerManager::FindScrollTargetReply(
           &WidgetInputHandlerManager::DidHandleInputEventSentToCompositor, this,
           std::move(browser_callback)),
       hit_test_result);
+
+  // Let the main frames flow.
+  input_handler_proxy_->SetDeferBeginMainFrame(false);
 }
 
 void WidgetInputHandlerManager::SendDroppedPointerDownCounts() {
@@ -843,10 +854,6 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
   if (event_disposition == InputHandlerProxy::REQUIRES_MAIN_THREAD_HIT_TEST) {
     TRACE_EVENT_INSTANT0("input", "PostingHitTestToMainThread",
                          TRACE_EVENT_SCOPE_THREAD);
-    // TODO(bokan): We're going to need to perform a hit test on the main thread
-    // before we can continue handling the event. This is the critical path of a
-    // scroll so we should probably ensure the scheduler can prioritize it
-    // accordingly. https://crbug.com/1082618.
     DCHECK(base::FeatureList::IsEnabled(::features::kScrollUnification));
     DCHECK_EQ(event->Event().GetType(),
               WebInputEvent::Type::kGestureScrollBegin);
@@ -863,6 +870,18 @@ void WidgetInputHandlerManager::DidHandleInputEventSentToCompositor(
         FROM_HERE,
         base::BindOnce(&WidgetInputHandlerManager::FindScrollTargetOnMainThread,
                        this, event_position, std::move(result_callback)));
+
+    // The hit test is on the critical path of the scroll. Don't post any
+    // BeginMainFrame tasks until we've returned from the hit test and handled
+    // the rest of the input in the compositor event queue.
+    //
+    // NOTE: setting this in FindScrollTargetOnMainThread would be too late; we
+    // might have already posted a BeginMainFrame by then. Even though the
+    // scheduler prioritizes the hit test, that main frame won't see the updated
+    // scroll offset because the task is bound to CompositorCommitData from the
+    // time it was posted. We'd then have to wait for a SECOND BeginMainFrame to
+    // actually repaint the scroller at the right offset.
+    input_handler_proxy_->SetDeferBeginMainFrame(true);
     return;
   }
 

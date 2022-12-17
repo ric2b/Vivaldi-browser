@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Попробуйте запустить средства диагностики сети Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Сайт содержит вредоносное ПО</translation>
 <translation id="1916770123977586577">Чтобы применить к сайту новые настройки, перезагрузите страницу</translation>
+<translation id="1973351931613083086">автовоспроизведение</translation>
 <translation id="1974060860693918893">Подробнее</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Проверьте настройки прокси-сервера и брандмауэра<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Кому выдан: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Вернуться</translation>
 <translation id="2539524384386349900">Определять</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> отправил неверный ответ.</translation>
-<translation id="2609632851001447353">Варианты</translation>
 <translation id="2634124572758952069">Не удалось найти IP-адрес сервера <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Доступ к файлу запрещён</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Злоумышленники могут пытаться похитить ваши данные с сайта <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (например, пароли, сообщения или номера банковских карт). <ph name="BEGIN_LEARN_MORE_LINK" />Подробнее…<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Похоже, вы подключились к другой сети.</translation>
 <translation id="2948083400971632585">Вы можете отключить используемые прокси-серверы на странице настроек.</translation>
+<translation id="2953943267837858202">Не допускается автовоспроизведение видео</translation>
 <translation id="2991571918955627853">Веб-сайт <ph name="SITE" /> использует механизм HSTS. Открыть сайт в настоящее время нельзя. Сбой мог быть вызван сетевой ошибкой или действиями злоумышленников. Скорее всего, сайт заработает через некоторое время.</translation>
 <translation id="3005723025932146533">Открыть копию из кэша</translation>
 <translation id="301521992641321250">Заблокировано автоматически</translation>
@@ -60,6 +61,7 @@
           <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Чтобы повторно ввести данные, необходимые для загрузки страницы, обновите страницу.</translation>
 <translation id="3234666976984236645">Всегда определять важный контент на этом сайте</translation>
+<translation id="3291915639428159043">Автовоспроизведение блокировано</translation>
 <translation id="3308738399950580893">рекламу</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> недоступен.</translation>
 <translation id="3427092606871434483">Разрешать (по умолчанию)</translation>
@@ -70,6 +72,7 @@
 <translation id="3566021033012934673">Ваше подключение не защищено</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Скрыть подробности</translation>
+<translation id="3620979700683094848">Сайты могут автоматически воспроизводить видео</translation>
 <translation id="3630155396527302611">Если программа входит в список тех, которым разрешён доступ к сети,
       удалите её из списка и добавьте туда снова.</translation>
 <translation id="3658742229777143148">Версия</translation>
@@ -81,6 +84,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> заблокирован</translation>
 <translation id="3987940399970879459">Менее 1 МБ</translation>
 <translation id="4075732493274867456">Клиент и сервер поддерживают разные версии протокола SSL или набора шифров.</translation>
+<translation id="410351446219883937">Автовоспроизведение</translation>
 <translation id="4116663294526079822">Всегда разрешать на этом сайте</translation>
 <translation id="4130226655945681476">Проверьте сетевые кабели, модем и маршрутизатор</translation>
 <translation id="4151403195736952345">Использовать глобально (определять)</translation>
@@ -146,6 +150,7 @@
 <translation id="6321917430147971392">Проверьте настройки DNS</translation>
 <translation id="6328639280570009161">Отключите предсказание сетевых действий</translation>
 <translation id="6328786501058569169">Это поддельный сайт</translation>
+<translation id="6348220984832452017">Активные варианты</translation>
 <translation id="6358450015545214790">Что это значит?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> не позволяет установить соединение.</translation>
 <translation id="6447842834002726250">Файлы сookie</translation>
@@ -164,6 +169,7 @@
 <translation id="7113310725918019676">Разрешить <ph name="BLOCKED_TYPE" /> с сервера <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> не соответствует стандартам безопасности.</translation>
 <translation id="7219179957768738017">В этом подключении используется протокол <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Показывать уведомления</translation>
 <translation id="7260504762447901703">Отменить доступ</translation>
 <translation id="7353601530677266744">Командная строка</translation>
 <translation id="7364115444476960850">Страница, к которой вы обратились, была заблокирована <ph name="BLOCKER_NAME" /></translation>
@@ -182,11 +188,13 @@
 <translation id="7758069387465995638">Возможно, подключение заблокировано брандмауэром или антивирусным ПО.</translation>
 <translation id="7800304661137206267">Соединение зашифровано с помощью <ph name="CIPHER" />, для аутентификации сообщений используется <ph name="MAC" />, для обмена ключами используется <ph name="KX" />.</translation>
 <translation id="7834399512844817676">Обычно сайт <ph name="SITE" /> использует шифрование для защиты ваших данных. Но сейчас при попытке подключиться к сайту <ph name="SITE" /> были получены неверные данные авторизации. Возможно, злоумышленники пытались замаскироваться под сайт <ph name="SITE" /> или окно подключения к Wi-Fi нарушило соединение. Ваши данные по-прежнему защищены - браузер разорвал соединение до того, как произошёл обмен данными.</translation>
+<translation id="7834693436815575883">Автовоспроизведение разрешено</translation>
 <translation id="7878562273885520351">Злоумышленники могут узнать ваш пароль</translation>
 <translation id="7951415247503192394">(32 бит)</translation>
 <translation id="8025119109950072390">Посещение этого сайта может привести к установке вредоносного ПО или хищению личной информации (например, паролей, телефонных номеров и данных банковских карт).</translation>
 <translation id="8037357227543935929">Спрашивать (по умолчанию)</translation>
 <translation id="8041940743680923270">Использовать глобально (спрашивать)</translation>
+<translation id="8044382196220116469">Не позволять сайтам автоматически воспроизводить видео</translation>
 <translation id="808894953321890993">Сменить пароль</translation>
 <translation id="8119307142152921512">слежку и рекламу</translation>
 <translation id="8149426793427495338">Ваш компьютер перешёл в спящий режим.</translation>
@@ -204,6 +212,7 @@
 <translation id="8503813439785031346">Имя пользователя</translation>
 <translation id="8703575177326907206">Соединение с <ph name="DOMAIN" /> не зашифровано.</translation>
 <translation id="8740359287975076522">Не удаётся найти &lt;abbr id="dnsDefinition"&gt;DNS-адрес&lt;/abbr&gt; сайта <ph name="HOST_NAME" />. Выполняется диагностика.</translation>
+<translation id="8774017153185436870">Сайты могут автоматически воспроизводить видео</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="8940028675168378100">Блокировано <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Перейти в настройки сайта</translation>
@@ -211,6 +220,7 @@
 <translation id="9008201768610948239">Пропустить</translation>
 <translation id="9025348182339809926">(недействительный)</translation>
 <translation id="9039213469156557790">Обратите внимание, что на странице обнаружен небезопасный контент. Возможно, при передаче ресурсы просматриваются третьими лицами, а злоумышленники могут получить доступ к странице и изменить её поведение.</translation>
+<translation id="9048224371732578627">Автовоспроизведение видео разрешено</translation>
 <translation id="9062620674789239642">Возможно, он был перемещён, изменён или удалён.</translation>
 <translation id="9069693763241529744">Заблокировано расширением</translation>
 <translation id="9073799351042754113">Вы отключили предупреждения системы безопасности для этого сайта.</translation>

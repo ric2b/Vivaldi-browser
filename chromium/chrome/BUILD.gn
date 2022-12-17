@@ -97,6 +97,7 @@ if (is_win) {
   }
 }
 
+# This does not currently work. See crbug.com/1311822.
 # This target exists above chrome and it's main components in the dependency
 # tree as a central place to put assert_no_deps annotations. Since this depends
 # on Chrome and the main DLLs it uses, it will transitively assert that those
@@ -119,6 +120,7 @@ group("assert_no_deps") {
   # //chrome/installer/util/BUILD.gn.
   assert_no_deps = [ "//chrome/installer/util:strings" ]
 }
+
 if (!is_android && !is_mac) {
   group("chrome") {
     public_deps = [ ":chrome_initial" ]
@@ -173,6 +175,8 @@ if (!is_android && !is_mac) {
       sources += [
         "app/chrome_exe.rc",
         "app/chrome_exe_main_win.cc",
+        "app/delay_load_failure_hook_win.cc",
+        "app/delay_load_failure_hook_win.h",
         "app/main_dll_loader_win.cc",
         "app/main_dll_loader_win.h",
         "common/crash_keys.cc",
@@ -321,7 +325,13 @@ if (!is_android && !is_mac) {
       }
 
       if (is_chromeos_lacros) {
-        deps += [ "//chromeos/crosapi/mojom" ]
+        deps += [
+          "//chromeos/crosapi/cpp:crosapi_constants",
+          "//chromeos/crosapi/mojom",
+          "//chromeos/lacros:lacros_paths",
+          "//chromeos/startup",
+          "//ui/base",
+        ]
       }
     }
 
@@ -392,7 +402,6 @@ if (is_win) {
       "//components/browser_watcher:stability_client",
       "//components/crash/core/app",
       "//components/policy:generated",
-      "//content/app/resources",
       "//content/public/app",
       "//crypto",
       "//headless:headless_renderer",
@@ -1221,7 +1230,7 @@ if (is_win) {
 
   # TOOD(crbug/1163903#c8) - thakis@ look into why profile and coverage
   # instrumentation adds these symbols in different orders
-  if (!is_component_build && chrome_pgo_phase != 1) {
+  if (!is_component_build && chrome_pgo_phase != 1 && !using_sanitizer) {
     action("verify_chrome_framework_order") {
       script = "//chrome/tools/build/mac/verify_order.py"
       stamp_file = "$target_out_dir/run_$target_name.stamp"
@@ -1382,6 +1391,7 @@ group("dependencies") {
     "//chrome/gpu",
     "//chrome/renderer",
     "//chrome/utility",
+    "//components/about_ui",
     "//components/gwp_asan/buildflags",
     "//components/heap_profiling/in_process",
     "//components/power_scheduler",
@@ -1430,9 +1440,9 @@ group("dependencies") {
   if (is_chromeos_ash) {
     public_deps += [
       "//ash/constants",
-      "//chrome/browser/chromeos",
+      "//chrome/browser/ash",
       "//chromeos",
-      "//chromeos/memory",
+      "//chromeos/ash/components/memory",
     ]
   }
 
@@ -1592,12 +1602,6 @@ group("strings") {
 }
 
 if (is_android) {
-  java_cpp_enum("assist_ranker_prediction_enum_javagen") {
-    sources = [
-      "browser/android/contextualsearch/contextual_search_ranker_logger_impl.h",
-    ]
-  }
-
   java_cpp_enum("partner_bookmarks_javagen") {
     sources = [ "browser/android/bookmarks/partner_bookmarks_reader.h" ]
   }

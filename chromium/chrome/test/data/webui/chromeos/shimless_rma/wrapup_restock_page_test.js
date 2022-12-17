@@ -42,9 +42,7 @@ export function wrapupRestockPageTest() {
     service.reset();
   });
 
-  /**
-   * @return {!Promise}
-   */
+  /** @return {!Promise} */
   function initializeRestockPage() {
     assertFalse(!!component);
 
@@ -61,9 +59,7 @@ export function wrapupRestockPageTest() {
     return flushTasks();
   }
 
-  /**
-   * @return {!Promise}
-   */
+  /** @return {!Promise} */
   function clickShutdownButton() {
     const shutdownComponent = component.shadowRoot.querySelector('#shutdown');
     assertTrue(!!shutdownComponent);

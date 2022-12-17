@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/side_search/side_search_tab_contents_helper.h"
 
+#include "base/metrics/histogram_functions.h"
 #include "chrome/browser/page_load_metrics/page_load_metrics_initialize.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
@@ -37,7 +38,7 @@ void SideSearchTabContentsHelper::NavigateInTabContents(
       params.url, ui::PageTransitionCoreTypeIs(ui::PAGE_TRANSITION_LINK,
                                                params.transition)};
 
-  web_contents()->GetMainFrame()->NotifyUserActivation(
+  web_contents()->GetPrimaryMainFrame()->NotifyUserActivation(
       blink::mojom::UserActivationNotificationType::kInteraction);
   web_contents()->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(params));
@@ -96,6 +97,10 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
     // navigation completes.
     last_search_url_ = url;
 
+    // Allow the page action label to be shown next time the entrypoint is
+    // revealed.
+    can_show_page_action_label_ = true;
+
     // If the navigation to a search results page succeeds we should update the
     // side panel availability bit accordingly.
     // TODO(tluk): If we continue to use a service check for side search SRP
@@ -107,6 +112,17 @@ void SideSearchTabContentsHelper::DidFinishNavigation(
     if (side_panel_contents_)
       UpdateSideContentsNavigation();
   }
+
+  // Trigger the timer only when the side panel first becomes available. The
+  // timer should only be cleared when the side panel is no longer available.
+  if (!could_show_for_last_committed_navigation_ &&
+      CanShowSidePanelForCommittedNavigation()) {
+    available_timer_ = base::ElapsedTimer();
+  } else if (!CanShowSidePanelForCommittedNavigation()) {
+    available_timer_.reset();
+  }
+  could_show_for_last_committed_navigation_ =
+      CanShowSidePanelForCommittedNavigation();
 }
 
 void SideSearchTabContentsHelper::OnSideSearchConfigChanged() {
@@ -144,9 +160,29 @@ bool SideSearchTabContentsHelper::CanShowSidePanelForCommittedNavigation() {
          GetConfig()->is_side_panel_srp_available();
 }
 
+void SideSearchTabContentsHelper::
+    MaybeRecordDurationSidePanelAvailableToFirstOpen() {
+  if (!available_timer_)
+    return;
+  base::UmaHistogramMediumTimes(
+      "SideSearch.TimeSinceSidePanelAvailableToFirstOpen",
+      available_timer_->Elapsed());
+  available_timer_.reset();
+}
+
 void SideSearchTabContentsHelper::SetDelegate(
     base::WeakPtr<Delegate> delegate) {
   delegate_ = std::move(delegate);
+}
+
+void SideSearchTabContentsHelper::DidShowPageActionLabel() {
+  ++page_action_label_shown_count_;
+}
+
+bool SideSearchTabContentsHelper::GetAndResetCanShowPageActionLabel() {
+  const bool initial_can_show_page_action_label = can_show_page_action_label_;
+  can_show_page_action_label_ = false;
+  return initial_can_show_page_action_label;
 }
 
 void SideSearchTabContentsHelper::SetSidePanelContentsForTesting(

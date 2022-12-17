@@ -25,7 +25,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 namespace {
@@ -136,9 +136,7 @@ bool IsLiveCaptionFeatureSupported() {
   if (!base::FeatureList::IsEnabled(ash::features::kOnDeviceSpeechRecognition))
     return false;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  if (!chromeos::LacrosService::Get()
-           ->init_params()
-           ->is_ondevice_speech_supported)
+  if (!chromeos::BrowserInitParams::Get()->is_ondevice_speech_supported)
     return false;
 #endif
 
@@ -153,11 +151,6 @@ bool IsLiveCaptionFeatureSupported() {
 #if BUILDFLAG(IS_WIN) && defined(ARCH_CPU_ARM64)
   // The Speech On-Device API (SODA) component does not support Windows on
   // arm64.
-  return false;
-#elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  // Disable Live Caption on LaCrOS. The feature has not been migrated there
-  // yet, and currently fails rather gracelessly (opening a non-existent .so).
-  // TODO(b/223493879): Remove this once it fails more gracefully.
   return false;
 #else
   return true;

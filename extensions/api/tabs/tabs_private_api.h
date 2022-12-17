@@ -36,10 +36,8 @@
 using JSAccessKeysCallback =
     base::OnceCallback<void(std::vector<::vivaldi::mojom::AccessKeyPtr>)>;
 
-using JSSpatialNavigationRectsCallback =
-    base::OnceCallback<void(std::vector<::vivaldi::mojom::SpatnavRectPtr>)>;
-
-using JSScrollPositionCallback = base::OnceCallback<void(int64_t, int64_t)>;
+using JSSpatnavRectCallback =
+    base::OnceCallback<void(::vivaldi::mojom::SpatnavRectPtr)>;
 
 using JSDetermineTextLanguageCallback =
     base::OnceCallback<void(const std::string&)>;
@@ -173,15 +171,16 @@ class VivaldiPrivateTabObserver
 
   void AccessKeyAction(std::string);
 
-  void GetSpatialNavigationRects(JSSpatialNavigationRectsCallback callback);
-  void SpatialNavigationRectsReceived(
-      JSSpatialNavigationRectsCallback callback,
-      std::vector<::vivaldi::mojom::SpatnavRectPtr> rects);
+  void UpdateSpatnavRects();
+  void GetCurrentSpatnavRect(JSSpatnavRectCallback callback);
 
-  void GetScrollPosition(JSScrollPositionCallback callback);
-  void ScrollPositionReceived(JSScrollPositionCallback callback,
-                              int64_t x,
-                              int64_t y);
+  // Same type of callback as GetCurrentSpatnavRect
+  void MoveSpatnavRect(::vivaldi::mojom::SpatnavDirection direction,
+                       JSSpatnavRectCallback callback);
+
+  void SpatnavRectReceived(JSSpatnavRectCallback callback,
+                           ::vivaldi::mojom::SpatnavRectPtr rect);
+
 
   void DetermineTextLanguage(const std::string& text,
                              JSDetermineTextLanguageCallback callback);
@@ -319,48 +318,61 @@ class TabsPrivateScrollPageFunction : public ExtensionFunction {
   ResponseAction Run() override;
 };
 
-class TabsPrivateGetSpatialNavigationRectsFunction : public ExtensionFunction {
+class TabsPrivateGetCurrentSpatnavRectFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getSpatialNavigationRects",
-                             TABSPRIVATE_GETSPATIALNAVIGATIONRECTS)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getCurrentSpatnavRect",
+                             TABSPRIVATE_GETCURRENTSPATNAVRECT)
 
-  TabsPrivateGetSpatialNavigationRectsFunction() = default;
+  TabsPrivateGetCurrentSpatnavRectFunction() = default;
 
  protected:
-  ~TabsPrivateGetSpatialNavigationRectsFunction() override = default;
+  ~TabsPrivateGetCurrentSpatnavRectFunction() override = default;
 
  private:
-  void SpatialNavigationRectsReceived(
-      std::vector<::vivaldi::mojom::SpatnavRectPtr> rects);
+  void SpatnavRectReceived(::vivaldi::mojom::SpatnavRectPtr rect);
 
   ResponseAction Run() override;
 };
 
-class TabsPrivateGetScrollPositionFunction : public ExtensionFunction {
+class TabsPrivateMoveSpatnavRectFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.getScrollPosition",
-                             TABSPRIVATE_GETSCROLLPOSITION)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.moveSpatnavRect",
+                             TABSPRIVATE_MOVESPATNAVRECT)
 
-  TabsPrivateGetScrollPositionFunction() = default;
+  TabsPrivateMoveSpatnavRectFunction() = default;
 
  protected:
-  ~TabsPrivateGetScrollPositionFunction() override = default;
+  ~TabsPrivateMoveSpatnavRectFunction() override = default;
 
  private:
-  void GetScrollPositionResponse(int64_t x, int64_t y);
+  void SpatnavRectReceived(::vivaldi::mojom::SpatnavRectPtr rect);
 
+ ResponseAction Run() override;
+};
+
+class TabsPrivateUpdateSpatnavRectsFunction : public ExtensionFunction {
+ public:
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.updateSpatnavRects",
+                             TABSPRIVATE_UPDATESPATNAVRECTS)
+
+  TabsPrivateUpdateSpatnavRectsFunction() = default;
+
+ protected:
+  ~TabsPrivateUpdateSpatnavRectsFunction() override = default;
+
+ private:
   ResponseAction Run() override;
 };
 
-class TabsPrivateActivateElementFromPointFunction : public ExtensionFunction {
+class TabsPrivateActivateSpatnavElementFunction : public ExtensionFunction {
  public:
-  DECLARE_EXTENSION_FUNCTION("tabsPrivate.activateElementFromPoint",
-                             TABSPRIVATE_ACTIVATEELEMENTFROMPOINT)
+  DECLARE_EXTENSION_FUNCTION("tabsPrivate.activateSpatnavElement",
+                             TABSPRIVATE_ACTIVATESPATNAVELEMENT)
 
-  TabsPrivateActivateElementFromPointFunction() = default;
+  TabsPrivateActivateSpatnavElementFunction() = default;
 
  protected:
-  ~TabsPrivateActivateElementFromPointFunction() override = default;
+  ~TabsPrivateActivateSpatnavElementFunction() override = default;
 
  private:
   ResponseAction Run() override;

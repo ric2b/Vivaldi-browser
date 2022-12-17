@@ -21,6 +21,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/mediastream/media_stream_request.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
@@ -46,12 +47,13 @@ class TabCaptureAccessHandlerTest : public ChromeRenderViewHostTestHarness {
   void ProcessRequest(
       const content::DesktopMediaID& fake_desktop_media_id_response,
       blink::mojom::MediaStreamRequestResult* request_result,
-      blink::MediaStreamDevices* devices_result,
+      blink::mojom::StreamDevices* devices_result,
       bool expect_result = true) {
     content::MediaStreamRequest request(
-        web_contents()->GetMainFrame()->GetProcess()->GetID(),
-        web_contents()->GetMainFrame()->GetRoutingID(), /*page_request_id=*/0,
-        GURL(kOrigin), /*user_gesture=*/false, blink::MEDIA_GENERATE_STREAM,
+        web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+        web_contents()->GetPrimaryMainFrame()->GetRoutingID(),
+        /*page_request_id=*/0, GURL(kOrigin), /*user_gesture=*/false,
+        blink::MEDIA_GENERATE_STREAM,
         /*requested_audio_device_id=*/std::string(),
         /*requested_video_device_id=*/std::string(),
         blink::mojom::MediaStreamType::NO_SERVICE,
@@ -63,12 +65,20 @@ class TabCaptureAccessHandlerTest : public ChromeRenderViewHostTestHarness {
     content::MediaResponseCallback callback = base::BindOnce(
         [](base::RunLoop* wait_loop, bool expect_result,
            blink::mojom::MediaStreamRequestResult* request_result,
-           blink::MediaStreamDevices* devices_result,
-           const blink::MediaStreamDevices& devices,
+           blink::mojom::StreamDevices* devices_result,
+           const blink::mojom::StreamDevicesSet& stream_devices_set,
            blink::mojom::MediaStreamRequestResult result,
            std::unique_ptr<content::MediaStreamUI> ui) {
+          DCHECK(!devices_result->audio_device);
+          DCHECK(!devices_result->video_device);
           *request_result = result;
-          *devices_result = devices;
+          if (result == blink::mojom::MediaStreamRequestResult::OK) {
+            ASSERT_EQ(stream_devices_set.stream_devices.size(), 1u);
+            *devices_result = *stream_devices_set.stream_devices[0];
+          } else {
+            ASSERT_TRUE(stream_devices_set.stream_devices.empty());
+            *devices_result = blink::mojom::StreamDevices();
+          }
           if (!expect_result) {
             FAIL() << "MediaResponseCallback should not be called.";
           }
@@ -95,21 +105,22 @@ TEST_F(TabCaptureAccessHandlerTest, PermissionGiven) {
       content::DesktopMediaID::TYPE_WEB_CONTENTS,
       content::DesktopMediaID::kNullId,
       content::WebContentsMediaCaptureId(
-          web_contents()->GetMainFrame()->GetProcess()->GetID(),
-          web_contents()->GetMainFrame()->GetRoutingID()));
+          web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+          web_contents()->GetPrimaryMainFrame()->GetRoutingID()));
 
   extensions::TabCaptureRegistry::Get(profile())->AddRequest(
       web_contents(), /*extension_id=*/"", /*is_anonymous=*/false,
       GURL(kOrigin), source, /*extension_name=*/"", web_contents());
 
   blink::mojom::MediaStreamRequestResult result = kInvalidResult;
-  blink::MediaStreamDevices devices;
+  blink::mojom::StreamDevices devices;
   ProcessRequest(source, &result, &devices);
 
   EXPECT_EQ(blink::mojom::MediaStreamRequestResult::OK, result);
-  EXPECT_EQ(1u, devices.size());
+  EXPECT_TRUE(devices.video_device.has_value());
+  EXPECT_FALSE(devices.audio_device.has_value());
   EXPECT_EQ(blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
-            devices[0].type);
+            devices.video_device.value().type);
 }
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -118,8 +129,8 @@ TEST_F(TabCaptureAccessHandlerTest, DlpRestricted) {
       content::DesktopMediaID::TYPE_WEB_CONTENTS,
       content::DesktopMediaID::kNullId,
       content::WebContentsMediaCaptureId(
-          web_contents()->GetMainFrame()->GetProcess()->GetID(),
-          web_contents()->GetMainFrame()->GetRoutingID()));
+          web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+          web_contents()->GetPrimaryMainFrame()->GetRoutingID()));
 
   // Setup Data Leak Prevention restriction.
   policy::MockDlpContentManager mock_dlp_content_manager;
@@ -137,11 +148,12 @@ TEST_F(TabCaptureAccessHandlerTest, DlpRestricted) {
       GURL(kOrigin), source, /*extension_name=*/"", web_contents());
 
   blink::mojom::MediaStreamRequestResult result = kInvalidResult;
-  blink::MediaStreamDevices devices;
+  blink::mojom::StreamDevices devices;
   ProcessRequest(source, &result, &devices);
 
   EXPECT_EQ(blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED, result);
-  EXPECT_EQ(0u, devices.size());
+  EXPECT_FALSE(devices.video_device.has_value());
+  EXPECT_FALSE(devices.audio_device.has_value());
 }
 
 TEST_F(TabCaptureAccessHandlerTest, DlpNotRestricted) {
@@ -149,8 +161,8 @@ TEST_F(TabCaptureAccessHandlerTest, DlpNotRestricted) {
       content::DesktopMediaID::TYPE_WEB_CONTENTS,
       content::DesktopMediaID::kNullId,
       content::WebContentsMediaCaptureId(
-          web_contents()->GetMainFrame()->GetProcess()->GetID(),
-          web_contents()->GetMainFrame()->GetRoutingID()));
+          web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+          web_contents()->GetPrimaryMainFrame()->GetRoutingID()));
 
   // Setup Data Leak Prevention restriction.
   policy::MockDlpContentManager mock_dlp_content_manager;
@@ -168,11 +180,12 @@ TEST_F(TabCaptureAccessHandlerTest, DlpNotRestricted) {
       GURL(kOrigin), source, /*extension_name=*/"", web_contents());
 
   blink::mojom::MediaStreamRequestResult result = kInvalidResult;
-  blink::MediaStreamDevices devices;
+  blink::mojom::StreamDevices devices;
   ProcessRequest(source, &result, &devices);
 
   EXPECT_EQ(blink::mojom::MediaStreamRequestResult::OK, result);
-  EXPECT_EQ(1u, devices.size());
+  EXPECT_TRUE(devices.video_device.has_value());
+  EXPECT_FALSE(devices.audio_device.has_value());
 }
 
 TEST_F(TabCaptureAccessHandlerTest, DlpWebContentsDestroyed) {
@@ -180,8 +193,8 @@ TEST_F(TabCaptureAccessHandlerTest, DlpWebContentsDestroyed) {
       content::DesktopMediaID::TYPE_WEB_CONTENTS,
       content::DesktopMediaID::kNullId,
       content::WebContentsMediaCaptureId(
-          web_contents()->GetMainFrame()->GetProcess()->GetID(),
-          web_contents()->GetMainFrame()->GetRoutingID()));
+          web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+          web_contents()->GetPrimaryMainFrame()->GetRoutingID()));
 
   // Setup Data Leak Prevention restriction.
   policy::MockDlpContentManager mock_dlp_content_manager;
@@ -200,10 +213,12 @@ TEST_F(TabCaptureAccessHandlerTest, DlpWebContentsDestroyed) {
       GURL(kOrigin), source, /*extension_name=*/"", web_contents());
 
   blink::mojom::MediaStreamRequestResult result = kInvalidResult;
-  blink::MediaStreamDevices devices;
+  blink::mojom::StreamDevices devices;
   ProcessRequest(source, &result, &devices, /*expect_result=*/false);
 
   EXPECT_EQ(kInvalidResult, result);
-  EXPECT_EQ(0u, devices.size());
+  EXPECT_FALSE(devices.video_device.has_value());
+  EXPECT_FALSE(devices.audio_device.has_value());
 }
+
 #endif  // BUILDFLAG(IS_CHROMEOS)

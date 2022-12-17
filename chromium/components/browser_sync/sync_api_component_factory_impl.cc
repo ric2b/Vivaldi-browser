@@ -15,7 +15,6 @@
 #include "build/chromeos_buildflags.h"
 #include "components/autofill/core/browser/payments/autofill_wallet_model_type_controller.h"
 #include "components/autofill/core/browser/webdata/autocomplete_sync_bridge.h"
-#include "components/autofill/core/browser/webdata/autofill_profile_model_type_controller.h"
 #include "components/autofill/core/browser/webdata/autofill_profile_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_metadata_sync_bridge.h"
 #include "components/autofill/core/browser/webdata/autofill_wallet_offer_sync_bridge.h"
@@ -33,6 +32,7 @@
 #include "components/send_tab_to_self/features.h"
 #include "components/send_tab_to_self/send_tab_to_self_model_type_controller.h"
 #include "components/send_tab_to_self/send_tab_to_self_sync_service.h"
+#include "components/sync/base/features.h"
 #include "components/sync/base/legacy_directory_deletion.h"
 #include "components/sync/base/report_unrecoverable_error.h"
 #include "components/sync/base/sync_prefs.h"
@@ -198,14 +198,12 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
     // Autofill sync is enabled by default.  Register unless explicitly
     // disabled.
     if (!disabled_types.Has(syncer::AUTOFILL_PROFILE)) {
-      controllers.push_back(
-          std::make_unique<AutofillProfileModelTypeController>(
-              std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
-                  db_thread_,
-                  base::BindRepeating(
-                      &AutofillProfileDelegateFromDataService,
-                      base::RetainedRef(web_data_service_on_disk_))),
-              sync_client_->GetPrefService(), sync_service));
+      controllers.push_back(std::make_unique<syncer::ModelTypeController>(
+          syncer::AUTOFILL_PROFILE,
+          std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+              db_thread_, base::BindRepeating(
+                              &AutofillProfileDelegateFromDataService,
+                              base::RetainedRef(web_data_service_on_disk_)))));
     }
 
     // Wallet data sync is enabled by default. Register unless explicitly
@@ -229,8 +227,6 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
 
     // Wallet offer data is enabled by default. Register unless explicitly
     // disabled.
-    // TODO(crbug.com/1112095): Currently the offer data depends on Wallet data
-    // sync, but revisit after other offer types are implemented.
     if (!disabled_types.Has(syncer::AUTOFILL_WALLET_DATA) &&
         !disabled_types.Has(syncer::AUTOFILL_WALLET_OFFER)) {
       controllers.push_back(CreateWalletModelTypeController(
@@ -269,46 +265,48 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
     }
   }
 
-  // These features are enabled only if history is not disabled.
-  if (!sync_client_->GetPrefService()->GetBoolean(
-          prefs::kSavingBrowserHistoryDisabled)) {
-    // TypedUrl sync is enabled by default.  Register unless explicitly
-    // disabled.
-    if (!disabled_types.Has(syncer::TYPED_URLS)) {
-      // TypedURLModelTypeController uses a proxy delegate internally, as
-      // provided by HistoryService.
-      controllers.push_back(
-          std::make_unique<history::TypedURLModelTypeController>(
-              sync_client_->GetHistoryService(),
-              sync_client_->GetPrefService()));
-    }
+  // TypedUrl sync is enabled by default.  Register unless explicitly disabled.
+  if (!disabled_types.Has(syncer::TYPED_URLS)) {
+    // TypedURLModelTypeController uses a proxy delegate internally, as
+    // provided by HistoryService.
+    controllers.push_back(
+        std::make_unique<history::TypedURLModelTypeController>(
+            syncer::TYPED_URLS, sync_service, sync_client_->GetHistoryService(),
+            sync_client_->GetPrefService()));
+  }
 
-    // Delete directive sync is enabled by default.
-    if (!disabled_types.Has(syncer::HISTORY_DELETE_DIRECTIVES)) {
-      controllers.push_back(
-          std::make_unique<history::HistoryDeleteDirectivesModelTypeController>(
-              dump_stack, sync_service,
-              sync_client_->GetModelTypeStoreService(),
-              sync_client_->GetHistoryService()));
-    }
+  if (!disabled_types.Has(syncer::HISTORY) &&
+      base::FeatureList::IsEnabled(syncer::kSyncEnableHistoryDataType)) {
+    controllers.push_back(
+        std::make_unique<history::TypedURLModelTypeController>(
+            syncer::HISTORY, sync_service, sync_client_->GetHistoryService(),
+            sync_client_->GetPrefService()));
+  }
 
-    // Session sync is enabled by default.  This is disabled if history is
-    // disabled because the tab sync data is added to the web history on the
-    // server.
-    if (!disabled_types.Has(syncer::PROXY_TABS)) {
-      controllers.push_back(
-          std::make_unique<sync_sessions::ProxyTabsDataTypeController>(
-              base::BindRepeating(
-                  &sync_sessions::SessionSyncService::ProxyTabsStateChanged,
-                  base::Unretained(sync_client_->GetSessionSyncService()))));
-      controllers.push_back(
-          std::make_unique<sync_sessions::SessionModelTypeController>(
-              sync_service, sync_client_->GetPrefService(),
-              std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
-                  sync_client_->GetSessionSyncService()
-                      ->GetControllerDelegate()
-                      .get())));
-    }
+  // Delete directive sync is enabled by default.
+  if (!disabled_types.Has(syncer::HISTORY_DELETE_DIRECTIVES)) {
+    controllers.push_back(
+        std::make_unique<history::HistoryDeleteDirectivesModelTypeController>(
+            dump_stack, sync_service, sync_client_->GetModelTypeStoreService(),
+            sync_client_->GetHistoryService(), sync_client_->GetPrefService()));
+  }
+
+  if (!disabled_types.Has(syncer::PROXY_TABS)) {
+    controllers.push_back(
+        std::make_unique<sync_sessions::ProxyTabsDataTypeController>(
+            sync_service, sync_client_->GetPrefService(),
+            base::BindRepeating(
+                &sync_sessions::SessionSyncService::ProxyTabsStateChanged,
+                base::Unretained(sync_client_->GetSessionSyncService()))));
+  }
+  if (!disabled_types.Has(syncer::SESSIONS)) {
+    controllers.push_back(
+        std::make_unique<sync_sessions::SessionModelTypeController>(
+            sync_service, sync_client_->GetPrefService(),
+            std::make_unique<syncer::ForwardingModelTypeControllerDelegate>(
+                sync_client_->GetSessionSyncService()
+                    ->GetControllerDelegate()
+                    .get())));
   }
 
   // Password sync is enabled by default.  Register unless explicitly
@@ -394,15 +392,12 @@ SyncApiComponentFactoryImpl::CreateCommonDataTypeControllers(
 
 std::unique_ptr<DataTypeManager>
 SyncApiComponentFactoryImpl::CreateDataTypeManager(
-    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
-        debug_info_listener,
     const DataTypeController::TypeMap* controllers,
     const syncer::DataTypeEncryptionHandler* encryption_handler,
     syncer::ModelTypeConfigurer* configurer,
     DataTypeManagerObserver* observer) {
-  return std::make_unique<DataTypeManagerImpl>(debug_info_listener, controllers,
-                                               encryption_handler, configurer,
-                                               observer);
+  return std::make_unique<DataTypeManagerImpl>(controllers, encryption_handler,
+                                               configurer, observer);
 }
 
 std::unique_ptr<syncer::SyncEngine>

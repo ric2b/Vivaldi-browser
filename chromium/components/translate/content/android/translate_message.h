@@ -85,7 +85,7 @@ class TranslateMessage {
     // A raw content::WebContents pointer is passed in instead of the Java
     // WebContents object in order to make testing easier, so that tests can
     // just use nullptr as the content::WebContents.
-    virtual void CreateTranslateMessage(
+    virtual bool CreateTranslateMessage(
         JNIEnv* env,
         content::WebContents* web_contents,
         TranslateMessage* native_translate_message,
@@ -94,23 +94,11 @@ class TranslateMessage {
     virtual void ShowTranslateError(JNIEnv* env,
                                     content::WebContents* web_contents) = 0;
 
-    virtual void ShowBeforeTranslateMessage(
+    virtual void ShowMessage(
         JNIEnv* env,
-        base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-        base::android::ScopedJavaLocalRef<jstring>
-            target_language_display_name) = 0;
-
-    virtual void ShowTranslationInProgressMessage(
-        JNIEnv* env,
-        base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-        base::android::ScopedJavaLocalRef<jstring>
-            target_language_display_name) = 0;
-
-    virtual void ShowAfterTranslateMessage(
-        JNIEnv* env,
-        base::android::ScopedJavaLocalRef<jstring> source_language_display_name,
-        base::android::ScopedJavaLocalRef<jstring>
-            target_language_display_name) = 0;
+        base::android::ScopedJavaLocalRef<jstring> title,
+        base::android::ScopedJavaLocalRef<jstring> description,
+        base::android::ScopedJavaLocalRef<jstring> primary_button_text) = 0;
 
     virtual base::android::ScopedJavaLocalRef<jobjectArray>
     ConstructMenuItemArray(
@@ -161,7 +149,6 @@ class TranslateMessage {
 
   // Constructed the first time ShowTranslateStep is called.
   std::unique_ptr<TranslateUIDelegate> ui_delegate_;
-  base::android::ScopedJavaGlobalRef<jobject> java_translate_message_;
   TranslateStep translate_step_ = TRANSLATE_STEP_TRANSLATE_ERROR;
 };
 

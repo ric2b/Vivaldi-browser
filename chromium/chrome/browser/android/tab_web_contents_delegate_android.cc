@@ -24,7 +24,6 @@
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/content_settings/host_content_settings_map_factory.h"
 #include "chrome/browser/content_settings/sound_content_setting_observer.h"
-#include "chrome/browser/data_reduction_proxy/data_reduction_proxy_tab_helper.h"
 #include "chrome/browser/file_select_helper.h"
 #include "chrome/browser/flags/android/cached_feature_flags.h"
 #include "chrome/browser/flags/android/chrome_feature_list.h"
@@ -167,15 +166,16 @@ void TabWebContentsDelegateAndroid::PortalWebContentsCreated(
   autofill::ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       portal_contents,
       autofill::ChromeAutofillClient::FromWebContents(portal_contents),
-      g_browser_process->GetApplicationLocale(),
-      autofill::BrowserAutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      base::BindRepeating(
+          &autofill::BrowserDriverInitHook,
+          autofill::ChromeAutofillClient::FromWebContents(portal_contents),
+          g_browser_process->GetApplicationLocale()));
   ChromePasswordManagerClient::CreateForWebContentsWithAutofillClient(
       portal_contents,
       autofill::ChromeAutofillClient::FromWebContents(portal_contents));
   HistoryTabHelper::CreateForWebContents(portal_contents);
   infobars::ContentInfoBarManager::CreateForWebContents(portal_contents);
   PrefsTabHelper::CreateForWebContents(portal_contents);
-  DataReductionProxyTabHelper::CreateForWebContents(portal_contents);
   safe_browsing::SafeBrowsingNavigationObserver::MaybeCreateForWebContents(
       portal_contents, HostContentSettingsMapFactory::GetForProfile(profile),
       safe_browsing::SafeBrowsingNavigationObserverManagerFactory::
@@ -434,6 +434,14 @@ void TabWebContentsDelegateAndroid::OnDidBlockNavigation(
   ShowFramebustBlockInfobarInternal(web_contents, blocked_url);
 }
 
+void TabWebContentsDelegateAndroid::UpdateUserGestureCarryoverInfo(
+    content::WebContents* web_contents) {
+  auto* intercept_navigation_delegate =
+      navigation_interception::InterceptNavigationDelegate::Get(web_contents);
+  if (intercept_navigation_delegate)
+    intercept_navigation_delegate->UpdateLastUserGestureCarryoverTimestamp();
+}
+
 content::PictureInPictureResult
 TabWebContentsDelegateAndroid::EnterPictureInPicture(
     content::WebContents* web_contents) {
@@ -630,7 +638,7 @@ void JNI_TabWebContentsDelegateAndroidImpl_OnRendererUnresponsive(
   content::WebContents* web_contents =
       content::WebContents::FromJavaWebContents(java_web_contents);
   if (base::RandDouble() < 0.01)
-    web_contents->GetMainFrame()->GetProcess()->DumpProcessStack();
+    web_contents->GetPrimaryMainFrame()->GetProcess()->DumpProcessStack();
 
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kEnableHungRendererInfoBar)) {
@@ -641,7 +649,7 @@ void JNI_TabWebContentsDelegateAndroidImpl_OnRendererUnresponsive(
       infobars::ContentInfoBarManager::FromWebContents(web_contents);
   DCHECK(!FindHungRendererInfoBar(infobar_manager));
   HungRendererInfoBarDelegate::Create(
-      infobar_manager, web_contents->GetMainFrame()->GetProcess());
+      infobar_manager, web_contents->GetPrimaryMainFrame()->GetProcess());
 }
 
 void JNI_TabWebContentsDelegateAndroidImpl_OnRendererResponsive(

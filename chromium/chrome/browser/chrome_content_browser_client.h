@@ -58,6 +58,7 @@ class URLLoaderThrottle;
 namespace content {
 class BrowserContext;
 class QuotaPermissionContext;
+class RenderFrameHost;
 enum class SmsFetchFailureType;
 struct ServiceWorkerVersionBaseInfo;
 }  // namespace content
@@ -130,7 +131,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
 
   // content::ContentBrowserClient:
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
-      content::MainFunctionParams parameters) override;
+      bool is_integration_test) override;
   void PostAfterStartupTask(
       const base::Location& from_here,
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
@@ -141,7 +142,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   content::StoragePartitionConfig GetStoragePartitionConfigForSite(
       content::BrowserContext* browser_context,
       const GURL& site) override;
-  content::WebContentsViewDelegate* GetWebContentsViewDelegate(
+  std::unique_ptr<content::WebContentsViewDelegate> GetWebContentsViewDelegate(
       content::WebContents* web_contents) override;
   void RenderProcessWillLaunch(content::RenderProcessHost* host) override;
   bool AllowGpuLaunchRetryOnIOThread() override;
@@ -201,11 +202,14 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                       const GURL& site_url) override;
   bool MayReuseHost(content::RenderProcessHost* process_host) override;
   size_t GetProcessCountToIgnoreForLimit() override;
+  blink::ParsedPermissionsPolicy GetPermissionsPolicyForIsolatedApp(
+      content::BrowserContext* browser_context,
+      const url::Origin& app_origin) override;
   bool ShouldTryToUseExistingProcessHost(
       content::BrowserContext* browser_context,
       const GURL& url) override;
-  bool ShouldSubframesTryToReuseExistingProcess(
-      content::RenderFrameHost* main_frame) override;
+  bool ShouldEmbeddedFramesTryToReuseExistingProcess(
+      content::RenderFrameHost* outermost_main_frame) override;
   void SiteInstanceGotProcess(content::SiteInstance* site_instance) override;
   void SiteInstanceDeleting(content::SiteInstance* site_instance) override;
   bool ShouldSwapBrowsingInstancesForNavigation(
@@ -298,6 +302,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       const url::Origin* impression_origin,
       const url::Origin* conversion_origin,
       const url::Origin* reporting_origin) override;
+  bool IsSharedStorageAllowed(content::BrowserContext* browser_context,
+                              const url::Origin& top_frame_origin,
+                              const url::Origin& accessing_origin) override;
 #if BUILDFLAG(IS_CHROMEOS)
   void OnTrustAnchorUsed(content::BrowserContext* browser_context) override;
 #endif
@@ -323,7 +330,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       int cert_error,
       const net::SSLInfo& ssl_info,
       const GURL& request_url,
-      bool is_main_frame_request,
+      bool is_primary_main_frame_request,
       bool strict_enforcement,
       base::OnceCallback<void(content::CertificateRequestResultType)> callback)
       override;
@@ -425,7 +432,9 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
                      sandbox::mojom::Sandbox sandbox_type,
                      ChildSpawnFlags flags) override;
   std::wstring GetAppContainerSidForSandboxType(
-      sandbox::mojom::Sandbox sandbox_type) override;
+      sandbox::mojom::Sandbox sandbox_type,
+      AppContainerFlags flags) override;
+  bool IsRendererAppContainerDisabled() override;
   std::wstring GetLPACCapabilityNameForNetworkService() override;
   bool IsUtilityCetCompatible(const std::string& utility_sub_type) override;
   bool IsRendererCodeIntegrityEnabled() override;
@@ -566,7 +575,7 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
       cert_verifier::mojom::CertVerifierCreationParams*
           cert_verifier_creation_params) override;
   std::vector<base::FilePath> GetNetworkContextsParentDirectory() override;
-  base::DictionaryValue GetNetLogConstants() override;
+  base::Value::Dict GetNetLogConstants() override;
   bool AllowRenderingMhtmlOverHttp(
       content::NavigationUIData* navigation_ui_data) override;
   bool ShouldForceDownloadResource(const GURL& url,
@@ -771,25 +780,25 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void OnWebContentsCreated(content::WebContents* web_contents) override;
 
   bool IsFindInPageDisabledForOrigin(const url::Origin& origin) override;
-  bool IsFirstPartySetsEnabled() override;
+  bool WillProvidePublicFirstPartySets() override;
   base::Value::Dict GetFirstPartySetsOverrides() override;
 
   bool ShouldPreconnectNavigation(
       content::BrowserContext* browser_context) override;
 
-  enum UserAgentReductionEnterprisePolicyState {
-    kDefault = 0,
-    kForceDisabled = 1,
-    kForceEnabled = 2,
-  };
-
   bool ShouldDisableOriginAgentClusterDefault(
       content::BrowserContext* browser_context) override;
 
   content::mojom::AlternativeErrorPageOverrideInfoPtr
-  GetAlternativeErrorPageOverrideInfo(const GURL& url,
-                                      content::BrowserContext* browser_context,
-                                      int32_t error_code) override;
+  GetAlternativeErrorPageOverrideInfo(
+      const GURL& url,
+      content::RenderFrameHost* render_frame_host,
+      content::BrowserContext* browser_context,
+      int32_t error_code) override;
+
+  bool OpenExternally(content::RenderFrameHost* opener,
+                      const GURL& url,
+                      WindowOpenDisposition disposition) override;
 
  protected:
   static bool HandleWebUI(GURL* url, content::BrowserContext* browser_context);
@@ -876,12 +885,6 @@ class ChromeContentBrowserClient : public content::ContentBrowserClient {
   void OnKeepaliveTimerFired(
       std::unique_ptr<ScopedKeepAlive> keep_alive_handle);
 #endif
-
-  UserAgentReductionEnterprisePolicyState
-  GetUserAgentReductionEnterprisePolicyState(content::BrowserContext* context);
-
-  embedder_support::ForceMajorVersionToMinorPosition
-  GetForceMajorVersionToMinorPosition(content::BrowserContext* context);
 
   // Vector of additional ChromeContentBrowserClientParts.
   // Parts are deleted in the reverse order they are added.

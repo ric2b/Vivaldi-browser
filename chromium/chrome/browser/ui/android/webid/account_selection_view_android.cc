@@ -45,13 +45,13 @@ ScopedJavaLocalRef<jobject> ConvertToJavaAccount(JNIEnv* env,
 ScopedJavaLocalRef<jobject> ConvertToJavaIdentityProviderMetadata(
     JNIEnv* env,
     const content::IdentityProviderMetadata& metadata) {
-  base::android::ScopedJavaLocalRef<jobject> java_brand_icon;
-  if (!metadata.brand_icon.isNull())
-    java_brand_icon = gfx::ConvertToJavaBitmap(metadata.brand_icon);
+  ScopedJavaLocalRef<jstring> java_brand_icon_url =
+      base::android::ConvertUTF8ToJavaString(env,
+                                             metadata.brand_icon_url.spec());
   return Java_IdentityProviderMetadata_Constructor(
       env, ui::OptionalSkColorToJavaColor(metadata.brand_text_color),
       ui::OptionalSkColorToJavaColor(metadata.brand_background_color),
-      java_brand_icon);
+      java_brand_icon_url);
 }
 
 ScopedJavaLocalRef<jobject> ConvertToJavaClientIdMetadata(
@@ -113,8 +113,8 @@ AccountSelectionViewAndroid::~AccountSelectionViewAndroid() {
 }
 
 void AccountSelectionViewAndroid::Show(
-    const std::string& rp_etld_plus_one,
-    const std::string& idp_etld_plus_one,
+    const std::string& rp_for_display,
+    const std::string& idp_for_display,
     base::span<const Account> accounts,
     const content::IdentityProviderMetadata& idp_metadata,
     const content::ClientIdData& client_data,
@@ -123,7 +123,7 @@ void AccountSelectionViewAndroid::Show(
     // It's possible that the constructor cannot access the bottom sheet clank
     // component. That case may be temporary but we can't let users in a
     // waiting state so report that AccountSelectionView is dismissed instead.
-    delegate_->OnDismiss();
+    delegate_->OnDismiss(/* should_embargo=*/false);
     return;
   }
 
@@ -137,9 +137,8 @@ void AccountSelectionViewAndroid::Show(
   ScopedJavaLocalRef<jobject> client_id_metadata_obj =
       ConvertToJavaClientIdMetadata(env, client_data);
   Java_AccountSelectionBridge_showAccounts(
-      env, java_object_internal_,
-      ConvertUTF8ToJavaString(env, rp_etld_plus_one),
-      ConvertUTF8ToJavaString(env, idp_etld_plus_one), accounts_obj,
+      env, java_object_internal_, ConvertUTF8ToJavaString(env, rp_for_display),
+      ConvertUTF8ToJavaString(env, idp_for_display), accounts_obj,
       idp_metadata_obj, client_id_metadata_obj,
       sign_in_mode == Account::SignInMode::kAuto);
 }
@@ -153,13 +152,13 @@ void AccountSelectionViewAndroid::OnAccountSelected(
       env, account_string_fields, account_picture_url, is_sign_in));
 }
 
-void AccountSelectionViewAndroid::OnDismiss(JNIEnv* env) {
-  delegate_->OnDismiss();
+void AccountSelectionViewAndroid::OnDismiss(JNIEnv* env, bool should_embargo) {
+  delegate_->OnDismiss(should_embargo);
 }
 
 void AccountSelectionViewAndroid::OnAutoSignInCancelled(JNIEnv* env) {
   // TODO(yigu): Alternatively we could fall back to manual sign in flow.
-  delegate_->OnDismiss();
+  delegate_->OnDismiss(/*should_embargo=*/false);
 }
 
 bool AccountSelectionViewAndroid::RecreateJavaObject() {

@@ -14,7 +14,7 @@
 #include "third_party/blink/public/common/browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/permissions_policy/permissions_policy.mojom-blink.h"
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
@@ -437,8 +437,6 @@ void StringifyAndParseMethodSpecificData(ExecutionContext& execution_context,
   if (RuntimeEnabledFeatures::PaymentRequestBasicCardEnabled(
           &execution_context) &&
       supported_method == "basic-card") {
-    Deprecation::CountDeprecation(&execution_context,
-                                  WebFeature::kPaymentRequestBasicCard);
     BasicCardHelper::ParseBasiccardData(input, output->supported_networks,
                                         exception_state);
   } else if (supported_method == kSecurePaymentConfirmationMethod &&
@@ -448,7 +446,7 @@ void StringifyAndParseMethodSpecificData(ExecutionContext& execution_context,
                       WebFeature::kSecurePaymentConfirmation);
     output->secure_payment_confirmation =
         SecurePaymentConfirmationHelper::ParseSecurePaymentConfirmationData(
-            input, exception_state);
+            input, execution_context, exception_state);
   }
 }
 
@@ -810,8 +808,8 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
       DomWindow()->IsPaymentRequestTokenActive();
 
   if (!has_transient_user_activation) {
-    Deprecation::CountDeprecation(
-        GetExecutionContext(), WebFeature::kPaymentRequestShowWithoutGesture);
+    UseCounter::Count(GetExecutionContext(),
+                      WebFeature::kPaymentRequestShowWithoutGesture);
 
     if (!payment_request_token_active) {
       UseCounter::Count(GetExecutionContext(),
@@ -819,28 +817,22 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
     }
   }
 
-  bool payment_request_allowed = has_transient_user_activation;
+  bool payment_request_allowed =
+      has_transient_user_activation || payment_request_token_active;
+  DomWindow()->ConsumePaymentRequestToken();
 
-  if (RuntimeEnabledFeatures::CapabilityDelegationPaymentRequestEnabled(
-          GetExecutionContext())) {
-    payment_request_allowed |= payment_request_token_active;
-    DomWindow()->ConsumePaymentRequestToken();
-  }
-  if (RuntimeEnabledFeatures::PaymentRequestRequiresUserActivationEnabled(
-          GetExecutionContext())) {
-    if (payment_request_allowed) {
-      LocalFrame::ConsumeTransientUserActivation(local_frame);
-    } else {
-      String message =
-          "PaymentRequest.show() requires either transient user activation or "
-          "delegated payment request capability";
-      GetExecutionContext()->AddConsoleMessage(
-          MakeGarbageCollected<ConsoleMessage>(
-              mojom::blink::ConsoleMessageSource::kJavaScript,
-              mojom::blink::ConsoleMessageLevel::kWarning, message));
-      exception_state.ThrowSecurityError(message);
-      return ScriptPromise();
-    }
+  if (payment_request_allowed) {
+    LocalFrame::ConsumeTransientUserActivation(local_frame);
+  } else {
+    String message =
+        "PaymentRequest.show() requires either transient user activation or "
+        "delegated payment request capability";
+    GetExecutionContext()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kJavaScript,
+            mojom::blink::ConsoleMessageLevel::kWarning, message));
+    exception_state.ThrowSecurityError(message);
+    return ScriptPromise();
   }
 
   // TODO(crbug.com/779126): add support for handling payment requests in
@@ -856,8 +848,7 @@ ScriptPromise PaymentRequest::show(ScriptState* script_state,
   UseCounter::Count(GetExecutionContext(), WebFeature::kPaymentRequestShow);
 
   is_waiting_for_show_promise_to_resolve_ = !details_promise.IsEmpty();
-  payment_provider_->Show(payment_request_allowed,
-                          is_waiting_for_show_promise_to_resolve_);
+  payment_provider_->Show(is_waiting_for_show_promise_to_resolve_);
   if (is_waiting_for_show_promise_to_resolve_) {
     // If the website does not calculate the final shopping cart contents within
     // 10 seconds, abort payment.
@@ -1520,6 +1511,10 @@ void PaymentRequest::OnError(PaymentErrorReason error,
 
     case PaymentErrorReason::NOT_ALLOWED_ERROR:
       exception_code = DOMExceptionCode::kNotAllowedError;
+      break;
+
+    case PaymentErrorReason::USER_OPT_OUT:
+      exception_code = DOMExceptionCode::kAbortError;
       break;
 
     case PaymentErrorReason::UNKNOWN:

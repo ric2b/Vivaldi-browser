@@ -24,7 +24,6 @@
 #include "components/subresource_filter/content/browser/ad_tagging_browser_test_utils.h"
 #include "components/subresource_filter/content/browser/subresource_filter_observer_test_utils.h"
 #include "components/subresource_filter/core/common/test_ruleset_utils.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/test_ukm_recorder.h"
 #include "content/public/test/back_forward_cache_util.h"
 #include "content/public/test/browser_test.h"
@@ -349,7 +348,7 @@ IN_PROC_BROWSER_TEST_F(AdTaggingBrowserTest, FramesByURL) {
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), GetURL("frame_factory.html")));
   EXPECT_FALSE(observer.GetIsAdSubframe(
-      GetWebContents()->GetMainFrame()->GetFrameTreeNodeId()));
+      GetWebContents()->GetPrimaryMainFrame()->GetFrameTreeNodeId()));
 
   // (1) Vanilla child.
   content::RenderFrameHost* vanilla_child =
@@ -396,7 +395,6 @@ IN_PROC_BROWSER_TEST_F(AdTaggingBrowserTest, FramesByURL) {
 const char kSubresourceFilterOriginStatusHistogram[] =
     "PageLoad.Clients.Ads.FrameCounts.AdFrames.PerFrame."
     "OriginStatus";
-const char kWindowOpenFromAdStateHistogram[] = "Blink.WindowOpen.FromAdState";
 
 IN_PROC_BROWSER_TEST_F(AdTaggingBrowserTest, VerifySameOriginWithoutNavigate) {
   // The test assumes pages gets deleted after navigation, triggering histogram
@@ -940,16 +938,6 @@ void ExpectWindowOpenUkmEntry(const ukm::TestUkmRecorder& ukm_recorder,
       from_ad_script);
 }
 
-void ExpectWindowOpenUmaEntry(const base::HistogramTester& histogram_tester,
-                              bool from_ad_subframe,
-                              bool from_ad_script) {
-  metrics::SubprocessMetricsProvider::MergeHistogramDeltasForTesting();
-  blink::FromAdState state =
-      blink::GetFromAdState(from_ad_subframe, from_ad_script);
-  histogram_tester.ExpectBucketCount(kWindowOpenFromAdStateHistogram, state,
-                                     1 /* expected_count */);
-}
-
 enum class NavigationInitiationType {
   kWindowOpen,
   kSetLocation,
@@ -1071,7 +1059,6 @@ IN_PROC_BROWSER_TEST_P(AdTaggingEventFromSubframeBrowserTest,
   bool from_ad_script = from_ad_subframe;
   ExpectWindowOpenUkmEntry(ukm_recorder, false /* from_main_frame */,
                            main_frame_url, from_ad_subframe, from_ad_script);
-  ExpectWindowOpenUmaEntry(histogram_tester, from_ad_subframe, from_ad_script);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1103,7 +1090,6 @@ IN_PROC_BROWSER_TEST_P(AdTaggingEventWithScriptInStackBrowserTest,
   bool from_ad_subframe = false;
   ExpectWindowOpenUkmEntry(ukm_recorder, true /* from_main_frame */,
                            main_frame_url, from_ad_subframe, from_ad_script);
-  ExpectWindowOpenUmaEntry(histogram_tester, from_ad_subframe, from_ad_script);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1135,7 +1121,9 @@ class AdTaggingFencedFrameBrowserTest : public AdTaggingBrowserTest {
     return observer_->GetIsAdSubframe(host->GetFrameTreeNodeId());
   }
 
-  RenderFrameHost* PrimaryMainFrame() { return web_contents()->GetMainFrame(); }
+  RenderFrameHost* PrimaryMainFrame() {
+    return web_contents()->GetPrimaryMainFrame();
+  }
 
   GURL GetURL(const std::string& page) {
     return https_server_.GetURL("/ad_tagging/" + page);

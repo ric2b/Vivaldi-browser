@@ -67,6 +67,9 @@ struct CONTENT_EXPORT NativeWebKeyboardEvent : public blink::WebKeyboardEvent {
   // it is hit in ime mode.
   // Currently, it's only used by Linux and Mac ports.
   bool skip_in_browser;
+
+  // Vivaldi
+  bool from_devtools = false;
 };
 
 }  // namespace content

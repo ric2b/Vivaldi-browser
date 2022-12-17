@@ -71,14 +71,22 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"componentPowerButton", IDS_SHIMLESS_RMA_COMPONENT_POWER_BUTTON},
       // Splash screen
       {"shimlessSplashRemembering", IDS_SHIMLESS_RMA_SPLASH_REMEMBERING},
-      {"shimlessSplashLoading", IDS_SHIMLESS_RMA_SPLASH_LOADING},
       // Common buttons
-      {"cancelButtonLabel", IDS_SHIMLESS_RMA_CANCEL_BUTTON},
+      {"exitButtonLabel", IDS_SHIMLESS_RMA_EXIT_BUTTON},
       {"backButtonLabel", IDS_SHIMLESS_RMA_BACK_BUTTON},
       {"nextButtonLabel", IDS_SHIMLESS_RMA_NEXT_BUTTON},
       {"skipButtonLabel", IDS_SHIMLESS_RMA_SKIP_BUTTON},
       {"okButtonLabel", IDS_SHIMLESS_RMA_OK_BUTTON},
+      {"cancelButtonLabel", IDS_SHIMLESS_RMA_CANCEL_BUTTON},
       {"retryButtonLabel", IDS_SHIMLESS_RMA_RETRY_BUTTON},
+      {"tryAgainButtonLabel", IDS_SHIMLESS_RMA_TRY_AGAIN_BUTTON},
+      // Exit dialog
+      {"exitDialogTitleText", IDS_SHIMLESS_RMA_EXIT_DIALOG_TITLE},
+      {"exitDialogDescriptionText", IDS_SHIMLESS_RMA_EXIT_DIALOG_DESCRIPTION},
+      {"exitDialogCancelButtonLabel",
+       IDS_SHIMLESS_RMA_EXIT_DIALOG_CANCEL_BUTTON_LABEL},
+      {"exitDialogConfirmButtonLabel",
+       IDS_SHIMLESS_RMA_EXIT_DIALOG_CONFIRM_BUTTON_LABEL},
       // Landing page
       {"beginRmaWarningText", IDS_SHIMLESS_RMA_AUTHORIZED_TECH_ONLY_WARNING},
       {"validatingComponentsText", IDS_SHIMLESS_RMA_VALIDATING_COMPONENTS},
@@ -95,6 +103,8 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CONNECT_PAGE_DESCRIPTION},
       {"connectNetworkDialogConnectButtonText",
        IDS_SHIMLESS_RMA_CONNECT_DIALOG_CONNECT},
+      {"connectNetworkDialogDisconnectButtonText",
+       IDS_SHIMLESS_RMA_CONNECT_DIALOG_DISCONNECT},
       {"connectNetworkDialogCancelButtonText",
        IDS_SHIMLESS_RMA_CONNECT_DIALOG_CANCEL},
       {"internetConfigName", IDS_SHIMLESS_RMA_CONNECT_DIALOG_CONFIG_NAME},
@@ -102,37 +112,33 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       // Select components page
       {"selectComponentsTitleText",
        IDS_SHIMLESS_RMA_SELECT_COMPONENTS_PAGE_TITLE},
+      {"undetectedComponentText", IDS_SHIMLESS_RMA_UNDETECTED_COMPONENT_LABEL},
       {"reworkFlowLinkText", IDS_SHIMLESS_RMA_REWORK_FLOW_LINK},
       // Choose destination page
       {"chooseDestinationTitleText", IDS_SHIMLESS_RMA_CHOOSE_DESTINATION},
       {"sameOwnerText", IDS_SHIMLESS_RMA_SAME_OWNER},
-      {"sameOwnerDescriptionText", IDS_SHIMLESS_RMA_SAME_OWNER_DESCRIPTION},
       {"newOwnerText", IDS_SHIMLESS_RMA_NEW_OWNER},
       {"newOwnerDescriptionText", IDS_SHIMLESS_RMA_NEW_OWNER_DESCRIPTION},
+      {"notSureOwnerText", IDS_SHIMLESS_RMA_NOT_SURE_OWNER},
       // OS update page
       {"osUpdateTitleText", IDS_SHIMLESS_RMA_UPDATE_OS_PAGE_TITLE},
       {"osUpdateUnqualifiedComponentsTopText",
        IDS_SHIMLESS_RMA_UPDATE_OS_UNQUALIFIED_COMPONENTS_TOP},
       {"osUpdateUnqualifiedComponentsBottomText",
        IDS_SHIMLESS_RMA_UPDATE_OS_UNQUALIFIED_COMPONENTS_BOTTOM},
-      {"osUpdateVeryOutOfDateDescriptionText",
-       IDS_SHIMLESS_RMA_UPDATE_OS_VERY_OUT_OF_DATE},
       {"osUpdateOutOfDateDescriptionText",
        IDS_SHIMLESS_RMA_UPDATE_OS_OUT_OF_DATE},
-      {"osUpdateNetworkUnavailableText",
-       IDS_SHIMLESS_RMA_UPDATE_OS_NETWORK_UNAVAILABLE},
-      {"osUpdateFailedToStartText", IDS_SHIMLESS_RMA_UPDATE_OS_FAILED_TO_START},
-      {"currentVersionText", IDS_SHIMLESS_RMA_CURRENT_VERSION},
       {"currentVersionOutOfDateText",
        IDS_SHIMLESS_RMA_CURRENT_VERSION_OUT_OF_DATE},
-      {"currentVersionUpToDateText",
-       IDS_SHIMLESS_RMA_CURRENT_VERSION_UP_TO_DATE},
       {"updateVersionRestartLabel",
        IDS_SHIMLESS_RMA_UPDATE_VERSION_AND_RESTART},
       {"updatingOsVersionText", IDS_SHIMLESS_RMA_UPDATING_OS_VERSION},
+      {"updatingOsErrorMessage", IDS_SHIMLESS_RMA_UPDATE_OS_ERROR_MESSAGE},
       // Choose WP disable method page
       {"chooseWpDisableMethodPageTitleText",
        IDS_SHIMLESS_RMA_CHOOSE_WP_DISABLE_METHOD_PAGE_TITLE},
+      {"manualWpDisableMethodDescriptionText",
+       IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_DESCRIPTION},
       {"manualWpDisableMethodOptionText",
        IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_OPTION},
       {"rsuWpDisableMethodOptionText",
@@ -145,12 +151,12 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rsuChallengeDialogTitleText",
        IDS_SHIMLESS_RMA_RSU_CHALLENGE_DIALOG_TITLE},
       {"rsuCodeLabelText", IDS_SHIMLESS_RMA_RSU_CODE_LABEL},
+      {"rsuCodeErrorLabelText", IDS_SHIMLESS_RMA_RSU_CODE_ERROR_LABEL},
       {"rsuChallengeDialogDoneButtonLabel",
        IDS_SHIMLESS_RMA_RSU_CHALLENGE_DIALOG_DONE_BUTTON},
       // Manual WP disable complete
       {"wpDisableCompletePageTitleText",
        IDS_SHIMLESS_RMA_WP_DISABLE_COMPLETE_PAGE_TITLE},
-      {"wpDisableSkippedText", IDS_SHIMLESS_RMA_WP_DISABLE_SKIPPED_MESSAGE},
       {"wpDisableReassembleNowText",
        IDS_SHIMLESS_RMA_WP_DISABLE_REASSEMBLE_NOW_MESSAGE},
       {"wpDisableLeaveDisassembledText",
@@ -160,8 +166,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CALIBRATION_FAILED_PAGE_TITLE},
       {"calibrationFailedInstructionsText",
        IDS_SHIMLESS_RMA_CALIBRATION_FAILED_INSTRUCTIONS},
-      {"calibrationFailedRetryButtonLabel",
-       IDS_SHIMLESS_RMA_CALIBRATION_FAILED_RETRY_BUTTON_LABEL},
       {"calibrationFailedDialogTitle",
        IDS_SHIMLESS_RMA_CALIBRATION_FAILED_DIALOG_TITLE},
       {"calibrationFailedDialogText",
@@ -185,25 +189,20 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_FINALIZE_FAILED_NON_BLOCKING},
       {"finalizePageFailedRetryButtonLabel",
        IDS_SHIMLESS_RMA_FINALIZE_FAILED_RETRY_BUTTON_LABEL},
+      {"finalizePageWpDisabledDialogTitle",
+       IDS_SHIMLESS_RMA_FINALIZE_WP_DISABLED_DIALOG_TITLE},
+      {"finalizePageWpDisabledDialogBody",
+       IDS_SHIMLESS_RMA_FINALIZE_WP_DISABLED_DIALOG_BODY},
       // Run calibration page
       {"runCalibrationTitleText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_PAGE_TITLE},
       {"runCalibrationCompleteTitleText",
        IDS_SHIMLESS_RMA_RUN_CALIBRATION_COMPLETE_TITLE},
-      {"runCalibrationCompleteText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_COMPLETE},
-      {"runCalibrationStartingText", IDS_SHIMLESS_RMA_RUN_CALIBRATION_STARTING},
-      {"runCalibrationCalibratingComponent",
-       IDS_SHIMLESS_RMA_RUN_CALIBRATING_COMPONENT},
       // Device provisioning page
       {"provisioningPageTitleText", IDS_SHIMLESS_RMA_PROVISIONING_TITLE},
-      {"provisioningPageInProgressText",
-       IDS_SHIMLESS_RMA_PROVISIONING_IN_PROGRESS},
-      {"provisioningPageCompleteText", IDS_SHIMLESS_RMA_PROVISIONING_COMPLETE},
-      {"provisioningPageFailedBlockingText",
-       IDS_SHIMLESS_RMA_PROVISIONING_FAILED_BLOCKING},
-      {"provisioningPageFailedNonBlockingText",
-       IDS_SHIMLESS_RMA_PROVISIONING_FAILED_NON_BLOCKING},
-      {"provisioningPageFailedRetryButtonLabel",
-       IDS_SHIMLESS_RMA_PROVISIONING_FAILED_RETRY_BUTTON_LABEL},
+      {"provisioningPageWpEnabledDialogTitle",
+       IDS_SHIMLESS_RMA_PROVISIONING_WP_ENABLED_DIALOG_TITLE},
+      {"provisioningPageWpEnabledDialogBody",
+       IDS_SHIMLESS_RMA_PROVISIONING_WP_ENABLED_DIALOG_BODY},
       // Repair complete page
       {"repairCompletedTitleText", IDS_SHIMLESS_RMA_REPAIR_COMPLETED},
       {"repairCompletedDescriptionText",
@@ -229,7 +228,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"rmaLogsTitleText", IDS_SHIMLESS_RMA_LOGS_TITLE},
       {"rmaLogsCancelButtonText", IDS_SHIMLESS_RMA_LOGS_CANCEL_BUTTON},
       {"rmaLogsSaveToUsbButtonText", IDS_SHIMLESS_RMA_LOGS_SAVE_BUTTON},
-      {"batteryShutoffTooltipText", IDS_SHIMLESS_BATTERY_SHUTOFF_TOOLTIP_TEXT},
       {"repairCompletedPowerwashTitle",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_TITLE},
       {"repairCompletedPowerwashShutdownDescription",
@@ -238,23 +236,37 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_REBOOT_DESCRIPTION},
       {"repairCompletedPowerwashButton",
        IDS_SHIMLESS_RMA_REPAIR_COMPLETED_POWERWASH_BUTTON},
+      {"repairCompletedBatteryCutoffCountdownDescription",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_CUTOFF_COUNTDOWN_DESCRIPTION},
+      {"repairCompletedBatteryCutoffShutdownButton",
+       IDS_SHIMLESS_RMA_REPAIR_COMPLETED_BATTERY_CUTOFF_SHUTDOWN_BUTTON},
+      // Powerwash dialog
+      {"powerwashDialogTitle", IDS_SHIMLESS_RMA_POWERWASH_DIALOG_TITLE},
+      {"powerwashDialogShutdownDescription",
+       IDS_SHIMLESS_RMA_POWERWASH_DIALOG_SHUTDOWN_DESCRIPTION},
+      {"powerwashDialogRebootDescription",
+       IDS_SHIMLESS_RMA_POWERWASH_DIALOG_REBOOT_DESCRIPTION},
+      {"powerwashDialogPowerwashButton",
+       IDS_SHIMLESS_RMA_POWERWASH_DIALOG_POWERWASH_BUTTON},
 
       // Manual disable wp page
       {"manuallyDisableWpTitleText",
        IDS_SHIMLESS_RMA_MANUALLY_DISABLE_WP_TITLE},
       {"manuallyDisableWpInstructionsText",
        IDS_SHIMLESS_RMA_MANUALLY_DISABLE_WP_INSTRUCTIONS},
+      {"manuallyDisableWpTitleTextReboot",
+       IDS_SHIMLESS_RMA_MANUALLY_DISABLE_WP_TITLE_REBOOT},
+      {"manuallyDisableWpInstructionsTextReboot",
+       IDS_SHIMLESS_RMA_MANUALLY_DISABLE_WP_INSTRUCTIONS_REBOOT},
       // Restock mainboard page
-      {"restockTitleText", IDS_SHIMLESS_RMA_RESTOCK_PAGE_TITLE},
       {"restockInstructionsText", IDS_SHIMLESS_RMA_RESTOCK_INSTRUCTIONS},
       {"restockShutdownButtonText", IDS_SHIMLESS_RMA_RESTOCK_SHUTDOWN_BUTTON},
       {"restockContinueButtonText", IDS_SHIMLESS_RMA_RESTOCK_CONTINUE_BUTTON},
+      {"restockTitleText", IDS_SHIMLESS_RMA_RESTOCK_PAGE_TITLE},
       // Manual enable wp page
       {"manuallyEnableWpTitleText", IDS_SHIMLESS_RMA_MANUALLY_ENABLE_WP_TITLE},
       {"manuallyEnableWpInstructionsText",
        IDS_SHIMLESS_RMA_MANUALLY_ENABLE_WP_INSTRUCTIONS},
-      {"manuallyEnabledWpMessageText",
-       IDS_SHIMLESS_RMA_MANUALLY_ENABLED_WP_MESSAGE},
       // Confirm device information page
       {"confirmDeviceInfoTitle", IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_TITLE},
       {"confirmDeviceInfoInstructions",
@@ -269,12 +281,10 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_EMPTY_WHITE_LABEL_LABEL},
       {"confirmDeviceInfoDramPartNumberLabel",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DRAM_PART_NUMBER_LABEL},
-      {"confirmDeviceInfoDramPartNumberPlaceholderLabel",
-       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_DRAM_PART_NUMBER_PLACEHOLDER_LABEL},
       {"confirmDeviceInfoSkuLabel",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SKU_LABEL},
       {"confirmDeviceInfoResetButtonLabel",
-       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_RESET_BUTTON_LABEL},
+       IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_REVERT_BUTTON_LABEL},
       {"confirmDeviceInfoSkuWarning",
        IDS_SHIMLESS_RMA_CONFIRM_DEVICE_INFO_SKU_WARNING},
       // Firmware reimaging page
@@ -286,8 +296,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
       {"firmwareUpdateRebootText", IDS_SHIMLESS_RMA_FIRMWARE_REBOOT},
       {"firmwareUpdateCompleteText", IDS_SHIMLESS_RMA_FIRMWARE_UPDATE_COMPLETE},
       // Onboarding update page
-      {"onboardingUpdateConnectToInternet",
-       IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_CONNECT},
       {"onboardingUpdateProgress", IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_PROGRESS},
       {"onboardingUpdateIdle", IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_IDLE},
       {"onboardingUpdateChecking", IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_CHECKING},
@@ -307,7 +315,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_ONBOARDING_UPDATE_PERMISSION},
       // Critical error
       {"criticalErrorMessageText", IDS_SHIMLESS_RMA_CRITICAL_ERROR_MESSAGE},
-      {"criticalErrorExitText", IDS_SHIMLESS_RMA_CRITICAL_EXIT_BUTTON},
       {"criticalErrorRebootText", IDS_SHIMLESS_RMA_CRITICAL_REBOOT_BUTTON},
       // Wipe device page
       {"wipeDeviceTitleText", IDS_SHIMLESS_RMA_WIPE_DEVICE_TITLE},
@@ -317,8 +324,6 @@ void AddShimlessRmaStrings(content::WebUIDataSource* html_source) {
        IDS_SHIMLESS_RMA_WIPE_DEVICE_REMOVE_DATA_OPTION_DESCRIPTION},
       {"wipeDevicePreserveDataLabel",
        IDS_SHIMLESS_RMA_WIPE_DEVICE_PRESERVE_DATA_OPTION},
-      {"wipeDevicePreserveDataDescription",
-       IDS_SHIMLESS_RMA_WIPE_DEVICE_PRESERVE_DATA_OPTION_DESCRIPTION},
   };
 
   html_source->AddLocalizedStrings(kLocalizedStrings);
@@ -333,12 +338,17 @@ void AddDevicePlaceholderStrings(content::WebUIDataSource* html_source) {
       "welcomeTitleText",
       ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_LANDING_PAGE_TITLE));
   html_source->AddString(
-      "manualWpDisableMethodDescriptionText",
-      ui::SubstituteChromeOSDeviceType(
-          IDS_SHIMLESS_RMA_MANUAL_WP_DISABLE_METHOD_DESCRIPTION));
+      "criticalErrorExitText",
+      ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_CRITICAL_EXIT_BUTTON));
   html_source->AddString(
       "criticalErrorTitleText",
       ui::SubstituteChromeOSDeviceType(IDS_SHIMLESS_RMA_CRITICAL_ERROR_TITLE));
+}
+
+void AddFeatureFlags(content::WebUIDataSource* html_source) {
+  html_source->AddBoolean(
+      "osUpdateEnabled",
+      base::FeatureList::IsEnabled(chromeos::features::kShimlessRMAOsUpdate));
 }
 
 }  // namespace
@@ -394,6 +404,7 @@ ShimlessRMADialogUI::ShimlessRMADialogUI(
 
   AddShimlessRmaStrings(html_source);
   AddDevicePlaceholderStrings(html_source);
+  AddFeatureFlags(html_source);
 
   ui::network_element::AddLocalizedStrings(html_source);
   ui::network_element::AddOncLocalizedStrings(html_source);

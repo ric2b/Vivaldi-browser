@@ -36,7 +36,9 @@
 #include "third_party/blink/renderer/core/css/css_primitive_value.h"
 #include "third_party/blink/renderer/core/css/css_property_value_set.h"
 #include "third_party/blink/renderer/core/css/css_to_length_conversion_data.h"
+#include "third_party/blink/renderer/core/css/parser/css_parser_context.h"
 #include "third_party/blink/renderer/core/css/parser/css_tokenizer.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/style/computed_style.h"
 #include "third_party/blink/renderer/platform/geometry/calculation_expression_node.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
@@ -91,9 +93,9 @@ TEST(CSSCalculationValue, AccumulatePixelsAndPercent) {
   scoped_refptr<ComputedStyle> style =
       ComputedStyle::CreateInitialStyleSingleton();
   style->SetEffectiveZoom(5);
-  CSSToLengthConversionData conversion_data(style.get(), style.get(), nullptr,
-                                            /* nearest_container */ nullptr,
-                                            style->EffectiveZoom());
+  CSSToLengthConversionData conversion_data(
+      style.get(), style.get(), nullptr,
+      CSSToLengthConversionData::ContainerSizes(), style->EffectiveZoom());
 
   TestAccumulatePixelsAndPercent(
       conversion_data,
@@ -324,8 +326,10 @@ TEST(CSSMathExpressionNode, TestParseDeeplyNestedExpression) {
     CSSTokenizer tokenizer(String(ss.str().c_str()));
     const auto tokens = tokenizer.TokenizeToEOF();
     const CSSParserTokenRange range(tokens);
-    const CSSMathExpressionNode* res =
-        CSSMathExpressionNode::ParseMathFunction(CSSValueID::kCalc, range);
+    const CSSParserContext* context = MakeGarbageCollected<CSSParserContext>(
+        kHTMLStandardMode, SecureContextMode::kInsecureContext);
+    const CSSMathExpressionNode* res = CSSMathExpressionNode::ParseMathFunction(
+        CSSValueID::kCalc, range, *context, kCSSAnchorQueryTypesNone);
 
     if (test_case.expected) {
       EXPECT_TRUE(res);

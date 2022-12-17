@@ -11,9 +11,7 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_registry.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_registry_observer.h"
 
-class Browser;
 class BrowserView;
-class ReadAnythingCoordinator;
 class SidePanelComboboxModel;
 
 namespace views {
@@ -35,8 +33,7 @@ class View;
 class SidePanelCoordinator final : public SidePanelRegistryObserver,
                                    public TabStripModelObserver {
  public:
-  explicit SidePanelCoordinator(BrowserView* browser_view,
-                                SidePanelRegistry* global_registry);
+  explicit SidePanelCoordinator(BrowserView* browser_view);
   SidePanelCoordinator(const SidePanelCoordinator&) = delete;
   SidePanelCoordinator& operator=(const SidePanelCoordinator&) = delete;
   ~SidePanelCoordinator() override;
@@ -45,12 +42,22 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   void Close();
   void Toggle();
 
-  ReadAnythingCoordinator* read_anything_coordinator() {
-    return read_anything_coordinator_.get();
+  SidePanelRegistry* GetGlobalSidePanelRegistry();
+
+  // Prevent content swapping delays from happening for testing.
+  // This should be called before the side panel is first shown.
+  void SetNoDelaysForTesting();
+
+  SidePanelEntry* GetCurrentSidePanelEntryForTesting() {
+    return current_entry_.get();
   }
 
  private:
   friend class SidePanelCoordinatorTest;
+  FRIEND_TEST_ALL_PREFIXES(UserNoteUICoordinatorTest,
+                           ShowEmptyUserNoteSidePanel);
+  FRIEND_TEST_ALL_PREFIXES(UserNoteUICoordinatorTest,
+                           PopulateUserNoteSidePanel);
 
   views::View* GetContentView();
   SidePanelEntry* GetEntryForId(SidePanelEntry::Id entry_id);
@@ -59,8 +66,12 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   void InitializeSidePanel();
 
   // Removes existing SidePanelEntry contents from the side panel if any exist
-  // and populates the side panel with the provided SidePanelEntry.
-  void PopulateSidePanel(SidePanelEntry* entry);
+  // and populates the side panel with the provided SidePanelEntry and
+  // |content_view| if provided, otherwise get the content_view from the
+  // provided SidePanelEntry.
+  void PopulateSidePanel(
+      SidePanelEntry* entry,
+      absl::optional<std::unique_ptr<views::View>> content_view);
 
   // Clear cached views for registry entries for global and contextual
   // registries.
@@ -70,15 +81,14 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
   // entry exists.
   absl::optional<SidePanelEntry::Id> GetLastActiveEntryId() const;
 
+  // Returns the currently selected id in the combobox, if one is shown.
+  absl::optional<SidePanelEntry::Id> GetSelectedId() const;
+
   SidePanelRegistry* GetActiveContextualRegistry() const;
 
   std::unique_ptr<views::View> CreateHeader();
   std::unique_ptr<views::Combobox> CreateCombobox();
   void OnComboboxChanged();
-
-  std::unique_ptr<views::View> CreateBookmarksWebView(Browser* browser);
-  std::unique_ptr<views::View> CreateReadAnythingWebView(Browser* browser);
-  std::unique_ptr<views::View> CreateUserNoteView(Browser* browser);
 
   // SidePanelRegistryObserver:
   void OnEntryRegistered(SidePanelEntry* entry) override;
@@ -90,18 +100,28 @@ class SidePanelCoordinator final : public SidePanelRegistryObserver,
       const TabStripModelChange& change,
       const TabStripSelectionChange& selection) override;
 
+  // When true, prevent loading delays when switching between side panel
+  // entries.
+  bool no_delays_for_testing_ = false;
+
   const raw_ptr<BrowserView> browser_view_;
   raw_ptr<SidePanelRegistry> global_registry_;
   absl::optional<SidePanelEntry::Id> last_active_global_entry_id_;
+
+  // current_entry_ tracks the entry that currently has its view hosted by the
+  // side panel. It is necessary as current_entry_ may belong to a contextual
+  // registry that is swapped out (during a tab switch for e.g.). In such
+  // situations we may still need a reference to the entry corresponding to the
+  // hosted view so we can cache and clean up appropriately before switching in
+  // the new entry.
+  // Use a weak pointer so that current side panel entry can be reset
+  // automatically if the entry is destroyed.
+  base::WeakPtr<SidePanelEntry> current_entry_;
 
   // Used to update SidePanelEntry options in the header_combobox_ based on
   // their availability in the observed side panel registries.
   std::unique_ptr<SidePanelComboboxModel> combobox_model_;
   raw_ptr<views::Combobox> header_combobox_ = nullptr;
-
-  // Used to coordinate the "Read Anything" component, instantiated in
-  // CreateReadAnythingWebView.
-  std::unique_ptr<ReadAnythingCoordinator> read_anything_coordinator_;
 
   // TODO(pbos): Add awareness of tab registries here. This probably needs to
   // know the tab registry it's currently monitoring.

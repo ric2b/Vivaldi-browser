@@ -144,6 +144,7 @@ class CORE_EXPORT HTMLLinkElement final : public HTMLElement,
   void SetToPendingState() override;
   void FinishParsingChildren() override;
   bool HasActivationBehavior() const override;
+  bool IsPotentiallyRenderBlocking() const override;
 
   // From LinkLoaderClient
   void LinkLoaded() override;

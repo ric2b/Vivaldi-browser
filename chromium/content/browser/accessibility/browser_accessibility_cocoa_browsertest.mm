@@ -204,7 +204,8 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   ASSERT_NE(nil, cocoa_text);
 
   NSPoint position = [[cocoa_text position] pointValue];
-  NSSize size = [[cocoa_text size] sizeValue];
+
+  NSSize size = cocoa_text.accessibilityFrame.size;
   NSRect frame = NSMakeRect(position.x, position.y, size.width, size.height);
 
   NSPoint p0_before = position;
@@ -488,7 +489,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   BrowserAccessibility* table = manager->GetRoot()->PlatformGetChild(0);
   base::scoped_nsobject<BrowserAccessibilityCocoa> table_obj(
       [table->GetNativeViewAccessible() retain]);
-  NSArray* row_nodes = [table_obj rows];
+  NSArray* row_nodes = [table_obj accessibilityRows];
 
   EXPECT_EQ(3U, [row_nodes count]);
   EXPECT_NSEQ(@"AXRow", [row_nodes[0] role]);
@@ -541,7 +542,7 @@ IN_PROC_BROWSER_TEST_F(BrowserAccessibilityCocoaBrowserTest,
   EXPECT_NSEQ(@"AXColumn", [col_obj role]);
   EXPECT_NSEQ(@"column1", [col_obj accessibilityLabel]);
 
-  NSArray* row_nodes = [col_obj rows];
+  NSArray* row_nodes = [col_obj accessibilityRows];
   EXPECT_NSEQ(@"AXRow", [row_nodes[0] role]);
   EXPECT_NSEQ(@"row1", [row_nodes[0] accessibilityLabel]);
 

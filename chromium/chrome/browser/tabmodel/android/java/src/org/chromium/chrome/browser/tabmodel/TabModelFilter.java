@@ -301,10 +301,10 @@ public abstract class TabModelFilter implements TabModelObserver, TabList {
     }
 
     @Override
-    public void allTabsClosureCommitted() {
+    public void allTabsClosureCommitted(boolean isIncognito) {
         if (!shouldNotifyObservers()) return; // Vivaldi
         for (TabModelObserver observer : mFilteredObservers) {
-            observer.allTabsClosureCommitted();
+            observer.allTabsClosureCommitted(isIncognito);
         }
     }
 

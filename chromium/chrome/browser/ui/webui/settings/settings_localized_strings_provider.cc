@@ -92,7 +92,7 @@
 #include "ui/strings/grit/ui_strings.h"
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -112,7 +112,7 @@
 #include "ui/accessibility/accessibility_features.h"
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
 #endif
 
@@ -144,6 +144,25 @@
 namespace settings {
 namespace {
 
+#if defined(VIVALDI_BUILD)
+void AddVivaldiStrings(content::WebUIDataSource* html_source) {
+  static constexpr webui::LocalizedString kLocalizedStrings[] = {
+      {"siteSettingsAutoplay", IDS_SITE_SETTINGS_TYPE_AUTOPLAY},
+      {"siteSettingsAutoplayDescription",
+       IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_DESCRIPTION},
+      {"siteSettingsAutoplayAllowed",
+       IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_ALLOWED},
+      {"siteSettingsAutoplayBlocked",
+       IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_BLOCKED},
+      {"siteSettingsAutoplayAllowedExceptions",
+       IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_ALLOWED_EXCEPTIONS},
+      {"siteSettingsAutoplayBlockedExceptions",
+       IDS_SETTINGS_SITE_SETTINGS_AUTOPLAY_BLOCKED_EXCEPTIONS},
+  };
+  html_source->AddLocalizedStrings(kLocalizedStrings);
+}
+#endif  // VIVALDI_BUILD
+
 void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"add", IDS_ADD},
@@ -164,6 +183,7 @@ void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
     {"extensionsLinkTooltip", IDS_SETTINGS_MENU_EXTENSIONS_LINK_TOOLTIP},
     {"fonts", IDS_SETTINGS_FONTS},
     {"learnMore", IDS_LEARN_MORE},
+    {"manage", IDS_SETTINGS_MANAGE},
     {"menu", IDS_MENU},
     {"menuButtonLabel", IDS_SETTINGS_MENU_BUTTON_LABEL},
     {"moreActions", IDS_SETTINGS_MORE_ACTIONS},
@@ -209,7 +229,7 @@ void AddCommonStrings(content::WebUIDataSource* html_source, Profile* profile) {
       user_manager::UserManager::Get()->IsLoggedInAsGuest() ||
           user_manager::UserManager::Get()->IsLoggedInAsPublicAccount());
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-      chromeos::LacrosService::Get()->init_params()->session_type ==
+      chromeos::BrowserInitParams::Get()->session_type ==
               crosapi::mojom::SessionType::kPublicSession ||
           profile->IsGuestSession());
 #else
@@ -366,6 +386,7 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
     {"serifFont", IDS_SETTINGS_SERIF_FONT_LABEL},
     {"sansSerifFont", IDS_SETTINGS_SANS_SERIF_FONT_LABEL},
     {"fixedWidthFont", IDS_SETTINGS_FIXED_WIDTH_FONT_LABEL},
+    {"mathFont", IDS_SETTINGS_MATH_FONT_LABEL},
     {"minimumFont", IDS_SETTINGS_MINIMUM_FONT_SIZE_LABEL},
     {"tiny", IDS_SETTINGS_TINY_FONT_SIZE},
     {"huge", IDS_SETTINGS_HUGE_FONT_SIZE},
@@ -411,45 +432,48 @@ void AddAppearanceStrings(content::WebUIDataSource* html_source,
 void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source,
                                  Profile* profile) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
-      {"clearTimeRange", IDS_SETTINGS_CLEAR_PERIOD_TITLE},
-      {"clearBrowsingDataWithSync", IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC},
-      {"clearBrowsingDataWithSyncError",
-       IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_ERROR},
-      {"clearBrowsingDataWithSyncPassphraseError",
-       IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PASSPHRASE_ERROR},
-      {"clearBrowsingDataWithSyncPaused",
-       IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PAUSED},
-      {"clearBrowsingHistory", IDS_SETTINGS_CLEAR_BROWSING_HISTORY},
-      {"clearBrowsingHistorySummary",
-       IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY},
-      {"clearBrowsingHistorySummarySignedInNoLink",
-       IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN_NO_LINK},
-      {"clearDownloadHistory", IDS_SETTINGS_CLEAR_DOWNLOAD_HISTORY},
-      {"clearCache", IDS_SETTINGS_CLEAR_CACHE},
-      {"clearCookies", IDS_SETTINGS_CLEAR_COOKIES},
-      {"clearCookiesSummary",
-       IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC},
-      {"clearCookiesSummarySignedIn",
-       IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC_WITH_EXCEPTION},
-      {"clearCookiesCounter", IDS_DEL_COOKIES_COUNTER},
-      {"clearPasswords", IDS_SETTINGS_CLEAR_PASSWORDS},
-      {"clearFormData", IDS_SETTINGS_CLEAR_FORM_DATA},
-      {"clearHostedAppData", IDS_SETTINGS_CLEAR_HOSTED_APP_DATA},
-      {"clearPeriodHour", IDS_SETTINGS_CLEAR_PERIOD_HOUR},
-      {"clearPeriod24Hours", IDS_SETTINGS_CLEAR_PERIOD_24_HOURS},
-      {"clearPeriod7Days", IDS_SETTINGS_CLEAR_PERIOD_7_DAYS},
-      {"clearPeriod4Weeks", IDS_SETTINGS_CLEAR_PERIOD_FOUR_WEEKS},
-      {"clearPeriodEverything", IDS_SETTINGS_CLEAR_PERIOD_EVERYTHING},
-      {"historyDeletionDialogTitle",
-       IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE},
-      {"historyDeletionDialogOK", IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_OK},
-      {"passwordsDeletionDialogTitle",
-       IDS_CLEAR_BROWSING_DATA_PASSWORDS_NOTICE_TITLE},
-      {"passwordsDeletionDialogOK",
-       IDS_CLEAR_BROWSING_DATA_PASSWORDS_NOTICE_OK},
-      {"installedAppsConfirm", IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_CONFIRM},
-      {"installedAppsTitle", IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_TITLE},
-      {"notificationWarning", IDS_SETTINGS_NOTIFICATION_WARNING},
+    {"clearTimeRange", IDS_SETTINGS_CLEAR_PERIOD_TITLE},
+    {"clearBrowsingDataWithSync", IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC},
+    {"clearBrowsingDataWithSyncError",
+     IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_ERROR},
+    {"clearBrowsingDataWithSyncPassphraseError",
+     IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PASSPHRASE_ERROR},
+    {"clearBrowsingDataWithSyncPaused",
+     IDS_SETTINGS_CLEAR_BROWSING_DATA_WITH_SYNC_PAUSED},
+    {"clearBrowsingHistory", IDS_SETTINGS_CLEAR_BROWSING_HISTORY},
+    {"clearBrowsingHistorySummary",
+     IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY},
+    {"clearBrowsingHistorySummarySignedInNoLink",
+     IDS_SETTINGS_CLEAR_BROWSING_HISTORY_SUMMARY_SIGNED_IN_NO_LINK},
+    {"clearDownloadHistory", IDS_SETTINGS_CLEAR_DOWNLOAD_HISTORY},
+    {"clearCache", IDS_SETTINGS_CLEAR_CACHE},
+    {"clearCookies", IDS_SETTINGS_CLEAR_COOKIES},
+    {"clearCookiesSummary",
+     IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC},
+    {"clearCookiesSummarySignedIn",
+     IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC_WITH_EXCEPTION},
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+    {"clearCookiesSummarySignedInMainProfile",
+     IDS_SETTINGS_CLEAR_COOKIES_AND_SITE_DATA_SUMMARY_BASIC_MAIN_PROFILE},
+#endif
+    {"clearCookiesCounter", IDS_DEL_COOKIES_COUNTER},
+    {"clearPasswords", IDS_SETTINGS_CLEAR_PASSWORDS},
+    {"clearFormData", IDS_SETTINGS_CLEAR_FORM_DATA},
+    {"clearHostedAppData", IDS_SETTINGS_CLEAR_HOSTED_APP_DATA},
+    {"clearPeriodHour", IDS_SETTINGS_CLEAR_PERIOD_HOUR},
+    {"clearPeriod24Hours", IDS_SETTINGS_CLEAR_PERIOD_24_HOURS},
+    {"clearPeriod7Days", IDS_SETTINGS_CLEAR_PERIOD_7_DAYS},
+    {"clearPeriod4Weeks", IDS_SETTINGS_CLEAR_PERIOD_FOUR_WEEKS},
+    {"clearPeriodEverything", IDS_SETTINGS_CLEAR_PERIOD_EVERYTHING},
+    {"historyDeletionDialogTitle",
+     IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_TITLE},
+    {"historyDeletionDialogOK", IDS_CLEAR_BROWSING_DATA_HISTORY_NOTICE_OK},
+    {"passwordsDeletionDialogTitle",
+     IDS_CLEAR_BROWSING_DATA_PASSWORDS_NOTICE_TITLE},
+    {"passwordsDeletionDialogOK", IDS_CLEAR_BROWSING_DATA_PASSWORDS_NOTICE_OK},
+    {"installedAppsConfirm", IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_CONFIRM},
+    {"installedAppsTitle", IDS_SETTINGS_CLEAR_INSTALLED_APPS_DATA_TITLE},
+    {"notificationWarning", IDS_SETTINGS_NOTIFICATION_WARNING},
   };
 
   html_source->AddString(
@@ -478,7 +502,7 @@ void AddClearBrowsingDataStrings(content::WebUIDataSource* html_source,
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
 void AddDefaultBrowserStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"defaultBrowser", IDS_SETTINGS_DEFAULT_BROWSER},
@@ -706,7 +730,7 @@ void AddResetStrings(content::WebUIDataSource* html_source, Profile* profile) {
                          chrome::kAutomaticSettingsResetLearnMoreURL);
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
 void AddImportDataStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
       {"importTitle", IDS_SETTINGS_IMPORT_SETTINGS_TITLE},
@@ -733,7 +757,6 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"languagesPageTitle", IDS_SETTINGS_LANGUAGES_PAGE_TITLE},
-    {"languagesListTitle", IDS_SETTINGS_LANGUAGES_LANGUAGES_LIST_TITLE},
     {"searchLanguages", IDS_SETTINGS_LANGUAGE_SEARCH},
     {"languagesExpandA11yLabel",
      IDS_SETTINGS_LANGUAGES_EXPAND_ACCESSIBILITY_LABEL},
@@ -807,7 +830,7 @@ void AddLanguagesStrings(content::WebUIDataSource* html_source,
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 }
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 void AddChromeOSSettingsStrings(content::WebUIDataSource* html_source) {
   html_source->AddString(
       "osSettingsBannerText",
@@ -853,12 +876,11 @@ bool IsFidoAuthenticationAvailable(autofill::PersonalDataManager* personal_data,
   if (!autofill_driver_factory)
     return false;
   autofill::ContentAutofillDriver* autofill_driver =
-      autofill_driver_factory->DriverForFrame(web_contents->GetMainFrame());
+      autofill_driver_factory->DriverForFrame(
+          web_contents->GetPrimaryMainFrame());
   if (!autofill_driver)
     return false;
-  autofill::BrowserAutofillManager* autofill_manager =
-      autofill_driver->browser_autofill_manager();
-  if (!autofill_manager)
+  if (!autofill_driver->autofill_manager())
     return false;
 
   // Show the toggle switch only if FIDO authentication is available. Once
@@ -1030,6 +1052,7 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"editPasswordUsernameLabel", IDS_SETTINGS_PASSWORDS_USERNAME},
       {"editPasswordPasswordLabel", IDS_SETTINGS_PASSWORDS_PASSWORD},
       {"passwordNoteLabel", IDS_SETTINGS_PASSWORDS_NOTE},
+      {"passwordNoNoteAdded", IDS_SETTINGS_PASSWORDS_NO_NOTE_ADDED},
       {"passwordNoteCharacterCount",
        IDS_SETTINGS_PASSWORDS_NOTE_CHARACTER_COUNT},
       {"passwordNoteCharacterCountWarning",
@@ -1053,6 +1076,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"passwordDeletedFromAccountAndDevice",
        IDS_SETTINGS_PASSWORD_DELETED_PASSWORD_FROM_ACCOUNT_AND_DEVICE},
       {"passwordCopiedToClipboard", IDS_SETTINGS_PASSWORD_COPIED_TO_CLIPBOARD},
+      {"passwordUsernameCopiedToClipboard",
+       IDS_SETTINGS_PASSWORD_USERNAME_COPIED_TO_CLIPBOARD},
       {"passwordMovePasswordsToAccount",
        IDS_SETTINGS_PASSWORD_MOVE_PASSWORDS_TO_ACCOUNT},
       {"passwordMovePasswordsToAccountDialogBodyText",
@@ -1089,6 +1114,8 @@ void AddAutofillStrings(content::WebUIDataSource* html_source,
       {"passwordRowMoreActionsButton", IDS_SETTINGS_PASSWORD_ROW_MORE_ACTIONS},
       {"passwordRowFederatedMoreActionsButton",
        IDS_SETTINGS_PASSWORD_ROW_FEDERATED_MORE_ACTIONS},
+      {"passwordRowPasswordDetailPageButton",
+       IDS_SETTINGS_PASSWORD_ROW_PASSWORD_DETAIL_PAGE},
       {"exportPasswordsTitle", IDS_SETTINGS_PASSWORDS_EXPORT_TITLE},
       {"exportPasswordsDescription", IDS_SETTINGS_PASSWORDS_EXPORT_DESCRIPTION},
       {"exportPasswords", IDS_SETTINGS_PASSWORDS_EXPORT},
@@ -1422,7 +1449,7 @@ void AddPeopleStrings(content::WebUIDataSource* html_source, Profile* profile) {
   AddSignOutDialogStrings(html_source, profile);
   AddSyncControlsStrings(html_source);
   AddSyncAccountControlStrings(html_source);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   AddPasswordPromptDialogStrings(html_source);
 #endif
   AddSyncPageStrings(html_source);
@@ -1542,7 +1569,7 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_NETWORK_PREDICTION_ENABLED_DESC},
     {"networkPredictionEnabledDescCookiesPage",
      IDS_SETTINGS_NETWORK_PREDICTION_ENABLED_DESC_COOKIES_PAGE},
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
     {"openChromeOSSecureDnsSettingsLabel",
      IDS_SETTINGS_SECURE_DNS_OPEN_CHROME_OS_SETTINGS_LABEL},
 #endif
@@ -1587,7 +1614,7 @@ void AddPrivacyStrings(content::WebUIDataSource* html_source,
   bool link_secure_dns = ShouldLinkSecureDnsOsSettings();
   html_source->AddBoolean("showSecureDnsSetting",
                           show_secure_dns && !link_secure_dns);
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   html_source->AddBoolean("showSecureDnsSettingLink",
                           show_secure_dns && link_secure_dns);
   html_source->AddString(
@@ -1816,6 +1843,8 @@ void AddPrivacyGuideStrings(content::WebUIDataSource* html_source) {
        IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_HEADER},
       {"privacyGuideCompletionCardSubHeader",
        IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_SUB_HEADER},
+      {"privacyGuideCompletionCardSubHeaderNoLinks",
+       IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_SUB_HEADER_NO_LINKS},
       {"privacyGuideCompletionCardLeaveButton",
        IDS_SETTINGS_PRIVACY_GUIDE_COMPLETION_CARD_LEAVE_BUTTON},
       {"privacyGuideCompletionCardPrivacySandboxLabel",
@@ -2131,6 +2160,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"cookiePageBlockAllBulTwo", IDS_SETTINGS_COOKIES_BLOCK_ALL_BULLET_TWO},
     {"cookiePageBlockAllBulThree", IDS_SETTINGS_COOKIES_BLOCK_ALL_BULLET_THREE},
     {"cookiePageClearOnExit", IDS_SETTINGS_COOKIES_CLEAR_ON_EXIT},
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+    {"cookiePageClearOnExitDesc", IDS_SETTINGS_COOKIES_CLEAR_ON_EXIT_DESC},
+#endif
     {"cookiePageAllSitesLink", IDS_SETTINGS_COOKIES_ALL_SITES_LINK},
     {"cookiePageAllowExceptions", IDS_SETTINGS_COOKIES_ALLOW_EXCEPTIONS},
     {"cookiePageBlockExceptions", IDS_SETTINGS_COOKIES_BLOCK_EXCEPTIONS},
@@ -2139,6 +2171,8 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
     {"cookiesManageSiteSpecificExceptions",
      IDS_SETTINGS_COOKIES_SITE_SPECIFIC_EXCEPTIONS},
     {"siteSettingsCategoryCookies", IDS_SITE_SETTINGS_TYPE_COOKIES},
+    {"siteSettingsCategoryFederatedIdentityApi",
+     IDS_SITE_SETTINGS_TYPE_FEDERATED_IDENTITY_API},
     {"siteSettingsCategoryHandlers", IDS_SITE_SETTINGS_TYPE_HANDLERS},
     {"siteSettingsCategoryImages", IDS_SITE_SETTINGS_TYPE_IMAGES},
     {"siteSettingsCategoryInsecureContent",
@@ -2241,7 +2275,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_BLOCKED},
     {"siteSettingsProtectedContentBlockedSubLabel",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_BLOCKED_SUB_LABEL},
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_WIN)
+#if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_WIN)
     {"siteSettingsProtectedContentIdentifiersExplanation",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_EXPLANATION},
     {"siteSettingsProtectedContentEnableIdentifiers",
@@ -2256,6 +2290,10 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_ALLOWED_EXCEPTIONS},
     {"siteSettingsProtectedContentIdentifiersBlockedExceptions",
      IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_BLOCKED_EXCEPTIONS},
+#endif
+#if BUILDFLAG(IS_WIN) && BUILDFLAG(GOOGLE_CHROME_BRANDING)
+    {"siteSettingsProtectedContentIdentifiersAllowedSubLabel",
+     IDS_SETTINGS_SITE_SETTINGS_PROTECTED_CONTENT_IDENTIFIERS_ALLOWED_SUB_LABEL},
 #endif
     {"siteSettingsPopups", IDS_SITE_SETTINGS_TYPE_POPUPS_REDIRECTS},
     {"siteSettingsPopupsMidSentence",
@@ -2578,6 +2616,20 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
      IDS_SETTINGS_SITE_SETTINGS_DEVICE_USE_ALLOWED_EXCEPTIONS},
     {"siteSettingsDeviceUseBlockedExceptions",
      IDS_SETTINGS_SITE_SETTINGS_DEVICE_USE_BLOCKED_EXCEPTIONS},
+    {"siteSettingsFederatedIdentityApi",
+     IDS_SITE_SETTINGS_TYPE_FEDERATED_IDENTITY_API},
+    {"siteSettingsFederatedIdentityApiAllowed",
+     IDS_SETTINGS_SITE_SETTINGS_FEDERATED_IDENTITY_API_ALLOWED},
+    {"siteSettingsFederatedIdentityApiBlocked",
+     IDS_SETTINGS_SITE_SETTINGS_FEDERATED_IDENTITY_API_BLOCKED},
+    {"siteSettingsFederatedIdentityApiAllowedExceptions",
+     IDS_SETTINGS_SITE_SETTINGS_FEDERATED_IDENTITY_API_ALLOWED_EXCEPTIONS},
+    {"siteSettingsFederatedIdentityApiBlockedExceptions",
+     IDS_SETTINGS_SITE_SETTINGS_FEDERATED_IDENTITY_API_BLOCKED_EXCEPTIONS},
+    {"siteSettingsFederatedIdentityApiDescription",
+     IDS_SETTINGS_SITE_SETTINGS_FEDERATED_IDENTITY_API_DESCRIPTION},
+    {"siteSettingsFederatedIdentityApiMidSentence",
+     IDS_SITE_SETTINGS_TYPE_FEDERATED_IDENTITY_API_MID_SENTENCE},
     {"siteSettingsFileSystemWriteDescription",
      IDS_SETTINGS_SITE_SETTINGS_FILE_SYSTEM_WRITE_DESCRIPTION},
     {"siteSettingsFileSystemWriteAllowed",
@@ -2823,6 +2875,9 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
       "enablePaymentHandlerContentSetting",
       base::FeatureList::IsEnabled(features::kServiceWorkerPaymentApps));
 
+  html_source->AddBoolean("enableFederatedIdentityApiContentSetting",
+                          base::FeatureList::IsEnabled(features::kFedCm));
+
   base::CommandLine& cmd = *base::CommandLine::ForCurrentProcess();
   html_source->AddBoolean(
       "enableExperimentalWebPlatformFeatures",
@@ -2849,7 +2904,7 @@ void AddSiteSettingsStrings(content::WebUIDataSource* html_source,
 void AddSystemStrings(content::WebUIDataSource* html_source) {
   static constexpr webui::LocalizedString kLocalizedStrings[] = {
     {"systemPageTitle", IDS_SETTINGS_SYSTEM},
-#if !defined(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_CHROMEOS_LACROS)
     {"backgroundAppsLabel", IDS_SETTINGS_SYSTEM_BACKGROUND_APPS_LABEL},
 #endif
 #if !BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -3031,9 +3086,6 @@ void AddSecurityKeysStrings(content::WebUIDataSource* html_source) {
                           !win_native_api_available);
   html_source->AddBoolean("enableSecurityKeysBioEnrollment",
                           !win_native_api_available);
-  html_source->AddBoolean(
-      "enableSecurityKeysPhonesSubpage",
-      base::FeatureList::IsEnabled(device::kWebAuthPhoneSupport));
 }
 
 void AddIPHStrings(content::WebUIDataSource* html_source) {
@@ -3074,7 +3126,7 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
   AddSearchStrings(html_source);
   AddSiteSettingsStrings(html_source, profile);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   AddChromeOSSettingsStrings(html_source);
 #else
   AddDefaultBrowserStrings(html_source);
@@ -3091,6 +3143,10 @@ void AddLocalizedStrings(content::WebUIDataSource* html_source,
 
   policy_indicator::AddLocalizedStrings(html_source);
   AddSecurityKeysStrings(html_source);
+
+#if defined(VIVALDI_BUILD)
+  AddVivaldiStrings(html_source);
+#endif  // VIVALDI_BUILD
 
   html_source->UseStringsJs();
 }

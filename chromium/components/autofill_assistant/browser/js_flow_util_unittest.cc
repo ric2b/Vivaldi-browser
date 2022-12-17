@@ -145,7 +145,7 @@ TEST(JsFlowUtilTest, ExtractFlowReturnValue) {
   std::unique_ptr<base::Value> out_flow_value;
   ClientStatus status = ExtractFlowReturnValue(
       devtools_status, devtools_result.get(), out_flow_value,
-      /* js_line_offset= */ 0, /* num_stack_entries_to_drop= */ 0);
+      /* js_line_offsets= */ {}, /* num_stack_entries_to_drop= */ 0);
   EXPECT_TRUE(status.ok());
   EXPECT_EQ(*out_flow_value, base::Value(12345));
 }
@@ -250,6 +250,23 @@ TEST(JsFlowUtilTest, NativeActionResultToResultValueHasSerializedActionResult) {
           "actionSpecificResult": ")" + wait_for_dom_result_base64 + "\"}")));
 }
 
+TEST(JsFlowUtilTest, NativeActionResultToResultValueHasAutofillErrorInfo) {
+  ProcessedActionProto processed_action;
+  AutofillErrorInfoProto* autofill_error_info =
+      processed_action.mutable_status_details()->mutable_autofill_error_info();
+  autofill_error_info->set_client_memory_address_key_names("key_names");
+
+  std::string autofill_error_info_base64;
+  base::Base64Encode(autofill_error_info->SerializeAsString(),
+                     &autofill_error_info_base64);
+
+  EXPECT_THAT(
+      NativeActionResultToResultValue(processed_action), Pointee(IsJson(R"(
+        {
+          "navigationStarted": false,
+          "autofillErrorInfo": ")" + autofill_error_info_base64 + "\"}")));
+}
+
 TEST(JsFlowUtilTest, NativeActionResultToResultValueHasEmptyActionResult) {
   ProcessedActionProto processed_action;
 
@@ -257,6 +274,23 @@ TEST(JsFlowUtilTest, NativeActionResultToResultValueHasEmptyActionResult) {
               Pointee(IsJson(R"(
         { "navigationStarted": false }
   )")));
+}
+
+TEST(JsFlowUtilTest, ExceptionLocationToDevtoolsUrlMapping) {
+  const std::string url =
+      GetDevtoolsSourceUrl(UnexpectedErrorInfoProto::JS_FLOW);
+  EXPECT_THAT(GetExceptionLocation(url), UnexpectedErrorInfoProto::JS_FLOW);
+}
+
+TEST(JsFlowUtilTest, UnknownUrl) {
+  EXPECT_THAT(GetExceptionLocation("SOME_STRING"),
+              UnexpectedErrorInfoProto::UNKNOWN);
+}
+
+TEST(JsFlowUtilTest, GetDevtoolsSourceUrlCommentToAppend) {
+  EXPECT_THAT(GetDevtoolsSourceUrlCommentToAppend(
+                  UnexpectedErrorInfoProto::JS_FLOW_LIBRARY),
+              "\n//# sourceURL=JS_FLOW_LIBRARY");
 }
 
 }  // namespace

@@ -50,6 +50,7 @@
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/content_switches.h"
+#include "content/public/common/url_constants.h"
 #include "content/public/common/webplugininfo.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -3763,6 +3764,58 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, UpdateSiteForCookies) {
                                 site_a.GetURL("a.test", "/")));
 }
 
+// Tests that if `update_first_party_url_on_redirect` is set to false, download
+// will not behave like a top-level frame navigation and SameSite=Strict cookies
+// will not be set on a redirection.
+IN_PROC_BROWSER_TEST_F(
+    DownloadContentTest,
+    SiteForCookies_DownloadUrl_NotUpdateFirstPartyUrlOnRedirect) {
+  net::EmbeddedTestServer site_a;
+  net::EmbeddedTestServer site_b;
+
+  base::StringPairs cookie_headers;
+  cookie_headers.push_back(std::make_pair(
+      std::string("Set-Cookie"), std::string("A=strict; SameSite=Strict")));
+  cookie_headers.push_back(std::make_pair(std::string("Set-Cookie"),
+                                          std::string("B=lax; SameSite=Lax")));
+
+  // This will request a URL on b.test, which redirects to a url that sets the
+  // cookies on a.test.
+  site_a.RegisterRequestHandler(CreateBasicResponseHandler(
+      "/sets-samesite-cookies", net::HTTP_OK, cookie_headers,
+      "application/octet-stream", "abcd"));
+  ASSERT_TRUE(site_a.Start());
+  site_b.RegisterRequestHandler(
+      CreateRedirectHandler("/redirected-download",
+                            site_a.GetURL("a.test", "/sets-samesite-cookies")));
+  ASSERT_TRUE(site_b.Start());
+
+  // Download the file.
+  SetupEnsureNoPendingDownloads();
+  std::unique_ptr<download::DownloadUrlParameters> download_parameters(
+      DownloadRequestUtils::CreateDownloadForWebContentsMainFrame(
+          shell()->web_contents(),
+          site_b.GetURL("b.test", "/redirected-download"),
+          TRAFFIC_ANNOTATION_FOR_TESTS));
+  download_parameters->set_update_first_party_url_on_redirect(false);
+  std::unique_ptr<DownloadTestObserver> observer(CreateWaiter(shell(), 1));
+  DownloadManagerForShell(shell())->DownloadUrl(std::move(download_parameters));
+  observer->WaitForFinished();
+
+  // Get the important info from other threads and check it.
+  EXPECT_TRUE(EnsureNoPendingDownloads());
+
+  std::vector<download::DownloadItem*> downloads;
+  DownloadManagerForShell(shell())->GetAllDownloads(&downloads);
+  ASSERT_EQ(1u, downloads.size());
+  ASSERT_EQ(download::DownloadItem::COMPLETE, downloads[0]->GetState());
+
+  // Check that the cookies were not set on a.test.
+  EXPECT_EQ("",
+            content::GetCookies(shell()->web_contents()->GetBrowserContext(),
+                                site_a.GetURL("a.test", "/")));
+}
+
 // Verifies that isolation info set in DownloadUrlParameters can be populated.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest,
                        SiteForCookies_DownloadUrl_IsolationInfoPopulated) {
@@ -4839,8 +4892,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, FetchErrorResponseBodyResumption) {
 
 // Verify WebUI download will success with an associated renderer process.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadFromWebUI) {
-  GURL webui_url(
-      GetWebUIURL("resources/images/apps/topbar_button_maximize.png"));
+  GURL webui_url(GetWebUIURL("resources/images/error.svg"));
   EXPECT_TRUE(NavigateToURL(shell(), webui_url));
   SetupEnsureNoPendingDownloads();
 
@@ -4863,7 +4915,7 @@ IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadFromWebUI) {
 // Verify WebUI download will gracefully fail without an associated renderer
 // process.
 IN_PROC_BROWSER_TEST_F(DownloadContentTest, DownloadFromWebUIWithoutRenderer) {
-  GURL webui_url("chrome://resources/images/apps/topbar_button_maximize.png");
+  GURL webui_url("chrome://resources/images/error.svg");
   EXPECT_TRUE(NavigateToURL(shell(), webui_url));
   SetupEnsureNoPendingDownloads();
 

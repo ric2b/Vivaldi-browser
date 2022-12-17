@@ -91,6 +91,8 @@ void MediaRouterDialogControllerViews::CreateMediaRouterDialog(
 
   if (dialog_creation_callback_)
     dialog_creation_callback_.Run();
+
+  MediaRouterMetrics::RecordMediaRouterDialogOrigin(activation_location);
 }
 
 void MediaRouterDialogControllerViews::CloseMediaRouterDialog() {
@@ -104,14 +106,15 @@ bool MediaRouterDialogControllerViews::IsShowingMediaRouterDialog() const {
 void MediaRouterDialogControllerViews::Reset() {
   // If |ui_| is null, Reset() has already been called.
   if (ui_) {
-    if (IsShowingMediaRouterDialog() && GetActionController())
+    if (GetActionController())
       GetActionController()->OnDialogHidden();
     ui_.reset();
     MediaRouterDialogController::Reset();
   }
 }
 
-void MediaRouterDialogControllerViews::OnWidgetClosing(views::Widget* widget) {
+void MediaRouterDialogControllerViews::OnWidgetDestroying(
+    views::Widget* widget) {
   DCHECK(scoped_widget_observations_.IsObservingSource(widget));
   if (ui_)
     ui_->LogMediaSinkStatus();
@@ -144,13 +147,11 @@ void MediaRouterDialogControllerViews::OnServiceDisabled() {
 }
 
 void MediaRouterDialogControllerViews::InitializeMediaRouterUI() {
-  ui_ = std::make_unique<MediaRouterUI>(initiator());
-  if (start_presentation_context_) {
-    ui_->InitWithStartPresentationContextAndMirroring(
-        std::move(start_presentation_context_));
-  } else {
-    ui_->InitWithDefaultMediaSourceAndMirroring();
-  }
+  ui_ = start_presentation_context_
+            ? MediaRouterUI::CreateWithStartPresentationContextAndMirroring(
+                  initiator(), std::move(start_presentation_context_))
+            : MediaRouterUI::CreateWithDefaultMediaSourceAndMirroring(
+                  initiator());
 }
 
 void MediaRouterDialogControllerViews::ShowGlobalMeidaControlsDialog(

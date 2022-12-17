@@ -37,14 +37,9 @@ class TestLayerTreeFrameSinkClient {
 
   virtual std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
   CreateDisplayController() = 0;
-  virtual std::unique_ptr<viz::SkiaOutputSurface>
-  CreateDisplaySkiaOutputSurface(
+  virtual std::unique_ptr<viz::SkiaOutputSurface> CreateSkiaOutputSurface(
       viz::DisplayCompositorMemoryAndTaskController*) = 0;
-
-  // This passes the ContextProvider being used by LayerTreeHostImpl which
-  // can be used for the OutputSurface optionally.
-  virtual std::unique_ptr<viz::OutputSurface> CreateDisplayOutputSurface(
-      scoped_refptr<viz::ContextProvider> compositor_context_provider) = 0;
+  virtual std::unique_ptr<viz::OutputSurface> CreateSoftwareOutputSurface() = 0;
 
   virtual void DisplayReceivedLocalSurfaceId(
       const viz::LocalSurfaceId& local_surface_id) = 0;
@@ -173,7 +168,7 @@ class TestLayerTreeFrameSink : public LayerTreeFrameSink,
   raw_ptr<TestLayerTreeFrameSinkClient> test_client_ = nullptr;
   gfx::Size enlarge_pass_texture_amount_;
 
-  TaskRunnerProvider* task_runner_provider_;
+  raw_ptr<TaskRunnerProvider> task_runner_provider_;
 
   // The set of SharedBitmapIds that have been reported as allocated to this
   // interface. On closing this interface, the display compositor should drop

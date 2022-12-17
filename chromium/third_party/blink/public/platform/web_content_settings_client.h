@@ -114,6 +114,10 @@ class WebContentSettingsClient {
   // frame.
   virtual bool ShouldAutoupgradeMixedContent() { return true; }
 
+#if defined(VIVALDI_BUILD)
+  virtual bool AllowAutoplay(bool play_requested) { return true; }
+#endif  // defined(VIVALDI_BUILD)
+
   virtual ~WebContentSettingsClient() = default;
 };
 

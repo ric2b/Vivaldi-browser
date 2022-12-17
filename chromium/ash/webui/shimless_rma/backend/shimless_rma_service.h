@@ -7,12 +7,15 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "ash/webui/shimless_rma/backend/version_updater.h"
 #include "ash/webui/shimless_rma/mojom/shimless_rma.mojom.h"
-#include "chromeos/dbus/rmad/rmad.pb.h"
-#include "chromeos/dbus/rmad/rmad_client.h"
+#include "base/containers/flat_set.h"
+#include "chromeos/ash/components/dbus/rmad/rmad.pb.h"
+#include "chromeos/ash/components/dbus/rmad/rmad_client.h"
 #include "chromeos/dbus/update_engine/update_engine.pb.h"
+#include "chromeos/services/network_config/public/mojom/cros_network_config.mojom.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/receiver.h"
 #include "mojo/public/cpp/bindings/remote_set.h"
@@ -24,7 +27,7 @@ namespace shimless_rma {
 class ShimlessRmaDelegate;
 
 class ShimlessRmaService : public mojom::ShimlessRmaService,
-                           public chromeos::RmadClient::Observer {
+                           public RmadClient::Observer {
  public:
   ShimlessRmaService(
       std::unique_ptr<ShimlessRmaDelegate> shimless_rma_delegate);
@@ -41,6 +44,7 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
 
   void BeginFinalization(BeginFinalizationCallback callback) override;
 
+  void TrackConfiguredNetworks() override;
   void NetworkSelectionComplete(
       NetworkSelectionCompleteCallback callback) override;
 
@@ -48,6 +52,7 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
   void CheckForOsUpdates(CheckForOsUpdatesCallback callback) override;
   void UpdateOs(UpdateOsCallback callback) override;
   void UpdateOsSkipped(UpdateOsSkippedCallback callback) override;
+  VersionUpdater* GetVersionUpdaterForTesting();
 
   void SetSameOwner(SetSameOwnerCallback callback) override;
   void SetDifferentOwner(SetDifferentOwnerCallback callback) override;
@@ -130,6 +135,7 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
       WriteProtectManuallyEnabledCallback callback) override;
 
   void GetLog(GetLogCallback callback) override;
+  void SaveLog(SaveLogCallback callback) override;
   void GetPowerwashRequired(GetPowerwashRequiredCallback callback) override;
   void LaunchDiagnostics() override;
   void EndRma(rmad::RepairCompleteState::ShutdownMethod shutdown_method,
@@ -181,20 +187,48 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
                         double progress,
                         update_engine::ErrorCode error_code);
 
+  // Sends a metric to the platform side when the Diagnostics app is launched.
+  void SendMetricOnLaunchDiagnostics();
+
+  // Sends a metric to the platform side when an OS update is requested.
+  void SendMetricOnUpdateOs();
+
  private:
   using TransitionStateCallback =
-      base::OnceCallback<void(mojom::State, bool, bool, rmad::RmadErrorCode)>;
+      base::OnceCallback<void(mojom::StateResultPtr)>;
+
+  mojom::StateResultPtr CreateStateResult(mojom::State,
+                                          bool can_exit,
+                                          bool can_go_back,
+                                          rmad::RmadErrorCode);
+  mojom::StateResultPtr CreateStateResultForInvalidRequest();
+
+  enum StateResponseCalledFrom {
+    kTransitPreviousState = 0,
+    kGetCurrentState,
+    kTransitNextState,
+  };
 
   template <class Callback>
   void TransitionNextStateGeneric(Callback callback);
   template <class Callback>
   void OnGetStateResponse(Callback callback,
+                          StateResponseCalledFrom called_from,
                           absl::optional<rmad::GetStateReply> response);
   void OnAbortRmaResponse(AbortRmaCallback callback,
                           bool reboot,
                           absl::optional<rmad::AbortRmaReply> response);
+  void AbortRmaForgetNetworkResponse(
+      AbortRmaCallback callback,
+      bool reboot,
+      absl::optional<rmad::AbortRmaReply> response);
+  void EndRmaForgetNetworkResponse(
+      rmad::RepairCompleteState::ShutdownMethod shutdown_method,
+      EndRmaCallback callback);
   void OnGetLog(GetLogCallback callback,
                 absl::optional<rmad::GetLogReply> response);
+  void OnSaveLog(SaveLogCallback callback,
+                 absl::optional<rmad::SaveLogReply> response);
 
   void OnOsUpdateStatusCallback(update_engine::Operation operation,
                                 double progress,
@@ -206,6 +240,50 @@ class ShimlessRmaService : public mojom::ShimlessRmaService,
 
   void OsUpdateOrNextRmadStateCallback(TransitionStateCallback callback,
                                        const std::string& version);
+
+  // Indicate if user has seen the NetworkPage. It helps to check if user
+  // will skip the NetworkPage when clicking back button.
+  bool user_has_seen_network_page_ = false;
+
+  // Saves existing configured networks to `existing_saved_network_guids_`.
+  void OnTrackConfiguredNetworks(
+      std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
+          networks);
+
+  // Fetches the list of configured networks on RMA completion/exit.
+  void ForgetNewNetworkConnections(base::OnceClosure end_rma_callback);
+
+  // Compares the saved and current list of configured networks and attempts to
+  // drop any new network configurations.
+  void OnForgetNewNetworkConnections(
+      std::vector<chromeos::network_config::mojom::NetworkStatePropertiesPtr>
+          networks);
+
+  // Confirms if the network was dropped. Invokes `end_rma_callback_` once all
+  // the expected networks are dropped.
+  void OnForgetNetwork(const std::string& guid, bool success);
+
+  // Handles responses from the platform to diagnostics requests.
+  void OnMetricsReply(
+      absl::optional<rmad::RecordBrowserActionMetricReply> response);
+
+  // Remote for sending requests to the CrosNetworkConfig service.
+  mojo::Remote<chromeos::network_config::mojom::CrosNetworkConfig>
+      remote_cros_network_config_;
+
+  // The GUIDs of the saved network configurations prior to starting RMA. Needed
+  // to track network connections added during RMA. This only gets created if
+  // the user gets to the `kConfigureNetwork` state.
+  absl::optional<base::flat_set<std::string>> existing_saved_network_guids_;
+
+  // The set of guids for networks to be removed from the device before RMA
+  // exit. After each response from ForgetNetwork(), the corresponding guid is
+  // removed from the set.
+  base::flat_set<std::string> pending_network_guids_to_forget_;
+
+  // The callback invoked once to end RMA when all the expected networks have
+  // been forgotten.
+  base::OnceClosure end_rma_callback_;
 
   rmad::RmadState state_proto_;
   bool can_abort_ = false;

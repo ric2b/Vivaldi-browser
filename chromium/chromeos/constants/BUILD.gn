@@ -20,7 +20,7 @@ component("constants") {
   if (is_chromeos_lacros) {
     deps += [
       "//chromeos/crosapi/mojom",
-      "//chromeos/lacros:lacros",
+      "//chromeos/startup",
     ]
   }
 }
@@ -39,6 +39,7 @@ source_set("unit_tests") {
     deps += [
       "//chromeos/lacros:lacros",
       "//chromeos/lacros:test_support",
+      "//chromeos/startup",
     ]
   }
 }

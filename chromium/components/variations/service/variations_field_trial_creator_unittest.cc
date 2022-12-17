@@ -12,6 +12,7 @@
 #include "base/base_switches.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
@@ -1190,8 +1191,6 @@ TEST_F(FieldTrialCreatorSafeModeExperimentTest, OptOutOfExperiment) {
   EXPECT_FALSE(base::FieldTrialList::IsTrialActive(kExtendedSafeModeTrial));
   EXPECT_FALSE(
       field_trial_creator.was_maybe_extend_variations_safe_mode_called());
-  histogram_tester.ExpectTotalCount(
-      "Variations.ExtendedSafeMode.WritePrefsTime", 0);
 }
 
 INSTANTIATE_TEST_SUITE_P(
@@ -1298,10 +1297,6 @@ TEST_F(FieldTrialCreatorSafeModeExperimentTest,
   EXPECT_EQ(active_group,
             base::FieldTrialList::FindValue(kExtendedSafeModeTrial));
 
-  // Check metrics.
-  histogram_tester.ExpectTotalCount(
-      "Variations.ExtendedSafeMode.WritePrefsTime", 1);
-
   // Verify that the beacon file does not exist.
   EXPECT_FALSE(base::PathExists(
       user_data_dir_path().Append(variations::kVariationsFilename)));
@@ -1342,13 +1337,10 @@ TEST_F(FieldTrialCreatorSafeModeExperimentTest,
   ASSERT_TRUE(
       base::ReadFileToString(variations_file_path, &beacon_file_contents));
   EXPECT_EQ(beacon_file_contents,
-            "{\"monitoring_stage\":2,"
-            "\"user_experience_metrics.stability.exited_cleanly\":false,"
+            "{\"user_experience_metrics.stability.exited_cleanly\":false,"
             "\"variations_crash_streak\":0}");
 
   // Verify metrics.
-  histogram_tester.ExpectTotalCount(
-      "Variations.ExtendedSafeMode.WritePrefsTime", 1);
   histogram_tester.ExpectUniqueSample(
       "Variations.ExtendedSafeMode.BeaconFileWrite", 1, 1);
 }

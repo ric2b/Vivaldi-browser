@@ -46,6 +46,10 @@ bool MenubarMenuParams::Delegate::IsItemChecked(int id) {
   return false;
 }
 
+bool MenubarMenuParams::Delegate::IsItemEnabled(int id) {
+  return true;
+}
+
 bool MenubarMenuParams::Delegate::IsItemPersistent(int id) {
   return false;
 }

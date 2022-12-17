@@ -7,11 +7,13 @@
 
 #include <string>
 
+#include "ash/components/login/session/session_termination_manager.h"
 #include "base/callback_list.h"
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/sequence_checker.h"
 #include "base/task/thread_pool.h"
+#include "chrome/browser/ash/settings/device_settings_service.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
 #include "chrome/browser/metrics/profile_pref_names.h"
 #include "chrome/browser/profiles/profile.h"
@@ -39,7 +41,8 @@ namespace metrics {
 // assumption is only true in Ash Chrome.
 class PerUserStateManagerChromeOS
     : public user_manager::UserManager::UserSessionStateObserver,
-      public user_manager::UserManager::Observer {
+      public user_manager::UserManager::Observer,
+      public ash::SessionTerminationManager::Observer {
  public:
   // Callback to handle changes in user metrics consent.
   using MetricsConsentHandler = base::RepeatingCallback<void(bool)>;
@@ -166,6 +169,18 @@ class PerUserStateManagerChromeOS
   // owned.
   virtual bool IsDeviceOwned() const;
 
+  // These methods are protected to avoid dependency on DeviceSettingsService
+  // during testing.
+
+  // Ensures that ownership status is known before proceeding with using
+  // profile prefs.
+  virtual void WaitForOwnershipStatus();
+
+  // Loads appropriate prefs from |current_user_| and creates new log storage
+  // using profile prefs.
+  void InitializeProfileMetricsState(
+      ash::DeviceSettingsService::OwnershipStatus status);
+
  private:
   // Possible states for |this|.
   enum class State {
@@ -192,9 +207,8 @@ class PerUserStateManagerChromeOS
   // UserManager::Observer:
   void OnUserToBeRemoved(const AccountId& account_id) override;
 
-  // Loads appropriate prefs from |current_user_| and creates new log storage
-  // using profile prefs.
-  void InitializeProfileMetricsState();
+  // ash::SessionTerminationManager::Observer:
+  void OnSessionWillBeTerminated() override;
 
   // Updates the current user ID to |new_user_id|. Updates both the profile pref
   // as well as local state pref.

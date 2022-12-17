@@ -186,6 +186,7 @@ TEST_P(SurfaceTest, Attach) {
   surface->Attach(buffer.get());
   EXPECT_TRUE(surface->HasPendingAttachedBuffer());
   surface->Commit();
+  EXPECT_EQ(gfx::SizeF(buffer_size), surface->content_size());
 
   // Commit without calling Attach() should have no effect.
   surface->Commit();
@@ -196,6 +197,7 @@ TEST_P(SurfaceTest, Attach) {
   surface->Attach(nullptr);
   EXPECT_FALSE(surface->HasPendingAttachedBuffer());
   surface->Commit();
+  EXPECT_TRUE(surface->content_size().IsEmpty());
   // LayerTreeFrameSinkHolder::ReclaimResources() gets called via
   // CompositorFrameSinkClient interface. We need to wait here for the mojo
   // call to finish so that the release callback finishes running before
@@ -489,7 +491,7 @@ TEST_P(SurfaceTest, MAYBE_SetOpaqueRegion) {
         frame.render_pass_list.back()->quad_list.back());
 
     EXPECT_FALSE(texture_draw_quad->ShouldDrawWithBlending());
-    EXPECT_EQ(SK_ColorBLACK, texture_draw_quad->background_color);
+    EXPECT_EQ(SkColors::kBlack, texture_draw_quad->background_color);
     EXPECT_EQ(gfx::Rect(buffer_size), ToTargetSpaceDamage(frame));
   }
 
@@ -506,7 +508,7 @@ TEST_P(SurfaceTest, MAYBE_SetOpaqueRegion) {
     auto* texture_draw_quad = viz::TextureDrawQuad::MaterialCast(
         frame.render_pass_list.back()->quad_list.back());
     EXPECT_TRUE(texture_draw_quad->ShouldDrawWithBlending());
-    EXPECT_EQ(SK_ColorTRANSPARENT, texture_draw_quad->background_color);
+    EXPECT_EQ(SkColors::kTransparent, texture_draw_quad->background_color);
     EXPECT_EQ(gfx::Rect(buffer_size), ToTargetSpaceDamage(frame));
   }
 
@@ -805,6 +807,11 @@ TEST_P(SurfaceTest, SetViewport) {
   const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 512, 512)), GetCompleteDamage(frame));
+
+  // This will make the surface have no content regardless of the viewport.
+  surface->Attach(nullptr);
+  surface->Commit();
+  EXPECT_TRUE(surface->content_size().IsEmpty());
 }
 
 TEST_P(SurfaceTest, SubpixelCoordinate) {
@@ -915,6 +922,11 @@ TEST_P(SurfaceTest, SetCrop) {
   const viz::CompositorFrame& frame = GetFrameFromSurface(shell_surface.get());
   ASSERT_EQ(1u, frame.render_pass_list.size());
   EXPECT_EQ(ToPixel(gfx::Rect(0, 0, 12, 12)), GetCompleteDamage(frame));
+
+  // This will make the surface have no content regardless of the crop.
+  surface->Attach(nullptr);
+  surface->Commit();
+  EXPECT_TRUE(surface->content_size().IsEmpty());
 }
 
 void SurfaceTest::SetCropAndBufferTransformHelperTransformAndTest(
@@ -1262,8 +1274,8 @@ TEST_P(SurfaceTest, ScaledSurfaceQuad) {
 
 TEST_P(SurfaceTest, ColorBufferAlpha) {
   gfx::Size buffer_size(1, 1);
-  constexpr SkColor4f kBuffColorExpected[] = {{1.f, 0.5f, 0.f, 1.f},
-                                              {0.f, 0.5f, 1.f, 0.f}};
+  constexpr SkColor4f kBuffColorExpected[] = {{1.f, 128.0f / 255.0f, 0.f, 1.f},
+                                              {0.f, 128.0f / 255.0f, 1.f, 0.f}};
   constexpr bool kExpectedOpaque[] = {true, false};
   for (size_t i = 0; i < std::size(kBuffColorExpected); i++) {
     auto buffer =
@@ -1294,8 +1306,7 @@ TEST_P(SurfaceTest, ColorBufferAlpha) {
       EXPECT_EQ(kExpectedOpaque[i],
                 draw_quad->shared_quad_state->are_contents_opaque);
       auto* solid_color_quad = viz::SolidColorDrawQuad::MaterialCast(draw_quad);
-      EXPECT_EQ(kBuffColorExpected[i].SkColor4f::toSkColor(),
-                solid_color_quad->color);
+      EXPECT_EQ(kBuffColorExpected[i], solid_color_quad->color);
     }
   }
 }

@@ -4,8 +4,6 @@
 
 #include "chrome/browser/policy/networking/device_network_configuration_updater_ash.h"
 
-#include <map>
-
 #include "ash/components/settings/cros_settings_names.h"
 #include "ash/components/settings/cros_settings_provider.h"
 #include "ash/components/tpm/install_attributes.h"
@@ -14,6 +12,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/containers/flat_map.h"
 #include "base/feature_list.h"
 #include "chrome/browser/ash/policy/core/browser_policy_connector_ash.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
@@ -21,7 +20,6 @@
 #include "chrome/browser/browser_process_platform_part.h"
 #include "chromeos/components/onc/onc_parsed_certificates.h"
 #include "chromeos/components/onc/onc_utils.h"
-#include "chromeos/components/onc/variable_expander.h"
 #include "chromeos/network/managed_network_configuration_handler.h"
 #include "chromeos/network/network_device_handler.h"
 #include "chromeos/system/statistics_provider.h"
@@ -122,19 +120,17 @@ void DeviceNetworkConfigurationUpdaterAsh::ApplyNetworkPolicy(
   // number or Asset ID are empty, the placeholders will be expanded to an empty
   // string. This is to be consistent with user policy identity string
   // expansions.
-  std::map<std::string, std::string> substitutions;
+  base::flat_map<std::string, std::string> substitutions;
   substitutions[::onc::substitutes::kDeviceSerialNumber] =
       chromeos::system::StatisticsProvider::GetInstance()
           ->GetEnterpriseMachineID();
   substitutions[::onc::substitutes::kDeviceAssetId] =
       device_asset_id_fetcher_.Run();
 
-  chromeos::VariableExpander variable_expander(std::move(substitutions));
-  chromeos::onc::ExpandStringsInNetworks(variable_expander,
-                                         network_configs_onc);
-
+  network_config_handler_->SetProfileWideVariableExpansions(
+      /*username_hash=*/std::string(), std::move(substitutions));
   network_config_handler_->SetPolicy(
-      onc_source_, std::string() /* no username hash */, *network_configs_onc,
+      onc_source_, /*username_hash=*/std::string(), *network_configs_onc,
       *global_network_config);
 }
 

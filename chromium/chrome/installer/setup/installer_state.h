@@ -114,6 +114,10 @@ class InstallerState {
   // Returns true if this install needs to register an Active Setup command.
   bool RequiresActiveSetup() const;
 
+  // When a Vivaldi.exe is removed we need to dis-connect the clsid we create
+  // when installing.
+  void ClearToastActivatorTargetExe() const;
+
  protected:
   // Clears the instance to an uninitialized state.
   void Clear();

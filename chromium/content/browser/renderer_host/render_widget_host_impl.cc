@@ -82,6 +82,7 @@
 #include "content/browser/renderer_host/render_widget_host_view_base.h"
 #include "content/browser/renderer_host/render_widget_host_view_child_frame.h"
 #include "content/browser/renderer_host/visible_time_request_trigger.h"
+#include "content/browser/scheduler/browser_task_executor.h"
 #include "content/browser/storage_partition_impl.h"
 #include "content/common/content_constants_internal.h"
 #include "content/common/cursors/webcursor.h"
@@ -1029,20 +1030,14 @@ blink::VisualProperties RenderWidgetHostImpl::GetVisualProperties() {
       .only_expand_top_controls_at_page_top =
       rvh_delegate_view->OnlyExpandTopControlsAtPageTop();
 
-  float top_controls_height = rvh_delegate_view->GetTopControlsHeight();
-  float top_controls_min_height = rvh_delegate_view->GetTopControlsMinHeight();
-  float bottom_controls_height = rvh_delegate_view->GetBottomControlsHeight();
-  float bottom_controls_min_height =
-      rvh_delegate_view->GetBottomControlsMinHeight();
-  float browser_controls_dsf_multiplier = 1.f;
   visual_properties.browser_controls_params.top_controls_height =
-      top_controls_height / browser_controls_dsf_multiplier;
+      rvh_delegate_view->GetTopControlsHeight();
   visual_properties.browser_controls_params.top_controls_min_height =
-      top_controls_min_height / browser_controls_dsf_multiplier;
+      rvh_delegate_view->GetTopControlsMinHeight();
   visual_properties.browser_controls_params.bottom_controls_height =
-      bottom_controls_height / browser_controls_dsf_multiplier;
+      rvh_delegate_view->GetBottomControlsHeight();
   visual_properties.browser_controls_params.bottom_controls_min_height =
-      bottom_controls_min_height / browser_controls_dsf_multiplier;
+      rvh_delegate_view->GetBottomControlsMinHeight();
 
   visual_properties.auto_resize_enabled = auto_resize_enabled_;
   visual_properties.min_size_for_auto_resize = min_size_for_auto_resize_;
@@ -3644,6 +3639,19 @@ void RenderWidgetHostImpl::OnRenderFrameMetadataChangedAfterActivation(
     base::TimeTicks activation_time) {
   const auto& metadata =
       render_frame_metadata_provider_.LastRenderFrameMetadata();
+  // We only want to report the timings for the very First Surface that is
+  // activated.
+  if (!first_surface_activated_) {
+    first_surface_activated_ = true;
+    UMA_HISTOGRAM_TIMES(
+        "Compositing.Renderer.FirstSurfaceActivationUpdateDuration."
+        "PreviousSurfaces",
+        metadata.previous_surfaces_visual_update_duration);
+    UMA_HISTOGRAM_TIMES(
+        "Compositing.Renderer.FirstSurfaceActivationUpdateDuration."
+        "CurrentSurface",
+        metadata.current_surface_visual_update_duration);
+  }
 
   bool is_mobile_optimized = metadata.is_mobile_optimized;
   input_router_->NotifySiteIsMobileOptimized(is_mobile_optimized);

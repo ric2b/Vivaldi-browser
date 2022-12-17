@@ -34,6 +34,7 @@
 #include "ash/clipboard/clipboard_history_controller_impl.h"
 #include "ash/clipboard/control_v_histogram_recorder.h"
 #include "ash/constants/ash_switches.h"
+#include "ash/controls/contextual_tooltip.h"
 #include "ash/dbus/ash_dbus_services.h"
 #include "ash/detachable_base/detachable_base_handler.h"
 #include "ash/detachable_base/detachable_base_notification_controller.h"
@@ -70,11 +71,11 @@
 #include "ash/hud_display/hud_display.h"
 #include "ash/ime/ime_controller_impl.h"
 #include "ash/in_session_auth/in_session_auth_dialog_controller_impl.h"
+#include "ash/in_session_auth/webauthn_dialog_controller_impl.h"
 #include "ash/keyboard/keyboard_controller_impl.h"
 #include "ash/keyboard/ui/keyboard_ui_factory.h"
 #include "ash/login/login_screen_controller.h"
 #include "ash/login_status.h"
-#include "ash/marker/marker_controller.h"
 #include "ash/media/media_controller_impl.h"
 #include "ash/metrics/feature_discovery_duration_reporter_impl.h"
 #include "ash/metrics/login_unlock_throughput_recorder.h"
@@ -95,7 +96,6 @@
 #include "ash/rgb_keyboard/rgb_keyboard_manager.h"
 #include "ash/root_window_controller.h"
 #include "ash/session/session_controller_impl.h"
-#include "ash/shelf/contextual_tooltip.h"
 #include "ash/shelf/shelf_controller.h"
 #include "ash/shelf/shelf_window_watcher.h"
 #include "ash/shell_delegate.h"
@@ -118,7 +118,9 @@
 #include "ash/system/diagnostics/diagnostics_log_controller.h"
 #include "ash/system/firmware_update/firmware_update_notification_controller.h"
 #include "ash/system/geolocation/geolocation_controller.h"
-#include "ash/system/hps/hps_orientation_controller.h"
+#include "ash/system/human_presence/human_presence_orientation_controller.h"
+#include "ash/system/human_presence/snooping_protection_controller.h"
+#include "ash/system/keyboard_brightness/keyboard_backlight_color_controller.h"
 #include "ash/system/keyboard_brightness/keyboard_brightness_controller.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
 #include "ash/system/locale/locale_update_controller_impl.h"
@@ -147,7 +149,6 @@
 #include "ash/system/system_notification_controller.h"
 #include "ash/system/toast/toast_manager_impl.h"
 #include "ash/system/tray/system_tray_notifier.h"
-#include "ash/system/unified/hps_notify_controller.h"
 #include "ash/system/usb_peripheral/usb_peripheral_notification_controller.h"
 #include "ash/touch/ash_touch_transform_controller.h"
 #include "ash/touch/touch_devices_controller.h"
@@ -165,6 +166,7 @@
 #include "ash/wm/immersive_context_ash.h"
 #include "ash/wm/lock_state_controller.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/multitask_menu_nudge_controller.h"
 #include "ash/wm/native_cursor_manager_ash.h"
 #include "ash/wm/overlay_event_filter.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -193,9 +195,9 @@
 #include "base/notreached.h"
 #include "base/system/sys_info.h"
 #include "base/trace_event/trace_event.h"
+#include "chromeos/ash/components/dbus/usb/usbguard_client.h"
 #include "chromeos/dbus/init/initialize_dbus_client.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
-#include "chromeos/dbus/usb/usbguard_client.h"
 #include "chromeos/services/assistant/public/cpp/features.h"
 #include "chromeos/system/devicemode.h"
 #include "chromeos/ui/wm/features.h"
@@ -565,6 +567,8 @@ Shell::Shell(std::unique_ptr<ShellDelegate> shell_delegate)
       focus_cycler_(std::make_unique<FocusCycler>()),
       ime_controller_(std::make_unique<ImeControllerImpl>()),
       immersive_context_(std::make_unique<ImmersiveContextAsh>()),
+      webauthn_dialog_controller_(
+          std::make_unique<WebAuthNDialogControllerImpl>()),
       in_session_auth_dialog_controller_(
           std::make_unique<InSessionAuthDialogControllerImpl>()),
       keyboard_brightness_control_delegate_(
@@ -718,13 +722,13 @@ Shell::~Shell() {
   // before destroying |session_controller_|.
   accelerator_controller_->Shutdown();
 
-  // Must be destructed before hps_orientation_controller_.
+  // Must be destructed before human_presence_orientation_controller_.
   power_prefs_.reset();
 
   // Must be destructed before the tablet mode and message center controllers,
   // both of which these rely on.
-  hps_notify_controller_.reset();
-  hps_orientation_controller_.reset();
+  snooping_protection_controller_.reset();
+  human_presence_orientation_controller_.reset();
 
   // Shutdown tablet mode controller early on since it has some observers which
   // need to be removed. It will be destroyed later after all windows are closed
@@ -774,6 +778,7 @@ Shell::~Shell() {
   // Close all widgets (including the shelf) and destroy all window containers.
   CloseAllRootWindowChildWindows();
 
+  multitask_menu_nudge_controller_.reset();
   capture_mode_controller_.reset();
   tablet_mode_controller_.reset();
   login_screen_controller_.reset();
@@ -821,7 +826,12 @@ Shell::~Shell() {
   display_configuration_controller_.reset();
 
   // Needs to be destructed before `ime_controler_`.
+  keyboard_backlight_color_controller_.reset();
   rgb_keyboard_manager_.reset();
+
+  // `AshColorProvider` observes `WallPaperController` and must be destructed
+  // before it.
+  ash_color_provider_.reset();
 
   // These members access Shell in their destructors.
   wallpaper_controller_.reset();
@@ -890,13 +900,10 @@ Shell::~Shell() {
   display_color_manager_.reset();
   projecting_observer_.reset();
 
-  // Depends on MarkerController, LaserPointerController and
-  // PartialMagnifierController.
   projector_controller_.reset();
 
   partial_magnifier_controller_.reset();
 
-  marker_controller_.reset();
   laser_pointer_controller_.reset();
 
   if (display_change_observer_)
@@ -949,14 +956,12 @@ Shell::~Shell() {
   // before it.
   calendar_controller_.reset();
 
-  ash_color_provider_.reset();
-
   shell_delegate_.reset();
 
-  chromeos::UsbguardClient::Shutdown();
+  UsbguardClient::Shutdown();
 
   // Must be shut down after detachable_base_handler_.
-  chromeos::HammerdClient::Shutdown();
+  HammerdClient::Shutdown();
 
   for (auto& observer : shell_observers_)
     observer.OnShellDestroyed();
@@ -974,9 +979,9 @@ void Shell::Init(
       std::make_unique<LoginUnlockThroughputRecorder>();
 
   // Required by DetachableBaseHandler.
-  chromeos::InitializeDBusClient<chromeos::HammerdClient>(dbus_bus.get());
+  chromeos::InitializeDBusClient<HammerdClient>(dbus_bus.get());
 
-  chromeos::InitializeDBusClient<chromeos::UsbguardClient>(dbus_bus.get());
+  chromeos::InitializeDBusClient<UsbguardClient>(dbus_bus.get());
 
   local_state_ = local_state;
 
@@ -1013,7 +1018,7 @@ void Shell::Init(
 
   tablet_mode_controller_ = std::make_unique<TabletModeController>();
 
-  if (::features::IsRgbKeyboardEnabled()) {
+  if (features::IsRgbKeyboardEnabled()) {
     rgb_keyboard_manager_ =
         std::make_unique<RgbKeyboardManager>(ime_controller_.get());
   }
@@ -1021,13 +1026,15 @@ void Shell::Init(
   // Observes the tablet mode controller if any hps feature is enabled.
   if (features::IsSnoopingProtectionEnabled() ||
       features::IsQuickDimEnabled()) {
-    hps_orientation_controller_ = std::make_unique<HpsOrientationController>();
+    human_presence_orientation_controller_ =
+        std::make_unique<HumanPresenceOrientationController>();
   }
 
-  // Construct HpsNotifyController, must be constructed after
-  // HpsOrientationController.
+  // Construct SnoopingProtectionController, must be constructed after
+  // HumanPresenceOrientationController.
   if (features::IsSnoopingProtectionEnabled()) {
-    hps_notify_controller_ = std::make_unique<HpsNotifyController>();
+    snooping_protection_controller_ =
+        std::make_unique<SnoopingProtectionController>();
   }
 
   // Manages lifetime of DiagnosticApp logs.
@@ -1060,6 +1067,8 @@ void Shell::Init(
       peripheral_battery_listener_.get());
   power_event_observer_ = std::make_unique<PowerEventObserver>();
   window_cycle_controller_ = std::make_unique<WindowCycleController>();
+  multitask_menu_nudge_controller_ =
+      std::make_unique<MultitaskMenuNudgeController>();
 
   capture_mode_controller_ = std::make_unique<CaptureModeController>(
       shell_delegate_->CreateCaptureModeDelegate());
@@ -1072,6 +1081,13 @@ void Shell::Init(
   views::FocusManagerFactory::Install(new AshFocusManagerFactory);
 
   wallpaper_controller_ = WallpaperControllerImpl::Create(local_state_);
+
+  if (features::IsRgbKeyboardEnabled()) {
+    // Initialized after |wallpaper_controller_| because we will need to observe
+    // when the extracted wallpaper color changes.
+    keyboard_backlight_color_controller_ =
+        std::make_unique<KeyboardBacklightColorController>();
+  }
 
   window_positioner_ = std::make_unique<WindowPositioner>();
 
@@ -1167,10 +1183,8 @@ void Shell::Init(
       display::Screen::GetScreen()->GetPrimaryDisplay());
 
   accelerator_controller_ = std::make_unique<AcceleratorControllerImpl>();
-  if (chromeos::features::IsClipboardHistoryEnabled()) {
-    clipboard_history_controller_ =
-        std::make_unique<ClipboardHistoryControllerImpl>();
-  }
+  clipboard_history_controller_ =
+      std::make_unique<ClipboardHistoryControllerImpl>();
 
   // `HoldingSpaceController` must be instantiated before the shelf.
   holding_space_controller_ = std::make_unique<HoldingSpaceController>();
@@ -1403,10 +1417,8 @@ void Shell::Init(
         std::make_unique<DisplayAlignmentController>();
   }
 
-  if (chromeos::features::IsProjectorEnabled()) {
-    marker_controller_ = std::make_unique<MarkerController>();
+  if (chromeos::features::IsProjectorEnabled())
     projector_controller_ = std::make_unique<ProjectorControllerImpl>();
-  }
 
   if (chromeos::wm::features::IsFloatWindowEnabled())
     float_controller_ = std::make_unique<FloatController>();

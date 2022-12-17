@@ -294,13 +294,16 @@ class VivaldiBrowserWindow final
   void ShowBookmarkBubble(const GURL& url, bool already_bookmarked) override {}
   sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
       content::WebContents* contents,
-      const gfx::Image& image,
-      sharing_hub::ScreenshotCapturedBubbleController* controller) override;
+      const gfx::Image& image) override;
   qrcode_generator::QRCodeGeneratorBubbleView* ShowQRCodeGeneratorBubble(
       content::WebContents* contents,
-      qrcode_generator::QRCodeGeneratorBubbleController* controller,
       const GURL& url,
       bool show_back_button) override;
+  send_tab_to_self::SendTabToSelfBubbleView*
+  ShowSendTabToSelfDevicePickerBubble(content::WebContents* contents) override;
+  send_tab_to_self::SendTabToSelfBubbleView*
+  ShowSendTabToSelfPromoBubble(content::WebContents* contents,
+                             bool show_signin_button) override;
   ShowTranslateBubbleResult ShowTranslateBubble(
       content::WebContents* contents,
       translate::TranslateStep step,
@@ -355,14 +358,8 @@ class VivaldiBrowserWindow final
       const absl::optional<url::Origin>& initiating_origin,
       IntentPickerResponse callback) override {}
 #endif
-  send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
-      content::WebContents* contents,
-      send_tab_to_self::SendTabToSelfBubbleController* controller,
-      bool is_user_gesture) override;
   sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
-      content::WebContents* contents,
-      sharing_hub::SharingHubBubbleController* controller,
-      bool is_user_gesture) override;
+      share::ShareAttempt attempt) override;
   ExtensionsContainer* GetExtensionsContainer() override;
   void UpdateCustomTabBarVisibility(bool visible, bool animate) override {}
   SharingDialog* ShowSharingDialog(content::WebContents* contents,
@@ -379,29 +376,30 @@ class VivaldiBrowserWindow final
   void ShowCaretBrowsingDialog() override {}
   void CreateTabSearchBubble() override {}
   void CloseTabSearchBubble() override {}
-  FeaturePromoController* GetFeaturePromoController() override;
+  user_education::FeaturePromoController* GetFeaturePromoController() override;
   bool IsFeaturePromoActive(
       const base::Feature& iph_feature,
       bool include_continued_promos = false) const override;
   bool MaybeShowFeaturePromo(
       const base::Feature& iph_feature,
-      FeaturePromoSpecification::StringReplacements body_text_replacements = {},
-      FeaturePromoController::BubbleCloseCallback close_callback =
+      user_education::FeaturePromoSpecification::StringReplacements
+          body_text_replacements = {},
+      user_education::FeaturePromoController::BubbleCloseCallback
+          close_callback =
           base::DoNothing()) override;
   bool CloseFeaturePromo(const base::Feature& iph_feature) override;
-  FeaturePromoController::PromoHandle CloseFeaturePromoAndContinue(
+  user_education::FeaturePromoController::PromoHandle
+  CloseFeaturePromoAndContinue(
       const base::Feature& iph_feature) override;
   void NotifyFeatureEngagementEvent(const char* event_name) override {}
   void ShowIncognitoClearBrowsingDataDialog() override {}
   void ShowIncognitoHistoryDisclaimerDialog() override {}
-  std::string GetWorkspace() const override;
-  bool IsVisibleOnAllWorkspaces() const override;
-  bool IsLocationBarVisible() const override;
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
   bool IsSideSearchPanelVisible() const override;
   void MaybeRestoreSideSearchStatePerWindow(
       const std::map<std::string, std::string>& extra_data) override {}
-#endif
+  std::string GetWorkspace() const override;
+  bool IsVisibleOnAllWorkspaces() const override;
+  bool IsLocationBarVisible() const override;
 
   // BrowserWindow overrides end
 
@@ -436,10 +434,7 @@ class VivaldiBrowserWindow final
   content::WebContents* GetActiveWebContents() override;
 
   ExclusiveAccessContext* GetExclusiveAccessContext() override;
-  void ShowAvatarBubbleFromAvatarButton(
-      AvatarBubbleMode mode,
-      signin_metrics::AccessPoint access_point,
-      bool is_source_keyboard) override {}
+  void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) override {}
 
   void MaybeShowProfileSwitchIPH() override {}
 

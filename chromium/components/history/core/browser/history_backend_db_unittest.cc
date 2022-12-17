@@ -1683,7 +1683,7 @@ TEST_F(HistoryBackendDBTest, MigratePresentations) {
   CreateBackendAndDatabase();
 
   std::vector<std::unique_ptr<PageUsageData>> results =
-      db_->QuerySegmentUsage(segment_time, 10, base::NullCallback());
+      db_->QuerySegmentUsage(/*max_result_count=*/10, base::NullCallback());
   ASSERT_EQ(1u, results.size());
   EXPECT_EQ(url, results[0]->GetURL());
   EXPECT_EQ(segment_id, results[0]->GetID());
@@ -1830,7 +1830,7 @@ TEST_F(HistoryBackendDBTest, MigrateVisitSegmentNames) {
   CreateBackendAndDatabase();
 
   std::vector<std::unique_ptr<PageUsageData>> results = db_->QuerySegmentUsage(
-      segment_time, /*max_result_count=*/10, base::NullCallback());
+      /*max_result_count=*/10, base::NullCallback());
   ASSERT_EQ(1u, results.size());
   EXPECT_THAT(results[0]->GetURL(), testing::AnyOf(url1, url2));
   EXPECT_THAT(results[0]->GetTitle(), testing::AnyOf(title1, title2));
@@ -2589,6 +2589,85 @@ TEST_F(HistoryBackendDBTest,
     EXPECT_TRUE(visit_content_annotations.search_terms.empty());
   }
 }
+TEST_F(HistoryBackendDBTest, MigrateContentAnnotationsAddPageMetadataColumns) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(53));
+
+  const VisitID visit_id1 = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertContentAnnotationsStatement[] =
+      "INSERT INTO content_annotations "
+      "(visit_id, floc_protected_score, categories, page_topics_model_version, "
+      "annotation_flags, entities, related_searches, search_normalized_url, "
+      "search_terms) "
+      "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)";
+
+  // Add an entry to "content_annotations" table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertContentAnnotationsStatement));
+    s.BindInt64(0, visit_id1);
+    s.BindDouble(1, -1);
+    s.BindString(2, "");
+    s.BindInt64(3, -1);
+    s.BindInt64(4, 0);
+    s.BindString(5, "");
+    s.BindString(6, "");
+    s.BindString(7, "");
+    s.BindString(8, "");
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // The version should have been updated.
+  ASSERT_GE(HistoryDatabase::GetCurrentVersion(), 54);
+
+  // After the migration, the page metadata should be empty.
+  {
+    VisitContentAnnotations visit_content_annotations;
+    db_->GetContentAnnotationsForVisit(visit_id1, &visit_content_annotations);
+    EXPECT_TRUE(visit_content_annotations.alternative_title.empty());
+  }
+}
+
+TEST_F(HistoryBackendDBTest,
+       MigrateVisitsAutoincrementIdAndAddOriginatorColumns) {
+  ASSERT_NO_FATAL_FAILURE(CreateDBVersion(54));
+
+  constexpr VisitID visit_id1 = 1;
+
+  // Open the db for manual manipulation.
+  sql::Database db;
+  ASSERT_TRUE(db.Open(history_dir_.Append(kHistoryFilename)));
+
+  const char kInsertVisitStatement[] =
+      "INSERT INTO visits "
+      "(id, url, visit_time) VALUES (?, ?, ?)";
+
+  // Add a row to `visits` table.
+  {
+    sql::Statement s(db.GetUniqueStatement(kInsertVisitStatement));
+    s.BindInt64(0, 1);
+    s.BindInt64(1, 1);
+    s.BindTime(2, base::Time::Now());
+    ASSERT_TRUE(s.Run());
+  }
+
+  // Re-open the db, triggering migration.
+  CreateBackendAndDatabase();
+
+  // After the migration, the originator columns should return default values.
+  {
+    VisitRow visit;
+    db_->GetRowForVisit(visit_id1, &visit);
+    EXPECT_EQ(visit.originator_cache_guid, "");
+    EXPECT_EQ(visit.originator_visit_id, 0);
+  }
+}
 
 bool FilterURL(const GURL& url) {
   return url.SchemeIsHTTPOrHTTPS();
@@ -2620,15 +2699,15 @@ TEST_F(HistoryBackendDBTest, QuerySegmentUsage) {
 
   // Without a filter, the "file://" URL should win.
   std::vector<std::unique_ptr<PageUsageData>> results =
-      db_->QuerySegmentUsage(time, 1, base::NullCallback());
+      db_->QuerySegmentUsage(/*max_result_count=*/1, base::NullCallback());
   ASSERT_EQ(1u, results.size());
   EXPECT_EQ(url1, results[0]->GetURL());
   EXPECT_EQ(segment_id1, results[0]->GetID());
 
   // With the filter, the "file://" URL should be filtered out, so the "http://"
   // URL should win instead.
-  std::vector<std::unique_ptr<PageUsageData>> results2 =
-      db_->QuerySegmentUsage(time, 1, base::BindRepeating(&FilterURL));
+  std::vector<std::unique_ptr<PageUsageData>> results2 = db_->QuerySegmentUsage(
+      /*max_result_count=*/1, base::BindRepeating(&FilterURL));
   ASSERT_EQ(1u, results2.size());
   EXPECT_EQ(url2, results2[0]->GetURL());
   EXPECT_EQ(segment_id2, results2[0]->GetID());

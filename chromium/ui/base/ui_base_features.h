@@ -38,6 +38,8 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kSystemKeyboardLock;
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kUiCompositorScrollWithLayers;
+COMPONENT_EXPORT(UI_BASE_FEATURES)
+extern const base::Feature kVirtualKeyboardMultitouch;
 
 COMPONENT_EXPORT(UI_BASE_FEATURES) bool IsUiGpuRasterizationEnabled();
 
@@ -131,23 +133,14 @@ COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsDeprecateAltClickEnabled();
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
-extern const base::Feature kRgbKeyboard;
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
-bool IsRgbKeyboardEnabled();
-
-COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kShortcutCustomizationApp;
 
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 bool IsShortcutCustomizationAppEnabled();
 
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-
-#if BUILDFLAG(IS_CHROMEOS_LACROS)
 COMPONENT_EXPORT(UI_BASE_FEATURES)
 extern const base::Feature kLacrosResourcesFileSharing;
-#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 // Indicates whether DrmOverlayManager should used the synchronous API to
 // perform pageflip tests.

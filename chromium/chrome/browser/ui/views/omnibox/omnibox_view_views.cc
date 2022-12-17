@@ -16,6 +16,7 @@
 #include "base/i18n/rtl.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/task/task_traits.h"
 #include "base/task/thread_pool.h"
@@ -64,7 +65,6 @@
 #include "content/public/browser/navigation_handle.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/common/constants.h"
-#include "net/base/escape.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "net/base/url_util.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
@@ -387,10 +387,10 @@ void OmniboxViewViews::SetFocus(bool is_user_initiated) {
   // keep it revealed. |location_bar_view_| can be nullptr in unit tests.
   std::unique_ptr<ImmersiveRevealedLock> focus_reveal_lock;
   if (location_bar_view_) {
-    focus_reveal_lock.reset(
+    focus_reveal_lock =
         BrowserView::GetBrowserViewForBrowser(location_bar_view_->browser())
             ->immersive_mode_controller()
-            ->GetRevealedLock(ImmersiveModeController::ANIMATE_REVEAL_YES));
+            ->GetRevealedLock(ImmersiveModeController::ANIMATE_REVEAL_YES);
   }
 
   const bool omnibox_already_focused = HasFocus();
@@ -667,7 +667,8 @@ void OmniboxViewViews::OnOmniboxPaste() {
       // fakebox is hidden and there's only whitespace in the omnibox, it's
       // difficult for the user to see that the focus moved to the omnibox.
       (model()->focus_state() == OMNIBOX_FOCUS_INVISIBLE &&
-       std::all_of(text.begin(), text.end(), base::IsUnicodeWhitespace))) {
+       std::all_of(text.begin(), text.end(),
+                   base::IsUnicodeWhitespace<char16_t>))) {
     return;
   }
 
@@ -1904,7 +1905,7 @@ void OmniboxViewViews::PerformDrop(const ui::DropTargetEvent& event,
 void OmniboxViewViews::MaybeAddSendTabToSelfItem(
     ui::SimpleMenuModel* menu_contents) {
   // Only add this menu entry if SendTabToSelf feature is enabled.
-  if (!send_tab_to_self::ShouldOfferFeature(
+  if (!send_tab_to_self::ShouldDisplayEntryPoint(
           location_bar_view_->GetWebContents())) {
     return;
   }

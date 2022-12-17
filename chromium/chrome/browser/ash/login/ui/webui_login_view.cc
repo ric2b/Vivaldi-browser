@@ -21,12 +21,11 @@
 #include "chrome/browser/ash/login/ui/login_display_webui.h"
 #include "chrome/browser/ash/login/ui/web_contents_forced_title.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
-#include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/lifetime/termination_notification.h"
 #include "chrome/browser/media/webrtc/media_capture_devices_dispatcher.h"
 #include "chrome/browser/password_manager/chrome_password_manager_client.h"
 #include "chrome/browser/renderer_preferences_util.h"
 #include "chrome/browser/sessions/session_tab_helper_factory.h"
-#include "chrome/browser/ui/ash/keyboard/chrome_keyboard_controller_client.h"
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/browser/ui/autofill/chrome_autofill_client.h"
@@ -38,7 +37,6 @@
 #include "components/content_settings/core/common/content_settings_pattern.h"
 #include "components/password_manager/core/browser/password_manager.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
-#include "content/public/browser/notification_service.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/render_widget_host.h"
@@ -95,10 +93,9 @@ class ScopedArrowKeyTraversal {
 WebUILoginView::WebUILoginView(const WebViewSettings& settings,
                                base::WeakPtr<LoginDisplayHostWebUI> controller)
     : settings_(settings), controller_(controller) {
-  ChromeKeyboardControllerClient::Get()->AddObserver(this);
-
-  registrar_.Add(this, chrome::NOTIFICATION_APP_TERMINATING,
-                 content::NotificationService::AllSources());
+  on_app_terminating_subscription_ =
+      browser_shutdown::AddAppTerminatingCallback(base::BindOnce(
+          &WebUILoginView::OnAppTerminating, base::Unretained(this)));
 
   session_observation_.Observe(session_manager::SessionManager::Get());
 
@@ -133,7 +130,6 @@ WebUILoginView::~WebUILoginView() {
   // TODO(crbug.com/1188526) - Improve the observation of the system tray
   if (observing_system_tray_focus_ && LoginScreenClientImpl::HasInstance())
     LoginScreenClientImpl::Get()->RemoveSystemTrayObserver(this);
-  ChromeKeyboardControllerClient::Get()->RemoveObserver(this);
 
   // Clear any delegates we have set on the WebView.
   WebContents* web_contents = web_view_->GetWebContents();
@@ -292,20 +288,9 @@ void WebUILoginView::AboutToRequestFocusFromTabTraversal(bool reverse) {
   web_view_->web_contents()->FocusThroughTabTraversal(reverse);
   GetWidget()->Activate();
   web_view_->web_contents()->Focus();
-
-  if (!GetOobeUI())
-    return;
-  CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
-  if (view)
-    view->FocusReturned(reverse);
 }
 
-void WebUILoginView::Observe(int type,
-                             const content::NotificationSource& source,
-                             const content::NotificationDetails& details) {
-  DCHECK_EQ(chrome::NOTIFICATION_APP_TERMINATING, type)
-      << "Unexpected notification " << type;
-
+void WebUILoginView::OnAppTerminating() {
   // In some tests, WebUILoginView remains after LoginScreenClientImpl gets
   // deleted on shutdown. It should unregister itself before the deletion
   // happens.
@@ -323,17 +308,6 @@ void WebUILoginView::OnNetworkErrorScreenShown() {
 void WebUILoginView::OnLoginOrLockScreenVisible() {
   OnLoginPromptVisible();
   session_observation_.Reset();
-}
-
-////////////////////////////////////////////////////////////////////////////////
-// ChromeKeyboardControllerClient::Observer
-
-void WebUILoginView::OnKeyboardVisibilityChanged(bool visible) {
-  if (!GetOobeUI())
-    return;
-  CoreOobeView* view = GetOobeUI()->GetCoreOobeView();
-  if (view)
-    view->SetVirtualKeyboardShown(visible);
 }
 
 // WebUILoginView private: -----------------------------------------------------

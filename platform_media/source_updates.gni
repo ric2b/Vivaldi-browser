@@ -5,10 +5,7 @@ if (system_proprietary_codecs) {
 
 update_target("//media/test:pipeline_integration_test_base") {
   sources += [
-    "//vivaldi/platform_media/test/ipc_audio_decoder_unittest.cc",
     "//vivaldi/platform_media/test/platform_media_pipeline_integration_test.cc",
-    "//vivaldi/platform_media/test/platform_pipeline_test_base.cc",
-    "//vivaldi/platform_media/test/platform_pipeline_test_base.h",
     "//vivaldi/platform_media/test/ipc_pipeline_test_setup.h",
     "//vivaldi/platform_media/test/ipc_pipeline_test_setup.cc",
   ]
@@ -82,8 +79,6 @@ update_target("//media/renderers:renderers") {
     "//vivaldi/platform_media/gpu/pipeline/platform_media_pipeline_factory.h",
     "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.cc",
     "//vivaldi/platform_media/renderer/decoders/debug_buffer_logger.h",
-    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.cc",
-    "//vivaldi/platform_media/renderer/decoders/ipc_audio_decoder.h",
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.cc",
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer.h",
     "//vivaldi/platform_media/renderer/decoders/ipc_demuxer_stream.cc",
@@ -126,11 +121,6 @@ update_target("//media/renderers:renderers") {
       "//vivaldi/platform_media/common/mac/framework_type_conversions.mm",
       "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.cc",
       "//vivaldi/platform_media/renderer/decoders/mac/at_audio_decoder.h",
-      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.cc",
-      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer.h",
-      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.cc",
-      "//vivaldi/platform_media/renderer/decoders/mac/core_audio_demuxer_stream.h",
-      "//vivaldi/platform_media/renderer/decoders/mac/scoped_audio_queue_ref.h",
       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.h",
       "//vivaldi/platform_media/renderer/decoders/mac/viv_video_decoder.mm",
     ]
@@ -234,62 +224,11 @@ update_template_instance("//base:base") {
 # --------------------
 
 if (is_linux || is_mac || is_win) {
-  if (is_win) {
-    update_target("//third_party/ffmpeg:ffmpeg_generate_def") {
-      patched_sigs =
-          root_gen_dir + "/vivaldi/platform_media/ffmpeg/patched_ffmpeg.sigs"
-      assert(args[8] ==
-               "../../chromium/third_party/ffmpeg/chromium/ffmpeg.sigs",
-             "Check the original source path source path")
-      args_copy = args
-      args_copy[8] = rebase_path(patched_sigs)
-      args = []
-      args = args_copy
-      sources += [patched_sigs]
-      deps = ["//vivaldi/platform_media/ffmpeg:patch_ffmpeg_sigs"]
-    }
-  }
-
   update_target("//third_party/ffmpeg:ffmpeg_internal") {
     if (is_mac) {
-      # Patch audiotoolboxdec.c to replace bad filter string with NULL.
-      # TODO(igor@vivaldi.com): Find out what was the intention in the code behind
-      # that string.
-      audiotoolbox_source = "//third_party/ffmpeg/libavcodec/audiotoolboxdec.c"
-      audiotoolbox_lines = []
-      found_line_to_patch = false
-      path_to_libavcodec_from_gen =
-          rebase_path("libavcodec", target_gen_dir + "/vivaldi/libavcodec")
-      foreach (line, read_file(audiotoolbox_source, "list lines")) {
-        if (line ==
-            "FFAT_DEC(aac,          AV_CODEC_ID_AAC, \"aac_adtstoasc\")") {
-          assert(!found_line_to_patch,
-                "dublicated line to patch in " + audiotoolbox_source)
-          found_line_to_patch = true
-          line = "FFAT_DEC(aac,          AV_CODEC_ID_AAC, NULL)"
-        } else if (line == "#include \"config_components.h\"" ) {
-          line = "#include \"third_party/ffmpeg/chromium/config/Chromium/mac/$target_cpu/config_components.h\""
-        }
-
-        # Adjust #include "foo.h" where foo.h is a file from libavcodec directory
-        # so it points to the source dir from the generated dir.
-        if (filter_exclude([line], ["#include \"*"]) == []) {
-          # Line with include
-          if (filter_include([line], ["*/*", "*\"config.h\""]) == []) {
-            # include "foo.h" without slashes in foo and not config.h
-            line = string_replace(
-                line, "\"", "\"$path_to_libavcodec_from_gen/", 1)
-          }
-        }
-        audiotoolbox_lines += [line]
-      }
-      assert(found_line_to_patch,
-            "failed to find line to patch in " + audiotoolbox_source)
-      patched_audiotoolbox_source =
-          target_gen_dir + "/vivaldi/libavcodec/audiotoolboxdec.c"
-      write_file(patched_audiotoolbox_source, audiotoolbox_lines)
-
-      sources += [patched_audiotoolbox_source]
+      sources += [
+        "//vivaldi/platform_media/ffmpeg/audiotoolboxdec.c",
+      ]
     }
 
     if (is_win) {
@@ -304,13 +243,38 @@ if (is_linux || is_mac || is_win) {
       ]
     }
 
-    # Use the generated config files as include files.
+    sources += [
+        "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.c",
+        "//vivaldi/platform_media/ffmpeg/ffviv_audio_kit.h",
+        "//vivaldi/platform_media/ffmpeg/ffviv_log.cc",
+        "//vivaldi/platform_media/ffmpeg/ffviv_log.h",
+    ]
+
+    # Allow to call Chromium logging
+    deps += [ "//base" ]
+
+    # Use the generated config files as include files. We replace the original
+    # include directory for FFmpeg config rather than inserting the gen one as
+    # the first element into include_dirs to trigger a compilation error if
+    # generate_config target would not place all config files into gen, see
+    # comments in ffmpeg/BUILD.fn for details.
     deps += ["//vivaldi/platform_media/ffmpeg:generate_config"]
-    patched_config_dir =
+    assert(include_dirs[0] ==
+        "chromium/config/$ffmpeg_branding/$os_config/$ffmpeg_arch")
+
+    # This should be just include_dirs[0] = get_path_info(...), but GN
+    # flags that as a potential mistake, so here is a workaround.
+    patched_include_dirs = include_dirs
+    patched_include_dirs[0] =
         get_path_info("//vivaldi/platform_media/ffmpeg/", "gen_dir")
-    include_dirs_orig = include_dirs
     include_dirs = []
-    include_dirs = [ patched_config_dir ] + include_dirs_orig
+    include_dirs = patched_include_dirs
+
+    # Workaround for the byggmakker caching issue. We change the value whenever
+    # we add a new generated header file that should be found before FFmpeg
+    # sources on the include list. Without this the cache may not see that the
+    # include list should re-searched.
+    defines += [ "VIVALDI_FFMPEG_REBUILD=20220717" ]
   }
 
   if (is_mac) {

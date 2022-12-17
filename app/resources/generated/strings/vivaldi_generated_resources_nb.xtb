@@ -138,6 +138,7 @@
 <translation id="3360297538363969800">Utskrift feilet. Sjekk skriveren og prøv igjen.</translation>
 <translation id="3378572629723696641">Denne utvidelsen kan være skadet.</translation>
 <translation id="3387614642886316601">Bruk forbedret stavekontroll</translation>
+<translation id="3393582007140394275">Kunne ikke caste skjermen.</translation>
 <translation id="3432227430032737297">Fjern alle viste</translation>
 <translation id="345693547134384690">Åpne b&amp;ilde i ny fane</translation>
 <translation id="3494769164076977169">Spør når et nettsted prøver å laste ned filer automatisk etter første fil (anbefales)</translation>
@@ -210,8 +211,10 @@
 <translation id="488785315393301722">Vis detaljer</translation>
 <translation id="4907306957610201395">Tilgangskategori</translation>
 <translation id="4912643508233590958">Oppvåkninger fra inaktiv</translation>
+<translation id="49265687513387605">Kunne ikke caste skjermen.  Sjekk om du har bekreftet forespørselen om å begynne å dele skjermen din.</translation>
 <translation id="4927753642311223124">Ingenting å se her, gå videre.</translation>
 <translation id="4930714375720679147">Slå på</translation>
+<translation id="4961318399572185831">Cast skjermen</translation>
 <translation id="4988526792673242964">Sider</translation>
 <translation id="49896407730300355">Roter mot klokken</translation>
 <translation id="4989966318180235467">Inspiser &amp;bakgrunnsside</translation>

@@ -9,9 +9,11 @@ import org.chromium.base.Promise;
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
 import org.chromium.base.annotations.NativeMethods;
+import org.chromium.chrome.browser.history_clusters.HistoryCluster.MatchPosition;
 import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.url.GURL;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 
@@ -59,15 +61,45 @@ class HistoryClustersBridge {
     }
 
     @CalledByNative
-    static HistoryCluster buildCluster(ClusterVisit[] visits, String[] keywords) {
+    static HistoryCluster buildCluster(ClusterVisit[] visits, String[] keywords, String label,
+            int[] labelMatchStarts, int[] labelMatchEnds, long timestamp,
+            String[] relatedSearches) {
         List<String> keywordList = Arrays.asList(keywords);
         List<ClusterVisit> clusterVisitList = Arrays.asList(visits);
-        return new HistoryCluster(keywordList, clusterVisitList);
+
+        assert labelMatchEnds.length == labelMatchStarts.length;
+        List<MatchPosition> matchPositions = new ArrayList<>(labelMatchStarts.length);
+        for (int i = 0; i < labelMatchStarts.length; i++) {
+            MatchPosition matchPosition = new MatchPosition(labelMatchStarts[i], labelMatchEnds[i]);
+            matchPositions.add(matchPosition);
+        }
+
+        List<String> relatedSearchesList = Arrays.asList(relatedSearches);
+        return new HistoryCluster(keywordList, clusterVisitList, label, matchPositions, timestamp,
+                relatedSearchesList);
     }
 
     @CalledByNative
-    static ClusterVisit buildClusterVisit(float score, GURL url, String title) {
-        return new ClusterVisit(score, url, title);
+    static ClusterVisit buildClusterVisit(float score, GURL url, String urlForDisplay, String title,
+            int[] titleMatchStarts, int[] titleMatchEnds, int[] urlMatchStarts,
+            int[] urlMatchEnds) {
+        assert titleMatchStarts.length == titleMatchEnds.length;
+        assert urlMatchStarts.length == urlMatchEnds.length;
+
+        List<MatchPosition> titleMatchPositions = new ArrayList<>(titleMatchStarts.length);
+        for (int i = 0; i < titleMatchStarts.length; i++) {
+            MatchPosition matchPosition = new MatchPosition(titleMatchStarts[i], titleMatchEnds[i]);
+            titleMatchPositions.add(matchPosition);
+        }
+
+        List<MatchPosition> urlMatchPositions = new ArrayList<>(urlMatchStarts.length);
+        for (int i = 0; i < urlMatchStarts.length; i++) {
+            MatchPosition matchPosition = new MatchPosition(urlMatchStarts[i], urlMatchEnds[i]);
+            urlMatchPositions.add(matchPosition);
+        }
+
+        return new ClusterVisit(
+                score, url, title, urlForDisplay, titleMatchPositions, urlMatchPositions);
     }
 
     @NativeMethods

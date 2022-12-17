@@ -103,6 +103,17 @@ bool IsCellOrTableHeader(const ax::mojom::Role role) {
   }
 }
 
+bool IsChildTreeOwner(const ax::mojom::Role role) {
+  switch (role) {
+    case ax::mojom::Role::kIframe:
+    case ax::mojom::Role::kIframePresentational:
+    case ax::mojom::Role::kPortal:
+      return true;
+    default:
+      return false;
+  }
+}
+
 bool IsClickable(const ax::mojom::Role role) {
   switch (role) {
     case ax::mojom::Role::kButton:
@@ -277,6 +288,18 @@ bool IsDialog(const ax::mojom::Role role) {
   switch (role) {
     case ax::mojom::Role::kAlertDialog:
     case ax::mojom::Role::kDialog:
+      return true;
+    default:
+      return false;
+  }
+}
+
+bool IsGridLike(const ax::mojom::Role role) {
+  switch (role) {
+    case ax::mojom::Role::kGrid:
+    case ax::mojom::Role::kListGrid:
+    case ax::mojom::Role::kTree:
+    case ax::mojom::Role::kTreeGrid:
       return true;
     default:
       return false;
@@ -944,6 +967,20 @@ bool IsUIAEmbeddedObject(ax::mojom::Role role) {
     default:
       return false;
   }
+}
+
+bool IsUIATableLike(ax::mojom::Role role) {
+  if (role == ax::mojom::Role::kLayoutTable)
+    return false;
+
+  return IsTableLike(role);
+}
+
+bool IsUIACellOrTableHeader(ax::mojom::Role role) {
+  if (role == ax::mojom::Role::kLayoutTableCell)
+    return false;
+
+  return IsCellOrTableHeader(role);
 }
 
 bool IsWindow(ax::mojom::Role role) {

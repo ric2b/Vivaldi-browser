@@ -29,6 +29,7 @@
 #include "components/autofill_assistant/browser/wait_for_dom_operation.h"
 #include "components/autofill_assistant/browser/web/element_action_util.h"
 #include "components/autofill_assistant/browser/web/element_finder.h"
+#include "components/autofill_assistant/browser/web/element_finder_result.h"
 #include "components/autofill_assistant/browser/web/element_store.h"
 #include "components/autofill_assistant/browser/web/web_controller.h"
 #include "components/strings/grit/components_strings.h"
@@ -340,6 +341,8 @@ void ScriptExecutor::CollectUserData(
                      weak_ptr_factory_.GetWeakPtr(),
                      std::move(collect_user_data_options->terms_link_callback));
   ui_delegate_->SetCollectUserDataOptions(collect_user_data_options);
+  ui_delegate_->SetCollectUserDataUiState(/* loading= */ false,
+                                          UserDataEventField::NONE);
   delegate_->EnterState(AutofillAssistantState::PROMPT);
 }
 
@@ -453,11 +456,13 @@ void ScriptExecutor::Prompt(
   }
 }
 
-void ScriptExecutor::CleanUpAfterPrompt() {
+void ScriptExecutor::CleanUpAfterPrompt(bool consume_touchable_area) {
   ui_delegate_->SetUserActions(nullptr);
-  // Mark touchable_elements_ as consumed, so that it won't affect the next
-  // prompt or the end of the script.
-  touchable_element_area_.reset();
+  if (consume_touchable_area) {
+    // Mark touchable_elements_ as consumed, so that it won't affect the next
+    // prompt or the end of the script.
+    touchable_element_area_.reset();
+  }
 
   delegate_->ClearTouchableElementArea();
   ui_delegate_->SetExpandSheetForPromptAction(true);
@@ -622,6 +627,10 @@ ScriptExecutor::GetPasswordChangeSuccessTracker() const {
 
 content::WebContents* ScriptExecutor::GetWebContents() const {
   return delegate_->GetWebContents();
+}
+
+JsFlowDevtoolsWrapper* ScriptExecutor::GetJsFlowDevtoolsWrapper() const {
+  return delegate_->GetJsFlowDevtoolsWrapper();
 }
 
 ElementStore* ScriptExecutor::GetElementStore() const {
@@ -824,6 +833,7 @@ void ScriptExecutor::OnGetActions(
       roundtrip_duration.InMilliseconds());
   bool success = http_status == net::HTTP_OK &&
                  ProcessNextActionResponse(response, response_info);
+
   if (should_stop_script_) {
     // The last action forced the script to stop. Sending the result of the
     // action is considered best effort in this situation. Report a successful
@@ -865,12 +875,17 @@ bool ScriptExecutor::ProcessNextActionResponse(
   actions_.clear();
 
   bool should_update_scripts = false;
+  std::string js_flow_library;
   std::vector<std::unique_ptr<Script>> scripts;
   bool parse_result = ProtocolUtils::ParseActions(
       this, response, &run_id_, &last_global_payload_, &last_script_payload_,
-      &actions_, &scripts, &should_update_scripts);
+      &actions_, &scripts, &should_update_scripts, &js_flow_library);
   if (!parse_result) {
     return false;
+  }
+
+  if (!js_flow_library.empty()) {
+    delegate_->SetJsFlowLibrary(js_flow_library);
   }
 
   roundtrip_network_stats_ =
@@ -974,12 +989,24 @@ void ScriptExecutor::GetNextActions() {
                      weak_ptr_factory_.GetWeakPtr(), get_next_actions_start));
 }
 
+void ScriptExecutor::MaybeSetPreviousAction(
+    const ProcessedActionProto& processed_action) {
+  const auto action_info_case = processed_action.action().action_info_case();
+
+  // JS flows are themselves a way of executing a script.
+  if (action_info_case == ActionProto::kJsFlow) {
+    return;
+  }
+
+  previous_action_type_ = action_info_case;
+}
+
 void ScriptExecutor::OnProcessedAction(
     base::TimeTicks start_time,
     std::unique_ptr<ProcessedActionProto> processed_action_proto) {
   DCHECK(current_action_);
   base::TimeDelta run_time = base::TimeTicks::Now() - start_time;
-  previous_action_type_ = processed_action_proto->action().action_info_case();
+  MaybeSetPreviousAction(*processed_action_proto);
   processed_actions_.emplace_back(*processed_action_proto);
 
 #ifdef NDEBUG
@@ -1075,13 +1102,16 @@ ProcessedActionStatusDetailsProto& ScriptExecutor::GetLogInfo() {
 }
 
 void ScriptExecutor::RequestUserData(
+    UserDataEventField event_field,
     const CollectUserDataOptions& options,
     base::OnceCallback<void(bool, const GetUserDataResponseProto&)> callback) {
   auto* service = delegate_->GetService();
   DCHECK(service);
 
+  delegate_->EnterState(AutofillAssistantState::RUNNING);
+  ui_delegate_->SetCollectUserDataUiState(/* loading= */ true, event_field);
   service->GetUserData(
-      options, run_id_,
+      options, run_id_, user_data_,
       base::BindOnce(&ScriptExecutor::OnRequestUserData,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
 }
@@ -1099,6 +1129,51 @@ void ScriptExecutor::OnRequestUserData(
   GetUserDataResponseProto response_proto;
   bool success = response_proto.ParseFromString(response);
   std::move(callback).Run(success, response_proto);
+}
+
+bool ScriptExecutor::SupportsExternalActions() {
+  return ui_delegate_->SupportsExternalActions();
+}
+
+void ScriptExecutor::RequestExternalAction(
+    const ExternalActionProto& external_action,
+    base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
+        start_dom_checks_callback,
+    base::OnceCallback<void(const external::Result& result)>
+        end_action_callback) {
+  bool prompt = external_action.allow_interrupt() ||
+                external_action.show_touchable_area();
+  if (prompt && delegate_->EnterState(AutofillAssistantState::PROMPT)) {
+    if (external_action.show_touchable_area() && touchable_element_area_) {
+      delegate_->SetTouchableElementArea(*touchable_element_area_);
+
+      // The touchable element and overlays are cleared by calling
+      // ScriptExecutor::CleanUpAfterPrompt
+    }
+  }
+  external::Action action;
+  *action.mutable_info() = external_action.info();
+  ui_delegate_->ExecuteExternalAction(
+      action, std::move(start_dom_checks_callback),
+      base::BindOnce(&ScriptExecutor::OnExternalActionFinished,
+                     weak_ptr_factory_.GetWeakPtr(), external_action, prompt,
+                     std::move(end_action_callback)));
+}
+
+void ScriptExecutor::OnExternalActionFinished(
+    const ExternalActionProto& external_action,
+    const bool prompt,
+    base::OnceCallback<void(const external::Result& result)>
+        end_action_callback,
+    const external::Result& result) {
+  if (prompt) {
+    CleanUpAfterPrompt(external_action.show_touchable_area());
+  }
+  std::move(end_action_callback).Run(result);
+}
+
+bool ScriptExecutor::MustUseBackendData() const {
+  return delegate_->MustUseBackendData();
 }
 
 }  // namespace autofill_assistant

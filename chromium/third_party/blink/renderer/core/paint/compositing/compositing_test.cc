@@ -4,6 +4,7 @@
 
 #include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
+#include "cc/base/features.h"
 #include "cc/layers/picture_layer.h"
 #include "cc/layers/recording_source.h"
 #include "cc/layers/surface_layer.h"
@@ -18,6 +19,7 @@
 #include "third_party/blink/renderer/core/dom/dom_node_ids.h"
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/html/html_element.h"
 #include "third_party/blink/renderer/core/html/html_iframe_element.h"
@@ -457,8 +459,8 @@ TEST_P(CompositingTest, BackgroundColorInScrollingContentsLayer) {
   // blending the CSS background-color of the <html> element with
   // LocalFrameView::BaseBackgroundColor(), which is white by default.
   auto* layer = CcLayersByName(RootCcLayer(), "LayoutView #document")[0];
-  SkColor expected_color = SkColorSetRGB(10, 20, 30);
-  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
+  SkColor4f expected_color = SkColor4f::FromColor(SkColorSetRGB(10, 20, 30));
+  EXPECT_EQ(layer->background_color(), SkColors::kTransparent);
   auto* scrollable_area = GetLocalFrameView()->LayoutViewport();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
@@ -466,9 +468,9 @@ TEST_P(CompositingTest, BackgroundColorInScrollingContentsLayer) {
 
   // Non-root layers set background_color based on the CSS background color of
   // the layer-defining element.
-  expected_color = SkColorSetRGB(30, 40, 50);
+  expected_color = SkColor4f::FromColor(SkColorSetRGB(30, 40, 50));
   layer = CcLayerByDOMElementId("scroller");
-  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(layer->background_color(), SkColors::kTransparent);
   scrollable_area = scroller_box->GetScrollableArea();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
@@ -519,23 +521,24 @@ TEST_P(CompositingTest, BackgroundColorInGraphicsLayer) {
   // contents layer should not checkerboard, so its background color should be
   // transparent.
   auto* layer = CcLayersByName(RootCcLayer(), "LayoutView #document")[0];
-  EXPECT_EQ(layer->background_color(), SK_ColorWHITE);
+  EXPECT_EQ(layer->background_color(), SkColors::kWhite);
   auto* scrollable_area = GetLocalFrameView()->LayoutViewport();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
-  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
-  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(layer->background_color(), SkColors::kTransparent);
+  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SkColors::kTransparent);
 
   // Non-root layers set background_color based on the CSS background color of
   // the layer-defining element.
-  SkColor expected_color = SkColorSetARGB(roundf(255. * 0.6), 30, 40, 50);
+  SkColor4f expected_color =
+      SkColor4f::FromColor(SkColorSetARGB(roundf(255. * 0.6), 30, 40, 50));
   layer = CcLayerByDOMElementId("scroller");
   EXPECT_EQ(layer->background_color(), expected_color);
   scrollable_area = scroller_box->GetScrollableArea();
   layer = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(), scrollable_area->GetScrollElementId());
-  EXPECT_EQ(layer->background_color(), SK_ColorTRANSPARENT);
-  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(layer->background_color(), SkColors::kTransparent);
+  EXPECT_EQ(layer->SafeOpaqueBackgroundColor(), SkColors::kTransparent);
 }
 
 TEST_P(CompositingTest, ContainPaintLayerBounds) {
@@ -614,10 +617,19 @@ class CompositingSimTest : public PaintTestConfigurations, public SimTest {
 
  private:
   void SetUp() override {
+    if (RuntimeEnabledFeatures::ScrollUnificationEnabled())
+      feature_list_.InitAndEnableFeature(::features::kScrollUnification);
+
     SimTest::SetUp();
     // Ensure a non-empty size so painting does not early-out.
     WebView().Resize(gfx::Size(800, 600));
   }
+  void TearDown() override {
+    SimTest::TearDown();
+    feature_list_.Reset();
+  }
+
+  base::test::ScopedFeatureList feature_list_;
 };
 
 INSTANTIATE_PAINT_TEST_SUITE_P(CompositingSimTest);
@@ -1372,38 +1384,38 @@ TEST_P(CompositingSimTest, SafeOpaqueBackgroundColor) {
 
   auto* opaque_color = CcLayerByDOMElementId("opaque-color");
   EXPECT_TRUE(opaque_color->contents_opaque());
-  EXPECT_EQ(SK_ColorBLUE, opaque_color->background_color());
-  EXPECT_EQ(SK_ColorBLUE, opaque_color->SafeOpaqueBackgroundColor());
+  EXPECT_EQ(opaque_color->background_color(), SkColors::kBlue);
+  EXPECT_EQ(opaque_color->SafeOpaqueBackgroundColor(), SkColors::kBlue);
 
   auto* opaque_image = CcLayerByDOMElementId("opaque-image");
   EXPECT_TRUE(opaque_image->contents_opaque());
-  EXPECT_EQ(SK_ColorTRANSPARENT, opaque_image->background_color());
+  EXPECT_EQ(opaque_image->background_color(), SkColors::kTransparent);
   // Fallback to use the viewport background.
-  EXPECT_EQ(SK_ColorYELLOW, opaque_image->SafeOpaqueBackgroundColor());
+  EXPECT_EQ(opaque_image->SafeOpaqueBackgroundColor(), SkColors::kYellow);
 
-  const SkColor kTranslucentCyan = SkColorSetARGB(128, 0, 255, 255);
+  const SkColor4f kTranslucentCyan{0.0f, 1.0f, 1.0f, 128.0f / 255.0f};
   auto* opaque_image_translucent_color =
       CcLayerByDOMElementId("opaque-image-translucent-color");
   EXPECT_TRUE(opaque_image_translucent_color->contents_opaque());
-  EXPECT_EQ(kTranslucentCyan,
-            opaque_image_translucent_color->background_color());
+  EXPECT_EQ(opaque_image_translucent_color->background_color(),
+            kTranslucentCyan);
   // Use background_color() with the alpha channel forced to be opaque.
-  EXPECT_EQ(SK_ColorCYAN,
-            opaque_image_translucent_color->SafeOpaqueBackgroundColor());
+  EXPECT_EQ(opaque_image_translucent_color->SafeOpaqueBackgroundColor(),
+            SkColors::kCyan);
 
   auto* partly_opaque = CcLayerByDOMElementId("partly-opaque");
   EXPECT_FALSE(partly_opaque->contents_opaque());
-  EXPECT_EQ(SK_ColorBLUE, partly_opaque->background_color());
+  EXPECT_EQ(partly_opaque->background_color(), SkColors::kBlue);
   // SafeOpaqueBackgroundColor() returns SK_ColorTRANSPARENT when
   // background_color() is opaque and contents_opaque() is false.
-  EXPECT_EQ(SK_ColorTRANSPARENT, partly_opaque->SafeOpaqueBackgroundColor());
+  EXPECT_EQ(partly_opaque->SafeOpaqueBackgroundColor(), SkColors::kTransparent);
 
   auto* translucent = CcLayerByDOMElementId("translucent");
   EXPECT_FALSE(translucent->contents_opaque());
-  EXPECT_EQ(kTranslucentCyan, translucent->background_color());
+  EXPECT_EQ(translucent->background_color(), kTranslucentCyan);
   // SafeOpaqueBackgroundColor() returns background_color() if it's not opaque
   // and contents_opaque() is false.
-  EXPECT_EQ(kTranslucentCyan, translucent->SafeOpaqueBackgroundColor());
+  EXPECT_EQ(translucent->SafeOpaqueBackgroundColor(), kTranslucentCyan);
 }
 
 TEST_P(CompositingSimTest, SquashingLayerSafeOpaqueBackgroundColor) {
@@ -1452,10 +1464,11 @@ TEST_P(CompositingSimTest, SquashingLayerSafeOpaqueBackgroundColor) {
   EXPECT_FALSE(squashing_layer->contents_opaque());
   // The background color of #bottomright is used as the background color
   // because it covers the most significant area of the squashing layer.
-  EXPECT_EQ(squashing_layer->background_color(), SK_ColorCYAN);
+  EXPECT_EQ(squashing_layer->background_color(), SkColors::kCyan);
   // SafeOpaqueBackgroundColor() returns SK_ColorTRANSPARENT when
   // background_color() is opaque and contents_opaque() is false.
-  EXPECT_EQ(squashing_layer->SafeOpaqueBackgroundColor(), SK_ColorTRANSPARENT);
+  EXPECT_EQ(squashing_layer->SafeOpaqueBackgroundColor(),
+            SkColors::kTransparent);
 }
 
 // Test that a pleasant checkerboard color is used in the presence of blending.
@@ -1470,8 +1483,8 @@ TEST_P(CompositingSimTest, RootScrollingContentsSafeOpaqueBackgroundColor) {
   auto* scrolling_contents = ScrollingContentsCcLayerByScrollElementId(
       RootCcLayer(),
       MainFrame().GetFrameView()->LayoutViewport()->GetScrollElementId());
-  EXPECT_EQ(scrolling_contents->background_color(), SK_ColorWHITE);
-  EXPECT_EQ(scrolling_contents->SafeOpaqueBackgroundColor(), SK_ColorWHITE);
+  EXPECT_EQ(scrolling_contents->background_color(), SkColors::kWhite);
+  EXPECT_EQ(scrolling_contents->SafeOpaqueBackgroundColor(), SkColors::kWhite);
 }
 
 TEST_P(CompositingSimTest, NonDrawableLayersIgnoredForRenderSurfaces) {
@@ -1757,6 +1770,144 @@ TEST_P(CompositingSimTest, ImplSideScrollSkipsCommit) {
   EXPECT_FALSE(Compositor().LayerTreeHost()->CommitRequested());
 }
 
+TEST_P(CompositingSimTest, ImplSideScaleSkipsCommit) {
+  InitializeWithHTML(R"HTML(
+    <div>Empty Page</div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  ASSERT_FALSE(Compositor().LayerTreeHost()->CommitRequested());
+  ASSERT_EQ(1.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  // Simulate a page scale delta (i.e. user pinch-zoomed) on the compositor.
+  cc::CompositorCommitData commit_data;
+  commit_data.page_scale_delta = 2.f;
+
+  {
+    auto sync = Compositor().LayerTreeHost()->SimulateSyncingDeltasForTesting();
+    Compositor().LayerTreeHost()->ApplyCompositorChanges(&commit_data);
+  }
+
+  // The transform tree's page scale factor isn't computed until we perform a
+  // lifecycle update.
+  ASSERT_EQ(1.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  // Update just the blink lifecycle because a full frame would clear the bit
+  // for whether a commit was requested.
+  UpdateAllLifecyclePhases();
+
+  EXPECT_EQ(2.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  // A main frame is needed to call UpdateLayers which updates property trees,
+  // re-calculating cached to/from-screen transforms.
+  EXPECT_TRUE(Compositor().LayerTreeHost()->RequestedMainFramePending());
+
+  // A full commit is not needed.
+  EXPECT_FALSE(Compositor().LayerTreeHost()->CommitRequested());
+}
+
+// Ensure that updates to page scale coming from the main thread update the
+// page scale factor on the transform tree.
+TEST_P(CompositingSimTest, MainThreadScaleUpdatesTransformTree) {
+  InitializeWithHTML(R"HTML(
+    <div>Empty Page</div>
+  )HTML");
+  Compositor().BeginFrame();
+
+  ASSERT_EQ(1.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  VisualViewport& viewport = WebView().GetPage()->GetVisualViewport();
+
+  // This test checks that the transform tree's page scale factor is correctly
+  // updated when scale is set with an existing property tree.
+  ASSERT_TRUE(viewport.GetPageScaleNode());
+  viewport.SetScale(2.f);
+
+  // The scale factor on the layer tree should be updated immediately.
+  ASSERT_EQ(2.f, Compositor().LayerTreeHost()->page_scale_factor());
+
+  // The transform tree's page scale factor isn't computed until we perform a
+  // lifecycle update.
+  ASSERT_EQ(1.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(2.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  // Ensure the transform node is also correctly updated.
+  const cc::TransformNode* scale_node =
+      GetPropertyTrees()->transform_tree().FindNodeFromElementId(
+          viewport.GetPageScaleNode()->GetCompositorElementId());
+  ASSERT_TRUE(scale_node);
+  EXPECT_TRUE(scale_node->local.IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(2, 2), scale_node->local.To2dScale());
+}
+
+// Similar to above but ensure the transform tree is correctly setup when scale
+// already exists when building the tree.
+TEST_P(CompositingSimTest, BuildTreeSetsScaleOnTransformTree) {
+  SimRequest main_resource("https://origin-a.com/a.html", "text/html");
+  LoadURL("https://origin-a.com/a.html");
+  main_resource.Complete(R"HTML(
+      <!DOCTYPE html>
+      <div>Empty Page</div>
+  )HTML");
+
+  VisualViewport& viewport = WebView().GetPage()->GetVisualViewport();
+
+  // This test checks that the transform tree's page scale factor is correctly
+  // set when scale is set before property trees have been built.
+  ASSERT_FALSE(viewport.GetPageScaleNode());
+  viewport.SetScale(2.f);
+
+  // The scale factor on the layer tree should be updated immediately.
+  ASSERT_EQ(2.f, Compositor().LayerTreeHost()->page_scale_factor());
+
+  // The transform tree's page scale factor isn't computed until we perform a
+  // lifecycle update.
+  ASSERT_EQ(1.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  Compositor().BeginFrame();
+
+  EXPECT_EQ(2.f, GetPropertyTrees()->transform_tree().page_scale_factor());
+
+  // Ensure the transform node is also correctly updated.
+  const cc::TransformNode* scale_node =
+      GetPropertyTrees()->transform_tree().FindNodeFromElementId(
+          viewport.GetPageScaleNode()->GetCompositorElementId());
+  ASSERT_TRUE(scale_node);
+  EXPECT_TRUE(scale_node->local.IsScale2d());
+  EXPECT_EQ(gfx::Vector2dF(2, 2), scale_node->local.To2dScale());
+}
+
+TEST_P(CompositingSimTest, UnifiedScrollWithMainThreadReasonsNeedsCommit) {
+  // This test requires scroll unification.
+  if (!RuntimeEnabledFeatures::ScrollUnificationEnabled())
+    return;
+
+  InitializeWithHTML(R"HTML(
+    <style>
+      body { height: 2500px; }
+      #h { background: url(data:image/png;base64,invalid) fixed; }
+    </style>
+    <div id="h">ABCDE</div>
+  )HTML");
+  Compositor().BeginFrame();
+  auto* layer_tree_host = Compositor().LayerTreeHost();
+  EXPECT_FALSE(layer_tree_host->CommitRequested());
+
+  // Simulate 100px scroll from compositor thread.
+  cc::CompositorCommitData commit_data;
+  commit_data.scrolls.emplace_back(
+      MainFrame().GetFrameView()->LayoutViewport()->GetScrollElementId(),
+      gfx::Vector2dF(0, 100.f), absl::nullopt);
+  layer_tree_host->ApplyCompositorChanges(&commit_data);
+
+  // Due to main thread scrolling reasons (fixed-background element), we need a
+  // commit to push the update to the transform tree.
+  EXPECT_TRUE(layer_tree_host->CommitRequested());
+}
+
 TEST_P(CompositingSimTest, FrameAttribution) {
   InitializeWithHTML(R"HTML(
     <div id='child' style='will-change: transform;'>test</div>
@@ -1894,7 +2045,8 @@ TEST_P(CompositingSimTest, BackgroundColorChangeUsesRepaintUpdate) {
 
   Compositor().BeginFrame();
 
-  EXPECT_EQ(CcLayerByDOMElementId("target")->background_color(), SK_ColorWHITE);
+  EXPECT_EQ(CcLayerByDOMElementId("target")->background_color(),
+            SkColors::kWhite);
 
   // Initially, no update is needed.
   EXPECT_FALSE(paint_artifact_compositor()->NeedsUpdate());
@@ -1911,7 +2063,8 @@ TEST_P(CompositingSimTest, BackgroundColorChangeUsesRepaintUpdate) {
 
   // Though a repaint-only update was done, the background color should still
   // be updated.
-  EXPECT_EQ(CcLayerByDOMElementId("target")->background_color(), SK_ColorBLACK);
+  EXPECT_EQ(CcLayerByDOMElementId("target")->background_color(),
+            SkColors::kBlack);
 }
 
 // Similar to |BackgroundColorChangeUsesRepaintUpdate| but with multiple paint
@@ -1953,7 +2106,7 @@ TEST_P(CompositingSimTest, MultipleChunkBackgroundColorChangeRepaintUpdate) {
       RootCcLayer(),
       MainFrame().GetFrameView()->LayoutViewport()->GetScrollElementId());
 
-  EXPECT_EQ(scrolling_contents->background_color(), SK_ColorBLACK);
+  EXPECT_EQ(scrolling_contents->background_color(), SkColors::kBlack);
 
   // Clear the previous update to ensure we record a new one in the next update.
   paint_artifact_compositor()->ClearPreviousUpdateForTesting();
@@ -1967,7 +2120,7 @@ TEST_P(CompositingSimTest, MultipleChunkBackgroundColorChangeRepaintUpdate) {
 
   // Though a repaint-only update was done, the background color should still
   // be updated.
-  EXPECT_EQ(scrolling_contents->background_color(), SK_ColorWHITE);
+  EXPECT_EQ(scrolling_contents->background_color(), SkColors::kWhite);
 }
 
 // Similar to |BackgroundColorChangeUsesRepaintUpdate| but with post-paint

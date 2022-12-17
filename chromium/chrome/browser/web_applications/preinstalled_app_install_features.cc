@@ -9,6 +9,10 @@
 #include "chrome/browser/policy/profile_policy_connector.h"
 #include "chrome/browser/profiles/profile.h"
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif  // IS_CHROMEOS
+
 namespace web_app {
 
 // A hard coded list of features available for externally installed apps to
@@ -21,6 +25,7 @@ constexpr const base::Feature* kPreinstalledAppInstallFeatures[] = {
 #if BUILDFLAG(IS_CHROMEOS)
     &kCursiveStylusPreinstall,
     &kMessagesPreinstall,
+    &::chromeos::features::kCloudGamingDevice,
 #endif
 };
 
@@ -40,24 +45,13 @@ bool IsMigrationFeature(const base::Feature& feature) {
 // Enables migration of default installed GSuite apps over to their replacement
 // web apps.
 const base::Feature kMigrateDefaultChromeAppToWebAppsGSuite{
-  "MigrateDefaultChromeAppToWebAppsGSuite",
-#if BUILDFLAG(IS_CHROMEOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_CHROMEOS)
-};
+    "MigrateDefaultChromeAppToWebAppsGSuite", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables migration of default installed non-GSuite apps over to their
 // replacement web apps.
 const base::Feature kMigrateDefaultChromeAppToWebAppsNonGSuite{
-  "MigrateDefaultChromeAppToWebAppsNonGSuite",
-#if BUILDFLAG(IS_CHROMEOS)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_CHROMEOS)
-};
+    "MigrateDefaultChromeAppToWebAppsNonGSuite",
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables installing the PWA version of the chrome os calculator instead of the
 // deprecated chrome app.
@@ -86,7 +80,7 @@ const base::Feature kCursiveStylusPreinstall{"CursiveStylusPreinstall",
 
 // Enables installing the Messages app on unmanaged devices.
 const base::Feature kMessagesPreinstall{"MessagesPreinstall",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
+                                        base::FEATURE_ENABLED_BY_DEFAULT};
 
 #endif  // BUILDFLAG(IS_CHROMEOS)
 

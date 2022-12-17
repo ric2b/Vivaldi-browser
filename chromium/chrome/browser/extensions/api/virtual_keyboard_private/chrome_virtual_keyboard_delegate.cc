@@ -577,8 +577,11 @@ void ChromeVirtualKeyboardDelegate::OnHasInputDevices(
       "borderedkey", base::FeatureList::IsEnabled(
                          chromeos::features::kVirtualKeyboardBorderedKey)));
   features.Append(GenerateFeatureFlag(
-      "multitouch", base::FeatureList::IsEnabled(
-                        chromeos::features::kVirtualKeyboardMultitouch)));
+      "multitouch",
+      base::FeatureList::IsEnabled(features::kVirtualKeyboardMultitouch)));
+  features.Append(GenerateFeatureFlag(
+      "roundCorners", base::FeatureList::IsEnabled(
+                          chromeos::features::kVirtualKeyboardRoundCorners)));
   features.Append(GenerateFeatureFlag(
       "systemchinesephysicaltyping",
       base::FeatureList::IsEnabled(
@@ -608,7 +611,7 @@ void ChromeVirtualKeyboardDelegate::DispatchConfigChangeEvent(
     return;
 
   auto event_args = std::make_unique<base::ListValue>();
-  event_args->Append(std::move(settings));
+  event_args->Append(base::Value::FromUniquePtrValue(std::move(settings)));
 
   auto event = std::make_unique<extensions::Event>(
       extensions::events::VIRTUAL_KEYBOARD_PRIVATE_ON_KEYBOARD_CONFIG_CHANGED,

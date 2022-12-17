@@ -15,7 +15,6 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "base/task/thread_pool/thread_pool_instance.h"
 #include "base/threading/thread_restrictions.h"
 #include "build/build_config.h"
@@ -346,16 +345,16 @@ std::string VivaldiImageStore::GetMappingJSONOnFileThread() {
   // bookamrks and a add a version field to the file. Then presence of the file
   // without the version string will indicate the need for converssion.
 
-  std::vector<base::Value::DictStorage::value_type> items;
+  base::Value::Dict items;
   for (const auto& it : path_id_map_) {
     const base::FilePath& path = it.second;
     base::Value::Dict item;
     item.Set("local_path", path.AsUTF16Unsafe());
-    items.emplace_back(it.first, std::move(item));
+    items.Set(it.first, std::move(item));
   }
 
   base::Value::Dict root;
-  root.Set("mappings", base::Value(base::Value::DictStorage(std::move(items))));
+  root.Set("mappings", std::move(items));
 
   std::string json;
   base::JSONWriter::WriteWithOptions(

@@ -81,9 +81,7 @@ class AppListNudgeControllerTest : public AshTestBase {
           ->toast_container_for_test();
     }
 
-    return GetAppListTestHelper()
-        ->GetAppsContainerView()
-        ->toast_container_for_test();
+    return GetAppListTestHelper()->GetAppsContainerView()->toast_container();
   }
 
   // Show app list and wait long enough for the nudge to be considered shown.
@@ -104,26 +102,25 @@ TEST_F(AppListNudgeControllerTest, Basic) {
 
   // The reorder nudge should show 3 times to the users.
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   DismissAppList();
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   DismissAppList();
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   DismissAppList();
 
   // After the fourth time opening the app list, the nudge should be removed.
   ShowAppListAndWait();
-  EXPECT_FALSE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kNone,
-            GetToastContainerView()->current_toast());
+  EXPECT_FALSE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kNone, GetToastContainerView()->current_toast());
   DismissAppList();
 }
 
@@ -133,15 +130,15 @@ TEST_F(AppListNudgeControllerTest, StopShowingNudgeAfterReordering) {
 
   // The reorder nudge should show for the first time.
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   // Simulate that the app list is reordered by name.
   Shell::Get()->app_list_controller()->UpdateAppListWithNewTemporarySortOrder(
       AppListSortOrder::kNameAlphabetical, /*animate=*/false,
       base::OnceClosure());
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderUndo,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderUndo,
             GetToastContainerView()->current_toast());
   DismissAppList();
 
@@ -158,15 +155,15 @@ TEST_F(AppListNudgeControllerTest, TabletModeVisibilityTest) {
   SimulateUserLogin("user@gmail.com");
 
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   // Change to tablet mode. The bubble app list is hidden and fullscreen app
   // list is showing.
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(true);
   EXPECT_EQ(1, GetReorderNudgeShownCount());
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   // Wait for long enough for the nudge to be considered shown.
   task_environment()->AdvanceClock(base::Seconds(1));
@@ -178,8 +175,8 @@ TEST_F(AppListNudgeControllerTest, TabletModeVisibilityTest) {
   EXPECT_EQ(2, GetReorderNudgeShownCount());
   // Close the window and return back to app list.
   window->Hide();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
   // Wait for long enough for the nudge to be considered shown.
   task_environment()->AdvanceClock(base::Seconds(1));
@@ -191,12 +188,12 @@ TEST_F(AppListNudgeControllerTest, TabletModeVisibilityTest) {
   // For the case where the nudge is visible but inactive, the count doesn't
   // increment as the nudge is still visible.
   EXPECT_EQ(2, GetReorderNudgeShownCount());
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
 
   // Exit the search view. The nudge should be visible and active now.
   search_box->SetSearchBoxActive(false, ui::ET_MOUSE_PRESSED);
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
 
   // Change to tablet mode. The nudge should be removed when the next time the
@@ -204,9 +201,8 @@ TEST_F(AppListNudgeControllerTest, TabletModeVisibilityTest) {
   Shell::Get()->tablet_mode_controller()->SetEnabledForTest(false);
   EXPECT_EQ(3, GetReorderNudgeShownCount());
   ShowAppListAndWait();
-  EXPECT_FALSE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kNone,
-            GetToastContainerView()->current_toast());
+  EXPECT_FALSE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kNone, GetToastContainerView()->current_toast());
 }
 
 TEST_F(AppListNudgeControllerTest, ReorderNudgeDismissButton) {
@@ -214,8 +210,8 @@ TEST_F(AppListNudgeControllerTest, ReorderNudgeDismissButton) {
   SimulateUserLogin("user@gmail.com");
 
   ShowAppListAndWait();
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderNudge,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderNudge,
             GetToastContainerView()->current_toast());
 
   // Dismiss the reorder nudge and check that it is no longer visible.
@@ -225,15 +221,14 @@ TEST_F(AppListNudgeControllerTest, ReorderNudgeDismissButton) {
                                    ->GetBoundsInScreen()
                                    .CenterPoint());
   event_generator->ClickLeftButton();
-  EXPECT_FALSE(GetToastContainerView()->is_toast_visible());
+  EXPECT_FALSE(GetToastContainerView()->IsToastVisible());
 
   // Close and reopen app list to make sure that the reorder nudge is no longer
   // shown after being dismissed.
   DismissAppList();
   ShowAppListAndWait();
-  EXPECT_FALSE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kNone,
-            GetToastContainerView()->current_toast());
+  EXPECT_FALSE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kNone, GetToastContainerView()->current_toast());
 }
 
 TEST_F(AppListNudgeControllerTest, ReorderUndoCloseButton) {
@@ -247,8 +242,8 @@ TEST_F(AppListNudgeControllerTest, ReorderUndoCloseButton) {
   Shell::Get()->app_list_controller()->UpdateAppListWithNewTemporarySortOrder(
       AppListSortOrder::kNameAlphabetical, /*animate=*/false,
       base::OnceClosure());
-  EXPECT_TRUE(GetToastContainerView()->is_toast_visible());
-  EXPECT_EQ(AppListToastContainerView::ToastType::kReorderUndo,
+  EXPECT_TRUE(GetToastContainerView()->IsToastVisible());
+  EXPECT_EQ(AppListToastType::kReorderUndo,
             GetToastContainerView()->current_toast());
 
   GetToastContainerView()->GetWidget()->LayoutRootViewIfNecessary();
@@ -260,7 +255,7 @@ TEST_F(AppListNudgeControllerTest, ReorderUndoCloseButton) {
                                    ->GetBoundsInScreen()
                                    .CenterPoint());
   event_generator->ClickLeftButton();
-  EXPECT_FALSE(GetToastContainerView()->is_toast_visible());
+  EXPECT_FALSE(GetToastContainerView()->IsToastVisible());
 }
 
 }  // namespace ash

@@ -71,6 +71,9 @@ class ASH_EXPORT AppListBubblePresenter
   // Switches to the assistant page. Requires the bubble to be open.
   void ShowEmbeddedAssistantUI();
 
+  // Updates the continue section visibility based on user preference.
+  void UpdateContinueSectionVisibility();
+
   // Handles `AppListController::UpdateAppListWithNewSortingOrder()` for the
   // bubble launcher.
   void UpdateForNewSortingOrder(
@@ -101,7 +104,7 @@ class ASH_EXPORT AppListBubblePresenter
   // outside the bubble.
   void OnPressOutsideBubble();
 
-  // Gets the display id for the display `bubble_widget_` is shown on, returns
+  // Gets the display id for the display `bubble_widget_` is shown on. Returns
   // kInvalidDisplayId if not shown.
   int64_t GetDisplayId() const;
 
@@ -110,8 +113,9 @@ class ASH_EXPORT AppListBubblePresenter
 
   AppListControllerImpl* const controller_;
 
-  // Whether the view is showing or animating to shown. If true,
-  // `bubble_widget_` is not null.
+  // Whether the view is showing or animating to show. Note that the
+  // `bubble_widget_` may be null during the zero state search called in
+  // `Show()`.
   bool is_target_visibility_show_ = false;
 
   // Owned by native widget.

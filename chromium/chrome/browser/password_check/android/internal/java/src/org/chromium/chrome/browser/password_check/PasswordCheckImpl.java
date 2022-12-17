@@ -10,6 +10,7 @@ import android.os.Bundle;
 
 import org.chromium.base.ObserverList;
 import org.chromium.chrome.browser.password_check.PasswordCheckBridge.PasswordCheckObserver;
+import org.chromium.chrome.browser.password_manager.PasswordChangeSuccessTrackerBridge;
 import org.chromium.chrome.browser.password_manager.PasswordCheckReferrer;
 import org.chromium.components.browser_ui.settings.SettingsLauncher;
 
@@ -165,5 +166,17 @@ class PasswordCheckImpl implements PasswordCheck, PasswordCheckObserver {
     @Override
     public void fetchScripts() {
         mPasswordCheckBridge.refreshScripts();
+    }
+
+    @Override
+    public void onAutomatedPasswordChangeStarted(CompromisedCredential credential) {
+        PasswordChangeSuccessTrackerBridge.onAutomatedPasswordChangeStarted(
+                credential.getAssociatedUrl(), credential.getUsername());
+    }
+
+    @Override
+    public void onManualPasswordChangeStarted(CompromisedCredential credential) {
+        PasswordChangeSuccessTrackerBridge.onManualPasswordChangeStarted(
+                credential.getAssociatedUrl(), credential.getUsername());
     }
 }

@@ -46,7 +46,7 @@ class IsolatedAppsDeveloperModeAllowedPolicyTest
 
     const std::string isolated_app_origins =
         std::string("https://") + kIsolatedAppHost;
-    command_line->AppendSwitchASCII(switches::kRestrictedApiOrigins,
+    command_line->AppendSwitchASCII(switches::kIsolatedAppOrigins,
                                     isolated_app_origins);
   }
 
@@ -89,7 +89,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedAppsDeveloperModeAllowedPolicyTest, MockTcp) {
       https_server()->GetURL(kIsolatedAppHost, "/policy/direct_sockets.html")));
 
   const bool enabled = std::get<1>(GetParam());
-  ASSERT_EQ(enabled, EvalJs(app_contents->GetMainFrame(), "mockTcp()"));
+  ASSERT_EQ(enabled, EvalJs(app_contents->GetPrimaryMainFrame(), "mockTcp()"));
 }
 
 IN_PROC_BROWSER_TEST_P(IsolatedAppsDeveloperModeAllowedPolicyTest, MockUdp) {
@@ -103,7 +103,7 @@ IN_PROC_BROWSER_TEST_P(IsolatedAppsDeveloperModeAllowedPolicyTest, MockUdp) {
       https_server()->GetURL(kIsolatedAppHost, "/policy/direct_sockets.html")));
 
   const bool enabled = std::get<1>(GetParam());
-  ASSERT_EQ(enabled, EvalJs(app_contents->GetMainFrame(), "mockUdp()"));
+  ASSERT_EQ(enabled, EvalJs(app_contents->GetPrimaryMainFrame(), "mockUdp()"));
 }
 
 INSTANTIATE_TEST_SUITE_P(

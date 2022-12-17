@@ -15,6 +15,7 @@ import org.chromium.components.offline_items_collection.OfflineContentProvider;
 import org.chromium.components.offline_items_collection.OfflineItem;
 import org.chromium.components.offline_items_collection.UpdateDelta;
 import org.chromium.ui.modaldialog.ModalDialogManager;
+import org.chromium.url.GURL;
 
 import java.util.List;
 
@@ -68,6 +69,12 @@ public interface DownloadMessageUiController extends OfflineContentProvider.Obse
     /** Associates a notification ID with the tracked download for future usage. */
     // TODO(shaktisahu): Find an alternative way after moving to offline content provider.
     void onNotificationShown(ContentId id, int notificationId);
+
+    /**
+     * Registers a new URL source for which a download interstitial download will be initiated.
+     * @param originalUrl The URL of the download.
+     */
+    void addDownloadInterstitialSource(GURL originalUrl);
 
     /** OfflineContentProvider.Observer methods. */
     @Override

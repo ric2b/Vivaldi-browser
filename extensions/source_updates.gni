@@ -2,9 +2,6 @@ import ("//vivaldi/testing/testing.gni")
 
 if (vivaldi_build_tests) {
   update_target("//chrome/test:browser_tests") {
-    sources -= [
-      "../browser/apps/platform_apps/api/music_manager_private/music_manager_private_browsertest.cc",
-    ]
     sources += [
       "//vivaldi/extensions/api/webview/chrome_web_view_mediastate_apitest.cc",
       "//vivaldi/extensions/api/tabs/tests/tabs_mediastate_apitest.cc",
@@ -13,7 +10,7 @@ if (vivaldi_build_tests) {
 }
 
 if (!is_android) {
-  update_target("//chrome/common:common") {
+  update_target("//chrome/common:common_lib") {
     sources -= ["initialize_extensions_client.cc"]
     sources += ["//vivaldi/extensions/vivaldi_initialize_extensions_client.cc"]
   }

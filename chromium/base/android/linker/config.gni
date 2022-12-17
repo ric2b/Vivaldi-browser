@@ -11,10 +11,9 @@ import("//build/config/sanitizers/sanitizers.gni")
 # Chromium linker causes instrumentation to return incorrect results.
 # Incompatible with incremental_install because it causes LibraryLoader to not
 # look for the .so files in their side-loaded location.
-# NOTE(jarle@vivaldi.com): Chromium linker causes runtime crash on certain
-# Samsung devices (Galaxy Note8/S9 etc.). WE NEED THIS PATCH.
-# Ref. https://bugs.vivaldi.com/browse/VAB-375 and https://bugs.vivaldi.com/browse/VAB-25
 chromium_linker_supported =
     !incremental_install && !is_component_build && !enable_profiling &&
     !use_order_profiling && !is_asan
+# Vivaldi: Patch for https://bugs.vivaldi.com/browse/VAB-375 is still needed.
+# Ref. https://bugs.vivaldi.com/browse/VAB-6092
     && !is_vivaldi

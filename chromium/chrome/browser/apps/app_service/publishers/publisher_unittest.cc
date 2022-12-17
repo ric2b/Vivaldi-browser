@@ -21,6 +21,7 @@
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/test_web_app_url_loader.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/account_id/account_id.h"
 #include "components/app_constants/constants.h"
@@ -226,7 +227,7 @@ class AppRegistryCacheObserver : public apps::AppRegistryCache::Observer {
  private:
   std::vector<std::string> updated_ids_;
   std::vector<apps::AppType> app_types_;
-  apps::AppRegistryCache* cache_ = nullptr;
+  raw_ptr<apps::AppRegistryCache> cache_ = nullptr;
 };
 
 }  // namespace
@@ -289,7 +290,7 @@ class PublisherTest : public extensions::ExtensionServiceTestBase {
     web_app_info->title = base::UTF8ToUTF16(app_name);
     web_app_info->start_url = kAppUrl;
     web_app_info->scope = kAppUrl;
-    web_app_info->user_display_mode = web_app::DisplayMode::kStandalone;
+    web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
     return web_app::test::InstallWebApp(profile(), std::move(web_app_info));
   }

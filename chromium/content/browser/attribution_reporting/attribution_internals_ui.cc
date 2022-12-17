@@ -5,8 +5,6 @@
 #include "content/browser/attribution_reporting/attribution_internals_ui.h"
 
 #include "content/browser/attribution_reporting/attribution_internals_handler_impl.h"
-#include "content/browser/attribution_reporting/attribution_manager_provider.h"
-#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/grit/dev_ui_content_resources.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
@@ -31,6 +29,12 @@ AttributionInternalsUI::AttributionInternalsUI(WebUI* web_ui)
                           IDR_ATTRIBUTION_INTERNALS_MOJOM_JS);
   source->AddResourcePath("attribution_internals.js",
                           IDR_ATTRIBUTION_INTERNALS_JS);
+  source->AddResourcePath("attribution_internals_table.js",
+                          IDR_ATTRIBUTION_INTERNALS_TABLE_JS);
+  source->AddResourcePath("attribution_internals_table.html.js",
+                          IDR_ATTRIBUTION_INTERNALS_TABLE_HTML_JS);
+  source->AddResourcePath("table_model.js",
+                          IDR_ATTRIBUTION_INTERNALS_TABLE_MODEL_JS);
   source->AddResourcePath("attribution_internals.css",
                           IDR_ATTRIBUTION_INTERNALS_CSS);
   source->SetDefaultResource(IDR_ATTRIBUTION_INTERNALS_HTML);
@@ -53,12 +57,6 @@ void AttributionInternalsUI::BindInterface(
     mojo::PendingReceiver<attribution_internals::mojom::Handler> receiver) {
   ui_handler_ = std::make_unique<AttributionInternalsHandlerImpl>(
       web_ui(), std::move(receiver));
-}
-
-void AttributionInternalsUI::SetAttributionManagerProviderForTesting(
-    std::unique_ptr<AttributionManagerProvider> manager_provider) {
-  ui_handler_->SetAttributionManagerProviderForTesting(
-      std::move(manager_provider));
 }
 
 }  // namespace content

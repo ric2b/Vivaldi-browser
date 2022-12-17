@@ -14,9 +14,9 @@
 #include "ash/constants/ash_features.h"
 #include "ash/public/cpp/accelerators.h"
 #include "ash/public/cpp/style/color_provider.h"
+#include "ash/public/cpp/view_shadow.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/highlight_border.h"
 #include "ash/system/tray/tray_constants.h"
 #include "ash/system/unified/unified_system_tray_view.h"
 #include "third_party/skia/include/core/SkCanvas.h"
@@ -30,6 +30,7 @@
 #include "ui/base/metadata/metadata_impl_macros.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_type.h"
+#include "ui/compositor_extra/shadow.h"
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/color_palette.h"
@@ -37,6 +38,7 @@
 #include "ui/gfx/geometry/rect.h"
 #include "ui/gfx/geometry/skia_conversions.h"
 #include "ui/views/bubble/bubble_frame_view.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/painter.h"
 #include "ui/views/views_delegate.h"
@@ -246,6 +248,10 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
   // an alert dialog. This would make screen readers announce the whole of the
   // system tray which is undesirable.
   SetAccessibleRole(ax::mojom::Role::kDialog);
+  // We force to create contents background since the bubble border background
+  // is not shown in this view.
+  if (features::IsDarkLightModeEnabled())
+    set_force_create_contents_background(true);
   // Bubbles that use transparent colors should not paint their ClientViews to a
   // layer as doing so could result in visual artifacts.
   SetPaintClientToLayer(false);
@@ -266,18 +272,11 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
                                              : gfx::Insets());
 
   if (init_params.translucent) {
-    // The following code will not work with bubble's shadow.
-    DCHECK(!init_params.has_shadow);
-
-    if (features::IsDarkLightModeEnabled()) {
-      // TODO(crbug/1313073): Remove layer creation in children views of this
-      // view to improve performance.
-      SetPaintToLayer();
-    } else {
-      SetPaintToLayer(ui::LAYER_SOLID_COLOR);
-      layer()->SetFillsBoundsOpaquely(false);
-    }
-
+    // TODO(crbug/1313073): In the dark light mode feature, remove layer
+    // creation in children views of this view to improve performance.
+    SetPaintToLayer(features::IsDarkLightModeEnabled() ? ui::LAYER_TEXTURED
+                                                       : ui::LAYER_SOLID_COLOR);
+    layer()->SetFillsBoundsOpaquely(false);
     layer()->SetRoundedCornerRadius(
         gfx::RoundedCornersF{static_cast<float>(params_.corner_radius)});
     layer()->SetIsFastRoundedCorner(true);
@@ -289,11 +288,21 @@ TrayBubbleView::TrayBubbleView(const InitParams& init_params)
     // NativeViewHost and may steal events.
     SetPaintToLayer(ui::LAYER_NOT_DRAWN);
 
-    if (features::IsDarkLightModeEnabled()) {
+    if (features::IsDarkLightModeEnabled() && !init_params.transparent) {
       SetPaintToLayer();
       layer()->SetRoundedCornerRadius(
           gfx::RoundedCornersF{static_cast<float>(params_.corner_radius)});
     }
+  }
+
+  if (init_params.transparent) {
+    set_color(SK_ColorTRANSPARENT);
+  }
+
+  if (params_.has_shadow) {
+    shadow_ = std::make_unique<ViewShadow>(this, params_.shadow_elevation);
+    shadow_->shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
+    shadow_->SetRoundedCornerRadius(params_.corner_radius);
   }
 
   auto layout = std::make_unique<BottomAlignedBoxLayout>(this);
@@ -392,15 +401,6 @@ void TrayBubbleView::StopReroutingEvents() {
   reroute_event_handler_.reset();
 }
 
-void TrayBubbleView::OnBeforeBubbleWidgetInit(Widget::InitParams* params,
-                                              Widget* bubble_widget) const {
-  if (params_.has_shadow) {
-    // Apply a WM-provided shadow (see ui/wm/core/).
-    params->shadow_type = Widget::InitParams::ShadowType::kDrop;
-    params->shadow_elevation = wm::kShadowElevationActiveWindow;
-  }
-}
-
 void TrayBubbleView::OnWidgetClosing(Widget* widget) {
   // We no longer need to watch key events for activation if the widget is
   // closing.
@@ -429,10 +429,8 @@ ui::LayerType TrayBubbleView::GetLayerType() const {
 std::unique_ptr<NonClientFrameView> TrayBubbleView::CreateNonClientFrameView(
     Widget* widget) {
   // Create the customized bubble border.
-  std::unique_ptr<BubbleBorder> bubble_border = std::make_unique<BubbleBorder>(
-      arrow(), BubbleBorder::NO_SHADOW,
-      params_.bg_color.value_or(gfx::kPlaceholderColor));
-  bubble_border->set_use_theme_background_color(!params_.bg_color);
+  std::unique_ptr<BubbleBorder> bubble_border =
+      std::make_unique<BubbleBorder>(arrow(), BubbleBorder::NO_SHADOW);
   if (params_.corner_radius)
     bubble_border->SetCornerRadius(params_.corner_radius);
   bubble_border->set_avoid_shadow_overlap(true);
@@ -509,15 +507,15 @@ void TrayBubbleView::GetAccessibleNodeData(ui::AXNodeData* node_data) {
 
 void TrayBubbleView::OnThemeChanged() {
   views::BubbleDialogDelegateView::OnThemeChanged();
+  if (params_.transparent)
+    return;
 
   if (features::IsDarkLightModeEnabled()) {
-    SetBorder(std::make_unique<HighlightBorder>(
-        params_.corner_radius, HighlightBorder::Type::kHighlightBorder1,
+    SetBorder(std::make_unique<views::HighlightBorder>(
+        params_.corner_radius, views::HighlightBorder::Type::kHighlightBorder1,
         /*use_light_colors=*/false));
-    SetBackground(views::CreateRoundedRectBackground(
-        AshColorProvider::Get()->GetBaseLayerColor(
-            AshColorProvider::BaseLayerType::kTransparent80),
-        params_.corner_radius));
+    set_color(AshColorProvider::Get()->GetBaseLayerColor(
+        AshColorProvider::BaseLayerType::kTransparent80));
     return;
   }
 

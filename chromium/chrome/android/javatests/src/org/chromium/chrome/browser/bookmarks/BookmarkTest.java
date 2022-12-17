@@ -55,6 +55,7 @@ import org.chromium.base.test.util.CallbackHelper;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.base.test.util.Criteria;
 import org.chromium.base.test.util.CriteriaHelper;
+import org.chromium.base.test.util.DisableIf;
 import org.chromium.base.test.util.DisabledTest;
 import org.chromium.base.test.util.Feature;
 import org.chromium.base.test.util.FlakyTest;
@@ -79,6 +80,7 @@ import org.chromium.chrome.browser.power_bookmarks.ShoppingSpecifics;
 import org.chromium.chrome.browser.preferences.ChromePreferenceKeys;
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 import org.chromium.chrome.browser.profiles.Profile;
+import org.chromium.chrome.browser.read_later.ReadingListUtils;
 import org.chromium.chrome.browser.sync.SyncService;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.messages.snackbar.Snackbar;
@@ -103,6 +105,7 @@ import org.chromium.content_public.browser.test.util.TestThreadUtils;
 import org.chromium.content_public.browser.test.util.TouchCommon;
 import org.chromium.net.test.EmbeddedTestServer;
 import org.chromium.ui.test.util.NightModeTestUtils;
+import org.chromium.ui.test.util.UiDisableIf;
 import org.chromium.ui.test.util.UiRestriction;
 import org.chromium.url.GURL;
 
@@ -117,8 +120,7 @@ import java.util.concurrent.ExecutionException;
 // clang-format off
 @RunWith(ParameterizedRunner.class)
 @ParameterAnnotations.UseRunnerDelegate(ChromeJUnit4RunnerDelegate.class)
-@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE, "force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:use_root_bookmark_as_default/false"})
+@CommandLineFlags.Add({ChromeSwitches.DISABLE_FIRST_RUN_EXPERIENCE})
 public class BookmarkTest {
     // clang-format on
     @Rule
@@ -379,6 +381,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testOpenBookmark() throws InterruptedException, ExecutionException {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
         openBookmarkManager();
@@ -414,6 +417,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testOpenBookmarkManager() throws InterruptedException {
         openBookmarkManager();
         BookmarkTestUtil.waitForBookmarkModelLoaded();
@@ -426,12 +430,9 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
-    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:use_root_bookmark_as_default/true"})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
-    public void
-    testOpenBookmarkManagerWhenDefaultToRootEnabled()
+    public void testOpenBookmarkManagerWhenDefaultToRootEnabled()
             throws InterruptedException, ExecutionException {
         openBookmarkManager();
         BookmarkTestUtil.waitForBookmarkModelLoaded();
@@ -642,6 +643,7 @@ public class BookmarkTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     @ParameterAnnotations.UseMethodParameter(NightModeTestUtils.NightModeParams.class)
     public void testBookmarkFolderIcon(boolean nightModeEnabled) throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -701,6 +703,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testEndIconVisibilityInSelectionMode() throws Exception {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         addBookmark(TEST_TITLE_A, mTestUrlA);
@@ -799,6 +802,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testSmallDrag_Up_BookmarksOnly() throws Exception {
         List<BookmarkId> initial = new ArrayList<>();
         List<BookmarkId> expected = new ArrayList<>();
@@ -862,6 +866,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testSmallDrag_Down_FoldersOnly() throws Exception {
         List<BookmarkId> initial = new ArrayList<>();
         List<BookmarkId> expected = new ArrayList<>();
@@ -927,6 +932,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testSmallDrag_Down_MixedFoldersAndBookmarks() throws Exception {
         List<BookmarkId> initial = new ArrayList<>();
         List<BookmarkId> expected = new ArrayList<>();
@@ -988,6 +994,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testPromoDraggability() throws Exception {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
 
@@ -1008,6 +1015,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testPartnerFolderDraggability() throws Exception {
         BookmarkId testId = addFolderWithPartner(TEST_FOLDER_TITLE);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
@@ -1027,6 +1035,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testUnselectedItemDraggability() throws Exception {
         BookmarkId aId = addBookmark("a", mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
@@ -1081,8 +1090,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListItemsInSelectionMode() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1111,8 +1119,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListItemMenuItems() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1153,8 +1160,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListDeletion() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1177,8 +1183,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testSearchReadingList_Deletion() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1208,8 +1213,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListEmptyView() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
         openBookmarkManager();
@@ -1231,8 +1235,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListOpenInCCT() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1256,17 +1259,15 @@ public class BookmarkTest {
         Assert.assertFalse(customTabIntent.hasExtra(IntentHandler.EXTRA_OPEN_NEW_INCOGNITO_TAB));
         TestThreadUtils.runOnUiThreadBlocking(
                 () -> { Assert.assertTrue(activity.getActivityTab().getUrl().equals(mTestUrlA)); });
-        activity.finish();
+        pressBack();
+        onView(withText("Reading list")).check(matches(isDisplayed()));
     }
 
     @Test
     @SmallTest
-    @Features.EnableFeatures(
-            {ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER + "<Study"})
-    @CommandLineFlags.
-    Add({"force-fieldtrials=Study/Group", "force-fieldtrial-params=Study.Group:use_cct/false"})
-    public void
-    testReadingListOpenInRegularTab() throws Exception {
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_cct/false"})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    public void testReadingListOpenInRegularTab() throws Exception {
         addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
         openBookmarkManager();
@@ -1288,11 +1289,48 @@ public class BookmarkTest {
             Criteria.checkThat(activityTab, Matchers.notNullValue());
             Criteria.checkThat(activityTab.getUrl(), Matchers.notNullValue());
             Criteria.checkThat(activityTab.getUrl(), Matchers.is(mTestUrlA));
+            Criteria.checkThat(activityTab.isIncognito(), Matchers.is(false));
         });
+        pressBack();
+        onView(withText("Reading list")).check(matches(isDisplayed()));
+    }
+
+    @Test
+    @SmallTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_cct/false"})
+    @Restriction({UiRestriction.RESTRICTION_TYPE_PHONE})
+    public void testReadingListOpenInIncognitoTab() throws Exception {
+        addReadingListBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
+        BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
+        mActivityTestRule.loadUrlInNewTab("about:blank", /*incognito=*/true);
+        openBookmarkManager();
+        CriteriaHelper.pollUiThread(() -> mBookmarkModel.getReadingListItem(mTestUrlA) != null);
+
+        // Open the "Reading list" folder.
+        TestThreadUtils.runOnUiThreadBlocking(
+                () -> mManager.openFolder(mBookmarkModel.getRootFolderId()));
+        onView(withText("Reading list")).perform(click());
+        RecyclerViewTestUtils.waitForStableRecyclerView(mItemsContainer);
+        View readingListRow = mItemsContainer.findViewHolderForAdapterPosition(1).itemView;
+        Assert.assertEquals("The 2nd view should be reading list.", BookmarkType.READING_LIST,
+                getIdByPosition(1).getType());
+        TestThreadUtils.runOnUiThreadBlocking(() -> TouchCommon.singleClickView(readingListRow));
+
+        ChromeTabbedActivity activity = waitForTabbedActivity();
+        CriteriaHelper.pollUiThread(() -> {
+            Tab activityTab = activity.getActivityTab();
+            Criteria.checkThat(activityTab, Matchers.notNullValue());
+            Criteria.checkThat(activityTab.getUrl(), Matchers.notNullValue());
+            Criteria.checkThat(activityTab.getUrl(), Matchers.is(mTestUrlA));
+            Criteria.checkThat(activityTab.isIncognito(), Matchers.is(true));
+        });
+        pressBack();
+        onView(withText("Reading list")).check(matches(isDisplayed()));
     }
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testMoveUpMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
@@ -1319,6 +1357,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testMoveDownMenuItem() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
@@ -1345,6 +1384,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testMoveDownGoneForBottomElement() throws Exception {
         addBookmarkWithPartner(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolderWithPartner(TEST_FOLDER_TITLE);
@@ -1361,6 +1401,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testMoveUpGoneForTopElement() throws Exception {
         addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestUrlA);
         addFolder(TEST_FOLDER_TITLE);
@@ -1401,6 +1442,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testMoveButtonsGoneWithOneBookmark() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
@@ -1500,6 +1542,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testShowInFolder_NoScroll() throws Exception {
         addFolder(TEST_FOLDER_TITLE);
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.PROMO_FOR_SYNC_TURNED_OFF_STATE);
@@ -1534,6 +1577,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/1333546
     public void testShowInFolder_Scroll() throws Exception {
         addFolder(TEST_FOLDER_TITLE); // Index 8
         addBookmark(TEST_TITLE_A, mTestUrlA);
@@ -1571,6 +1615,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @DisableIf.Device(type = {UiDisableIf.TABLET}) // https://crbug.com/1333546
     public void testShowInFolder_OpenOtherFolder() throws Exception {
         BookmarkId testId = addFolder(TEST_FOLDER_TITLE);
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1776,8 +1821,7 @@ public class BookmarkTest {
      */
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     @Features.DisableFeatures({ChromeFeatureList.SHOPPING_LIST})
     public void testReadingListFolderShown() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -1799,33 +1843,9 @@ public class BookmarkTest {
                 BookmarkListEntry.ViewType.FOLDER, getAdapter().getItemViewType(1));
     }
 
-    /**
-     * Verifies the bottom sheet will shown without reading list enabled if
-     * {@link ChromeFeatureList#BOOKMARK_BOTTOM_SHEET} is enabled.
-     */
     @Test
     @SmallTest
-    @Features.EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET})
-    @Features.DisableFeatures({ChromeFeatureList.READ_LATER})
-    public void testBookmarkBottomSheetShownWithoutReadingList() throws Exception {
-        BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
-        openBookmarkManager();
-        BookmarkTestUtil.waitForBookmarkModelLoaded();
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mManager.openFolder(mBookmarkModel.getRootFolderId()));
-        RecyclerViewTestUtils.waitForStableRecyclerView(mItemsContainer);
-        Assert.assertEquals("Wrong number of top level elements.", 1, getAdapter().getItemCount());
-
-        // Reading list should show in the root folder.
-        onView(withText("Reading list")).check(doesNotExist());
-        Assert.assertEquals("The 1st view should be a normal folder.",
-                BookmarkListEntry.ViewType.FOLDER, getAdapter().getItemViewType(0));
-    }
-
-    @Test
-    @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListFolderShownOneUnreadPage() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
         openBookmarkManager();
@@ -1840,8 +1860,7 @@ public class BookmarkTest {
 
     @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testReadingListFolderShownMultipleUnreadPages() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
         openBookmarkManager();
@@ -1856,50 +1875,8 @@ public class BookmarkTest {
     }
 
     @Test
-    @MediumTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
-    public void testAddReadingListItemFromBottomSheet() throws Exception {
-        mActivityTestRule.loadUrl(mTestPage);
-        TestThreadUtils.runOnUiThreadBlocking(
-                () -> mBookmarkModel.loadEmptyPartnerBookmarkShimForTesting());
-        BookmarkTestUtil.waitForBookmarkModelLoaded();
-
-        // Click the star icon to trigger bookmark bottom sheet.
-        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
-                mActivityTestRule.getActivity(), R.id.bookmark_this_page_id);
-
-        // Click the reading list folder in the bottom sheet, and wait for reading list item added.
-        onView(withText("Reading list ")).check(matches(isDisplayed())).perform(click());
-        CriteriaHelper.pollUiThread(() -> mBookmarkModel.getReadingListItem(mTestPage) != null);
-
-        TestThreadUtils.runOnUiThreadBlocking(() -> {
-            // Check reading list item states.
-            BookmarkItem readingListItem = mBookmarkModel.getReadingListItem(mTestPage);
-            Assert.assertEquals(mTestPage, readingListItem.getUrl());
-            Assert.assertEquals(TEST_PAGE_TITLE_GOOGLE, readingListItem.getTitle());
-            Assert.assertFalse(readingListItem.isRead());
-
-            // Snackbar has been shown.
-            SnackbarManager snackbarManager = mActivityTestRule.getActivity().getSnackbarManager();
-            Snackbar currentSnackbar = snackbarManager.getCurrentSnackbarForTesting();
-            Assert.assertEquals("Add to reading list snackbar not shown.",
-                    Snackbar.UMA_READING_LIST_BOOKMARK_ADDED,
-                    currentSnackbar.getIdentifierForTesting());
-        });
-
-        waitForOfflinePageSaved(mTestPage);
-
-        // Click the star button again to launch the edit activity.
-        MenuUtils.invokeCustomMenuActionSync(InstrumentationRegistry.getInstrumentation(),
-                mActivityTestRule.getActivity(), R.id.bookmark_this_page_id);
-        waitForEditActivity().finish();
-    }
-
-    @Test
     @SmallTest
-    @Features.
-    EnableFeatures({ChromeFeatureList.BOOKMARK_BOTTOM_SHEET, ChromeFeatureList.READ_LATER})
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER})
     public void testShowBookmarkManagerReadingListPage() {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
         TestThreadUtils.runOnUiThreadBlocking(
@@ -1907,17 +1884,12 @@ public class BookmarkTest {
         BookmarkTestUtil.waitForBookmarkModelLoaded();
 
         if (mActivityTestRule.getActivity().isTablet()) {
-            TestThreadUtils.runOnUiThreadBlocking(() -> {
-                BookmarkUtils.showBookmarkManager(
-                        null, new BookmarkId(0, BookmarkType.READING_LIST), /*isIncognito=*/false);
-            });
+            TestThreadUtils.runOnUiThreadBlocking(
+                    () -> ReadingListUtils.showReadingList(/*isIncognito=*/false));
         } else {
             mBookmarkActivity = ApplicationTestUtils.waitForActivityWithClass(
-                    BookmarkActivity.class, Stage.CREATED, () -> {
-                        BookmarkUtils.showBookmarkManager(null,
-                                new BookmarkId(0, BookmarkType.READING_LIST),
-                                /*isIncognito=*/false);
-                    });
+                    BookmarkActivity.class, Stage.CREATED,
+                    () -> ReadingListUtils.showReadingList(/*isIncognito=*/false));
         }
 
         onView(withText("Reading list")).check(matches(isDisplayed()));
@@ -1925,11 +1897,9 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
-    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:add_to_reading_list_in_app_menu/true"})
-    public void
-    testAddToReadingListFromAppMenu() throws Exception {
+    @Features.
+    EnableFeatures({ChromeFeatureList.READ_LATER + ":add_to_reading_list_in_app_menu/true"})
+    public void testAddToReadingListFromAppMenu() throws Exception {
         mActivityTestRule.loadUrl(mTestPage);
 
         // Click "Add to Reading List" to add the current tab.
@@ -1952,6 +1922,7 @@ public class BookmarkTest {
 
     @Test
     @MediumTest
+    @Features.EnableFeatures({ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void testBookmarksDoesNotRecordLaunchMetrics() throws Throwable {
         Assert.assertEquals(1,
                 RecordHistogram.getHistogramTotalCountForTesting(
@@ -2039,9 +2010,9 @@ public class BookmarkTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    @Features.
+    EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + ":bookmark_visuals_enabled/true",
+            ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void
     testBookmarksVisualRefreshFolders() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -2069,9 +2040,9 @@ public class BookmarkTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + ":bookmark_visuals_enabled/true"
+                    + "/bookmark_compact_visuals_enabled/false",
+            ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void
     testBookmarksVisualRefreshBookmarks() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -2099,9 +2070,40 @@ public class BookmarkTest {
     @Test
     @MediumTest
     @Feature({"RenderTest"})
-    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + "<Study"})
-    @CommandLineFlags.Add({"force-fieldtrials=Study/Group",
-            "force-fieldtrial-params=Study.Group:bookmark_visuals_enabled/true"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + ":bookmark_visuals_enabled/true"
+                    + "/bookmark_compact_visuals_enabled/true",
+            ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
+    public void
+    testBookmarksCompactVisualRefreshBookmarks() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        openBookmarkManager();
+
+        RecyclerView.Adapter adapter = getAdapter();
+        final BookmarkManager manager = getBookmarkManager();
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_bookmarks");
+        BookmarkRow itemView = (BookmarkRow) manager.getRecyclerViewForTests()
+                                       .findViewHolderForAdapterPosition(0)
+                                       .itemView;
+
+        toggleSelectionAndEndAnimation(getIdByPosition(0), itemView);
+
+        // Make sure the Item "test" is selected.
+        CriteriaHelper.pollUiThread(
+                itemView::isChecked, "Expected item \"test\" to become selected");
+
+        mRenderTestRule.render(
+                manager.getView(), "bookmarks_compact_visual_refresh_bookmarks_selected");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + ":bookmark_visuals_enabled/true"
+                    + "/bookmark_compact_visuals_enabled/false",
+            ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
     public void
     testBookmarksVisualRefreshBookmarksAndFolder() throws Exception {
         BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
@@ -2133,6 +2135,45 @@ public class BookmarkTest {
 
         mRenderTestRule.render(
                 manager.getView(), "bookmarks_visual_refresh_bookmarksandfolders_selected");
+    }
+
+    @Test
+    @MediumTest
+    @Feature({"RenderTest"})
+    @Features.EnableFeatures({ChromeFeatureList.BOOKMARKS_REFRESH + ":bookmark_visuals_enabled/true"
+                    + "/bookmark_compact_visuals_enabled/true",
+            ChromeFeatureList.READ_LATER + ":use_root_bookmark_as_default/false"})
+    public void
+    testBookmarksCompactVisualRefreshBookmarksAndFolder() throws Exception {
+        BookmarkPromoHeader.forcePromoStateForTests(SyncPromoState.NO_PROMO);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addFolder(TEST_FOLDER_TITLE);
+        addBookmark(TEST_PAGE_TITLE_GOOGLE, mTestPage);
+        addFolder(TEST_FOLDER_TITLE);
+        openBookmarkManager();
+
+        RecyclerView.Adapter adapter = getAdapter();
+        final BookmarkManager manager = getBookmarkManager();
+
+        mRenderTestRule.render(manager.getView(), "bookmarks_visual_refresh_bookmarksandfolders");
+        BookmarkRow itemView1 = (BookmarkRow) manager.getRecyclerViewForTests()
+                                        .findViewHolderForAdapterPosition(0)
+                                        .itemView;
+        BookmarkRow itemView2 = (BookmarkRow) manager.getRecyclerViewForTests()
+                                        .findViewHolderForAdapterPosition(1)
+                                        .itemView;
+
+        toggleSelectionAndEndAnimation(getIdByPosition(0), itemView1);
+        toggleSelectionAndEndAnimation(getIdByPosition(1), itemView2);
+
+        // Make sure the Item "test" is selected.
+        CriteriaHelper.pollUiThread(
+                itemView1::isChecked, "Expected item \"test\" to become selected");
+        CriteriaHelper.pollUiThread(
+                itemView2::isChecked, "Expected item \"test\" to become selected");
+
+        mRenderTestRule.render(
+                manager.getView(), "bookmarks_compact_visual_refresh_bookmarksandfolders_selected");
     }
 
     @Test

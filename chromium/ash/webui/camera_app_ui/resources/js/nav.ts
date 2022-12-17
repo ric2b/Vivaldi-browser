@@ -2,8 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {assertExists, assertInstanceof} from './assert.js';
-import * as dom from './dom.js';
+import {assert} from './assert.js';
+import {DEPLOYED_VERSION} from './deployed_version.js';
 import {toggleExpertMode} from './expert.js';
 import * as state from './state.js';
 import * as toast from './toast.js';
@@ -14,12 +14,12 @@ import {windowController} from './window_controller.js';
 
 /**
  * All views stacked in ascending z-order (DOM order) for navigation, and only
- * the topmost visible view is active (clickable/focusable).
+ * the topmost shown view is active (clickable/focusable).
  */
 let allViews: View[] = [];
 
 /**
- * Index of the current topmost visible view in the stacked views.
+ * Index of the current topmost shown view in the stacked views.
  */
 let topmostIndex = -1;
 
@@ -40,54 +40,12 @@ function* getRecursiveViews(view: View): Generator<View> {
  */
 export function setup(views: View[]): void {
   allViews = views.flatMap((v) => [...getRecursiveViews(v)]);
-  // Manage all tabindex usages in for navigation.
-  document.body.addEventListener('keydown', (event) => {
-    const e = assertInstanceof(event, KeyboardEvent);
-    if (e.key === 'Tab') {
-      state.set(state.State.TAB_NAVIGATION, true);
-    }
+  document.addEventListener('pointerdown', () => {
+    state.set(state.State.KEYBOARD_NAVIGATION, false);
   });
-  document.body.addEventListener(
-      'pointerdown', () => state.set(state.State.TAB_NAVIGATION, false));
-}
-
-/**
- * Activates the view to be focusable.
- *
- * @param index Index of the view.
- */
-function activate(index: number) {
-  // Restore the view's child elements' tabindex and then focus the view.
-  const view = allViews[index];
-  view.root.setAttribute('aria-hidden', 'false');
-  for (const element of dom.getAllFrom(view.root, '[tabindex]', HTMLElement)) {
-    if (element.dataset['tabindex'] === undefined) {
-      // First activation, no need to restore tabindex from data-tabindex.
-      continue;
-    }
-    element.setAttribute('tabindex', element.dataset['tabindex']);
-    element.removeAttribute('data-tabindex');
-  }
-  view.focus();
-}
-
-/**
- * Deactivates the view to be unfocusable.
- *
- * @param index Index of the view.
- */
-function deactivate(index: number) {
-  const view = allViews[index];
-  view.root.setAttribute('aria-hidden', 'true');
-  for (const element of dom.getAllFrom(view.root, '[tabindex]', HTMLElement)) {
-    element.dataset['tabindex'] =
-        assertExists(element.getAttribute('tabindex'));
-    element.setAttribute('tabindex', '-1');
-  }
-  const activeElement = document.activeElement;
-  if (activeElement instanceof HTMLElement) {
-    activeElement.blur();
-  }
+  document.addEventListener('keydown', () => {
+    state.set(state.State.KEYBOARD_NAVIGATION, true);
+  });
 }
 
 /**
@@ -102,29 +60,30 @@ function isShown(index: number): boolean {
 
 /**
  * Shows the view indexed in the stacked views and activates the view only if
- * it becomes the topmost visible view.
+ * it becomes the topmost shown view.
  *
  * @param index Index of the view.
  * @return View shown.
  */
 function show(index: number): View {
   const view = allViews[index];
-  if (!isShown(index)) {
-    state.set(view.name, true);
-    view.layout();
-    if (index > topmostIndex) {
-      if (topmostIndex >= 0) {
-        deactivate(topmostIndex);
-      }
-      activate(index);
-      topmostIndex = index;
+  if (isShown(index)) {
+    return view;
+  }
+  state.set(view.name, true);
+  view.layout();
+  if (index > topmostIndex) {
+    if (topmostIndex >= 0) {
+      allViews[topmostIndex].onCoveredAsTop();
     }
+    topmostIndex = index;
+    allViews[index].onShownAsTop();
   }
   return view;
 }
 
 /**
- * Finds the next topmost visible view in the stacked views.
+ * Finds the next topmost shown view in the stacked views.
  *
  * @return Index of the view found; otherwise, -1.
  */
@@ -139,18 +98,19 @@ function findNextTopmostIndex(): number {
 
 /**
  * Hides the view indexed in the stacked views and deactivate the view if it was
- * the topmost visible view.
+ * the topmost shown view.
  *
  * @param index Index of the view.
  */
 function hide(index: number) {
+  assert(isShown(index));
   if (index === topmostIndex) {
-    deactivate(index);
+    allViews[index].onHideAsTop();
     const next = findNextTopmostIndex();
-    if (next >= 0) {
-      activate(next);
-    }
     topmostIndex = next;
+    if (next >= 0) {
+      allViews[next].onUncoveredAsTop(allViews[index].name);
+    }
   }
   state.set(allViews[index].name, false);
 }
@@ -174,11 +134,14 @@ function findIndex(name: ViewName): number {
  * @return Promise for the operation or result.
  */
 export function open(
-    name: ViewName, options?: EnterOptions): Promise<LeaveCondition> {
+    name: ViewName, options?: EnterOptions): {closed: Promise<LeaveCondition>} {
   const index = findIndex(name);
-  return show(index).enter(options).finally(() => {
-    hide(index);
-  });
+  const view = show(index);
+  return {
+    closed: view.enter(options).finally(() => {
+      hide(index);
+    }),
+  };
 }
 
 /**
@@ -186,11 +149,10 @@ export function open(
  *
  * @param name View name.
  * @param condition Optional condition for leaving the view.
- * @return Whether successfully leaving the view or not.
  */
-export function close(name: ViewName, condition?: unknown): boolean {
+export function close(name: ViewName, condition?: unknown): void {
   const index = findIndex(name);
-  return allViews[index].leave({kind: 'CLOSED', val: condition});
+  allViews[index].leave({kind: 'CLOSED', val: condition});
 }
 
 /**
@@ -219,13 +181,16 @@ export function onKeyPressed(event: KeyboardEvent): void {
       event.preventDefault();
       break;
     case 'Ctrl-V':
-      toast.showDebugMessage('SWA');
+      toast.showDebugMessage(`SWA${
+          DEPLOYED_VERSION === undefined ?
+              '' :
+              `, Local overrde enabled (${DEPLOYED_VERSION})`}`);
       break;
     case 'Ctrl-Shift-E':
       toggleExpertMode();
       break;
     default:
-      // Make the topmost visible view handle the pressed key.
+      // Make the topmost shown view handle the pressed key.
       if (topmostIndex >= 0 && allViews[topmostIndex].onKeyPressed(key)) {
         event.preventDefault();
       }
@@ -233,11 +198,12 @@ export function onKeyPressed(event: KeyboardEvent): void {
 }
 
 /**
- * Handles when the window state or size changed.
+ * Relayout all shown views.
+ *
+ * All shown views need being relayout after window is resized or state
+ * changed.
  */
-export function onWindowStatusChanged(): void {
-  // All visible views need being relayout after window is resized or state
-  // changed.
+export function layoutShownViews(): void {
   for (let i = allViews.length - 1; i >= 0; i--) {
     if (isShown(i)) {
       allViews[i].layout();

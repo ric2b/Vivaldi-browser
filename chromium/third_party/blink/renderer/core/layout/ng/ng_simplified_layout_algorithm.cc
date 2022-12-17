@@ -134,6 +134,14 @@ NGSimplifiedLayoutAlgorithm::NGSimplifiedLayoutAlgorithm(
           std::make_unique<NGTableFragmentData::CollapsedBordersGeometry>(
               *table_collapsed_borders_geometry));
     }
+  } else if (physical_fragment.IsTableNGSection()) {
+    if (const auto section_start_row_index =
+            physical_fragment.TableSectionStartRowIndex()) {
+      Vector<LayoutUnit> section_row_offsets =
+          *physical_fragment.TableSectionRowOffsets();
+      container_builder_.SetTableSectionCollapsedBordersGeometry(
+          *section_start_row_index, std::move(section_row_offsets));
+    }
   }
 
   if (physical_fragment.IsGridNG()) {
@@ -272,7 +280,10 @@ const NGLayoutResult* NGSimplifiedLayoutAlgorithm::Layout() {
     auto* items_builder = container_builder_.ItemsBuilder();
     DCHECK(items_builder);
     DCHECK_EQ(items_builder->GetWritingDirection(), writing_direction_);
-    items_builder->AddPreviousItems(previous_fragment, *previous_items);
+    const auto result =
+        items_builder->AddPreviousItems(previous_fragment, *previous_items);
+    if (!result.succeeded)
+      return nullptr;
   }
 
   // Some layout types (grid) manually calculate their inflow-bounds rather

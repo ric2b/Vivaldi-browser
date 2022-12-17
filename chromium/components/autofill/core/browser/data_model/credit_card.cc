@@ -43,8 +43,6 @@ using base::ASCIIToUTF16;
 
 namespace autofill {
 
-using structured_address::VerificationStatus;
-
 // Unicode characters used in card number obfuscation:
 //  - \u2022 - Bullet.
 //  - \u2006 - SIX-PER-EM SPACE (small space between bullets).
@@ -172,7 +170,7 @@ CreditCard::CreditCard(const CreditCard& credit_card) : CreditCard() {
   operator=(credit_card);
 }
 
-CreditCard::~CreditCard() {}
+CreditCard::~CreditCard() = default;
 
 // static
 const std::u16string CreditCard::StripSeparators(const std::u16string& number) {
@@ -376,6 +374,11 @@ std::u16string CreditCard::GetMidlineEllipsisDots(size_t num_dots) {
   return dots;
 }
 
+// static
+bool CreditCard::IsLocalCard(const CreditCard* card) {
+  return card && card->record_type() == CreditCard::LOCAL_CARD;
+}
+
 void CreditCard::SetNetworkForMaskedCard(base::StringPiece network) {
   DCHECK_EQ(MASKED_SERVER_CARD, record_type());
   network_ = std::string(network);
@@ -386,6 +389,18 @@ AutofillMetadata CreditCard::GetMetadata() const {
   metadata.id = (record_type_ == LOCAL_CARD ? guid() : server_id_);
   metadata.billing_address_id = billing_address_id_;
   return metadata;
+}
+
+double CreditCard::GetRankingScore(base::Time current_time) const {
+  int virtual_card_boost = 0;
+  if (virtual_card_enrollment_state_ == VirtualCardEnrollmentState::ENROLLED) {
+    virtual_card_boost =
+        features::kAutofillRankingFormulaVirtualCardBoost.Get() *
+        exp(-GetDaysSinceLastUse(current_time) /
+            features::kAutofillRankingFormulaVirtualCardBoostHalfLife.Get());
+  }
+
+  return AutofillDataModel::GetRankingScore(current_time) + virtual_card_boost;
 }
 
 bool CreditCard::SetMetadata(const AutofillMetadata metadata) {
@@ -458,9 +473,10 @@ std::u16string CreditCard::GetRawInfo(ServerFieldType type) const {
   }
 }
 
-void CreditCard::SetRawInfoWithVerificationStatus(ServerFieldType type,
-                                                  const std::u16string& value,
-                                                  VerificationStatus status) {
+void CreditCard::SetRawInfoWithVerificationStatus(
+    ServerFieldType type,
+    const std::u16string& value,
+    structured_address::VerificationStatus status) {
   DCHECK_EQ(FieldTypeGroup::kCreditCard, AutofillType(type).group());
   switch (type) {
     case CREDIT_CARD_NAME_FULL:
@@ -1063,7 +1079,7 @@ bool CreditCard::SetInfoWithVerificationStatusImpl(
     const AutofillType& type,
     const std::u16string& value,
     const std::string& app_locale,
-    VerificationStatus status) {
+    structured_address::VerificationStatus status) {
   ServerFieldType storable_type = type.GetStorableType();
   if (storable_type == CREDIT_CARD_EXP_MONTH)
     return SetExpirationMonthFromString(value, app_locale);

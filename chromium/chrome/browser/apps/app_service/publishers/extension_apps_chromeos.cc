@@ -26,7 +26,6 @@
 #include "base/values.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
-#include "chrome/browser/apps/app_service/extension_apps_utils.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/apps/app_service/launch_utils.h"
 #include "chrome/browser/apps/app_service/menu_util.h"
@@ -35,6 +34,7 @@
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/child_accounts/time_limits/app_time_limit_interface.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
+#include "chrome/browser/ash/crosapi/hosted_app_util.h"
 #include "chrome/browser/ash/crostini/crostini_util.h"
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/file_browser_handlers.h"
@@ -672,7 +672,6 @@ void ExtensionAppsChromeOs::UpdateShowInFields(const std::string& app_id) {
 
 void ExtensionAppsChromeOs::OnHideWebStoreIconPrefChanged() {
   UpdateShowInFields(extensions::kWebStoreAppId);
-  UpdateShowInFields(extension_misc::kEnterpriseWebStoreAppId);
 }
 
 void ExtensionAppsChromeOs::OnSystemFeaturesPrefChanged() {
@@ -708,7 +707,9 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
     }
     // QuickOffice has file_handlers which we need to register.
     if (extension_misc::IsQuickOfficeExtension(extension->id())) {
-      return true;
+      // Don't publish quickoffice in ash if 1st party ash extension keep list
+      // is enforced, since quickoffice extension is published in Lacros.
+      return !crosapi::browser_util::ShouldEnforceAshExtensionKeepList();
     }
     // Only accept extensions with file_browser_handlers.
     FileBrowserHandler::List* handler_list =
@@ -727,7 +728,7 @@ bool ExtensionAppsChromeOs::Accepts(const extensions::Extension* extension) {
   //  Lacros.
   if (extension->is_hosted_app() &&
       extension->id() != app_constants::kChromeAppId &&
-      apps::ShouldHostedAppsRunInLacros()) {
+      crosapi::IsStandaloneBrowserHostedAppsEnabled()) {
     return false;
   }
 

@@ -14,12 +14,12 @@ namespace web_app {
 // still providing isolation for the work done in the callback.
 class CallbackCommand : public WebAppCommand {
  public:
-  CallbackCommand(WebAppCommandQueueId queue_id, base::OnceClosure callback);
+  CallbackCommand(WebAppCommandLock command_lock, base::OnceClosure callback);
   ~CallbackCommand() override;
 
   void Start() override;
 
-  void OnBeforeForcedUninstallFromSync() override {}
+  void OnSyncSourceRemoved() override {}
 
   void OnShutdown() override {}
   base::Value ToDebugValue() const override;

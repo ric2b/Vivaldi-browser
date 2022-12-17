@@ -49,7 +49,7 @@ To implement the __"Data Source Reader"__ functionality, the Windows code contai
 
 The idea here was to create a Linux platform backend that could be used if the extra-ffmpeg was not available. We have also discussed making this cross platform and have only one backend and manage the platform through GStreamer plugins.
 
-The backend works (but is quite unstable) for video/audio tags. To work with MSE it would need to have a functional IPCVideoDecoder, see [**Renderer Decoders**][11], similarly for audio (on the branch below is the beginning of an IPCAudioDecoder(Adapter)).
+The backend works (but is quite unstable) for video/audio tags. To work with MSE it would need to have a functional IPCVideoDecoder, see [**Renderer Decoders**][11], similarly for audio.
 
 [Chromium branch][9]
 [Vivaldi branch][10]

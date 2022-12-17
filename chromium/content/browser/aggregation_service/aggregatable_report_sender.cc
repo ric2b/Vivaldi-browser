@@ -10,7 +10,7 @@
 
 #include "base/callback.h"
 #include "base/check.h"
-#include "base/json/json_string_value_serializer.h"
+#include "base/json/json_writer.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -92,7 +92,7 @@ void AggregatableReportSender::SendReport(const GURL& url,
             "Sends the aggregatable report to reporting endpoint requested by "
             "APIs that rely on private, secure aggregation (e.g. Attribution "
             "Reporting API, see "
-            "https://github.com/WICG/conversion-measurement-api)."
+            "https://github.com/WICG/attribution-reporting-api)."
           trigger:
             "When an aggregatable report has become eligible for reporting."
           data:
@@ -117,10 +117,9 @@ void AggregatableReportSender::SendReport(const GURL& url,
   simple_url_loader_ptr->SetTimeoutDuration(base::Seconds(30));
 
   std::string contents_json;
-  JSONStringValueSerializer serializer(&contents_json);
 
   // TODO(crbug.com/1244991): Check for required fields of contents.
-  bool succeeded = serializer.Serialize(contents);
+  bool succeeded = base::JSONWriter::Write(contents, &contents_json);
   DCHECK(succeeded);
   simple_url_loader_ptr->AttachStringForUpload(contents_json,
                                                "application/json");

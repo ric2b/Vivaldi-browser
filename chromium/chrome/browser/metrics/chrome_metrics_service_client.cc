@@ -42,6 +42,7 @@
 #include "chrome/browser/chrome_notification_types.h"
 #include "chrome/browser/google/google_brand.h"
 #include "chrome/browser/history/history_service_factory.h"
+#include "chrome/browser/metrics/bluetooth_metrics_provider.h"
 #include "chrome/browser/metrics/cached_metrics_profile.h"
 #include "chrome/browser/metrics/chrome_metrics_extensions_helper.h"
 #include "chrome/browser/metrics/chrome_metrics_service_accessor.h"
@@ -128,6 +129,7 @@
 #include "components/metrics/android_metrics_provider.h"
 #else
 #include "chrome/browser/metrics/browser_activity_watcher.h"
+#include "components/performance_manager/public/metrics/metrics_provider.h"
 #endif
 
 #if BUILDFLAG(IS_POSIX)
@@ -143,7 +145,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/metrics/lacros_metrics_provider.h"
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -177,9 +179,8 @@
 #endif
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-#include "chrome/browser/signin/chrome_signin_status_metrics_provider_delegate.h"
+#include "chrome/browser/signin/chrome_signin_and_sync_status_metrics_provider.h"
 #include "components/metrics/content/accessibility_metrics_provider.h"
-#include "components/signin/core/browser/signin_status_metrics_provider.h"
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
@@ -260,7 +261,7 @@ void RegisterOrRemovePreviousRunMetricsFile(
         FROM_HERE,
         {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
          base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::BindOnce(base::GetDeleteFileCallback(), metrics_file));
+        base::GetDeleteFileCallback(metrics_file));
   }
 }
 
@@ -312,8 +313,8 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           FROM_HERE,
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
-          base::BindOnce(base::GetDeletePathRecursivelyCallback(),
-                         std::move(browser_metrics_upload_dir)));
+          base::GetDeletePathRecursivelyCallback(
+              std::move(browser_metrics_upload_dir)));
     }
   }
 
@@ -347,8 +348,8 @@ std::unique_ptr<metrics::FileMetricsProvider> CreateFileMetricsProvider(
           FROM_HERE,
           {base::MayBlock(), base::TaskPriority::BEST_EFFORT,
            base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-          base::BindOnce(base::GetDeletePathRecursivelyCallback(),
-                         std::move(notification_helper_metrics_upload_dir)));
+          base::GetDeletePathRecursivelyCallback(
+              std::move(notification_helper_metrics_upload_dir)));
     }
   }
 #endif
@@ -660,9 +661,7 @@ void ChromeMetricsServiceClient::Initialize() {
     uint64_t client_id = 0;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
     // Read metrics service client id from ash chrome if it's present.
-    if (auto* lacros_service = chromeos::LacrosService::Get()) {
-      client_id = lacros_service->init_params()->ukm_client_id;
-    }
+    client_id = chromeos::BrowserInitParams::Get()->ukm_client_id;
 #endif
 
     ukm_service_ = std::make_unique<ukm::UkmService>(
@@ -764,6 +763,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<safe_browsing::SafeBrowsingMetricsProvider>());
 
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<metrics::BluetoothMetricsProvider>());
+
 #if BUILDFLAG(IS_ANDROID)
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::AndroidMetricsProvider>());
@@ -773,6 +775,9 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
       std::make_unique<PageLoadMetricsProvider>());
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<FamilyLinkUserMetricsProvider>());
+#else
+  metrics_service_->RegisterMetricsProvider(
+      std::make_unique<performance_manager::MetricsProvider>(local_state));
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)
@@ -843,8 +848,7 @@ void ChromeMetricsServiceClient::RegisterMetricsServiceProviders() {
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   metrics_service_->RegisterMetricsProvider(
-      SigninStatusMetricsProvider::CreateInstance(
-          std::make_unique<ChromeSigninStatusMetricsProviderDelegate>()));
+      std::make_unique<ChromeSigninAndSyncStatusMetricsProvider>());
   // ChromeOS uses ChromeOSMetricsProvider for accessibility metrics provider.
   metrics_service_->RegisterMetricsProvider(
       std::make_unique<metrics::AccessibilityMetricsProvider>());

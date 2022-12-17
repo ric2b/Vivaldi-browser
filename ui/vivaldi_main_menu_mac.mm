@@ -328,13 +328,13 @@ NSUInteger modifierMaskFromString(std::string& string) {
   if (candidate.length() >= 3) {
     if (candidate.find("Cmd") != std::string::npos ||
         candidate.find("Meta") != std::string::npos)
-      modifierMask |= NSCommandKeyMask;
+      modifierMask |= NSEventModifierFlagCommand;
     if (candidate.find("Shift") != std::string::npos)
-      modifierMask |= NSShiftKeyMask;
+      modifierMask |= NSEventModifierFlagShift;
     if (candidate.find("Alt") != std::string::npos)
-      modifierMask |= NSAlternateKeyMask;
+      modifierMask |= NSEventModifierFlagOption;
     if (candidate.find("Ctrl") != std::string::npos)
-      modifierMask |= NSControlKeyMask;
+      modifierMask |= NSEventModifierFlagControl;
   }
   return modifierMask;
 }
@@ -369,7 +369,7 @@ NSMenuItem* MakeMenuItem(NSString* title, const std::string* shortcut, int tag) 
   NSMenuItem* menuItem = [[NSMenuItem alloc]
           initWithTitle:title
                  action:nil
-          keyEquivalent:modifiers & NSShiftKeyMask ?
+          keyEquivalent:modifiers & NSEventModifierFlagShift ?
               keyEquivalent.uppercaseString : keyEquivalent.lowercaseString];
   [menuItem setKeyEquivalentModifierMask:modifiers];
   [menuItem setTag:tag];
@@ -392,7 +392,7 @@ void PopulateMenu(const menubar::MenuItem& item, NSMenu* menu, bool topLevel,
     }
   } else {
     // Either a sub menu item or a new top level item.
-    if (item.type && *(item.type) == "separator") {
+    if (item.type == menubar::ITEM_TYPE_SEPARATOR) {
       NSMenuItem* menuItem = [NSMenuItem separatorItem];
       [menuItem setTag:item.id];
       if (index == -1) {

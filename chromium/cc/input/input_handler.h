@@ -94,6 +94,12 @@ struct CC_EXPORT InputHandlerScrollResult {
   // scrolling node is the viewport, this would be the sum of the scroll offsets
   // of the inner and outer node, representing the visual scroll offset.
   gfx::PointF current_visual_offset;
+  // Used only in scroll unification. Tells the caller that we have performed
+  // the scroll (i.e. updated the offset in the scroll tree) on the compositor
+  // thread, but we will need a main thread lifecycle update + commit before
+  // the user will see the new pixels (for example, because the scroller does
+  // not have a composited layer).
+  bool needs_main_thread_repaint = false;
 };
 
 class CC_EXPORT InputHandlerClient {
@@ -393,6 +399,11 @@ class CC_EXPORT InputHandler {
 
   // Returns true if ScrollbarController is in the middle of a scroll operation.
   virtual bool ScrollbarScrollIsActive() = 0;
+
+  // Defers posting BeginMainFrame tasks. This is used during the main thread
+  // hit test for a GestureScrollBegin, to avoid posting a frame before the
+  // compositor thread has had a chance to update the scroll offset.
+  virtual void SetDeferBeginMainFrame(bool defer_begin_main_frame) const = 0;
 
  protected:
   virtual ~InputHandler() = default;

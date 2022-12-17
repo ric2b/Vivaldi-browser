@@ -8,6 +8,7 @@
 #include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/platform/web_runtime_features.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/frame/screen.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/fenced_frame_ad_sizes.h"
@@ -22,16 +23,16 @@ class HTMLFencedFrameElementTest
  public:
   HTMLFencedFrameElementTest()
       : ScopedFencedFramesForTest(true),
-        RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()) {}
+        RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()) {
+    enabled_feature_list_.InitWithFeaturesAndParameters(
+        {{blink::features::kFencedFrames,
+          {{"implementation_type", "shadow_dom"}}}},
+        {/* disabled_features */});
+  }
 
  protected:
   void SetUp() override {
     RenderingTest::SetUp();
-    base::FieldTrialParams params;
-    params["implementation_type"] = GetParam();
-    enabled_feature_list_.InitAndEnableFeatureWithParameters(
-        features::kFencedFrames, params);
-
     SecurityContext& security_context =
         GetDocument().GetFrame()->DomWindow()->GetSecurityContext();
     security_context.SetSecurityOriginForTesting(nullptr);

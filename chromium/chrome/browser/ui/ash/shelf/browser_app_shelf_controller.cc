@@ -8,8 +8,6 @@
 
 #include "ash/public/cpp/window_properties.h"
 #include "base/debug/dump_without_crashing.h"
-#include "chrome/browser/apps/app_service/app_service_proxy.h"
-#include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
 #include "chrome/browser/apps/app_service/browser_app_instance.h"
 #include "chrome/browser/apps/app_service/browser_app_instance_registry.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
@@ -19,6 +17,7 @@
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_item_factory.h"
 #include "chrome/browser/ui/ash/shelf/shelf_controller_helper.h"
 #include "chrome/browser/ui/ash/shelf/shelf_spinner_controller.h"
+#include "chrome/browser/web_applications/web_app_utils.h"
 #include "components/app_constants/constants.h"
 #include "ui/aura/window.h"
 
@@ -48,6 +47,7 @@ void BrowserWindowMustBeValid(
 
 BrowserAppShelfController::BrowserAppShelfController(
     Profile* profile,
+    apps::BrowserAppInstanceRegistry& browser_app_instance_registry,
     ash::ShelfModel& model,
     ChromeShelfItemFactory& shelf_item_factory,
     ShelfSpinnerController& shelf_spinner_controller)
@@ -55,9 +55,8 @@ BrowserAppShelfController::BrowserAppShelfController(
       model_(model),
       shelf_item_factory_(shelf_item_factory),
       shelf_spinner_controller_(shelf_spinner_controller),
-      browser_app_instance_registry_(
-          *apps::AppServiceProxyFactory::GetForProfile(profile)
-               ->BrowserAppInstanceRegistry()) {
+      browser_app_instance_registry_(browser_app_instance_registry) {
+  CHECK(web_app::IsWebAppsCrosapiEnabled());
   registry_observation_.Observe(&browser_app_instance_registry_);
   shelf_model_observation_.Observe(&model);
 }

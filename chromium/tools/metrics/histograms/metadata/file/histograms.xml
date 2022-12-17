@@ -110,17 +110,30 @@ chromium-metrics-reviews@google.com.
   </summary>
   <token key="Extension">
     <variant name="7z"/>
+    <variant name="bz"/>
     <variant name="bz2"/>
     <variant name="crx"/>
     <variant name="gz"/>
     <variant name="iso"/>
+    <variant name="lz"/>
+    <variant name="lzma"/>
     <variant name="rar"/>
     <variant name="tar"/>
+    <variant name="taz"/>
+    <variant name="tb2"/>
     <variant name="tbz"/>
     <variant name="tbz2"/>
     <variant name="tgz"/>
+    <variant name="tlz"/>
+    <variant name="tlzma"/>
+    <variant name="txz"/>
+    <variant name="tz"/>
+    <variant name="tz2"/>
+    <variant name="tzst"/>
     <variant name="xz"/>
+    <variant name="z"/>
     <variant name="zip"/>
+    <variant name="zst"/>
   </token>
 </histogram>
 
@@ -242,7 +255,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.DriveDuplicateFinder.LongComputeHash" units="ms"
-    expires_after="2022-04-24">
+    expires_after="M108">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -262,17 +275,24 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.DriveHostedFilePinSuccess" enum="BooleanSuccess"
-    expires_after="2022-04-24">
+    expires_after="M113">
   <owner>austinct@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>Tracks success rate of pinning hosted files in Drive.</summary>
 </histogram>
 
 <histogram name="FileBrowser.DrivePinSuccess" enum="BooleanSuccess"
-    expires_after="2022-04-24">
+    expires_after="M113">
   <owner>austinct@chromium.org</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>Tracks success rate of pinning files in Drive.</summary>
+</histogram>
+
+<histogram name="FileBrowser.ExtractTask.Status"
+    enum="FileManagerExtractStatus" expires_after="M113">
+  <owner>adanilo@chromium.org</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>Tracks success/error rate of extracting archive contents.</summary>
 </histogram>
 
 <histogram name="FileBrowser.FileSystemProviderMounted"
@@ -524,7 +544,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.MenuItemSelected" enum="FileManagerMenuCommands"
-    expires_after="2022-04-10">
+    expires_after="M113">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -627,7 +647,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="FileBrowser.Recent.FilterByType"
-    enum="FileManagerRecentFilterType" expires_after="2022-07-20">
+    enum="FileManagerRecentFilterType" expires_after="2022-11-27">
   <owner>simmonsjosh@google.com</owner>
   <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
@@ -833,12 +853,29 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="FileReaderSync.WorkerType" enum="FileReaderSyncWorkerType"
-    expires_after="M85">
-  <owner>mek@chromium.org</owner>
+<histogram name="FileBrowser.ZipMountTime.{RootType}" units="ms"
+    expires_after="M112">
+  <owner>simmonsjosh@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
   <summary>
-    For each FileReaderSync instance records the type of the web worker that
-    created the instance.
+    Tracks the time to mount a ZIP archive. Times are only recorded on success.
+  </summary>
+  <token key="RootType">
+    <variant name="Drive"
+        summary="The archive to mount is located under the Drive root"/>
+    <variant name="MyFiles"
+        summary="The archive to mount is a local archive, located under the
+                 My files or the Downloads root"/>
+    <variant name="Other"/>
+  </token>
+</histogram>
+
+<histogram name="FileBrowser.ZipTask.Time" units="ms" expires_after="M112">
+  <owner>simmonsjosh@google.com</owner>
+  <owner>src/ui/file_manager/OWNERS</owner>
+  <summary>
+    Time for the execution of a zipping task. Times are only reported on
+    success.
   </summary>
 </histogram>
 

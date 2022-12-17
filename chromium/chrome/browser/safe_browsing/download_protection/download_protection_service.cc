@@ -19,7 +19,6 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
-#include "chrome/browser/safe_browsing/chrome_user_population_helper.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service.h"
 #include "chrome/browser/safe_browsing/cloud_content_scanning/binary_upload_service_factory.h"
 #include "chrome/browser/safe_browsing/download_protection/check_client_download_request.h"
@@ -58,6 +57,8 @@
 #include "services/network/public/cpp/shared_url_loader_factory.h"
 
 using content::BrowserThread;
+using ReportThreatDetailsResult =
+    safe_browsing::PingManager::ReportThreatDetailsResult;
 namespace safe_browsing {
 
 namespace {
@@ -213,12 +214,6 @@ bool DownloadProtectionService::IsHashManuallyBlocklisted(
 void DownloadProtectionService::CheckClientDownload(
     download::DownloadItem* item,
     CheckDownloadRepeatingCallback callback) {
-  ClientDownloadRequest::DownloadType file_download_type =
-      download_type_util::GetDownloadType(item->GetTargetFilePath());
-  if (file_download_type == ClientDownloadRequest::DOCUMENT) {
-    UMA_HISTOGRAM_MEMORY_KB("SafeBrowsing.Macros.DocumentSize",
-                            item->GetReceivedBytes() / 1024);
-  }
   auto request = std::make_unique<CheckClientDownloadRequest>(
       item, std::move(callback), this, database_manager_,
       binary_feature_extractor_);
@@ -250,10 +245,13 @@ bool DownloadProtectionService::MaybeCheckClientDownload(
     // scanning request and not with a consumer check, the pre-deep scanning
     // DownloadCheckResult is considered UNKNOWN. This shouldn't trigger on
     // report-only scans to avoid skipping the consumer check.
-    UploadForDeepScanning(item, std::move(callback),
-                          DeepScanningRequest::DeepScanTrigger::TRIGGER_POLICY,
-                          DownloadCheckResult::UNKNOWN,
-                          std::move(settings.value()));
+    UploadForDeepScanning(
+        item,
+        base::BindRepeating(
+            &DownloadProtectionService::MaybeCheckMetdataAfterDeepScanning,
+            weak_ptr_factory_.GetWeakPtr(), item, std::move(callback)),
+        DeepScanningRequest::DeepScanTrigger::TRIGGER_POLICY,
+        DownloadCheckResult::UNKNOWN, std::move(settings.value()));
     return true;
   }
 
@@ -496,24 +494,10 @@ void DownloadProtectionService::MaybeSendDangerousDownloadOpenedReport(
     report->set_did_proceed(true);
     report->set_download_verdict(
         DownloadDangerTypeToDownloadResponseVerdict(item->GetDangerType()));
-    *report->mutable_population() =
-        safe_browsing::GetUserPopulationForProfile(profile);
-    std::string serialized_report;
-    if (report->SerializeToString(&serialized_report)) {
-      sb_service_->SendSerializedDownloadReport(profile, serialized_report);
 
-      // The following is to log this ClientSafeBrowsingReportRequest on any
-      // open
-      // chrome://safe-browsing pages.
-      content::GetUIThreadTaskRunner({})->PostTask(
-          FROM_HERE,
-          base::BindOnce(&WebUIInfoSingleton::AddToCSBRRsSent,
-                         base::Unretained(WebUIInfoSingleton::GetInstance()),
-                         std::move(report)));
-    } else {
-      DCHECK(false)
-          << "Unable to serialize the dangerous download opened report.";
-    }
+    ReportThreatDetailsResult result =
+        sb_service_->SendDownloadReport(profile, std::move(report));
+    DCHECK(result == ReportThreatDetailsResult::SUCCESS);
   }
 }
 
@@ -807,6 +791,17 @@ DownloadProtectionService::GetNavigationObserverManager(
     content::WebContents* web_contents) {
   return SafeBrowsingNavigationObserverManagerFactory::GetForBrowserContext(
       web_contents->GetBrowserContext());
+}
+
+void DownloadProtectionService::MaybeCheckMetdataAfterDeepScanning(
+    download::DownloadItem* item,
+    CheckDownloadRepeatingCallback callback,
+    DownloadCheckResult result) {
+  if (result == DownloadCheckResult::UNKNOWN) {
+    CheckClientDownload(item, callback);
+  } else {
+    std::move(callback).Run(result);
+  }
 }
 
 }  // namespace safe_browsing

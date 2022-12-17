@@ -17,8 +17,6 @@
 #include "base/base_export.h"
 #include "base/win/windows_types.h"
 
-#include "platform_media/ffmpeg/wmfaacdec.h"
-
 namespace base {
 class CommandLine;
 }
@@ -49,9 +47,6 @@ BASE_EXPORT HMODULE GetWMFLibraryForH264();
 // Get WMF library for demuxing. Unless in unit tests this must be called after
 // calling one of |InitFor*()| functions.
 BASE_EXPORT bool HasMFDemuxerSupport();
-
-// This should be called when FFmpeg library was initialized.
-BASE_EXPORT void OnFFmpegInit(FFWMF_LogInfo* info);
 
 }  // namespace platform_media_init
 

@@ -42,7 +42,9 @@ suite('AmbientPreviewTest', function() {
         personalizationStore.data.ambient.albums = ambientProvider.albums;
         personalizationStore.data.ambient.topicSource = TopicSource.kArtGallery;
         personalizationStore.data.ambient.ambientModeEnabled = false;
-        const ambientPreviewElement = initElement(AmbientPreview);
+        personalizationStore.data.ambient.googlePhotosAlbumsPreviews =
+            ambientProvider.googlePhotosAlbumsPreviews;
+        ambientPreviewElement = initElement(AmbientPreview);
         personalizationStore.notifyObservers();
         await waitAfterNextRender(ambientPreviewElement);
 
@@ -50,11 +52,12 @@ suite('AmbientPreviewTest', function() {
             ambientPreviewElement.shadowRoot!.getElementById(
                 'messageContainer');
         assertTrue(!!messageContainer);
-        const textSpan = messageContainer.querySelector('span');
+        const textSpan = messageContainer.querySelector<HTMLSpanElement>(
+            '#turnOnDescription');
         assertTrue(!!textSpan);
         assertEquals(
             ambientPreviewElement.i18n('ambientModeMainPageZeroStateMessage'),
-            textSpan.textContent);
+            textSpan.innerText);
       });
 
   test(
@@ -63,7 +66,9 @@ suite('AmbientPreviewTest', function() {
         personalizationStore.data.ambient.albums = ambientProvider.albums;
         personalizationStore.data.ambient.topicSource = TopicSource.kArtGallery;
         personalizationStore.data.ambient.ambientModeEnabled = false;
-        const ambientPreviewElement = initElement(AmbientPreview);
+        personalizationStore.data.ambient.googlePhotosAlbumsPreviews =
+            ambientProvider.googlePhotosAlbumsPreviews;
+        ambientPreviewElement = initElement(AmbientPreview);
         personalizationStore.notifyObservers();
         await waitAfterNextRender(ambientPreviewElement);
 
@@ -90,7 +95,7 @@ suite('AmbientPreviewTest', function() {
           };
         });
         const [path, queryParams] = await goToRoutePromise;
-        assertEquals(Paths.Ambient, path);
+        assertEquals(Paths.AMBIENT, path);
         assertDeepEquals({}, queryParams);
       });
 });

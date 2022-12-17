@@ -13,13 +13,14 @@
 #include "base/time/time.h"
 #include "chrome/browser/apps/app_service/metrics/app_service_metrics.h"
 #include "chrome/browser/apps/intent_helper/common_apps_navigation_throttle.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_list.h"
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_types.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -43,10 +44,11 @@ constexpr char kStartTime[] = "21 Jan 2022 10:00:00 GMT";
 }  // namespace
 
 // Summary of expected behavior on ChromeOS:
-// ____________________________|_SWA_launches_|_URL_redirection
-// projector.apps.chrome       | Yes          | Yes
-// chrome://projector/app/     | Yes          | No
-// chrome-untrusted://projector| No           | No
+// _____________________________|_SWA_launches_|_URL_redirection
+// screencast.apps.chrome       | Yes          | Yes
+// projector.apps.chrome        | Yes          | Yes (online only)
+// chrome://projector/app/      | Yes          | No
+// chrome-untrusted://projector | No           | No
 
 class ProjectorNavigationThrottleTest : public InProcessBrowserTest {
  public:
@@ -56,9 +58,8 @@ class ProjectorNavigationThrottleTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
-    web_app::WebAppProvider::GetForTest(profile())
-        ->system_web_app_manager()
-        .InstallSystemAppsForTesting();
+    ash::SystemWebAppManager::GetForTest(profile())
+        ->InstallSystemAppsForTesting();
 
     base::Time start_time;
     ASSERT_TRUE(base::Time::FromUTCString(kStartTime, &start_time));
@@ -85,7 +86,7 @@ class ProjectorNavigationThrottleTestParameterized
   bool navigate_from_link() const { return GetParam(); }
 };
 
-// Verifies that navigating to https://projector.apps.chrome/xyz redirects to
+// Verifies that navigating to https://screencast.apps.chrome/xyz redirects to
 // chrome://projector/app/xyz and launches the SWA.
 IN_PROC_BROWSER_TEST_P(ProjectorNavigationThrottleTestParameterized,
                        PwaNavigationRedirects) {
@@ -124,8 +125,8 @@ IN_PROC_BROWSER_TEST_P(ProjectorNavigationThrottleTestParameterized,
   // the previous one closed.
   EXPECT_NE(old_browser, new_browser);
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is now open.
   ASSERT_TRUE(app_browser);
   EXPECT_EQ(app_browser, new_browser);
@@ -163,12 +164,13 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
   EXPECT_EQ(BrowserList::GetInstance()->size(), 1u);
   Browser* old_browser = browser();
 
-  // Suppose the user clicks a link like https://projector.apps.chrome in gchat.
-  // The redirect URL actually looks like the below.
+  // Suppose the user clicks a link like https://screencast.apps.chrome in
+  // gchat. The redirect URL actually looks like the below.
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(),
-      GURL("https://www.google.com/url?q=https://"
-           "projector.apps.chrome&sa=D&source=hangouts&ust=1642759200000000")));
+      GURL(
+          "https://www.google.com/url?q=https://"
+          "screencast.apps.chrome&sa=D&source=hangouts&ust=1642759200000000")));
   // The Google servers would redirect to the URL in the ?q= query parameter.
   // Simulate this behavior in this test without actually pinging the Google
   // servers to prevent flakiness.
@@ -189,8 +191,8 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
   // we should have closed the previous one.
   EXPECT_NE(old_browser, new_browser);
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is now open.
   ASSERT_TRUE(app_browser);
   EXPECT_EQ(app_browser, new_browser);
@@ -213,8 +215,8 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), untrusted_url));
   web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is not open. We don't capture navigations to
   // chrome-untrusted://projector.
   EXPECT_FALSE(app_browser);
@@ -226,13 +228,6 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
 
   // URL remains unchanged.
   EXPECT_EQ(tab->GetVisibleURL(), untrusted_url);
-  // Verify the document language. We must use the deprecated
-  // ExecuteScriptAndExtract*() instead of EvalJs() due to CSP.
-  std::string lang;
-  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
-      tab, "domAutomationController.send(document.documentElement.lang)",
-      &lang));
-  EXPECT_EQ(lang, "en-US");
 }
 
 // Verifies that navigating to chrome://projector/app/ does not redirect but
@@ -246,8 +241,8 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
       ui_test_utils::BrowserTestWaitFlags::BROWSER_TEST_WAIT_FOR_BROWSER);
   web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is now open.
   ASSERT_TRUE(app_browser);
   content::WebContents* tab =
@@ -260,6 +255,21 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
   EXPECT_EQ(tab->GetVisibleURL(), trusted_url);
 }
 
+// Verifies that navigating to chrome-untrusted://projector-annotator does not
+// lead to a crash. Prevents a regression to b/229124074.
+IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleTest,
+                       UntrustedAnnotatorNavigationDoesNotCrash) {
+  GURL untrusted_annotator_url(kChromeUIUntrustedAnnotatorUrl);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), untrusted_annotator_url));
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(tab);
+  EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
+            content::PAGE_TYPE_ERROR);
+  EXPECT_EQ(tab->GetVisibleURL(), untrusted_annotator_url);
+}
+
 class ProjectorNavigationThrottleDisabledTest : public InProcessBrowserTest {
  public:
   ProjectorNavigationThrottleDisabledTest() {
@@ -269,9 +279,8 @@ class ProjectorNavigationThrottleDisabledTest : public InProcessBrowserTest {
 
   void SetUpOnMainThread() override {
     InProcessBrowserTest::SetUpOnMainThread();
-    web_app::WebAppProvider::GetForTest(profile())
-        ->system_web_app_manager()
-        .InstallSystemAppsForTesting();
+    ash::SystemWebAppManager::GetForTest(profile())
+        ->InstallSystemAppsForTesting();
   }
 
  protected:
@@ -281,8 +290,8 @@ class ProjectorNavigationThrottleDisabledTest : public InProcessBrowserTest {
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
-// Verifies that navigating to https://projector.apps.chrome does not launch the
-// SWA when the app is disabled.
+// Verifies that navigating to https://screencast.apps.chrome does not launch
+// the SWA when the app is disabled.
 IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleDisabledTest,
                        PwaNavigationLandingPage) {
   GURL pwa_url(kChromeUIUntrustedProjectorPwaUrl);
@@ -291,15 +300,15 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleDisabledTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), pwa_url));
   web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is not open because it is disabled.
   EXPECT_FALSE(app_browser);
 
   content::WebContents* tab =
       browser()->tab_strip_model()->GetActiveWebContents();
   ASSERT_TRUE(tab);
-  // Normally, navigating to https://projector.apps.chrome would reach the
+  // Normally, navigating to https://screencast.apps.chrome would reach the
   // landing page, but we don't have internet connection in this browser test.
   EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
             content::PAGE_TYPE_ERROR);
@@ -330,8 +339,8 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleDisabledTest,
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), trusted_url));
   web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
-  Browser* app_browser =
-      FindSystemWebAppBrowser(profile(), web_app::SystemAppType::PROJECTOR);
+  Browser* app_browser = web_app::FindSystemWebAppBrowser(
+      profile(), ash::SystemWebAppType::PROJECTOR);
   // Projector SWA is not open because it is disabled.
   EXPECT_FALSE(app_browser);
 
@@ -372,5 +381,39 @@ IN_PROC_BROWSER_TEST_F(ProjectorNavigationThrottleDisabledTest,
             content::PAGE_TYPE_ERROR);
   EXPECT_EQ(tab->GetVisibleURL(), trusted_annotator_url);
 }
+
+class ProjectorNavigationThrottleLocaleTest
+    : public ProjectorNavigationThrottleTest,
+      public testing::WithParamInterface<std::string> {
+ protected:
+  std::string locale() const { return GetParam(); }
+};
+
+// Verifies that the Projector app can detect locale changes.
+IN_PROC_BROWSER_TEST_P(ProjectorNavigationThrottleLocaleTest,
+                       UntrustedNavigationLocaleDetection) {
+  g_browser_process->SetApplicationLocale(locale());
+
+  GURL untrusted_url(kChromeUIUntrustedProjectorAppUrl);
+
+  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), untrusted_url));
+  content::WebContents* tab =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(tab);
+  EXPECT_EQ(tab->GetController().GetVisibleEntry()->GetPageType(),
+            content::PAGE_TYPE_NORMAL);
+
+  // Verify the document language. We must use the deprecated
+  // ExecuteScriptAndExtract*() instead of EvalJs() due to CSP.
+  std::string lang;
+  ASSERT_TRUE(content::ExecuteScriptAndExtractString(
+      tab, "domAutomationController.send(document.documentElement.lang)",
+      &lang));
+  EXPECT_EQ(lang, locale());
+}
+
+INSTANTIATE_TEST_SUITE_P(,
+                         ProjectorNavigationThrottleLocaleTest,
+                         /*locale=*/testing::Values("en-US", "zh-CN"));
 
 }  // namespace ash

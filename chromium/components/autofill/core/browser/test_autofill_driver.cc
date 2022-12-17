@@ -15,11 +15,17 @@
 namespace autofill {
 
 TestAutofillDriver::TestAutofillDriver()
-    : test_shared_loader_factory_(
+    :
+#if !BUILDFLAG(IS_IOS)
+      ContentAutofillDriver(/*render_frame_host=*/nullptr,
+                            /*autofill_router=*/nullptr),
+#endif
+      test_shared_loader_factory_(
           base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
-              &test_url_loader_factory_)) {}
+              &test_url_loader_factory_)) {
+}
 
-TestAutofillDriver::~TestAutofillDriver() {}
+TestAutofillDriver::~TestAutofillDriver() = default;
 
 bool TestAutofillDriver::IsIncognito() const {
   return is_incognito_;
@@ -72,10 +78,6 @@ std::vector<FieldGlobalId> TestAutofillDriver::FillOrPreviewForm(
     }
   }
   return result;
-}
-
-void TestAutofillDriver::PropagateAutofillPredictions(
-    const std::vector<FormStructure*>& forms) {
 }
 
 void TestAutofillDriver::HandleParsedForms(

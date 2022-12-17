@@ -53,6 +53,16 @@ class VIZ_COMMON_EXPORT BlendBitmap {
   sk_sp<SkImage> image_;
 };
 
+// Enum used to specify letteboxing behavior for a BlitRequest.
+enum class LetterboxingBehavior {
+  // No letterboxing is needed - only the destination region will be written
+  // into by the handler of CopyOutputRequest.
+  kDoNotLetterbox,
+  // Letterboxing is needed - everything outside of the destination region
+  // will be filled with black by the handler of CopyOutputRequest.
+  kLetterbox
+};
+
 // Structure describing a blit operation that can be appended to
 // `CopyOutputRequest` if the callers want to place the results of the operation
 // in textures that they own.
@@ -60,8 +70,10 @@ class VIZ_COMMON_EXPORT BlitRequest {
  public:
   explicit BlitRequest(
       const gfx::Point& destination_region_offset,
+      LetterboxingBehavior letterboxing_behavior,
       const std::array<gpu::MailboxHolder, CopyOutputResult::kMaxPlanes>&
-          mailboxes);
+          mailboxes,
+      bool populates_gpu_memory_buffer);
 
   BlitRequest(BlitRequest&& other);
   BlitRequest& operator=(BlitRequest&& other);
@@ -74,6 +86,10 @@ class VIZ_COMMON_EXPORT BlitRequest {
     return destination_region_offset_;
   }
 
+  LetterboxingBehavior letterboxing_behavior() const {
+    return letterboxing_behavior_;
+  }
+
   const std::array<gpu::MailboxHolder, CopyOutputResult::kMaxPlanes>&
   mailboxes() const {
     return mailboxes_;
@@ -82,6 +98,10 @@ class VIZ_COMMON_EXPORT BlitRequest {
   const gpu::MailboxHolder& mailbox(size_t i) const {
     CHECK(i < std::size(mailboxes_));
     return mailboxes_[i];
+  }
+
+  bool populates_gpu_memory_buffer() const {
+    return populates_gpu_memory_buffer_;
   }
 
   // Appends a new `BlendBitmap` request to this blit request.
@@ -106,11 +126,19 @@ class VIZ_COMMON_EXPORT BlitRequest {
   // images.
   gfx::Point destination_region_offset_;
 
+  // Specifies the letterboxing behavior of this request.
+  LetterboxingBehavior letterboxing_behavior_;
+
   // Mailboxes with planes that will be populated.
   // The textures can (but don't have to be) backed by
   // a GpuMemoryBuffer. The pixel format of the request determines
   // how many planes need to be present.
   std::array<gpu::MailboxHolder, CopyOutputResult::kMaxPlanes> mailboxes_;
+
+  // True if `mailboxes_` describe shared images that have been created from
+  // a GpuMemoryBuffer. In this case, the CopyOutputResult needs to be sent out
+  // only after it's safe to map the GpuMemoryBuffer to system memory.
+  bool populates_gpu_memory_buffer_;
 
   // Collection of bitmaps that will be blended onto the textures.
   // They will be blended in order (so if i < j, bitmap at offset i will

@@ -438,6 +438,11 @@ chromium_strings.grd. -->
           This computer will no longer receive Google Chrome updates because Windows XP and Windows Vista are no longer supported
         </message>
       </if>
+      <if expr="is_linux">
+        <message name="IDS_LINUX_OBSOLETE" desc="A message displayed on an at-launch infobar and about:help warning the user that the OS version they are using is no longer supported.">
+          Google Chrome may not function correctly because it is no longer supported on this Linux distribution
+        </message>
+      </if>
       <message name="IDS_ACCNAME_APP" desc="The accessible name for the app menu.">
         Chrome
       </message>
@@ -661,6 +666,10 @@ Permissions you've already given to websites and apps may apply to this account.
       </if>
 
       <!-- Download Bubble Items -->
+      <message name="IDS_DOWNLOAD_BUBBLE_DANGEROUS_FILE"
+               desc="Message shown to the user to validate the download of a dangerous file.">
+        Chrome blocked this file because this type of file is dangerous
+      </message>
       <message name="IDS_DOWNLOAD_BUBBLE_MALICIOUS_URL_BLOCKED"
                desc="Message shown to the user to validate the download when the download url is classified to lead to malware by the safebrowsing database.">
         Chrome blocked this file because it is dangerous
@@ -713,11 +722,6 @@ Permissions you've already given to websites and apps may apply to this account.
       <message name="IDS_BLOCK_REASON_UNWANTED_DOWNLOAD"
          desc="Message shown to the user on chrome://downloads page to explain that this download is blocked because it is unwanted sofware.">
         This file may be dangerous, so Chrome has blocked it.
-      </message>
-
-      <message name="IDS_PROMPT_CONFIRM_DANGEROUS_DOWNLOAD_ACCOUNT_COMPROMISE_BODY"
-        desc="Body prompt text for the confirmation dialog asking whether the user really meant to keep a download deemed to be associated with account compromise by safebrowsing">
-        Chrome recommends that you don't download or open this file
       </message>
 
       <!-- Abandon in-progress downloads confirmation dialog -->
@@ -858,13 +862,6 @@ Permissions you've already given to websites and apps may apply to this account.
 
       <!-- One click sign-in infobar -->
       <if expr="not chromeos_ash">
-        <!-- New one-click sign-in dialog contents for SAML support -->
-        <message name="IDS_ONE_CLICK_SIGNIN_DIALOG_TITLE_NEW" desc="The title of the modal dialog window that opens when the user chooses to use one click sign-in.">
-          You're signed in to Chrome!
-        </message>
-        <message name="IDS_ONE_CLICK_SIGNIN_DIALOG_MESSAGE_NEW" desc="The message of the one click sign-in dialog.">
-          You're signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>. Now you can access your bookmarks, history, and other settings on all your signed in devices.
-        </message>
         <message name="IDS_SYNC_WRONG_EMAIL" desc="Message shown when sync setup failed due to the user entering the wrong email address for sign-in.">
           You were signed in to Chrome as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>. Please use the same account to sign in again.
         </message>
@@ -895,6 +892,13 @@ Permissions you've already given to websites and apps may apply to this account.
         </message>
         <message name="IDS_ENTERPRISE_SIGNIN_WORK_PROFILE_EXPLANATION" desc="The warning message displayed to an enterprise user about to link their profile to their Google account. This message is followed by a 'Learn more' link.">
           Any Chrome data that is generated during the use of this profile (such as the creation of bookmarks, history, passwords, and other settings) can be removed by the work profile administrator. <ph name="LEARN_MORE">$1<ex>Learn more</ex></ph>
+        </message>
+        <!-- New one-click sign-in dialog contents for SAML support -->
+        <message name="IDS_ONE_CLICK_SIGNIN_DIALOG_TITLE_NEW" desc="The title of the modal dialog window that opens when the user chooses to use one click sign-in.">
+          You're signed in to Chrome!
+        </message>
+        <message name="IDS_ONE_CLICK_SIGNIN_DIALOG_MESSAGE_NEW" desc="The message of the one click sign-in dialog.">
+          You're signed in as <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>. Now you can access your bookmarks, history, and other settings on all your signed in devices.
         </message>
       </if>
 
@@ -940,12 +944,18 @@ Permissions you've already given to websites and apps may apply to this account.
          <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_ENTERPRISE_BUBBLE_DESC_MANAGED_DEVICE" desc="Body of the web signin interception bubble when the new account is personal and the existing account is managed on a managed device">
           This will create a new Chrome profile for <ph name="USER_EMAIL_ADDRESS">$1<ex>foo@gmail.com</ex></ph>
         </message>
+        <message name="IDS_SIGNIN_DICE_WEB_INTERCEPT_CONSUMER_BUBBLE_DESC_V2" desc="Body of the web signin interception bubble. It is shown when the user signs in on the web while they already have another account present in the current profile.">
+          Another account is already signed in. To keep your browsing separate, Chrome can create your own profile for you.
+        </message>
       </if>
 
       <if expr="not chromeos_ash and not is_android">
-        <!-- Profile Customization Bubble-->
+        <!-- Profile Customization Web UI -->
         <message name="IDS_PROFILE_CUSTOMIZATION_TEXT" desc="Text of the profile customization bubble">
           Customize your new Chrome profile
+        </message>
+        <message name="IDS_PROFILE_CUSTOMIZATION_TITLE_V2" desc="Title of the profile customization dialog">
+          Customize your Chrome profile
         </message>
       </if>
 
@@ -957,17 +967,6 @@ Permissions you've already given to websites and apps may apply to this account.
       </if>
 
       <!-- Sync/sign-in error messages -->
-      <if expr="not chromeos_ash">
-        <message name="IDS_SYNC_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error bubble view when the user's sign-in credentials are out of date.">
-          Google Chrome could not sync your data because your account sign-in details are out of date.
-        </message>
-        <message name="IDS_SYNC_UNAVAILABLE_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error bubble view when sync is not available for their domain.">
-          Google Chrome could not sync your data because Sync is not available for your domain.
-        </message>
-        <message name="IDS_SYNC_OTHER_SIGN_IN_ERROR_BUBBLE_VIEW_MESSAGE" desc="Message in the sign-in error bubble view when there's an error signing in.">
-          Google Chrome could not sync your data due to an error signing in.
-        </message>
-      </if>
       <if expr="chromeos_ash">
         <if expr="reven">
           <message name="IDS_SIGNIN_ERROR_SECONDARY_ACCOUNT_DISPLAY_SOURCE" desc="Context title shown in the notification header of sign-in error notification for ChromeOS Flex Secondary Accounts.">
@@ -1048,7 +1047,7 @@ Permissions you've already given to websites and apps may apply to this account.
       </message>
 
       <!-- ProcessSingleton -->
-      <if expr="is_linux or is_macosx">
+      <if expr="is_posix">
         <message name="IDS_PROFILE_IN_USE_POSIX" desc="Message shown when the browser cannot start because the profile is in use on a different host.">
           The profile appears to be in use by another Google Chrome process (<ph name="PROCESS_ID">$1<ex>12345</ex></ph>) on another computer (<ph name="HOST_NAME">$2<ex>example.com</ex></ph>).  Chrome has locked the profile so that it doesn't get corrupted.  If you are sure no other processes are using this profile, you can unlock the profile and relaunch Chrome.
         </message>
@@ -1429,7 +1428,7 @@ Permissions you've already given to websites and apps may apply to this account.
       </if>
 
       <!-- Chrome parent extension/app install blocking dialog. -->
-      <if expr="chromeos_ash">
+      <if expr="enable_extensions and enable_supervised_users">
         <message name="IDS_EXTENSION_INSTALL_BLOCKED_BY_PARENT_PROMPT_MESSAGE" desc="Text for the dialog indicating that a parent has blocked extensions and apps.">
          Your parent has turned off "Permissions for sites, apps and extensions" for Chrome. Adding this <ph name="EXTENSION_TYPE_PARAMETER">$1<ex>extension</ex></ph> is not allowed.
         </message>
@@ -1449,7 +1448,7 @@ Permissions you've already given to websites and apps may apply to this account.
           </message>
 
           <message name="IDS_PROFILE_PICKER_PROFILE_CREATION_FLOW_ACCOUNT_SELECTION_LACROS_SUBTITLE" desc="Profile picker, account selection screen subtitle">
-            The following accounts are not signed into any Chrome profiles. If you want to use an account in another profile, remove that profile first.
+            Sign in to Chrome
           </message>
         </if>
         <if expr="not chromeos_lacros">
@@ -1484,6 +1483,22 @@ Permissions you've already given to websites and apps may apply to this account.
         <message name="IDS_PROFILE_PICKER_PROFILE_SWITCH_SUBTITLE" desc="Profile picker profile switch subtitle">
           A Chrome profile with this account already exists on this device
         </message>
+
+        <!-- First Run Experience -->
+        <if expr="chromeos_lacros">
+          <message name="IDS_PRIMARY_PROFILE_FIRST_RUN_TITLE" desc="Title of the landing screen in first run experience for the primary profile. The screen promotes Chrome sync.">
+            Welcome to Chrome, <ph name="ACCOUNT_FIRST_NAME">$1<ex>Jane</ex></ph>
+          </message>
+          <message name="IDS_PRIMARY_PROFILE_FIRST_RUN_NO_NAME_TITLE" desc="Title of the screen shown when the user runs Chrome for the first time. A simple, generic welcome message.">
+            Welcome to Chrome
+          </message>
+          <message name="IDS_PRIMARY_PROFILE_FIRST_RUN_SUBTITLE" desc="Subtitle of the landing screen in first run experience for the primary profile. The screen promotes Chrome sync.">
+            Get your Chrome browser stuff from <ph name="ACCOUNT_EMAIL">$1<ex>Jane.Doe@gmail.com</ex></ph>
+          </message>
+          <message name="IDS_PRIMARY_PROFILE_FIRST_RUN_SESSION_MANAGED_BY_DESCRIPTION" desc="Disclaimer on the landing screen in first run experience for the primary profile, informing that the session is managed by an administrator.">
+            Your account is managed by <ph name="MANAGER_NAME">$1<ex>example.com</ex></ph>. Your administrator can see and edit this Chrome browser profile and its data like bookmarks, history, and passwords.
+          </message>
+        </if>
 
         <!-- Profile switch IPH -->
         <message name="IDS_PROFILE_SWITCH_PROMO" desc="Text of the In-Product-Help bubble for profile switching.">

@@ -17,40 +17,16 @@
 
 namespace web {
 
-bool CanShowContextMenuForParams(const ContextMenuParams& params) {
-  if (params.link_url.is_valid()) {
-    return true;
-  }
-  if (params.src_url.is_valid()) {
-    return true;
-  }
-  return false;
-}
-
-CGRect BoundingBoxFromBoundingBoxDictionary(const base::Value* boundingBox) {
-  absl::optional<double> x =
-      boundingBox->FindDoubleKey(kContextMenuElementBoundingBoxX);
-  absl::optional<double> y =
-      boundingBox->FindDoubleKey(kContextMenuElementBoundingBoxY);
-  absl::optional<double> width =
-      boundingBox->FindDoubleKey(kContextMenuElementBoundingBoxWidth);
-  absl::optional<double> height =
-      boundingBox->FindDoubleKey(kContextMenuElementBoundingBoxHeight);
-
-  if (x && y && width && height && width > 0.0 && height > 0.0) {
-    const double elementSize = *height * *width;
-    if (elementSize < kContextMenuMaxScreenshotSize) {
-      return CGRectMake(*x, *y, *width, *height);
-    }
-  }
-  return CGRectZero;
-}
-
 ContextMenuParams ContextMenuParamsFromElementDictionary(base::Value* element) {
   ContextMenuParams params;
   if (!element || !element->is_dict()) {
     // Invalid |element|.
     return params;
+  }
+
+  std::string* tag_name = element->FindStringKey(kContextMenuElementTagName);
+  if (tag_name) {
+    params.tag_name = base::SysUTF8ToNSString(*tag_name);
   }
 
   std::string* href = element->FindStringKey(kContextMenuElementHyperlink);
@@ -72,7 +48,7 @@ ContextMenuParams ContextMenuParamsFromElementDictionary(base::Value* element) {
   std::string* inner_text =
       element->FindStringKey(kContextMenuElementInnerText);
   if (inner_text && !inner_text->empty()) {
-    params.link_text = base::SysUTF8ToNSString(*inner_text);
+    params.text = base::SysUTF8ToNSString(*inner_text);
   }
 
   std::string* title_attribute =
@@ -86,22 +62,10 @@ ContextMenuParams ContextMenuParamsFromElementDictionary(base::Value* element) {
     params.alt_text = base::SysUTF8ToNSString(*alt_text);
   }
 
-  absl::optional<double> natural_width =
-      element->FindDoubleKey(web::kContextMenuElementNaturalWidth);
-  if (natural_width.has_value()) {
-    params.natural_width = *natural_width;
-  }
-
-  absl::optional<double> natural_height =
-      element->FindDoubleKey(web::kContextMenuElementNaturalHeight);
-  if (natural_height.has_value()) {
-    params.natural_height = *natural_height;
-  }
-
-  base::Value* bounding_box =
-      element->FindDictKey(web::kContextMenuElementBoundingBox);
-  if (bounding_box) {
-    params.bounding_box = BoundingBoxFromBoundingBoxDictionary(bounding_box);
+  absl::optional<double> text_offset =
+      element->FindDoubleKey(web::kContextMenuElementTextOffset);
+  if (text_offset.has_value()) {
+    params.text_offset = *text_offset;
   }
 
   return params;

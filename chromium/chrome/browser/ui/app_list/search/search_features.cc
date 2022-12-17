@@ -6,6 +6,7 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/field_trial_params.h"
+#include "chromeos/constants/chromeos_features.h"
 
 namespace search_features {
 
@@ -13,7 +14,8 @@ const base::Feature kLauncherGameSearch{"LauncherGameSearch",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
 bool IsLauncherGameSearchEnabled() {
-  return base::FeatureList::IsEnabled(kLauncherGameSearch);
+  return base::FeatureList::IsEnabled(kLauncherGameSearch) ||
+         chromeos::features::IsCloudGamingDeviceEnabled();
 }
 
 }  // namespace search_features

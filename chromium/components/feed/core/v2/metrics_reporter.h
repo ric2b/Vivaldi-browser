@@ -57,6 +57,7 @@ class MetricsReporter {
   void OnMetadataInitialized(bool isEnabledByEnterprisePolicy,
                              bool isFeedVisible,
                              bool isSignedIn,
+                             bool isEnabled,
                              const feedstore::Metadata& metadata);
 
   // User interactions. See |FeedApi| for definitions.
@@ -133,15 +134,14 @@ class MetricsReporter {
                                           WebFeedRefreshStatus status,
                                           int subscribed_web_feed_count);
 
-  // Notice events.
-  void OnNoticeCreated(const StreamType& stream_type, const std::string& key);
-  void OnNoticeViewed(const StreamType& stream_type, const std::string& key);
-  void OnNoticeOpenAction(const StreamType& stream_type,
-                          const std::string& key);
-  void OnNoticeDismissed(const StreamType& stream_type, const std::string& key);
-  void OnNoticeAcknowledged(const StreamType& stream_type,
-                            const std::string& key,
-                            NoticeAcknowledgementPath acknowledgement_path);
+  // Info card events.
+  void OnInfoCardTrackViewStarted(const StreamType& stream_type,
+                                  int info_card_type);
+  void OnInfoCardViewed(const StreamType& stream_type, int info_card_type);
+  void OnInfoCardClicked(const StreamType& stream_type, int info_card_type);
+  void OnInfoCardDismissedExplicitly(const StreamType& stream_type,
+                                     int info_card_type);
+  void OnInfoCardStateReset(const StreamType& stream_type, int info_card_type);
 
  private:
   // State replicated for reporting per-stream-type metrics.

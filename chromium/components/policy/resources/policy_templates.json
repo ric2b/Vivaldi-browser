@@ -144,6 +144,9 @@
 #   'default_for_managed_devices_doc_only', which documents an explicitly
 #   implemented default policy value for managed devices.
 #
+#   'default_policy_level' is used to override mandatory policy level for the
+#   'default_for_enterprise_users' with the recommended level.
+#
 #   'items' is used to outline the behavior of each state the policy can take.
 #   This field is only used for policies of type 'main', 'int-enum', or
 #   'string-enum'. For 'main' policies, it describes how the policy behaves when
@@ -287,9 +290,9 @@
 #   For managed users on ChromeOS (i.e. users receiving user policy from the
 #   cloud), if the optional key 'default_for_enterprise_users' is set, its value
 #   is applied as mandatory policy unless a different setting is received from
-#   the cloud. This default value handling is automatically enforced by the
-#   policy stack when filling the PolicyMap (specifically, by the generated
-#   function SetEnterpriseUsersDefaults).
+#   the cloud or `default_policy_level` is set. This default value handling is
+#   automatically enforced by the policy stack when filling the PolicyMap
+#   (specifically, by the generated function SetEnterpriseUsersDefaults).
 #
 # Enterprise defaults for device policy:
 #   The optional key 'default_for_managed_devices_doc_only' can be used to
@@ -540,6 +543,7 @@
       'caption': '''Content settings''',
       'desc': '''Content settings allow you to specify how contents of a specific type (for example Cookies, Images or JavaScript) is handled.''',
       'policies': [
+        'DefaultClipboardSetting',
         'DefaultCookiesSetting',
         'DefaultFileHandlingGuardSetting',
         'DefaultFileSystemReadGuardSetting',
@@ -561,6 +565,8 @@
         'DefaultSerialGuardSetting',
         'DefaultWebHidGuardSetting',
         'DefaultWindowPlacementSetting',
+        'ClipboardAllowedForUrls',
+        'ClipboardBlockedForUrls',
         'AutoSelectCertificateForUrls',
         'CookiesAllowedForUrls',
         'CookiesBlockedForUrls',
@@ -2127,7 +2133,7 @@
     },
     {
       'name': 'HistoryClustersVisible',
-      'owners': ['file://components/history_clusters/OWNERS', 'mahmadi@chromium.org'],
+      'owners': ['file://components/history_clusters/OWNERS', 'mahmadi@chromium.org', 'chrome-journeys@google.com'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'supported_on': ['chrome.*:97-', 'chrome_os:97-'],
@@ -2162,6 +2168,8 @@
       If the policy is set to Disabled, Journeys will not be visible at chrome://history/journeys.
 
       If the policy is left unset, Journeys will be visible at chrome://history/journeys by default and users can change the visibility of Journeys.
+
+      Please note, if <ph name="COMPONENT_UPDATES_ENABLED_POLICY_NAME">ComponentUpdatesEnabled</ph> policy is set to Disabled, but <ph name="HISTORY_CLUSTERS_VISIBLE_POLICY_NAME">HistoryClustersVisible</ph> is set to Enabled or unset, Journeys will still be available at chrome://history/journeys, but may be absent from the omnibox, and less relevant to the user.
       ''',
     },
     {
@@ -6819,7 +6827,7 @@
         {
           'name': 'BlockPopups',
           'value': 2,
-          'caption': '''Do not allow any site to show popups''',
+          'caption': '''Do not allow any site to show pop-ups''',
         },
       ],
       'supported_on': [
@@ -6834,7 +6842,7 @@
       },
       'example_value': 1,
       'id': 52,
-      'caption': '''Default popups setting''',
+      'caption': '''Default pop-ups setting''',
       'tags': [],
       'desc': '''Setting the policy to 1 lets websites display pop-ups. Setting the policy to 2 denies pop-ups.
 
@@ -8200,6 +8208,89 @@
       For detailed information on valid <ph name="URL_LABEL">url</ph> patterns, please see https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. <ph name="WILDCARD_VALUE">*</ph> is not an accepted value for this policy.''',
     },
     {
+      'name': 'DefaultClipboardSetting',
+      'owners': ['domfc@chromium.org', 'file://components/content_settings/OWNERS'],
+      'type': 'int-enum',
+      'schema': {
+        'type': 'integer',
+        'enum': [ 2, 3 ],
+      },
+      'items': [
+        {
+          'name': 'BlockClipboard',
+          'value': 2,
+          'caption': '''Do not allow any site to use the clipboard site permission''',
+        },
+        {
+          'name': 'AskClipboard',
+          'value': 3,
+          'caption': '''Allow sites to ask the user to grant the clipboard site permission''',
+        },
+      ],
+      'supported_on': ['chrome.*:103-', 'chrome_os:103-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'default': None,
+      'example_value': 2,
+      'id': 983,
+      'caption': '''Default clipboard setting''',
+      'tags': [],
+      'desc': '''Setting the policy to 2 blocks sites from using the clipboard site permission. Setting the policy to 3 or leaving it unset lets the user change the setting and decide if the clipboard APIs are available when a site wants to use one.
+
+      This policy can be overridden for specific URL patterns using the <ph name="CLIPBOARD_ALLOWED_FOR_URLS_POLICY_NAME">ClipboardAllowedForUrls</ph> and <ph name="CLIPBOARD_BLOCKED_FOR_URLS_POLICY_NAME">ClipboardBlockedForUrls</ph> policies.
+
+      This policy only affects clipboard operations controlled by the clipboard site permission, and does not affect sanitized clipboard writes or trusted copy and paste operations.''',
+    },
+    {
+      'name': 'ClipboardAllowedForUrls',
+      'owners': ['domfc@chromium.org', 'file://components/content_settings/OWNERS'],
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome.*:103-', 'chrome_os:103-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': ['https://www.example.com', '[*.]example.edu'],
+      'id': 984,
+      'caption': '''Allow clipboard on these sites''',
+      'tags': [],
+      'desc': '''Setting the policy lets you set a list of URL patterns that specify sites that can use the clipboard site permission. This does not include all clipboard operations on origins matching the patterns. For instance, users will still be able to paste using keyboard shortcuts as this isn't gated by the clipboard site permission.
+
+
+      Leaving the policy unset means <ph name="DEFAULT_CLIPBOARD_SETTING">DefaultClipboardSetting</ph> applies for all sites, if it's set. If not, the user's personal setting applies.
+
+      For detailed information on valid <ph name="URL_LABEL">url</ph> patterns, please see https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. <ph name="WILDCARD_VALUE">*</ph> is not an accepted value for this policy.''',
+    },
+    {
+      'name': 'ClipboardBlockedForUrls',
+      'owners': ['domfc@chromium.org', 'file://components/content_settings/OWNERS'],
+      'type': 'list',
+      'schema': {
+        'type': 'array',
+        'items': { 'type': 'string' },
+      },
+      'supported_on': ['chrome.*:103-', 'chrome_os:103-'],
+      'features': {
+        'dynamic_refresh': True,
+        'per_profile': True,
+      },
+      'example_value': ['https://www.example.com', '[*.]example.edu'],
+      'id': 985,
+      'caption': '''Block clipboard on these sites''',
+      'tags': [],
+      'desc': '''Setting the policy lets you set a list of URL patterns that specify sites that can't use the clipboard site permission. This does not include all clipboard operations on origins matching the patterns. For instance, users will still be able to paste using keyboard shortcuts as this isn't gated by the clipboard site permission.
+
+      Leaving the policy unset means <ph name="DEFAULT_CLIPBOARD_SETTING">DefaultClipboardSetting</ph> applies for all sites, if it's set. If not, the user's personal setting applies.
+
+      For detailed information on valid <ph name="URL_LABEL">url</ph> patterns, please see https://cloud.google.com/docs/chrome-enterprise/policies/url-patterns. <ph name="WILDCARD_VALUE">*</ph> is not an accepted value for this policy.''',
+    },
+    {
       'name': 'KeygenAllowedForUrls',
       'owners': ['engedy@chromium.org', 'file://components/content_settings/OWNERS'],
       'type': 'list',
@@ -8547,7 +8638,7 @@
       },
       'example_value': ['https://www.example.com', '[*.]example.edu'],
       'id': 75,
-      'caption': '''Allow popups on these sites''',
+      'caption': '''Allow pop-ups on these sites''',
       'tags': [],
       'desc': '''Setting the policy lets you set a list of URL patterns that specify the sites that can open pop-ups.
 
@@ -8616,7 +8707,7 @@
       },
       'example_value': ['https://www.example.com', '[*.]example.edu'],
       'id': 76,
-      'caption': '''Block popups on these sites''',
+      'caption': '''Block pop-ups on these sites''',
       'tags': [],
       'desc': '''Setting the policy lets you set a list of URL patterns that specify the sites that can't open pop-ups.
 
@@ -9197,7 +9288,7 @@
           'primary_account_signin',
         ]
       },
-      'future_on': ['chrome_os'],
+      'supported_on': ['chrome_os:103-'],
       'features': {
         # The case where a user is already signed in as a secondary account and the policy is dynamically refreshed to not allow secondary sign-ins cannot be handled right now. Hence this is not dynamic.
         'dynamic_refresh': False,
@@ -9312,11 +9403,11 @@
       'items': [
         {
           'value': True,
-          'caption': 'Only allow popups opened with a target of <ph name="BLANK_PAGE_NAME">_blank</ph> to interact with the page that opened the popup if the opener page explicitly opts-in to such interaction',
+          'caption': 'Only allow pop-ups opened with a target of <ph name="BLANK_PAGE_NAME">_blank</ph> to interact with the page that opened the pop-up if the opener page explicitly opts-in to such interaction',
         },
         {
           'value': False,
-          'caption': 'Allow all popups opened with a target of <ph name="BLANK_PAGE_NAME">_blank</ph> to interact the page that requested to open the popup unless the opener page explicitly opts-out of such interaction ',
+          'caption': 'Allow all pop-ups opened with a target of <ph name="BLANK_PAGE_NAME">_blank</ph> to interact the page that requested to open the pop-up unless the opener page explicitly opts-out of such interaction ',
         },
       ],
       'deprecated': True,
@@ -9325,7 +9416,7 @@
       'id': 802,
       'caption': '''Do not set <ph name="WINDOW_OPENER_PROPERTY">window.opener</ph> for links targeting <ph name="BLANK_PAGE_NAME">_blank</ph>''',
       'tags': [],
-      'desc': '''Setting the policy to Disabled allows popups targeting <ph name="BLANK_PAGE_NAME">_blank</ph> to access (via JavaScript) the page that requested to open the popup.
+      'desc': '''Setting the policy to Disabled allows pop-ups targeting <ph name="BLANK_PAGE_NAME">_blank</ph> to access (via JavaScript) the page that requested to open the pop-up.
 
       Setting the policy to Enabled or leaving it unset causes the <ph name="WINDOW_OPENER_PROPERTY">window.opener</ph> property to be set to <ph name="NULL_VALUE">null</ph> unless the anchor specifies <ph name="REL_OPENER_ATTRIBUTE">rel="opener"</ph>.
 
@@ -9612,6 +9703,7 @@
         'dynamic_refresh': True,
         'per_profile': True,
       },
+      'deprecated': True,
       'example_value': True,
       'default': False,
       'id': 903,
@@ -9642,7 +9734,7 @@
           'caption': 'Do not allow CRD to execute WebAuthn API requests proxied from a remote host.',
         },
       ],
-      'future_on': ['chrome.*', 'chrome_os'],
+      'supported_on': ['chrome.*:103-', 'chrome_os:103-'],
       'features': {
         'dynamic_refresh': True,
         'internal_only': True,  # Not available outside of Google.
@@ -10983,11 +11075,13 @@
       'owners': ['cros-reporting-team@google.com', 'albertojuarez@google.com'],
       'type': 'int',
       'schema': { 'type': 'integer', 'minimum': 60000 },
-      'future_on': ['chrome_os'],
+      'supported_on': ['chrome_os:103-'],
       'supported_chrome_os_management': ['google_cloud'],
       'device_only': True,
       'features': {
+        'cloud_only': True,
         'dynamic_refresh': True,
+        'unlisted': True,
       },
       'example_value': 600000,
       'default': 600000,
@@ -11129,11 +11223,13 @@
       'owners': ['anasr@google.com', 'cros-reporting-team@google.com'],
       'type': 'int',
       'schema': { 'type': 'integer', 'minimum': 60000 },
-      'future_on': ['chrome_os'],
+      'supported_on': ['chrome_os:103-'],
       'supported_chrome_os_management': ['google_cloud'],
       'device_only': True,
       'features': {
+        'cloud_only': True,
         'dynamic_refresh': True,
+        'unlisted': True,
       },
       'example_value': 600000,
       'default': 3600000,
@@ -11150,11 +11246,13 @@
       'owners': ['anasr@google.com', 'cros-reporting-team@google.com'],
       'type': 'int',
       'schema': { 'type': 'integer', 'minimum': 60000 },
-      'future_on': ['chrome_os'],
+      'supported_on': ['chrome_os:103-'],
       'supported_chrome_os_management': ['google_cloud'],
       'device_only': True,
       'features': {
+        'cloud_only': True,
         'dynamic_refresh': True,
+        'unlisted': True,
       },
       'example_value': 60000,
       'default': 600000,
@@ -19232,7 +19330,7 @@
     },
     {
       'name': 'WifiSyncAndroidAllowed',
-      'owners': ['jonmann@chromium.org', 'cvandermerwe@google.com'],
+      'owners': ['jonmann@chromium.org', 'chromeos-cross-device-eng@google.com'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'supported_on': ['chrome_os:89-'],
@@ -19916,7 +20014,9 @@
 
       Setting the policy to Disabled or leaving it unset means platform policy takes precedence if it conflicts with cloud policy.
 
-      This mandatory policy affects machine scope cloud policies.''',
+      This mandatory policy affects machine scope cloud policies.
+
+      This policy is only available on <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>; it has no effect on <ph name="GOOGLE_UPDATE_NAME">Google Update</ph>.''',
     },
     {
       'name': 'CloudUserPolicyOverridesCloudMachinePolicy',
@@ -20705,7 +20805,7 @@
     },
     {
       'name': 'PasswordProtectionWarningTrigger',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'int-enum',
       'schema': {
         'type': 'integer',
@@ -21154,7 +21254,7 @@
     },
     {
       'name': 'SafeBrowsingWhitelistDomains',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'list',
       'schema': {
         'type': 'array',
@@ -21180,7 +21280,7 @@
     },
     {
       'name': 'SafeBrowsingAllowlistDomains',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'list',
       'schema': {
         'type': 'array',
@@ -21205,7 +21305,7 @@
     },
     {
       'name': 'PasswordProtectionLoginURLs',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'list',
       'schema': {
         'type': 'array',
@@ -21228,7 +21328,7 @@
     },
     {
       'name': 'PasswordProtectionChangePasswordURL',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'string',
       'schema': { 'type': 'string' },
       'supported_on': ['chrome.*:69-', 'chrome_os:69-'],
@@ -21248,7 +21348,7 @@
     },
     {
       'name': 'SafeBrowsingExtendedReportingEnabled',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'supported_on': ['chrome.*:66-', 'chrome_os:66-', 'android: 87-'],
@@ -22010,7 +22110,7 @@
     },
     {
       'name': 'SafeSitesFilterBehavior',
-      'owners': ['bdea@chromium.org', 'nparker@chromium.org'],
+      'owners': ['nwokedi@chromium.org', 'nparker@chromium.org'],
       'type': 'int-enum',
       'schema': {
         'type': 'integer',
@@ -23779,7 +23879,7 @@
       'default_for_enterprise_users': False,
       'example_value': False,
       'id': 533,
-      'caption': '''Allows a page to show popups during its unloading''',
+      'caption': '''Allows a page to show pop-ups during its unloading''',
       'tags': [],
       'desc': '''Setting the policy to True allows pages to show pop-ups while the pages unload.
 
@@ -24453,8 +24553,17 @@
       'example_value': {'reboot_time' : {'hour': 22, 'minute': 30}, 'frequency': 'WEEKLY', 'day_of_week': 'TUESDAY', 'day_of_month': 11},
       'tags': [],
       'id': 862,
-      'caption': '''Set custom schedule to reboot kiosk devices''',
-      'desc': '''Allows setting a custom schedule to reboot devices. The policy currently applies only to devices which have enabled auto-launch app in the Kiosk session. Once set to True, the device will reboot to the schedule. The policy must be removed to cancel any more scheduled reboots.'''
+      'caption': '''Set custom schedule to reboot devices''',
+      'desc': '''Allows setting a custom schedule to reboot devices. Once set to True, the device will reboot to the schedule. The policy must be removed to cancel any more scheduled reboots.
+
+      In user sessions and guest sessions, the following applies:
+
+        * The users are notified that the restart will occur 1 hour before the scheduled time. They have an option to restart then or wait for the scheduled reboot. The scheduled reboot cannot be deferred.
+
+        * There is a 1 hour grace period after the device is booted. Scheduled reboots are skipped during this period and rescheduled for the next day, week, or month, depending on the setting.
+
+      In kiosk sessions, there is no grace period and no notifications about the reboot.
+'''
     },
     {
       'name': 'KerberosEnabled',
@@ -25470,6 +25579,37 @@
       'desc': '''Setting the policy to Enabled or leaving it unset turns Renderer Code Integrity on.
 
       Setting the policy to Disabled has a detrimental effect on <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>'s security and stability as unknown and potentially hostile code can load inside <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>'s renderer processes. Only turn off the policy if there are compatibility issues with third-party software that must run inside <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph>'s renderer processes.
+
+      Note: Read more about Process mitigation policies ( https://chromium.googlesource.com/chromium/src/+/HEAD/docs/design/sandbox.md#Process-mitigation-policies ).''',
+    },
+    {
+      'name': 'RendererAppContainerEnabled',
+      'owners': ['wfh@chromium.org', 'adetaylor@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome.win:104-'],
+      'features': {
+        'dynamic_refresh': False,
+        'per_profile': False,
+      },
+      'default': True,
+      'example_value': False,
+      'id': 987,
+      'items': [
+        {
+          'value': True,
+          'caption': 'Enable the Renderer App Container sandbox',
+        },
+        {
+          'value': False,
+          'caption': 'Disable the Renderer App Container sandbox',
+        },
+      ],
+      'caption': '''Enable Renderer App Container''',
+      'tags': ['system-security'],
+      'desc': '''Setting the policy to Enabled or leaving it unset means Renderer App Container configuration will be enabled on supported platforms.
+
+      Setting the policy to Disabled has a detrimental effect on the security and stability of <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> as it will weaken the sandbox that renderer processes use. Only turn off the policy if there are compatibility issues with third-party software that must run inside renderer processes.
 
       Note: Read more about Process mitigation policies ( https://chromium.googlesource.com/chromium/src/+/HEAD/docs/design/sandbox.md#Process-mitigation-policies ).''',
     },
@@ -27411,7 +27551,7 @@ If you disable this policy, web page scrolling to specific text fragments via UR
       'default': True,
       'example_value': True,
       'id': 981,
-      'caption': '''Control the URL parameter filter feature.''',
+      'caption': '''Control the URL parameter filter feature''',
       'tags': [],
       'desc': '''When enabled or not set, the URL parameter filter may remove some parameters when a user selects "Open Link in Incognito Window" from the context menu.
       When disabled, no filtering is performed.
@@ -29112,11 +29252,13 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
           'name': 'PrimaryAccountKeepExistingData',
           'value': 'primary_account_keep_existing_data',
           'caption': 'A Managed account must be a primary account and the user can import existing data at the time of its creation',
+          'supported_on': ['chrome.*:102-'],
         },
         {
           'name': 'PrimaryAccountStrictKeepExistingData',
           'value': 'primary_account_strict_keep_existing_data',
           'caption': 'A Managed account must be a primary account and have no secondary accounts and the user can import existing data at the time of its creation',
+          'supported_on': ['chrome.*:102-'],
         },
       ],
       'default': 'none',
@@ -29126,10 +29268,10 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'tags': [],
       'desc': '''
       If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT">'primary_account'</ph>, after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account.
-      If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT_KEEP_EXISTING_DATA">'primary_account_keep_existing_data'</ph>, after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account with an option to keep any existing browsing data.
+      If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT_KEEP_EXISTING_DATA">'primary_account_keep_existing_data'</ph>, after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account with an option to keep any existing browsing data. This option is supported on Chrome 102 and higher version.
 
       If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT_STRICT">'primary_account_strict'</ph>, after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account. This profile will not allow any secondary accounts.
-      If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT_STRICT_KEEP_EXISTING_DATA">'primary_account_strict_keep_existing_data'</ph> after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account with an option to keep any existing browsing data. This profile will not allow any secondary accounts.
+      If this policy is set to <ph name="POLICY_VALUE_PRIMARY_ACCOUNT_STRICT_KEEP_EXISTING_DATA">'primary_account_strict_keep_existing_data'</ph> after a signin into an a managed account subjected to this policy, the user be asked to create a new profile for the account with an option to keep any existing browsing data. This profile will not allow any secondary accounts. This option is supported on Chrome 102 and higher version.
 
       If this policy is set to <ph name="POLICY_VALUE_NONE">'none'</ph> or not set, managed accounts have no restrictions. This may result in a managed account being a secondary account, which disables its ability to receive policies set on the account by the admin.
 
@@ -29152,7 +29294,8 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
           'caption': 'Use default icons for secure connections',
         },
       ],
-      'supported_on': ['chrome.*:93-', 'chrome_os:93-', 'android:93-'],
+      'supported_on': ['chrome.*:93-102', 'chrome_os:93-102', 'android:93-102'],
+      'deprecated': True,
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -29454,7 +29597,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'owners': ['mattm@chromium.org'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'future_on': ['chrome.win', 'chrome.mac', 'chrome.linux'],
+      'supported_on': ['chrome.win:104-', 'chrome.mac:104-', 'chrome.linux:104-'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -29807,7 +29950,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'type': 'main',
       'schema': { 'type': 'boolean' },
       'default': True,
-      'supported_on': ['chrome.*:97-103', 'chrome_os:97-103', 'android:97-103'],
+      'supported_on': ['chrome.*:97-', 'chrome_os:97-', 'android:97-'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -29828,13 +29971,13 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'tags': [],
       'desc': '''Configures support of CORS non-wildcard request headers.
 
-      <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> version 97 introduces support for CORS non-wildcard request headers. When scripts make a cross-origin network request via fetch() and XMLHttpRequest with a script-added Authorization header, the header must be explicitly allowed by the Access-Control-Allow-Headers header in the CORS preflight response. "Explicitly" here means that the wild card symbol "*" doesn't cover the Authorization header. See <ph name="CORS_NON_WILDCARD_REQUEST_HEADERS_FEATURE_URL">https://www.chromest atus.com/feature/5768642492891136</ph> for more detail.
+      <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> version 97 introduces support for CORS non-wildcard request headers. When scripts make a cross-origin network request via fetch() and XMLHttpRequest with a script-added Authorization header, the header must be explicitly allowed by the Access-Control-Allow-Headers header in the CORS preflight response. "Explicitly" here means that the wild card symbol "*" doesn't cover the Authorization header. See <ph name="CORS_NON_WILDCARD_REQUEST_HEADERS_FEATURE_URL">https://www.chromestatus.com/feature/5768642492891136</ph> for more detail.
 
       If this policy is not set, or set to True, <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> will support the CORS non-wildcard request headers and behave as described above.
 
       When this policy is set to False, chrome will allow the wildcard symbol ("*") in the Access-Control-Allow-Headers header in the CORS preflight response to cover the Authorization header.
 
-      This Enterprise policy is temporary; it's intended to be removed after <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> version 103.''',
+      This Enterprise policy is temporary; it's intended to be removed in the future.''',
     },
     {
       'name': 'DeviceI18nShortcutsEnabled',
@@ -30126,16 +30269,15 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
         },
       ],
       'example_value': True,
-      'default': False,
+      'default': True,
       'id': 935,
       'caption': '''Enable Projector''',
       'desc': '''This policy gives Projector permission to create and transcribe screen recording and upload to Drive for enterprise users.
       This policy does not affect Family Link users.
       This policy does not affect <ph name="PROJECTOR_DOGFOOD_FOR_FAMILY_LINK_ENABLED_POLICY_NAME">ProjectorDogfoodForFamilyLinkEnabled</ph> policy for Family Link users.
 
-      If the policy is enabled, Projector will be enabled.
-      If the policy is disabled, Projector will be disabled.
-      If the policy is not set, Projector will by default disabled.''',
+      If the policy is unset or enabled, Projector will be enabled.
+      If the policy is disabled, Projector will be disabled.''',
     },
     {
       'name': 'DeviceKeylockerForStorageEncryptionEnabled',
@@ -30418,7 +30560,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'schema': { 'type': 'boolean' },
       'features' : {
         'dynamic_refresh': False,
-        'per_profile': False,
+        'per_profile': True,
       },
       'items': [
         {
@@ -30442,8 +30584,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
 
                   When this policy is set to Disabled, the First-Party Sets feature is disabled.
 
-                  The state of the First-Party Sets feature determines whether Chrome retrieves the list of First-Party Sets.
-                  It also controls whether Chrome supports First-Party Sets related features (e.g. the SameParty cookie attribute).''',
+                  It controls whether Chrome supports First-Party Sets related features (e.g. the SameParty cookie attribute).''',
     },
     {
       'name': 'FirstPartySetsOverrides',
@@ -30533,7 +30674,9 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       Wildcards (*) are not supported as a policy value, nor within any First-Party Set in these lists.
 
       All sets provided by to policy must be valid First-Party Sets, if they aren't then an
-      appropriate error will be outputted.''',
+      appropriate error will be outputted.
+
+      This policy is available only on Windows instances that are joined to a <ph name="MS_AD_NAME">Microsoft® Active Directory®</ph> domain or Windows 10 Pro or Enterprise instances that are enrolled for device management, and macOS instances that are managed via MDM or joined to a domain via MCX.''',
     },
     {
       'name': 'DeviceEncryptedReportingPipelineEnabled',
@@ -30628,7 +30771,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       'owners': ['file://components/optimization_guide/OWNERS', 'sophiechang@chromium.org'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'supported_on': ['android:101-', 'chrome.*:101-', 'chrome_os:101-', 'ios:101-'],
+      'supported_on': ['android:101-103', 'chrome.*:101-103', 'chrome_os:101-103', 'ios:101-103'],
       'features': {
         'dynamic_refresh': False,
         'per_profile': True,
@@ -30644,6 +30787,7 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
         },
       ],
       'default': True,
+      'deprecated': True,
       'example_value': True,
       'id': 963,
       'caption': '''Enable Optimization Guide Fetching''',
@@ -30814,11 +30958,57 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       If this policy is set to Disabled, a warning dialog is not shown when the user is attempting to quit.'''
     },
     {
+      'name': 'OsColorMode',
+      'owners': ['jaflis@google.com', 'cros-oobe@google.com', 'chromeos-wmp@google.com'],
+      'type': 'string-enum',
+      'schema': {
+        'type': 'string',
+        'enum': [
+          'light',
+          'dark',
+          'auto',
+        ],
+      },
+      'items': [
+        {
+          'name': 'light',
+          'value': 'light',
+          'caption': '''Use the Light theme''',
+        },
+        {
+          'name': 'dark',
+          'value': 'dark',
+          'caption': '''Use the Dark theme''',
+        },
+        {
+          'name': 'auto',
+          'value': 'auto',
+          'caption': '''Use the Auto mode''',
+        },
+      ],
+      'supported_on': ['chrome_os:104-'],
+      'features': {
+        'can_be_recommended': True,
+        'dynamic_refresh': True,
+        'per_profile': False,
+      },
+      'default': 'light',
+      'default_for_enterprise_users': 'light',
+      'default_policy_level': 'recommended',
+      'example_value': 'light',
+      'id': 986,
+      'caption': '''ChromeOS color mode''',
+      'tags': [],
+      'desc': '''Controls the theme used to render UI during OOBE and in session (dark/light/auto).
+      The auto mode automatically switches between dark and light themes on sunrise and sunset.
+      This policy should be recommended, giving users the possibility to change the theme in system settings.''',
+    },
+    {
       'name': 'InsightsExtensionEnabled',
       'owners': ['cros-reporting-team@google.com', 'vshenvi@google.com'],
       'type': 'main',
       'schema': { 'type': 'boolean' },
-      'future_on': ['chrome_os'],
+      'supported_on': ['chrome_os:103-'],
       'features': {
         'dynamic_refresh': True,
         'per_profile': True,
@@ -30916,7 +31106,77 @@ When this policy is set, <ph name="PRODUCT_OS_NAME">$2<ex>Google ChromeOS</ex></
       If the policy is disabled, Projector dogfood will be disabled for Family Link users.
       If the policy is not set, Projector dogfood will be by default disabled for Family Link users.''',
     },
+    {
+      'name': 'ScreenTimeEnabled',
+      'owners': ['lgrey@chromium.org', 'chrome-mac-dev@google.com'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'future_on':['chrome.mac'],
+      'tags': ['local-data-access'],
+      'features': {
+        'dynamic_refresh' : True,
+        'per_profile' : True,
+      },
+      'items': [
+        {
+          'value': True,
+          'caption': 'Enable Screen Time for websites',
+        },
+        {
+          'value': False,
+          'caption': 'Disable Screen Time for websites',
+        }
+      ],
+      'example_value': True,
+      'default': True,
+      'id': 982,
+      'caption': '''Enable Screen Time for websites''',
+      'desc': '''This policy enables <ph name="PRODUCT_NAME">$1<ex>Google Chrome</ex></ph> to participate in the <ph name="MAC_OS_NAME">macOS</ph> Screen Time feature.
 
+      If the policy is Enabled or not set, visited origins will be reported to the OS, and origins that have been blocked in Screen Time settings will display a blocking screen.
+      If the policy is Disabled, visited origins will not be reported to the OS, and origins that have been blocked in Screen Time settings will be accessible.''',
+    },
+    {
+      'name': 'UnthrottledNestedTimeoutEnabled',
+      'owners': ['file://third_party/blink/renderer/core/frame/OWNERS', 'etiennep@chromium.org', 'shaseley@chromium.org'],
+      'type': 'main',
+      'schema': { 'type': 'boolean' },
+      'supported_on': ['chrome_os:104-106', 'chrome.*:104-106', 'android:104-106'],
+      'features': {
+        'per_profile': True,
+        'dynamic_refresh': False,
+      },
+      'items': [
+        {
+          'value': True,
+          'caption': '''Javascript setTimeout() will not be clamped until a higher nesting threshold.''',
+        },
+        {
+          'value': False,
+          'caption': '''Javascript setTimeout() will be clamped after a normal nesting threshold.''',
+        },
+        {
+          'value': None,
+          'caption': '''Default behavior for setTimeout() function nested clamp.''',
+        },
+      ],
+      'default': None,
+      'example_value': True,
+      'id': 988,
+      'caption': '''Control the nesting threshold before which Javascript setTimeout() function start being clamped.''',
+      'tags': [],
+      'desc': '''setTimeout(…, 0) is commonly used to break down long Javascript tasks.
+          When the policy is set to Enabled, setTimeouts and setIntervals with an interval smaller than 4ms are not clamped as aggressively.
+          This improves short horizon performance, but websites abusing the API will still eventually have their setTimeouts clamped.
+
+          This may change task ordering on a web page, leading to unexpected behavior on sites that are dependent on a certain ordering in some way.
+          It also may affect sites with a lot of setTimeout() with a timeout of 0ms usage, e.g. increasing CPU load.
+
+          For users where this policy is unset, Chrome will roll out the change gradually on the stable channel.
+
+          This is a temporary policy that is planned be removed in Chrome 107. This deadline may be extended if there is a need for it among enterprises.
+          ''',
+    },
   ],
   'messages': {
     # Messages that are not associated to any policies.
@@ -31551,7 +31811,7 @@ The recommended way to configure policy on Windows is via GPO, although provisio
     {
       'id': 12,
       'name': 'PopupsSettings',
-      'caption': '''Popups settings''',
+      'caption': '''Pop-ups settings''',
       'policies': [
         'DefaultPopupsSetting',
         'PopupsAllowedForUrls',
@@ -31923,6 +32183,6 @@ The recommended way to configure policy on Windows is via GPO, although provisio
   'placeholders': [],
   'deleted_policy_ids': [114, 115, 204, 205, 206, 341, 412, 476, 544, 546, 562, 569, 578, 583, 585, 586, 587, 588, 589, 590, 591, 600, 668, 669, 872],
   'deleted_atomic_policy_group_ids': [19],
-  'highest_id_currently_used': 981,
+  'highest_id_currently_used': 988,
   'highest_atomic_group_id_currently_used': 43
 }

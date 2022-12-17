@@ -16,6 +16,7 @@
 
 #include "app/vivaldi_apptools.h"
 #include "content/public/browser/permission_controller_delegate.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 
 using extensions::mojom::APIPermissionID;
 
@@ -74,19 +75,25 @@ bool ExtensionMediaAccessHandler::CheckMediaAccessPermission(
   // device first. VB-84021.
   if (vivaldi::IsVivaldiApp(extension->id())) {
     bool is_audio = type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE;
-    content::PermissionType permission =
-        is_audio ? content::PermissionType::AUDIO_CAPTURE
-                 : content::PermissionType::VIDEO_CAPTURE;
+
+    blink::PermissionType permission =
+        is_audio ? blink::PermissionType::AUDIO_CAPTURE
+                 : blink::PermissionType::VIDEO_CAPTURE;
 
     content::WebContents* web_contents =
         content::WebContents::FromRenderFrameHost(render_frame_host);
 
-    auto* permission_controller =
+    content::PermissionControllerDelegate* delegate =
         web_contents->GetBrowserContext()->GetPermissionControllerDelegate();
-    return permission_controller->GetPermissionStatusForFrame(
-               permission, render_frame_host, security_origin) ==
+    if (!delegate) {
+      return false;
+    }
+
+    return delegate->GetPermissionStatusForCurrentDocument(permission,
+                                                           render_frame_host) ==
            blink::mojom::PermissionStatus::GRANTED;
   }
+
   return extension->permissions_data()->HasAPIPermission(
       type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE
           ? APIPermissionID::kAudioCapture

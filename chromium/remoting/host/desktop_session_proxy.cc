@@ -34,6 +34,7 @@
 #include "remoting/host/ipc_url_forwarder_configurator.h"
 #include "remoting/host/ipc_video_frame_capturer.h"
 #include "remoting/host/remote_open_url/remote_open_url_util.h"
+#include "remoting/host/webauthn/remote_webauthn_delegated_state_change_notifier.h"
 #include "remoting/proto/audio.pb.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/event.pb.h"
@@ -143,8 +144,7 @@ std::unique_ptr<ScreenControls> DesktopSessionProxy::CreateScreenControls() {
   return std::make_unique<IpcScreenControls>(this);
 }
 
-std::unique_ptr<webrtc::DesktopCapturer>
-DesktopSessionProxy::CreateVideoCapturer() {
+std::unique_ptr<DesktopCapturer> DesktopSessionProxy::CreateVideoCapturer() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   return std::make_unique<IpcVideoFrameCapturer>(this);
@@ -172,6 +172,14 @@ DesktopSessionProxy::CreateUrlForwarderConfigurator() {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
   return std::make_unique<IpcUrlForwarderConfigurator>(this);
+}
+
+std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
+DesktopSessionProxy::CreateRemoteWebAuthnStateChangeNotifier() {
+  DCHECK(caller_task_runner_->BelongsToCurrentThread());
+
+  return std::make_unique<RemoteWebAuthnDelegatedStateChangeNotifier>(
+      base::BindRepeating(&DesktopSessionProxy::SignalWebAuthnExtension, this));
 }
 
 std::string DesktopSessionProxy::GetCapabilities() const {
@@ -232,11 +240,6 @@ bool DesktopSessionProxy::OnMessageReceived(const IPC::Message& message) {
 
   bool handled = true;
   IPC_BEGIN_MESSAGE_MAP(DesktopSessionProxy, message)
-    IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_DisplayChanged,
-                        OnDesktopDisplayChanged)
-    IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_MouseCursor, OnMouseCursor)
-    IPC_MESSAGE_HANDLER(ChromotingDesktopNetworkMsg_KeyboardChanged,
-                        OnKeyboardChanged)
     IPC_MESSAGE_FORWARD(ChromotingDesktopNetworkMsg_FileResult,
                         &ipc_file_operations_factory_,
                         IpcFileOperations::ResultHandler::OnResult)
@@ -752,7 +755,7 @@ void DesktopSessionProxy::OnCaptureResult(mojom::CaptureResultPtr result) {
                                    std::move(frame));
 }
 
-void DesktopSessionProxy::OnMouseCursor(
+void DesktopSessionProxy::OnMouseCursorChanged(
     const webrtc::MouseCursor& mouse_cursor) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
@@ -762,7 +765,7 @@ void DesktopSessionProxy::OnMouseCursor(
   }
 }
 
-void DesktopSessionProxy::OnKeyboardChanged(
+void DesktopSessionProxy::OnKeyboardLayoutChanged(
     const protocol::KeyboardLayout& layout) {
   DCHECK(caller_task_runner_->BelongsToCurrentThread());
 
@@ -778,6 +781,14 @@ void DesktopSessionProxy::OnClipboardEvent(
 
   if (client_clipboard_) {
     client_clipboard_->InjectClipboardEvent(event);
+  }
+}
+
+void DesktopSessionProxy::SignalWebAuthnExtension() {
+  DCHECK(caller_task_runner_->BelongsToCurrentThread());
+
+  if (desktop_session_control_) {
+    desktop_session_control_->SignalWebAuthnExtension();
   }
 }
 

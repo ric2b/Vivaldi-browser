@@ -100,6 +100,7 @@
 #include "services/network/public/mojom/web_sandbox_flags.mojom-blink.h"
 #include "third_party/blink/public/common/context_menu_data/context_menu_params_builder.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/frame/fenced_frame_sandbox_flags.h"
 #include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/fenced_frame/fenced_frame.mojom-blink.h"
@@ -176,7 +177,6 @@
 #include "third_party/blink/renderer/core/events/after_print_event.h"
 #include "third_party/blink/renderer/core/events/before_print_event.h"
 #include "third_party/blink/renderer/core/exported/web_dev_tools_agent_impl.h"
-#include "third_party/blink/renderer/core/exported/web_document_loader_impl.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -245,6 +245,7 @@
 #include "third_party/blink/renderer/platform/graphics/color.h"
 #include "third_party/blink/renderer/platform/graphics/graphics_context.h"
 #include "third_party/blink/renderer/platform/graphics/paint/drawing_recorder.h"
+#include "third_party/blink/renderer/platform/graphics/paint/ignore_paint_timing_scope.h"
 #include "third_party/blink/renderer/platform/graphics/paint/paint_record_builder.h"
 #include "third_party/blink/renderer/platform/graphics/paint/scoped_paint_chunk_properties.h"
 #include "third_party/blink/renderer/platform/graphics/skia/skia_utils.h"
@@ -590,10 +591,6 @@ class PaintPreviewContext : public PrintContext {
   }
 };
 
-static WebDocumentLoader* DocumentLoaderForDocLoader(DocumentLoader* loader) {
-  return loader ? WebDocumentLoaderImpl::FromDocumentLoader(loader) : nullptr;
-}
-
 // WebFrame -------------------------------------------------------------------
 
 static CreateWebFrameWidgetCallback* g_create_web_frame_widget = nullptr;
@@ -616,11 +613,13 @@ WebFrameWidget* WebLocalFrame::InitializeFrameWidget(
         mojo_widget,
     const viz::FrameSinkId& frame_sink_id,
     bool is_for_nested_main_frame,
+    bool is_for_scalable_page,
     bool hidden) {
   CreateFrameWidgetInternal(
       base::PassKey<WebLocalFrame>(), std::move(mojo_frame_widget_host),
       std::move(mojo_frame_widget), std::move(mojo_widget_host),
-      std::move(mojo_widget), frame_sink_id, is_for_nested_main_frame, hidden);
+      std::move(mojo_widget), frame_sink_id, is_for_nested_main_frame,
+      is_for_scalable_page, hidden);
   return FrameWidget();
 }
 
@@ -1140,7 +1139,7 @@ void WebLocalFrameImpl::ClearActiveFindMatchForTesting() {
 
 WebDocumentLoader* WebLocalFrameImpl::GetDocumentLoader() const {
   DCHECK(GetFrame());
-  return DocumentLoaderForDocLoader(GetFrame()->Loader().GetDocumentLoader());
+  return GetFrame()->Loader().GetDocumentLoader();
 }
 
 void WebLocalFrameImpl::EnableViewSourceMode(bool enable) {
@@ -1333,7 +1332,7 @@ void WebLocalFrameImpl::RemoveSpellingMarkers() {
 void WebLocalFrameImpl::RemoveSpellingMarkersUnderWords(
     const WebVector<WebString>& words) {
   Vector<String> converted_words;
-  converted_words.Append(words.Data(), SafeCast<wtf_size_t>(words.size()));
+  converted_words.Append(words.data(), SafeCast<wtf_size_t>(words.size()));
   GetFrame()->RemoveSpellingMarkersUnderWords(converted_words);
 }
 
@@ -1707,6 +1706,11 @@ void WebLocalFrameImpl::DispatchBeforePrintEvent(
 
   GetFrame()->GetDocument()->SetPrinting(Document::kBeforePrinting);
   DispatchPrintEventRecursively(event_type_names::kBeforeprint);
+  // In case the printing or print preview aborts for any reason, it is
+  // important not to leave the document in the kBeforePrinting state.
+  // See: crbug.com/1309595
+  if (GetFrame())
+    GetFrame()->GetDocument()->SetPrinting(Document::kNotPrinting);
 }
 
 void WebLocalFrameImpl::DispatchAfterPrintEvent() {
@@ -1826,6 +1830,11 @@ bool WebLocalFrameImpl::CapturePaintPreview(const gfx::Rect& bounds,
                                             bool skip_accelerated_content) {
   bool success = false;
   {
+    // Ignore paint timing while capturing a paint preview as it can change LCP
+    // see crbug.com/1323073.
+    IgnorePaintTimingScope scope;
+    IgnorePaintTimingScope::IncrementIgnoreDepth();
+
     Document::PaintPreviewScope paint_preview(
         *GetFrame()->GetDocument(),
         skip_accelerated_content
@@ -1966,10 +1975,12 @@ WebLocalFrameImpl* WebLocalFrameImpl::CreateProvisional(
   network::mojom::blink::WebSandboxFlags sandbox_flags =
       network::mojom::blink::WebSandboxFlags::kNone;
   PermissionsPolicyFeatureState feature_state;
-  if (!previous_frame->Owner()) {
+  if (!previous_frame->Owner() || previous_frame->IsFencedFrameRoot()) {
     // Provisional main frames need to force sandbox flags.  This is necessary
     // to inherit sandbox flags when a sandboxed frame does a window.open()
     // which triggers a cross-process navigation.
+    // Fenced frames also need to force special initial sandbox flags that are
+    // passed via frame_policy.
     sandbox_flags = frame_policy.sandbox_flags;
   }
   // Note: this *always* temporarily sets a frame owner, even for main frames!
@@ -2107,13 +2118,22 @@ void WebLocalFrameImpl::InitializeCoreFrameInternal(
   // New documents are either:
   // 1. The initial empty document:
   //   a. In a new iframe.
-  //   b. In a new popup.
+  //   b. In a new fencedframe.
+  //   c. In a new popup.
   // 2. A document replacing the previous, one via a navigation.
   //
-  // This is about 1.b. This is used to define sandbox flags for the initial
-  // empty document in a new popup.
-  if (frame_->IsMainFrame())
+  // 1.b. will get the special sandbox flags. See:
+  // https://docs.google.com/document/d/1RO4NkQk_XaEE7vuysM9LJilZYsoOhydfh93sOvrPQxU/edit
+  // For 1.c., this is used to define sandbox flags for
+  // the initial empty document in a new popup.
+  if (frame_->IsMainFrame()) {
+    DCHECK(!frame_->IsInFencedFrameTree() ||
+           ((sandbox_flags & blink::kFencedFrameForcedSandboxFlags) ==
+            blink::kFencedFrameForcedSandboxFlags))
+        << "An MPArch fencedframe must be configured with its forced sandbox "
+        << "flags:" << sandbox_flags;
     frame_->SetOpenerSandboxFlags(sandbox_flags);
+  }
 
   Frame* opener_frame = opener ? ToCoreFrame(*opener) : nullptr;
 
@@ -2552,6 +2572,7 @@ void WebLocalFrameImpl::CreateFrameWidgetInternal(
         mojo_widget,
     const viz::FrameSinkId& frame_sink_id,
     bool is_for_nested_main_frame,
+    bool is_for_scalable_page,
     bool hidden) {
   DCHECK(!frame_widget_);
   DCHECK(frame_->IsLocalRoot());
@@ -2575,7 +2596,7 @@ void WebLocalFrameImpl::CreateFrameWidgetInternal(
             std::move(mojo_widget),
             Scheduler()->GetAgentGroupScheduler()->DefaultTaskRunner(),
             frame_sink_id, hidden, never_composited, is_for_child_local_root,
-            is_for_nested_main_frame));
+            is_for_nested_main_frame, is_for_scalable_page));
   } else {
     frame_widget_ = MakeGarbageCollected<WebFrameWidgetImpl>(
         std::move(pass_key), std::move(mojo_frame_widget_host),
@@ -2583,7 +2604,7 @@ void WebLocalFrameImpl::CreateFrameWidgetInternal(
         std::move(mojo_widget),
         Scheduler()->GetAgentGroupScheduler()->DefaultTaskRunner(),
         frame_sink_id, hidden, never_composited, is_for_child_local_root,
-        is_for_nested_main_frame);
+        is_for_nested_main_frame, is_for_scalable_page);
   }
   frame_widget_->BindLocalRoot(*this);
 
@@ -2648,7 +2669,7 @@ void WebLocalFrameImpl::ShowContextMenu(
   // TODO(jcivelli): http://crbug.com/45160 This prevents us from saving large
   //                 data encoded images.  We should have a way to save them.
   if (params.src_url.spec().size() > url::kMaxURLChars)
-    params.src_url = KURL();
+    params.src_url = GURL();
 
   params.selection_rect =
       LocalRootFrameWidget()->BlinkSpaceToEnclosedDIPs(data.selection_rect);
@@ -2876,13 +2897,8 @@ PageState WebLocalFrameImpl::CurrentHistoryItemToPageState() {
   return SingleHistoryItemToPageState(current_history_item_);
 }
 
-void WebLocalFrameImpl::ScrollFocusedEditableElementIntoRect(
-    const gfx::Rect& rect) {
-  // TODO(ekaramad): Perhaps we should remove |rect| since all it seems to be
-  // doing is helping verify if scrolling animation for a given focused editable
-  // element has finished.
-  if (has_scrolled_focused_editable_node_into_rect_ &&
-      rect == rect_for_scrolled_focused_editable_node_ && autofill_client_) {
+void WebLocalFrameImpl::ScrollFocusedEditableElementIntoView() {
+  if (has_scrolled_focused_editable_node_into_rect_ && autofill_client_) {
     autofill_client_->DidCompleteFocusChangeInFrame();
     return;
   }
@@ -2892,7 +2908,6 @@ void WebLocalFrameImpl::ScrollFocusedEditableElementIntoRect(
   if (!local_root_frame_widget->ScrollFocusedEditableElementIntoView())
     return;
 
-  rect_for_scrolled_focused_editable_node_ = rect;
   has_scrolled_focused_editable_node_into_rect_ = true;
   if (!local_root_frame_widget->HasPendingPageScaleAnimation() &&
       autofill_client_) {

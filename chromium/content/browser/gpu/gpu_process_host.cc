@@ -35,6 +35,7 @@
 #include "components/viz/common/features.h"
 #include "components/viz/common/switches.h"
 #include "content/browser/browser_child_process_host_impl.h"
+#include "content/browser/child_process_launcher.h"
 #include "content/browser/compositor/image_transport_factory.h"
 #include "content/browser/gpu/compositor_util.h"
 #include "content/browser/gpu/gpu_data_manager_impl.h"
@@ -44,6 +45,7 @@
 #include "content/common/child_process.mojom.h"
 #include "content/common/child_process_host_impl.h"
 #include "content/common/in_process_child_thread_params.h"
+#include "content/public/browser/browser_child_process_host.h"
 #include "content/public/browser/browser_main_runner.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
@@ -64,7 +66,6 @@
 #include "gpu/ipc/common/gpu_client_ids.h"
 #include "gpu/ipc/common/result_codes.h"
 #include "gpu/ipc/host/shader_disk_cache.h"
-#include "gpu/ipc/in_process_command_buffer.h"
 #include "media/base/media_switches.h"
 #include "media/media_buildflags.h"
 #include "mojo/public/cpp/bindings/generic_pending_receiver.h"
@@ -256,7 +257,6 @@ static const char* const kSwitchNames[] = {
     switches::kEnableLogging,
     switches::kEnableDeJelly,
     switches::kDeJellyScreenWidth,
-    switches::kDocumentTransitionSlowdownFactor,
     switches::kDoubleBufferCompositing,
     switches::kHeadless,
     switches::kLoggingLevel,
@@ -276,9 +276,6 @@ static const char* const kSwitchNames[] = {
     switches::kVModule,
     switches::kUseAdapterLuid,
     switches::kWebViewDrawFunctorUsesVulkan,
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-    switches::kEnableClearHevcForTesting,
-#endif
 #if BUILDFLAG(IS_MAC)
     sandbox::policy::switches::kEnableSandboxLogging,
     sandbox::policy::switches::kDisableMetalShaderCache,
@@ -311,7 +308,6 @@ static const char* const kSwitchNames[] = {
     switches::kHardwareVideoDecodeFrameRate,
 #endif
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    switches::kLacrosEnablePlatformEncryptedHevc,
     switches::kLacrosEnablePlatformHevc,
     switches::kLacrosUseChromeosProtectedMedia,
     switches::kLacrosUseChromeosProtectedAv1,
@@ -404,8 +400,9 @@ class GpuSandboxedProcessLauncherDelegate
       // Open GL path.
       policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
                             sandbox::USER_LIMITED);
-      sandbox::policy::SandboxWin::SetJobLevel(
-          cmd_line_, sandbox::JobLevel::kUnprotected, 0, policy);
+      sandbox::policy::SandboxWin::SetJobLevel(sandbox::mojom::Sandbox::kGpu,
+                                               sandbox::JobLevel::kUnprotected,
+                                               0, policy);
     } else {
       policy->SetTokenLevel(sandbox::USER_RESTRICTED_SAME_ACCESS,
                             sandbox::USER_LIMITED);
@@ -417,7 +414,7 @@ class GpuSandboxedProcessLauncherDelegate
       // message pump entirely and just add job restrictions to prevent child
       // processes.
       sandbox::policy::SandboxWin::SetJobLevel(
-          cmd_line_, sandbox::JobLevel::kLimitedUser,
+          sandbox::mojom::Sandbox::kGpu, sandbox::JobLevel::kLimitedUser,
           JOB_OBJECT_UILIMIT_SYSTEMPARAMETERS | JOB_OBJECT_UILIMIT_DESKTOP |
               JOB_OBJECT_UILIMIT_EXITWINDOWS |
               JOB_OBJECT_UILIMIT_DISPLAYSETTINGS,
@@ -766,11 +763,6 @@ GpuProcessHost::~GpuProcessHost() {
   if (g_gpu_process_hosts[kind_] == this)
     g_gpu_process_hosts[kind_] = nullptr;
 
-#if BUILDFLAG(IS_ANDROID)
-  UMA_HISTOGRAM_COUNTS_100("GPU.AtExitSurfaceCount",
-                           gpu::GpuSurfaceTracker::Get()->GetSurfaceCount());
-#endif
-
   bool block_offscreen_contexts = true;
   if (!in_process_ && process_launched_) {
     ChildProcessTerminationInfo info =
@@ -1053,8 +1045,8 @@ void GpuProcessHost::DidUpdateOverlayInfo(
   GpuDataManagerImpl::GetInstance()->UpdateOverlayInfo(overlay_info);
 }
 
-void GpuProcessHost::DidUpdateHDRStatus(bool hdr_enabled) {
-  GpuDataManagerImpl::GetInstance()->UpdateHDRStatus(hdr_enabled);
+void GpuProcessHost::DidUpdateDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) {
+  GpuDataManagerImpl::GetInstance()->UpdateDXGIInfo(std::move(dxgi_info));
 }
 #endif
 
@@ -1236,7 +1228,9 @@ bool GpuProcessHost::LaunchGpuProcess() {
   // Call LaunchWithoutExtraCommandLineSwitches() so the command line switches
   // will not be appended twice.
   process_->LaunchWithoutExtraCommandLineSwitches(
-      std::move(delegate), std::move(cmd_line), /*files_to_preload=*/{}, true);
+      std::move(delegate), std::move(cmd_line),
+      /*file_data=*/
+      std::make_unique<ChildProcessLauncherFileData>(), true);
   process_launched_ = true;
 
   if (kind_ == GPU_PROCESS_KIND_SANDBOXED) {

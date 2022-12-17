@@ -197,4 +197,20 @@ void ZXDGToplevelV6WrapperImpl::RequestWindowBounds(const gfx::Rect& bounds) {
   NOTREACHED();
 }
 
+void ZXDGToplevelV6WrapperImpl::SetRestoreInfo(int32_t, int32_t) {}
+
+void ZXDGToplevelV6WrapperImpl::SetRestoreInfoWithWindowIdSource(
+    int32_t,
+    const std::string&) {}
+
+void ZXDGToplevelV6WrapperImpl::SetSystemModal(bool modal) {
+  NOTREACHED();
+}
+
+bool ZXDGToplevelV6WrapperImpl::SupportsScreenCoordinates() const {
+  return false;
+}
+
+void ZXDGToplevelV6WrapperImpl::EnableScreenCoordinates() {}
+
 }  // namespace ui

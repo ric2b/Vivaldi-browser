@@ -94,7 +94,7 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
             std::vector<mojom::PaymentMethodDataPtr> method_data,
             mojom::PaymentDetailsPtr details,
             mojom::PaymentOptionsPtr options) override;
-  void Show(bool is_user_gesture, bool wait_for_updated_details) override;
+  void Show(bool wait_for_updated_details) override;
   void Retry(mojom::PaymentValidationErrorsPtr errors) override;
   void UpdateWith(mojom::PaymentDetailsPtr details) override;
   void OnPaymentDetailsNotUpdated() override;
@@ -128,6 +128,10 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
   // object and close any related connections.
   void OnUserCancelled();
 
+  // Called when the user explicitly opts out of the flow. Only used for
+  // SecurePaymentConfirmation currently.
+  void OnUserOptedOut();
+
   // Called when the PaymentRequest is about to be destroyed. This reports
   // the reason for destruction.
   void WillBeDestroyed(content::DocumentServiceDestructionReason reason) final;
@@ -142,7 +146,6 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
   void OnPaymentHandlerOpenWindowCalled();
 
   bool skipped_payment_request_ui() { return skipped_payment_request_ui_; }
-  bool is_show_user_gesture() const { return is_show_user_gesture_; }
   SPCTransactionMode spc_transaction_mode() const {
     return spc_transaction_mode_;
   }
@@ -254,11 +257,6 @@ class PaymentRequest : public content::DocumentService<mojom::PaymentRequest>,
 
   // Whether a completion was already recorded for this Payment Request.
   bool has_recorded_completion_ = false;
-
-  // Whether PaymentRequest.show() was invoked with a user gesture.
-  // TODO(crbug.com/825270): Remove this member now that user gesture is always
-  // required for show().
-  bool is_show_user_gesture_ = false;
 
   // Whether PaymentRequest.show() was invoked by skipping payment request UI.
   bool skipped_payment_request_ui_ = false;

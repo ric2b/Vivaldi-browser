@@ -88,6 +88,13 @@ const char kDisableAudioInput[] = "disable-audio-input";
 
 // Present video content as overlays.
 const char kUseOverlaysForVideo[] = "use-overlays-for-video";
+
+// Forces AudioManagerFuchsia to assume that the AudioCapturer implements echo
+// cancellation.
+// TODO(crbug.com/852834): Remove this once AudioManagerFuchsia is updated to
+// get this information from AudioCapturerFactory.
+const char kAudioCapturerWithEchoCancellation[] =
+    "audio-capturer-with-echo-cancellation";
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
 #if defined(USE_CRAS)
@@ -199,19 +206,12 @@ const char kOverrideHardwareSecureCodecsForTesting[] =
 const char kEnableLiveCaptionPrefForTesting[] =
     "enable-live-caption-pref-for-testing";
 
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-// Enables playback of clear (unencrypted) HEVC content for testing purposes.
-const char kEnableClearHevcForTesting[] = "enable-clear-hevc-for-testing";
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS)
 // These are flags passed from ash-chrome to lacros-chrome that correspond to
 // buildflags for the platform we are running on. lacros-chrome only builds for
 // x86/arm differences, so we unconditionally build in the below features into
 // the relevant parts of lacros-chrome and then filter the functionality based
 // on these command line flags.
-MEDIA_EXPORT extern const char kLacrosEnablePlatformEncryptedHevc[] =
-    "lacros-enable-platform-encrypted-hevc";
 MEDIA_EXPORT extern const char kLacrosEnablePlatformHevc[] =
     "lacros-enable-platform-hevc";
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[] =
@@ -267,6 +267,12 @@ const base::Feature kPictureInPicture {
 #endif
 };
 
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+// Enables HEVC hardware accelerated decoding.
+const base::Feature kPlatformHEVCDecoderSupport{
+    "PlatformHEVCDecoderSupport", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
+
 // Only decode preload=metadata elements upon visibility.
 // TODO(crbug.com/879406): Remove this after M76 ships to stable
 const base::Feature kPreloadMetadataLazyLoad{"PreloadMetadataLazyLoad",
@@ -282,12 +288,6 @@ const base::Feature kResumeBackgroundVideo {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
-
-// Experimental: Try to avoid destroying the media player when transferring a
-// media element to a new document.  This is a work in progress, and may cause
-// security and/or stability issues.
-const base::Feature kReuseMediaPlayer{"ReuseMediaPlayer",
-                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
 // When enabled, MediaCapabilities will check with GPU Video Accelerator
 // Factories to determine isPowerEfficient = true/false.
@@ -311,6 +311,16 @@ const base::Feature kMediaCastOverlayButton{"MediaCastOverlayButton",
 // that |kOverlayFullscreenVideo| is true, else it is ignored.
 const base::Feature kUseAndroidOverlayForSecureOnly{
     "UseAndroidOverlayForSecureOnly", base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Allows usage of OS-level (platform) audio encoders.
+const base::Feature kPlatformAudioEncoder {
+  "PlatformAudioEncoder",
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
 // If enabled, RTCVideoDecoderAdapter will wrap a DecoderStream as a video
 // decoder, rather than using MojoVideoDecoder.  This causes the RTC external
@@ -360,6 +370,23 @@ const base::FeatureParam<int> kChromeWideEchoCancellationProcessingFifoSize{
 // audio capture device.
 const base::FeatureParam<bool> kChromeWideEchoCancellationMinimizeResampling{
     &kChromeWideEchoCancellation, "minimize_resampling", true};
+
+// Dynamically sets audio::SyncReader's timeout based off of a percentage of
+// buffer duration, in an attempt to minimize glitches.
+// The default negative value indicates that no experiment is running, and
+// we shouldn't use a mixing specific timeout value.
+// If the similar kDynamicAudioTimeout feature is enabled and this value is set,
+// this parameter will override kDynamicAudioTimeout values when we are mixing.
+const base::FeatureParam<double>
+    kChromeWideEchoCancellationDynamicMixingTimeout{
+        &kChromeWideEchoCancellation, "mixing_buffer_duration_percent", -1.0};
+
+// Allows all sample rates to be used for audio processing. If disabled, only
+// sample rates divisible by 100 are allowed; a request for a media stream with
+// enabled audio processing will fail otherwise. For context see
+// https://crbug.com/1332484.
+const base::FeatureParam<bool> kChromeWideEchoCancellationAllowAllSampleRates{
+    &kChromeWideEchoCancellation, "allow_all_sample_rates", true};
 #endif
 
 // Make MSE garbage collection algorithm more aggressive when we are under
@@ -378,6 +405,11 @@ const base::Feature kMultiPlaneVideoCaptureSharedImages {
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
+
+// Controls whether the Open Screen libcast SenderSession is used for
+// initializing and managing streaming sessions, or the legacy implementation.
+const base::Feature kOpenscreenCastStreamingSession{
+    "OpenscreenCastStreamingSession", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Approach original pre-REC MSE object URL autorevoking behavior, though await
 // actual attempt to use the object URL for attachment to perform revocation.
@@ -467,10 +499,6 @@ const base::Feature kGlobalMediaControlsModernUI{
 const base::Feature kSpecCompliantCanPlayThrough{
     "SpecCompliantCanPlayThrough", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Controls usage of SurfaceLayer for MediaStreams.
-const base::Feature kSurfaceLayerForMediaStreams{
-    "SurfaceLayerForMediaStreams", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Disables the real audio output stream after silent audio has been delivered
 // for too long. Should save quite a bit of power in the muted video case.
 const base::Feature kSuspendMutedAudio{"SuspendMutedAudio",
@@ -497,6 +525,12 @@ const base::Feature kVaapiVideoDecodeLinux{"VaapiVideoDecoder",
 
 const base::Feature kVaapiVideoEncodeLinux{"VaapiVideoEncoder",
                                            base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Ignore the non-intel driver blacklist for VaapiVideoDecoder implementations.
+// Intended for manual usage only in order to gague the status of newer driver
+// implementations.
+const base::Feature kVaapiIgnoreDriverChecks{"VaapiIgnoreDriverChecks",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // BUILDFLAG(IS_LINUX)
 
 // Enable VA-API hardware decode acceleration for AV1.
@@ -543,14 +577,8 @@ const base::Feature kVaapiH264TemporalLayerHWEncoding{
 const base::Feature kVaapiVp8TemporalLayerHWEncoding{
     "VaapiVp8TemporalLayerEncoding", base::FEATURE_DISABLED_BY_DEFAULT};
 // Enable VP9 k-SVC encoding with HW encoder for webrtc use case on ChromeOS.
-const base::Feature kVaapiVp9kSVCHWEncoding {
-  "VaapiVp9kSVCHWEncoding",
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-      base::FEATURE_ENABLED_BY_DEFAULT
-#else
-      base::FEATURE_DISABLED_BY_DEFAULT
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-};
+const base::Feature kVaapiVp9kSVCHWEncoding{"VaapiVp9kSVCHWEncoding",
+                                            base::FEATURE_ENABLED_BY_DEFAULT};
 #endif  // defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
 
 // Inform video blitter of video color space.
@@ -560,7 +588,9 @@ const base::Feature kVideoBlitColorAccuracy{"video-blit-color-accuracy",
 // Enable VP9 k-SVC decoding with HW decoder for webrtc use case.
 const base::Feature kVp9kSVCHWDecoding {
   "Vp9kSVCHWDecoding",
-#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH)
+// TODO(crbug.com/1325698): Remove  defined(ARCH_CPU_X86_FAMILY) once this is
+// enabled by default on ChromeOS ARM devices.
+#if defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -643,6 +673,11 @@ const base::Feature kHardwareSecureDecryptionFallback{
 
 const base::Feature kWakeLockOptimisationHiddenMuted{
     "kWakeLockOptimisationHiddenMuted", base::FEATURE_ENABLED_BY_DEFAULT};
+
+// If active, enable HiDPI mode that increases the display scale factor
+// while capturing a low-resolution tab.
+const base::Feature kWebContentsCaptureHiDpi{"WebContentsCaptureHiDPI",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables handling of hardware media keys for controlling media.
 const base::Feature kHardwareMediaKeyHandling {
@@ -761,13 +796,17 @@ const base::Feature kUseRealColorSpaceForAndroidVideo{
 const base::Feature kUseChromeOSDirectVideoDecoder{
     "UseChromeOSDirectVideoDecoder", base::FEATURE_ENABLED_BY_DEFAULT};
 
+// Limit the number of concurrent hardware decoder instances on ChromeOS.
+const base::Feature kLimitConcurrentDecoderInstances{
+    "LimitConcurrentDecoderInstances", base::FEATURE_ENABLED_BY_DEFAULT};
+
 #if defined(ARCH_CPU_ARM_FAMILY)
 // Some architectures have separate image processor hardware that
 // can be used by Chromium's ImageProcessor to color convert/crop/etc.
 // video buffers.  Sometimes it is more efficient/performant/correct
 // to use libYUV instead of the hardware to do this processing.
 const base::Feature kPreferLibYuvImageProcessor{
-    "prefer-libyuv-image-processor", base::FEATURE_DISABLED_BY_DEFAULT};
+    "PreferLibYUVImageProcessor", base::FEATURE_DISABLED_BY_DEFAULT};
 #endif  // defined(ARCH_CPU_ARM_FAMILY)
 #if BUILDFLAG(IS_CHROMEOS)
 // ChromeOS has one of two VideoDecoder implementations active based on
@@ -781,12 +820,6 @@ const base::Feature kUseAlternateVideoDecoderImplementation{
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #if BUILDFLAG(IS_MAC)
-
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
-const base::Feature kVideoToolboxHEVCDecoding{
-    "VideoToolboxHEVCDecoding", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
-
 // Enable binding multiple shared images to a single GpuMemoryBuffer for
 // accelerated video decode using VideoToolbox.
 const base::Feature kMultiPlaneVideoToolboxSharedImages{
@@ -820,6 +853,10 @@ const base::Feature MEDIA_EXPORT kMediaFoundationAV1Encoding{
 const base::Feature MEDIA_EXPORT kMediaFoundationH264CbpEncoding{
     "MediaFoundationH264CbpEncoding", base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables VP9 encode acceleration for Windows.
+const base::Feature MEDIA_EXPORT kMediaFoundationVP9Encoding{
+    "MediaFoundationVP9Encoding", base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Enables MediaFoundation based video capture
 const base::Feature kMediaFoundationVideoCapture{
     "MediaFoundationVideoCapture", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -848,14 +885,46 @@ const base::Feature kMediaFoundationClearPlayback{
 const base::Feature MEDIA_EXPORT kWasapiRawAudioCapture{
     "WASAPIRawAudioCapture", base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enables HEVC hardware accelerated decoding.
-const base::Feature kD3D11HEVCDecoding{"D3D11HEVCDecoding",
-                                       base::FEATURE_DISABLED_BY_DEFAULT};
-
 // Enable VP9 kSVC decoding with HW decoder for webrtc use case on Windows.
 const base::Feature kD3D11Vp9kSVCHWDecoding{"D3D11Vp9kSVCHWDecoding",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
+// The Media Foundation Rendering Strategy determines which presentation mode
+// Media Foundation Renderer should use for presenting clear content. This
+// strategy has no impact for protected content, which must always use Direct
+// Composition.
+//
+// The strategy may be one of the following options:
+// 1.) Direct Composition: Media Foundation Renderer will use a Windowsless
+//     Swapchain to present directly to a Direct Composition surface.
+// 2.) Frame Server: Media Foundation Renderer will produce Video Frames that
+//     may be passed through the Chromium video frame rendering pipeline.
+// 3.) Dynamic: Media Foundation Renderer may freely switch between Direct
+//     Composition & Frame Server mode based on the current operating
+//     conditions.
+//
+// Command line invocation:
+// --enable-features=MediaFoundationClearRendering:strategy/direct-composition
+// --enable-features=MediaFoundationClearRendering:strategy/frame-server
+// --enable-features=MediaFoundationClearRendering:strategy/dynamic
+const base::Feature kMediaFoundationClearRendering = {
+    "MediaFoundationClearRendering", base::FEATURE_ENABLED_BY_DEFAULT};
+
+constexpr base::FeatureParam<MediaFoundationClearRenderingStrategy>::Option
+    kMediaFoundationClearRenderingStrategyOptions[] = {
+        {MediaFoundationClearRenderingStrategy::kDirectComposition,
+         "direct-composition"},
+        {MediaFoundationClearRenderingStrategy::kFrameServer, "frame-server"},
+        {MediaFoundationClearRenderingStrategy::kDynamic, "dynamic"}};
+
+// TODO(crbug.com/1321817, wicarr): Media Foundation for Clear should operate in
+// dynamic mode by default. However due to a bug with dual adapters when using
+// Frame Serve mode we currently start in Direct Composition mode.
+const base::FeatureParam<MediaFoundationClearRenderingStrategy>
+    kMediaFoundationClearRenderingStrategyParam{
+        &kMediaFoundationClearRendering, "strategy",
+        MediaFoundationClearRenderingStrategy::kDirectComposition,
+        &kMediaFoundationClearRenderingStrategyOptions};
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS)

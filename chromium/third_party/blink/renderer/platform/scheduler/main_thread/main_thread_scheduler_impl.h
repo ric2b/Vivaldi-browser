@@ -32,7 +32,6 @@
 #include "third_party/blink/renderer/platform/scheduler/common/pollable_thread_safe_flag.h"
 #include "third_party/blink/renderer/platform/scheduler/common/thread_scheduler_impl.h"
 #include "third_party/blink/renderer/platform/scheduler/common/tracing_helper.h"
-#include "third_party/blink/renderer/platform/scheduler/main_thread/auto_advancing_virtual_time_domain.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/deadline_task_runner.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/find_in_page_budget_pool_controller.h"
 #include "third_party/blink/renderer/platform/scheduler/main_thread/idle_time_estimator.h"
@@ -74,15 +73,12 @@ FORWARD_DECLARE_TEST(MainThreadSchedulerImplTest,
 class AgentGroupSchedulerImpl;
 class FrameSchedulerImpl;
 class PageSchedulerImpl;
-class TaskQueueThrottler;
 class WebRenderWidgetSchedulingState;
 class CPUTimeBudgetPool;
 
 class PLATFORM_EXPORT MainThreadSchedulerImpl
     : public ThreadSchedulerImpl,
-      public VirtualTimeController,
       public IdleHelper::Delegate,
-      public MainThreadSchedulerHelper::Observer,
       public RenderWidgetSignals::Observer,
       public base::trace_event::TraceLog::AsyncEnabledStateObserver {
  public:
@@ -158,7 +154,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   static const char* UseCaseToString(UseCase use_case);
   static const char* RAILModeToString(RAILMode rail_mode);
-  static const char* VirtualTimePolicyToString(VirtualTimePolicy);
 
   explicit MainThreadSchedulerImpl(
       std::unique_ptr<base::sequence_manager::SequenceManager>
@@ -193,11 +188,9 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void DidHandleInputEventOnMainThread(const WebInputEvent& web_input_event,
                                        WebInputEventResult result) override;
   void DidAnimateForInputOnCompositorThread() override;
-  void DidScheduleBeginMainFrame() override;
   void DidRunBeginMainFrame() override;
   void SetRendererHidden(bool hidden) override;
   void SetRendererBackgrounded(bool backgrounded) override;
-  void OnMainFrameRequestedForInput() override;
 #if BUILDFLAG(IS_ANDROID)
   void PauseTimersForAndroidWebView() override;
   void ResumeTimersForAndroidWebView() override;
@@ -217,7 +210,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void SetRendererProcessType(WebRendererProcessType type) override;
   Vector<WebInputEventAttribution> GetPendingUserInputInfo(
       bool include_continuous) const override;
-  bool IsBeginMainFrameScheduled() const override;
   bool DontDeferBeginMainFrame() const override;
 
   // ThreadScheduler implementation:
@@ -233,7 +225,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   WebAgentGroupScheduler* GetCurrentAgentGroupScheduler() override;
   std::unique_ptr<ThreadScheduler::RendererPauseHandle> PauseScheduler()
       override;
-  base::TimeTicks MonotonicallyIncreasingVirtualTime() override;
   NonMainThreadSchedulerImpl* AsNonMainThreadScheduler() override {
     return nullptr;
   }
@@ -262,14 +253,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void SetHasVisibleRenderWidgetWithTouchHandler(
       bool has_visible_render_widget_with_touch_handler) override;
 
-  // SchedulerHelper::Observer implementation:
-  void OnBeginNestedRunLoop() override;
-  void OnExitNestedRunLoop() override;
-
   // ThreadSchedulerImpl implementation:
   scoped_refptr<SingleThreadIdleTaskRunner> IdleTaskRunner() override;
   scoped_refptr<base::SingleThreadTaskRunner> ControlTaskRunner() override;
   const base::TickClock* GetTickClock() const override;
+  MainThreadSchedulerHelper& GetHelper() override { return helper_; }
 
   base::TimeTicks NowTicks() const;
 
@@ -299,25 +287,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
       FrameSchedulerImpl* frame_scheduler);
 
   scoped_refptr<base::sequence_manager::TaskQueue> NewTaskQueueForTest();
-
-  // VirtualTimeController implementation.
-  base::TimeTicks EnableVirtualTime(base::Time initial_time) override;
-  void DisableVirtualTimeForTesting() override;
-  bool VirtualTimeAllowedToAdvance() const override;
-  void GrantVirtualTimeBudget(
-      base::TimeDelta budget,
-      base::OnceClosure budget_exhausted_callback) override;
-  void SetVirtualTimePolicy(VirtualTimePolicy virtual_time_policy) override;
-  void SetMaxVirtualTimeTaskStarvationCount(
-      int max_task_starvation_count) override;
-  WebScopedVirtualTimePauser CreateWebScopedVirtualTimePauser(
-      const WTF::String& name,
-      WebScopedVirtualTimePauser::VirtualTaskDuration) override;
-
-  bool IsVirtualTimeEnabled() const;
-  base::TimeTicks IncrementVirtualTimePauseCount();
-  void DecrementVirtualTimePauseCount();
-  void MaybeAdvanceVirtualTime(base::TimeTicks new_virtual_time);
 
   void RemoveAgentGroupScheduler(AgentGroupSchedulerImpl*);
   void AddPageScheduler(PageSchedulerImpl*);
@@ -361,8 +330,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
                                base::TimeTicks time_remaining);
   bool PolicyNeedsUpdateForTesting();
 
-  AutoAdvancingVirtualTimeDomain* GetVirtualTimeDomain();
-
   std::unique_ptr<CPUTimeBudgetPool> CreateCPUTimeBudgetPoolForTesting(
       const char* name);
 
@@ -398,9 +365,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   UseCase current_use_case() const;
 
   const SchedulingSettings& scheduling_settings() const;
-
-  void SetPrioritizeCompositingAfterInput(
-      bool prioritize_compositing_after_input);
 
   base::WeakPtr<MainThreadSchedulerImpl> GetWeakPtr();
 
@@ -470,6 +434,13 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   // WebThreadScheduler private implementation:
   WebThreadScheduler* GetWebMainThreadScheduler() override;
+
+  // ThreadSchedulerImpl overrides
+  base::SequencedTaskRunner* GetVirtualTimeTaskRunner() override;
+  void OnVirtualTimeEnabled() override;
+  void OnVirtualTimeDisabled() override;
+  void OnVirtualTimePaused() override;
+  void OnVirtualTimeResumed() override;
 
   static const char* TimeDomainTypeToString(TimeDomainType domain_type);
 
@@ -693,20 +664,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
   void PauseRendererImpl();
   void ResumeRendererImpl();
 
-  void NotifyVirtualTimePaused();
-  void SetVirtualTimeStopped(bool virtual_time_stopped);
-  void ApplyVirtualTimePolicy();
-
-  // Pauses the timer queues by inserting a fence that blocks any tasks posted
-  // after this point from running. Orthogonal to PauseTimerQueue. Care must
-  // be taken when using this API to avoid fighting with the TaskQueueThrottler.
-  void VirtualTimePaused();
-
-  // Removes the fence added by VirtualTimePaused allowing timers to execute
-  // normally. Care must be taken when using this API to avoid fighting with the
-  // TaskQueueThrottler.
-  void VirtualTimeResumed();
-
   // Returns true if there is a change in the main thread's policy that should
   // trigger a priority update.
   bool ShouldUpdateTaskQueuePriorities(Policy new_policy) const;
@@ -807,9 +764,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
 
   MemoryPurgeManager memory_purge_manager_;
 
-  // Note |virtual_time_domain_| is lazily created.
-  std::unique_ptr<AutoAdvancingVirtualTimeDomain> virtual_time_domain_;
-
   base::RepeatingClosure update_policy_closure_;
   DeadlineTaskRunner delayed_update_policy_runner_;
   CancelableClosureHolder end_renderer_hidden_idle_period_closure_;
@@ -822,8 +776,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         const base::TickClock* time_source,
         base::TimeTicks now);
     ~MainThreadOnly();
-
-    bool IsInNestedRunloop();
 
     IdleTimeEstimator idle_time_estimator;
     TraceableState<UseCase, TracingCategory::kDefault> current_use_case;
@@ -854,7 +806,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     TraceableState<bool, TracingCategory::kDebug>
         has_visible_render_widget_with_touch_handler;
     TraceableState<bool, TracingCategory::kDebug> in_idle_period_for_testing;
-    TraceableState<bool, TracingCategory::kInfo> use_virtual_time;
     TraceableState<bool, TracingCategory::kTopLevel> is_audio_playing;
     TraceableState<bool, TracingCategory::kDebug>
         compositor_will_send_main_frame_not_expected;
@@ -874,21 +825,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         absl::optional<base::sequence_manager::TaskQueue::QueuePriority>,
         TracingCategory::kInfo>
         task_priority_for_tracing;  // Only used for tracing.
-    base::Time initial_virtual_time;
-    base::TimeTicks initial_virtual_time_ticks;
-
-    VirtualTimePolicy virtual_time_policy;
-
-    // In VirtualTimePolicy::kDeterministicLoading virtual time is only allowed
-    // to advance if this is zero.
-    int virtual_time_pause_count;
-
-    // The maximum number amount of delayed task starvation we will allow in
-    // VirtualTimePolicy::kAdvance or VirtualTimePolicy::kDeterministicLoading
-    // unless the run_loop is nested (in which case infinite starvation is
-    // allowed). NB a value of 0 allows infinite starvation.
-    int max_virtual_time_task_starvation_count;
-    bool virtual_time_stopped;
 
     // Holds task queues that are currently running.
     // The queue for the inmost task is at the top of stack when there are
@@ -896,9 +832,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     std::stack<scoped_refptr<MainThreadTaskQueue>,
                std::vector<scoped_refptr<MainThreadTaskQueue>>>
         running_queues;
-
-    // Depth of nested_runloop.
-    int nested_runloop_depth = 0;
 
     // High-priority for compositing events after input. This will cause
     // compositing events get a higher priority until the start of the next
@@ -920,6 +853,11 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
     base::TimeTicks last_frame_time;
     bool should_prioritize_compositor_task_queue_after_delay;
     bool have_seen_a_frame;
+
+    // Set when a discrete input event is handled on the main thread. This is
+    // used by the kPrioritizeCompositingAfterInput experiment to determine if
+    // the next frame should be prioritized.
+    bool did_handle_discrete_input_event = false;
 
     WTF::Vector<AgentGroupSchedulerScope> agent_group_scheduler_scope_stack;
 
@@ -950,8 +888,6 @@ class PLATFORM_EXPORT MainThreadSchedulerImpl
         waiting_for_any_main_frame_meaningful_paint;
     TraceableState<bool, TracingCategory::kInfo>
         have_seen_input_since_navigation;
-    TraceableCounter<uint32_t, TracingCategory::kInfo>
-        begin_main_frame_scheduled_count;
     base::TimeTicks last_main_frame_time;
   };
 

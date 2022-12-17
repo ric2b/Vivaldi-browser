@@ -6,44 +6,40 @@
 
 #include "base/logging.h"
 
-#include <mach/mach_vm.h>
+#include <mach/vm_map.h>
 #include "base/mac/mach_logging.h"
 
 namespace base {
 
-// static
-bool PlatformSharedMemoryMapper::MapInternal(
+absl::optional<span<uint8_t>> PlatformSharedMemoryMapper::Map(
     subtle::PlatformSharedMemoryHandle handle,
     bool write_allowed,
     uint64_t offset,
-    size_t size,
-    void** memory,
-    size_t* mapped_size) {
+    size_t size) {
   vm_prot_t vm_prot_write = write_allowed ? VM_PROT_WRITE : 0;
-  kern_return_t kr = mach_vm_map(
-      mach_task_self(),
-      reinterpret_cast<mach_vm_address_t*>(memory),  // Output parameter
-      size,
-      0,  // Alignment mask
-      VM_FLAGS_ANYWHERE, handle, offset,
-      FALSE,                         // Copy
-      VM_PROT_READ | vm_prot_write,  // Current protection
-      VM_PROT_READ | vm_prot_write,  // Maximum protection
-      VM_INHERIT_NONE);
+  vm_address_t address = 0;
+  kern_return_t kr = vm_map(mach_task_self(),
+                            &address,  // Output parameter
+                            size,
+                            0,  // Alignment mask
+                            VM_FLAGS_ANYWHERE, handle, offset,
+                            FALSE,                         // Copy
+                            VM_PROT_READ | vm_prot_write,  // Current protection
+                            VM_PROT_READ | vm_prot_write,  // Maximum protection
+                            VM_INHERIT_NONE);
   if (kr != KERN_SUCCESS) {
-    MACH_DLOG(ERROR, kr) << "mach_vm_map";
-    return false;
+    MACH_DLOG(ERROR, kr) << "vm_map";
+    return absl::nullopt;
   }
 
-  *mapped_size = size;
-  return true;
+  return make_span(reinterpret_cast<uint8_t*>(address), size);
 }
 
-// static
-void PlatformSharedMemoryMapper::UnmapInternal(void* memory, size_t size) {
-  kern_return_t kr = mach_vm_deallocate(
-      mach_task_self(), reinterpret_cast<mach_vm_address_t>(memory), size);
-  MACH_DLOG_IF(ERROR, kr != KERN_SUCCESS, kr) << "mach_vm_deallocate";
+void PlatformSharedMemoryMapper::Unmap(span<uint8_t> mapping) {
+  kern_return_t kr = vm_deallocate(
+      mach_task_self(), reinterpret_cast<vm_address_t>(mapping.data()),
+      mapping.size());
+  MACH_DLOG_IF(ERROR, kr != KERN_SUCCESS, kr) << "vm_deallocate";
 }
 
 }  // namespace base

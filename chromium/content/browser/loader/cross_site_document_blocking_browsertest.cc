@@ -385,15 +385,13 @@ class RequestInterceptor {
     // Tell the |original_client_| that the request has completed (and that it
     // can release its URLLoaderClient.
     if (status.error_code == net::OK) {
-      original_client_->OnReceiveResponse(std::move(response_head),
-                                          mojo::ScopedDataPipeConsumerHandle());
-
       mojo::ScopedDataPipeProducerHandle producer_handle;
       mojo::ScopedDataPipeConsumerHandle consumer_handle;
       ASSERT_EQ(mojo::CreateDataPipe(response_body.size() + 1, producer_handle,
                                      consumer_handle),
                 MOJO_RESULT_OK);
-      original_client_->OnStartLoadingResponseBody(std::move(consumer_handle));
+      original_client_->OnReceiveResponse(std::move(response_head),
+                                          std::move(consumer_handle));
 
       uint32_t num_bytes = response_body.size();
       EXPECT_EQ(MOJO_RESULT_OK,
@@ -707,6 +705,9 @@ IMG_TEST(js_html_polyglot2_html,
 // image.  CORB allows, because CORB doesn't care about
 // 'application/octet-stream'.
 IMG_TEST(nosniff_png, "nosniff.png.octet-stream", kShouldBeSniffedAndAllowed)
+// Like nosniff_png above, except that ORB v0.1 allows because HLS/m3u8 doesn't
+// sniff as HTML/XML/JSON.
+IMG_TEST(m3u8_octet_stream, "m3u8.octet-stream", kShouldBeSniffedAndAllowed)
 
 class CrossSiteDocumentBlockingTest
     : public CrossSiteDocumentBlockingTestBase,

@@ -31,6 +31,7 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #include "ios/chrome/browser/content_settings/host_content_settings_map_factory.h"
 #import "ios/chrome/browser/follow/follow_java_script_feature.h"
+#import "ios/chrome/browser/https_upgrades/https_upgrade_service_factory.h"
 #include "ios/chrome/browser/ios_chrome_main_parts.h"
 #import "ios/chrome/browser/link_to_text/link_to_text_java_script_feature.h"
 #include "ios/chrome/browser/ntp/browser_policy_new_tab_page_rewriter.h"
@@ -60,6 +61,7 @@
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_container.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_controller_client.h"
 #import "ios/components/security_interstitials/https_only_mode/https_only_mode_error.h"
+#import "ios/components/security_interstitials/https_only_mode/https_upgrade_service.h"
 #import "ios/components/security_interstitials/ios_blocking_page_tab_helper.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_blocking_page.h"
 #import "ios/components/security_interstitials/lookalikes/lookalike_url_container.h"
@@ -162,11 +164,13 @@ NSString* GetHttpsOnlyModeErrorPageHtml(web::WebState* web_state,
   // Fetch the HTTP URL from the container.
   HttpsOnlyModeContainer* container =
       HttpsOnlyModeContainer::FromWebState(web_state);
+  HttpsUpgradeService* service = HttpsUpgradeServiceFactory::GetForBrowserState(
+      web_state->GetBrowserState());
 
   // Construct the blocking page and associate it with the WebState.
   std::unique_ptr<security_interstitials::IOSSecurityInterstitialPage> page =
       std::make_unique<HttpsOnlyModeBlockingPage>(
-          web_state, container->http_url(),
+          web_state, container->http_url(), service,
           std::make_unique<HttpsOnlyModeControllerClient>(
               web_state, container->http_url(),
               GetApplicationContext()->GetApplicationLocale()));
@@ -192,6 +196,18 @@ std::string GetMobileProduct() {
 std::string GetDesktopProduct() {
   return base::StringPrintf(kProductTagWithPlaceholder,
                             version_info::GetMajorVersionNumber().c_str());
+}
+
+// Whether the desktop user agent should be used by default.
+bool ShouldUseDesktop(web::WebState* web_state, const GURL& url) {
+  ChromeBrowserState* browser_state =
+      ChromeBrowserState::FromBrowserState(web_state->GetBrowserState());
+  HostContentSettingsMap* settings_map =
+      ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state);
+  ContentSetting setting = settings_map->GetContentSetting(
+      url, url, ContentSettingsType::REQUEST_DESKTOP_SITE);
+
+  return setting == CONTENT_SETTING_ALLOW;
 }
 
 }  // namespace
@@ -312,7 +328,7 @@ std::vector<web::JavaScriptFeature*> ChromeWebClient::GetJavaScriptFeatures(
 NSString* ChromeWebClient::GetDocumentStartScriptForMainFrame(
     web::BrowserState* browser_state) const {
   NSMutableArray* scripts = [NSMutableArray array];
-  [scripts addObject:GetPageScript(@"chrome_bundle_main_frame")];
+  [scripts addObject:GetPageScript(@"language_detection")];
 
   return [scripts componentsJoinedByString:@";"];
 }
@@ -405,18 +421,17 @@ bool ChromeWebClient::EnableLongPressUIContextMenu() const {
 
 web::UserAgentType ChromeWebClient::GetDefaultUserAgent(
     web::WebState* web_state,
-    const GURL& url) {
-  ChromeBrowserState* browser_state =
-      ChromeBrowserState::FromBrowserState(web_state->GetBrowserState());
-  HostContentSettingsMap* settings_map =
-      ios::HostContentSettingsMapFactory::GetForBrowserState(browser_state);
-  ContentSetting setting = settings_map->GetContentSetting(
-      url, url, ContentSettingsType::REQUEST_DESKTOP_SITE);
-  bool use_desktop_agent = setting == CONTENT_SETTING_ALLOW;
-  base::UmaHistogramBoolean("IOS.PageLoad.DefaultModeMobile",
-                            !use_desktop_agent);
+    const GURL& url) const {
+  bool use_desktop_agent = ShouldUseDesktop(web_state, url);
   return use_desktop_agent ? web::UserAgentType::DESKTOP
                            : web::UserAgentType::MOBILE;
+}
+
+void ChromeWebClient::LogDefaultUserAgent(web::WebState* web_state,
+                                          const GURL& url) const {
+  bool use_desktop_agent = ShouldUseDesktop(web_state, url);
+  base::UmaHistogramBoolean("IOS.PageLoad.DefaultModeMobile",
+                            !use_desktop_agent);
 }
 
 bool ChromeWebClient::RestoreSessionFromCache(web::WebState* web_state) const {

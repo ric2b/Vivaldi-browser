@@ -118,12 +118,26 @@ bool CopyRGBATextureToVideoFrame(viz::RasterContextProvider* provider,
                                  const gfx::ColorSpace& src_color_space,
                                  GrSurfaceOrigin src_surface_origin,
                                  const gpu::MailboxHolder& src_mailbox_holder,
-                                 VideoFrame* dst_video_frame,
-                                 gpu::SyncToken& completion_sync_token) {
+                                 VideoFrame* dst_video_frame) {
   DCHECK_EQ(dst_video_frame->format(), PIXEL_FORMAT_NV12);
 
   auto* ri = provider->RasterInterface();
   DCHECK(ri);
+
+  // If context is lost for any reason e.g. creating shared image failed, we
+  // cannot distinguish between OOP and non-OOP raster based on GrContext().
+  if (ri->GetGraphicsResetStatusKHR() != GL_NO_ERROR) {
+    DLOG(ERROR) << "Raster context lost.";
+    return false;
+  }
+
+#if BUILDFLAG(IS_WIN)
+  // CopyToGpuMemoryBuffer is only supported for D3D shared images on Windows.
+  if (!provider->ContextCapabilities().shared_image_d3d) {
+    DLOG(ERROR) << "CopyToGpuMemoryBuffer not supported.";
+    return false;
+  }
+#endif  // BUILDFLAG(IS_WIN)
 
   if (!provider->GrContext()) {
     SkYUVAInfo yuva_info =
@@ -179,34 +193,35 @@ bool CopyRGBATextureToVideoFrame(viz::RasterContextProvider* provider,
 
   const size_t num_planes = dst_video_frame->layout().num_planes();
 
+#if BUILDFLAG(IS_WIN)
   // For shared memory GMBs on Windows we needed to explicitly request a copy
-  // from the shared image GPU texture to the GMB. Set `completion_sync_token`
-  // to mark the completion of the copy.
-  if (dst_video_frame->HasGpuMemoryBuffer() &&
-      dst_video_frame->GetGpuMemoryBuffer()->GetType() ==
-          gfx::SHARED_MEMORY_BUFFER) {
-    auto* sii = provider->SharedImageInterface();
+  // from the shared image GPU texture to the GMB.
+  DCHECK(dst_video_frame->HasGpuMemoryBuffer());
+  DCHECK_EQ(dst_video_frame->GetGpuMemoryBuffer()->GetType(),
+            gfx::SHARED_MEMORY_BUFFER);
 
-    gpu::SyncToken blit_done_sync_token;
-    ri->GenUnverifiedSyncTokenCHROMIUM(blit_done_sync_token.GetData());
+  gpu::SyncToken blit_done_sync_token;
+  ri->GenUnverifiedSyncTokenCHROMIUM(blit_done_sync_token.GetData());
 
-    for (size_t plane = 0; plane < num_planes; ++plane) {
-      const auto& mailbox = dst_video_frame->mailbox_holder(plane).mailbox;
-      sii->CopyToGpuMemoryBuffer(blit_done_sync_token, mailbox);
-    }
-
-    auto copy_to_gmb_done_sync_token = sii->GenUnverifiedSyncToken();
-    ri->WaitSyncTokenCHROMIUM(copy_to_gmb_done_sync_token.GetData());
+  auto* sii = provider->SharedImageInterface();
+  for (size_t plane = 0; plane < num_planes; ++plane) {
+    const auto& mailbox = dst_video_frame->mailbox_holder(plane).mailbox;
+    sii->CopyToGpuMemoryBuffer(blit_done_sync_token, mailbox);
   }
 
-  // We want to generate a SyncToken from the RasterInterface since callers may
-  // be using RasterInterface::Finish() to ensure synchronization in cases where
-  // SignalSyncToken can't be used.
-  ri->GenSyncTokenCHROMIUM(completion_sync_token.GetData());
+  // Synchronize RasterInterface with SharedImageInterface. We want to generate
+  // the final SyncToken from the RasterInterface since callers might be using
+  // RasterInterface::Finish() to ensure synchronization in cases where
+  // SignalSyncToken can't be used (e.g. webrtc video frame adapter).
+  auto copy_to_gmb_done_sync_token = sii->GenUnverifiedSyncToken();
+  ri->WaitSyncTokenCHROMIUM(copy_to_gmb_done_sync_token.GetData());
+#endif  // BUILDFLAG(IS_WIN)
 
   // Make access to the `dst_video_frame` wait on copy completion. We also
   // update the ReleaseSyncToken here since it's used when the underlying
   // GpuMemoryBuffer and SharedImage resources are returned to the pool.
+  gpu::SyncToken completion_sync_token;
+  ri->GenSyncTokenCHROMIUM(completion_sync_token.GetData());
   SimpleSyncTokenClient simple_client(completion_sync_token);
   for (size_t plane = 0; plane < num_planes; ++plane)
     dst_video_frame->UpdateMailboxHolderSyncToken(plane, &simple_client);

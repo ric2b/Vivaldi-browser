@@ -35,6 +35,9 @@ try_.builder(
 
 try_.builder(
     name = "win-asan",
+    mirrors = [
+        "ci/win-asan",
+    ],
     goma_jobs = goma.jobs.J150,
     execution_timeout = 5 * time.hour,
 )
@@ -68,6 +71,9 @@ try_.builder(
 
 try_.builder(
     name = "win_archive",
+    mirrors = [
+        "ci/win32-archive-rel",
+    ],
 )
 
 try_.builder(
@@ -100,10 +106,6 @@ try_.builder(
 )
 
 try_.builder(
-    name = "win_chromium_dbg_ng",
-)
-
-try_.builder(
     name = "win_chromium_x64_rel_ng",
     mirrors = [
         "ci/Win x64 Builder",
@@ -123,10 +125,17 @@ try_.builder(
 
 try_.builder(
     name = "win_x64_archive",
+    mirrors = [
+        "ci/win-archive-rel",
+    ],
 )
 
 try_.builder(
     name = "win10_chromium_x64_dbg_ng",
+    mirrors = [
+        "ci/Win x64 Builder (dbg)",
+        "ci/Win10 Tests x64 (dbg)",
+    ],
     os = os.WINDOWS_10,
 )
 
@@ -155,6 +164,7 @@ try_.builder(
 
 try_.orchestrator_builder(
     name = "win10_chromium_x64_rel_ng",
+    check_for_flakiness = True,
     compilator = "win10_chromium_x64_rel_ng-compilator",
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
     mirrors = [
@@ -172,10 +182,14 @@ try_.orchestrator_builder(
     coverage_test_types = ["unit", "overall"],
     main_list_view = "try",
     tryjob = try_.job(),
+    experiments = {
+        "remove_src_checkout_experiment": 100,
+    },
 )
 
 try_.compilator_builder(
     name = "win10_chromium_x64_rel_ng-compilator",
+    check_for_flakiness = True,
     branch_selector = branches.DESKTOP_EXTENDED_STABLE_MILESTONE,
     main_list_view = "try",
     # TODO (crbug.com/1245171): Revert when root issue is fixed
@@ -206,6 +220,12 @@ try_.builder(
             ".+/[+]/sandbox/policy/win/.+",
         ],
     ),
+)
+
+try_.builder(
+    name = "win-fieldtrial-fyi-rel",
+    os = os.WINDOWS_DEFAULT,
+    mirrors = ["ci/win-fieldtrial-rel"],
 )
 
 try_.gpu.optional_tests_builder(
@@ -249,7 +269,7 @@ try_.gpu.optional_tests_builder(
             ".+/[+]/media/mojo/.+",
             ".+/[+]/media/renderers/.+",
             ".+/[+]/media/video/.+",
-            ".+/[+]/testing/buildbot/chromium.gpu.fyi.json",
+            ".+/[+]/testing/buildbot/tryserver.chromium.win.json",
             ".+/[+]/testing/trigger_scripts/.+",
             ".+/[+]/third_party/blink/renderer/modules/vr/.+",
             ".+/[+]/third_party/blink/renderer/modules/mediastream/.+",
@@ -258,6 +278,7 @@ try_.gpu.optional_tests_builder(
             ".+/[+]/third_party/blink/renderer/modules/xr/.+",
             ".+/[+]/third_party/blink/renderer/platform/graphics/gpu/.+",
             ".+/[+]/tools/clang/scripts/update.py",
+            ".+/[+]/tools/mb/mb_config_expectations/tryserver.chromium.win.json",
             ".+/[+]/ui/gl/.+",
         ],
     ),

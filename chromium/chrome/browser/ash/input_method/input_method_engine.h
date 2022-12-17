@@ -258,6 +258,7 @@ class InputMethodEngine : virtual public ui::IMEEngineHandlerInterface,
   void ClickButton(const ui::ime::AssistiveWindowButton& button) override;
   bool AcceptSuggestionCandidate(int context_id,
                                  const std::u16string& candidate,
+                                 size_t delete_previous_utf16_len,
                                  std::string* error) override;
   bool SetAssistiveWindowProperties(
       int context_id,
@@ -292,8 +293,9 @@ class InputMethodEngine : virtual public ui::IMEEngineHandlerInterface,
   bool SetCursorPosition(int context_id, int candidate_id, std::string* error);
 
   // Update the state of the menu items.
-  bool UpdateMenuItems(const std::vector<InputMethodManager::MenuItem>& items,
-                       std::string* error);
+  virtual bool UpdateMenuItems(
+      const std::vector<InputMethodManager::MenuItem>& items,
+      std::string* error);
 
   // Hides the input view window (from API call).
   void HideInputView();

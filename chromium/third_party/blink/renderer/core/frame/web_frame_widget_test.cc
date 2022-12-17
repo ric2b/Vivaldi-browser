@@ -275,12 +275,14 @@ class WebFrameWidgetImplSimTest : public SimTest {
       bool never_composited,
       bool is_for_child_local_root,
       bool is_for_nested_main_frame,
+      bool is_for_scalable_page,
       SimCompositor* compositor) override {
     return MakeGarbageCollected<MockWebFrameWidgetImpl>(
         compositor, pass_key, std::move(frame_widget_host),
         std::move(frame_widget), std::move(widget_host), std::move(widget),
         std::move(task_runner), frame_sink_id, hidden, never_composited,
-        is_for_child_local_root, is_for_nested_main_frame);
+        is_for_child_local_root, is_for_nested_main_frame,
+        is_for_scalable_page);
   }
 
   MockWebFrameWidgetImpl* MockMainFrameWidget() {
@@ -488,7 +490,7 @@ class NotifySwapTimesWebFrameWidgetTest : public SimTest {
     color_layer->SetBounds(gfx::Size(100, 100));
     cc::CopyProperties(root_layer, color_layer.get());
     root_layer->SetChildLayerList(cc::LayerList({color_layer}));
-    color_layer->SetBackgroundColor(SK_ColorRED);
+    color_layer->SetBackgroundColor(SkColors::kRed);
   }
 
   WebFrameWidgetImpl* FrameWidgetBase() {
@@ -877,12 +879,14 @@ class EventHandlingWebFrameWidgetSimTest : public SimTest {
       bool never_composited,
       bool is_for_child_local_root,
       bool is_for_nested_main_frame,
+      bool is_for_scalable_page,
       SimCompositor* compositor) override {
     return MakeGarbageCollected<TestWebFrameWidget>(
         compositor, pass_key, std::move(frame_widget_host),
         std::move(frame_widget), std::move(widget_host), std::move(widget),
         std::move(task_runner), frame_sink_id, hidden, never_composited,
-        is_for_child_local_root, is_for_nested_main_frame);
+        is_for_child_local_root, is_for_nested_main_frame,
+        is_for_scalable_page);
   }
 
  protected:

@@ -405,7 +405,7 @@ TEST_F(NewTabPageHandlerTest, SetCustomBackground) {
                                        SkColorSetRGB(0, 0, 1));
   mock_color_provider_source_.SetColor(kColorNewTabPageTextUnthemed,
                                        SkColorSetRGB(0, 0, 2));
-  mock_color_provider_source_.SetColor(kColorNewTabPageLogoUnthemed,
+  mock_color_provider_source_.SetColor(kColorNewTabPageLogoUnthemedLight,
                                        SkColorSetRGB(0, 0, 3));
   mock_color_provider_source_.SetColor(
       kColorNewTabPageMostVisitedTileBackgroundUnthemed,
@@ -677,7 +677,7 @@ TEST_F(NewTabPageHandlerTest, GetModulesOrder) {
   EXPECT_CALL(callback, Run(_)).Times(1).WillOnce(SaveArg<0>(&module_ids));
   base::test::ScopedFeatureList features;
   features.InitWithFeaturesAndParameters(
-      {{ntp_features::kModules,
+      {{ntp_features::kNtpModulesOrder,
         {{ntp_features::kNtpModulesOrderParam, "bar,baz"}}},
        {ntp_features::kNtpModulesDragAndDrop, {}}},
       {});

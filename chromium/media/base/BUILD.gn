@@ -270,7 +270,6 @@ source_set("base") {
     "routing_token_callback.h",
     "sample_rates.cc",
     "sample_rates.h",
-    "scoped_async_trace.cc",
     "scoped_async_trace.h",
     "seekable_buffer.cc",
     "seekable_buffer.h",
@@ -313,8 +312,6 @@ source_set("base") {
     "timestamp_constants.h",
     "tuneable.cc",
     "tuneable.h",
-    "unaligned_shared_memory.cc",
-    "unaligned_shared_memory.h",
     "use_after_free_checker.h",
     "user_input_monitor.cc",
     "user_input_monitor.h",
@@ -440,6 +437,7 @@ source_set("base") {
     public_deps += [
       "//media/base/win:dcomp_texture_wrapper",
       "//media/base/win:mf_cdm_proxy",
+      "//media/base/win:overlay_state_observer_subscription",
     ]
     sources += [
       "win/mf_feature_checks.cc",
@@ -617,7 +615,6 @@ source_set("unit_tests") {
     "text_renderer_unittest.cc",
     "time_delta_interpolator_unittest.cc",
     "tuneable_unittest.cc",
-    "unaligned_shared_memory_unittest.cc",
     "user_input_monitor_unittest.cc",
     "vector_math_unittest.cc",
     "video_aspect_ratio_unittest.cc",

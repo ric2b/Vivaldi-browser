@@ -20,10 +20,10 @@ import org.junit.runner.RunWith;
 
 import org.chromium.base.jank_tracker.DummyJankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
+import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.test.util.CommandLineFlags;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
 import org.chromium.chrome.browser.flags.ChromeSwitches;
 import org.chromium.chrome.browser.fullscreen.BrowserControlsManager;
 import org.chromium.chrome.browser.share.ShareDelegate;
@@ -142,7 +142,7 @@ public class ShareIntentTest {
                     mockActivity, BrowserControlsManager.ControlsPosition.TOP);
             RootUiCoordinator rootUiCoordinator = new RootUiCoordinator(mockActivity, null,
                     mockActivity.getShareDelegateSupplier(), mockActivity.getActivityTabProvider(),
-                    null, null, null, null, new OneshotSupplierImpl<>(),
+                    null, null, null, null, null, new OneshotSupplierImpl<>(),
                     new OneshotSupplierImpl<>(), new OneshotSupplierImpl<>(),
                     ()
                             -> null,
@@ -156,14 +156,13 @@ public class ShareIntentTest {
                     mockActivity::supportsFindInPage, mockActivity.getTabCreatorManagerSupplier(),
                     browserControlsManager.getFullscreenManager(),
                     mockActivity.getCompositorViewHolderSupplier(),
-                    mockActivity.getTabContentManagerSupplier(),
-                    mockActivity.getOverviewModeBehaviorSupplier(),
-                    mockActivity::getSnackbarManager, mockActivity.getActivityType(),
-                    mockActivity::isInOverviewMode, mockActivity::isWarmOnResume,
+                    mockActivity.getTabContentManagerSupplier(), mockActivity::getSnackbarManager,
+                    mockActivity.getActivityType(), mockActivity::isInOverviewMode,
+                    mockActivity::isWarmOnResume,
                     /* appMenuDelegate= */ mockActivity,
                     /* statusBarColorProvider= */ mockActivity,
                     mockActivity.getIntentRequestTracker(), new OneshotSupplierImpl<>(),
-                    new OmniboxPedalDelegateImpl(mockActivity), false);
+                    new ObservableSupplierImpl<>(), false, null);
 
             ShareHelper.setLastShareComponentName(
                     null, new ComponentName("test.package", "test.activity"));

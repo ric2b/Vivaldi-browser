@@ -397,28 +397,12 @@ void GLES2CommandBufferStub::DidCreateAcceleratedSurfaceChildWindow(
 }
 #endif
 
-void GLES2CommandBufferStub::DidSwapBuffersComplete(
-    SwapBuffersCompleteParams params,
-    gfx::GpuFenceHandle release_fence) {
-  DCHECK(release_fence.is_null());
-  params.swap_response.swap_id = pending_swap_completed_params_.front().swap_id;
-  pending_swap_completed_params_.pop_front();
-  client().OnSwapBuffersCompleted(params);
-}
-
 const gles2::FeatureInfo* GLES2CommandBufferStub::GetFeatureInfo() const {
   return context_group_->feature_info();
 }
 
 const GpuPreferences& GLES2CommandBufferStub::GetGpuPreferences() const {
   return context_group_->gpu_preferences();
-}
-
-void GLES2CommandBufferStub::BufferPresented(
-    const gfx::PresentationFeedback& feedback) {
-  SwapBufferParams params = pending_presented_params_.front();
-  pending_presented_params_.pop_front();
-  client().OnBufferPresented(params.swap_id, feedback);
 }
 
 viz::GpuVSyncCallback GLES2CommandBufferStub::GetGpuVSyncCallback() {
@@ -503,71 +487,6 @@ void GLES2CommandBufferStub::GetGpuFenceHandle(
   std::move(callback).Run(std::move(handle));
 }
 
-void GLES2CommandBufferStub::CreateImage(mojom::CreateImageParamsPtr params) {
-  TRACE_EVENT0("gpu", "GLES2CommandBufferStub::OnCreateImage");
-  const int32_t id = params->id;
-  const gfx::Size& size = params->size;
-  const gfx::BufferFormat& format = params->format;
-  const gfx::BufferPlane& plane = params->plane;
-  const uint64_t image_release_count = params->image_release_count;
-  ScopedContextOperation operation(*this);
-  if (!operation.is_context_current())
-    return;
-
-  gles2::ImageManager* image_manager = channel_->image_manager();
-  DCHECK(image_manager);
-  if (image_manager->LookupImage(id)) {
-    LOG(ERROR) << "Image already exists with same ID.";
-    return;
-  }
-
-  if (!gpu::IsImageFromGpuMemoryBufferFormatSupported(
-          format, gles2_decoder_->GetCapabilities())) {
-    LOG(ERROR) << "Format is not supported.";
-    return;
-  }
-
-  if (!gpu::IsImageSizeValidForGpuMemoryBufferFormat(size, format)) {
-    LOG(ERROR) << "Invalid image size for format.";
-    return;
-  }
-
-  if (!gpu::IsPlaneValidForGpuMemoryBufferFormat(plane, format)) {
-    LOG(ERROR) << "Invalid plane " << gfx::BufferPlaneToString(plane) << " for "
-               << gfx::BufferFormatToString(format);
-    return;
-  }
-
-  scoped_refptr<gl::GLImage> image = channel()->CreateImageForGpuMemoryBuffer(
-      std::move(params->gpu_memory_buffer), size, format, plane,
-      surface_handle_);
-  if (!image.get())
-    return;
-
-  image_manager->AddImage(image.get(), id);
-  if (image_release_count)
-    sync_point_client_state_->ReleaseFenceSync(image_release_count);
-}
-
-void GLES2CommandBufferStub::DestroyImage(int32_t id) {
-  TRACE_EVENT0("gpu", "GLES2CommandBufferStub::OnDestroyImage");
-  ScopedContextOperation operation(*this);
-  if (!operation.is_context_current())
-    return;
-
-  gles2::ImageManager* image_manager = channel_->image_manager();
-  DCHECK(image_manager);
-  if (!image_manager->LookupImage(id)) {
-    LOG(ERROR) << "Image with ID doesn't exist.";
-    return;
-  }
-
-  image_manager->RemoveImage(id);
-}
-
-void GLES2CommandBufferStub::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {
-  pending_swap_completed_params_.push_back({swap_id, flags});
-  pending_presented_params_.push_back({swap_id, flags});
-}
+void GLES2CommandBufferStub::OnSwapBuffers(uint64_t swap_id, uint32_t flags) {}
 
 }  // namespace gpu

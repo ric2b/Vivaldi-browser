@@ -74,6 +74,7 @@ class TabStripSceneLayer : public SceneLayer {
       jfloat y,
       jfloat width,
       jfloat height,
+      jfloat touch_target_offset,
       jboolean visible,
       jint tint,
       jfloat button_alpha,
@@ -148,6 +149,14 @@ class TabStripSceneLayer : public SceneLayer {
       const base::android::JavaParamRef<jobject>& jobj,
       jboolean is_stack_strip);
 
+  // Vivaldi
+  void UpdateLoadingState(
+      JNIEnv* env,
+      const base::android::JavaParamRef<jobject>& jobj,
+      jint loading_text_resource_id,
+      const base::android::JavaParamRef<jobject>& jresource_manager,
+      jboolean should_show_loading);
+
  private:
   scoped_refptr<TabHandleLayer> GetNextLayer(
       LayerTitleCache* layer_title_cache);
@@ -171,6 +180,7 @@ class TabStripSceneLayer : public SceneLayer {
   // Vivaldi
   bool use_light_foreground_on_background;
   bool is_stack_strip_;
+  scoped_refptr<cc::UIResourceLayer> loading_text_;
 };
 
 }  // namespace android

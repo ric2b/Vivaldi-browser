@@ -68,7 +68,8 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   void SetAppStatus(const std::string& id, ash::AppStatus app_status) override;
   void SetItemPosition(const std::string& id,
                        const syncer::StringOrdinal& new_position) override;
-  void SetItemIsPersistent(const std::string& id, bool is_persistent) override;
+  void SetItemIsSystemFolder(const std::string& id,
+                             bool is_system_folder) override;
   void SetIsNewInstall(const std::string& id, bool is_new_install) override;
   void SetItemFolderId(const std::string& id,
                        const std::string& folder_id) override;
@@ -96,7 +97,7 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   void GetIdToAppListIndexMap(GetIdToAppListIndexMapCallback callback) override;
   size_t BadgedItemCount() override;
   void GetContextMenuModel(const std::string& id,
-                           bool add_sort_options,
+                           ash::AppListItemContext item_context,
                            GetMenuModelCallback callback) override;
   syncer::StringOrdinal GetPositionBeforeFirstItem() const override;
 
@@ -108,6 +109,7 @@ class ChromeAppListModelUpdater : public AppListModelUpdater,
   void NotifyProcessSyncChangesFinished() override;
 
   void OnAppListHidden() override;
+  void CommitTemporarySortOrder() override;
 
   void AddObserver(AppListModelUpdaterObserver* observer) override;
   void RemoveObserver(AppListModelUpdaterObserver* observer) override;

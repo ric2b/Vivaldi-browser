@@ -255,7 +255,7 @@ void PageImpl::UpdateBrowserControlsState(cc::BrowserControlsState constraints,
                                           bool animate) {
   // TODO(https://crbug.com/1154852): Asking for the LocalMainFrame interface
   // before the RenderFrame is created is racy.
-  if (!GetMainDocument().IsRenderFrameCreated())
+  if (!GetMainDocument().IsRenderFrameLive())
     return;
 
   GetMainDocument().GetAssociatedLocalMainFrame()->UpdateBrowserControlsState(
@@ -273,6 +273,19 @@ void PageImpl::UpdateEncoding(const std::string& encoding_name) {
 
   canonical_encoding_ =
       base::GetCanonicalEncodingNameByAliasName(encoding_name);
+}
+
+void PageImpl::NotifyVirtualKeyboardOverlayRect(
+    const gfx::Rect& keyboard_rect) {
+  // TODO(https://crbug.com/1317002): send notification to outer frames if
+  // needed.
+  DCHECK(virtual_keyboard_overlays_content());
+  GetMainDocument().GetAssociatedLocalFrame()->NotifyVirtualKeyboardOverlayRect(
+      keyboard_rect);
+}
+
+base::flat_map<std::string, std::string> PageImpl::GetKeyboardLayoutMap() {
+  return GetMainDocument().GetRenderWidgetHost()->GetKeyboardLayoutMap();
 }
 
 }  // namespace content

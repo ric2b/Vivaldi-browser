@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback.h"
+#include "base/command_line.h"
 #include "base/files/file_util.h"
 #include "base/path_service.h"
 #include "base/test/scoped_feature_list.h"
@@ -771,7 +772,7 @@ class MockNetworkContext : public network::TestNetworkContext {
                        pending_response_client) override {
     EXPECT_EQ(browser_->tab_strip_model()
                   ->GetActiveWebContents()
-                  ->GetMainFrame()
+                  ->GetPrimaryMainFrame()
                   ->GetNetworkIsolationKey(),
               network_isolation_key);
     mojo::Remote<network::mojom::ResolveHostClient> response_client(
@@ -1242,7 +1243,7 @@ void CheckTestHostNameUsedWithCorrectNetworkIsolationKey(Browser* browser) {
   net::NetworkIsolationKey network_isolation_key =
       browser->tab_strip_model()
           ->GetActiveWebContents()
-          ->GetMainFrame()
+          ->GetPrimaryMainFrame()
           ->GetNetworkIsolationKey();
   network::DnsLookupResult result1 = network::BlockingDnsLookup(
       network_context, kHostPortPair, std::move(params), network_isolation_key);
@@ -2104,7 +2105,7 @@ class PackagedAppTest : public extensions::ExtensionBrowserTest {
   }
 
   void RunTests(const std::string& extension_dirname) {
-    ExtensionTestMessageListener listener("PASS", false);
+    ExtensionTestMessageListener listener("PASS");
     LaunchTestingApp(extension_dirname);
     EXPECT_TRUE(listener.WaitUntilSatisfied());
   }

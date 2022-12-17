@@ -69,12 +69,12 @@ void ExternallyManagedAppManager::SetSubsystems(
     WebAppRegistrar* registrar,
     WebAppUiManager* ui_manager,
     WebAppInstallFinalizer* finalizer,
-    WebAppInstallManager* install_manager,
+    WebAppCommandManager* command_manager,
     WebAppSyncBridge* sync_bridge) {
   registrar_ = registrar;
   ui_manager_ = ui_manager;
   finalizer_ = finalizer;
-  install_manager_ = install_manager;
+  command_manager_ = command_manager;
   sync_bridge_ = sync_bridge;
 }
 
@@ -102,8 +102,11 @@ void ExternallyManagedAppManager::SynchronizeInstalledApps(
         registrar_->GetAppById(apps_it.first)
             ->GetSources()
             .test(ConvertExternalInstallSourceToSource(install_source));
-    if (has_same_external_source)
-      installed_urls.push_back(apps_it.second);
+    if (has_same_external_source) {
+      for (const GURL& url : apps_it.second) {
+        installed_urls.push_back(url);
+      }
+    }
   }
 
   std::sort(installed_urls.begin(), installed_urls.end());

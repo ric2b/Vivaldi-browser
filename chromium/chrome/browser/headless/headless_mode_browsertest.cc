@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/headless/headless_mode_util.h"
+#include "chrome/browser/headless/headless_mode_browsertest.h"
 
 #include "build/build_config.h"
 
@@ -22,13 +22,14 @@
 #include "base/test/multiprocess_test.h"
 #include "base/test/task_environment.h"
 #include "base/test/test_timeouts.h"
-#include "build/build_config.h"
 #include "chrome/browser/chrome_process_singleton.h"
+#include "chrome/browser/headless/headless_mode_util.h"
 #include "chrome/browser/process_singleton.h"
 #include "chrome/browser/ui/browser.h"
-#include "chrome/browser/ui/browser_window.h"
+#include "chrome/browser/ui/browser_commands.h"
+#include "chrome/browser/ui/exclusive_access/exclusive_access_test.h"
 #include "chrome/common/chrome_switches.h"
-#include "chrome/test/base/in_process_browser_test.h"
+#include "content/public/common/content_switches.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
@@ -41,34 +42,44 @@
 #endif  // BUILDFLAG(IS_LINUX)
 
 namespace {
-const char kChrome[] = "chrome";
 const int kErrorResultCode = -1;
 }  // namespace
 
-class HeadlessModeBrowserTest : public InProcessBrowserTest {
- public:
-  HeadlessModeBrowserTest() = default;
+void HeadlessModeBrowserTest::SetUpCommandLine(
+    base::CommandLine* command_line) {
+  InProcessBrowserTest::SetUpCommandLine(command_line);
 
-  HeadlessModeBrowserTest(const HeadlessModeBrowserTest&) = delete;
-  HeadlessModeBrowserTest& operator=(const HeadlessModeBrowserTest&) = delete;
+  command_line->AppendSwitchASCII(switches::kHeadless, kHeadlessSwitchValue);
+  headless::SetUpCommandLine(command_line);
+}
 
-  ~HeadlessModeBrowserTest() override = default;
+void HeadlessModeBrowserTest::SetUpOnMainThread() {
+  InProcessBrowserTest::SetUpOnMainThread();
 
-  void SetUpCommandLine(base::CommandLine* command_line) override {
-    InProcessBrowserTest::SetUpCommandLine(command_line);
+  ASSERT_TRUE(headless::IsChromeNativeHeadless());
+}
 
-    command_line->AppendSwitchASCII(switches::kHeadless, kChrome);
-    headless::SetUpCommandLine(command_line);
+void HeadlessModeBrowserTestWithStartWindowMode::SetUpCommandLine(
+    base::CommandLine* command_line) {
+  HeadlessModeBrowserTest::SetUpCommandLine(command_line);
+
+  switch (start_window_mode()) {
+    case kStartWindowNormal:
+      break;
+    case kStartWindowMaximized:
+      command_line->AppendSwitch(switches::kStartMaximized);
+      break;
+    case kStartWindowFullscreen:
+      command_line->AppendSwitch(switches::kStartFullscreen);
+      break;
   }
+}
 
-  void SetUpOnMainThread() override {
-    InProcessBrowserTest::SetUpOnMainThread();
-
-    ASSERT_TRUE(headless::IsChromeNativeHeadless());
-  }
-
- private:
-};
+void ToggleFullscreenModeSync(Browser* browser) {
+  FullscreenNotificationObserver observer(browser);
+  chrome::ToggleFullscreenMode(browser);
+  observer.Wait();
+}
 
 #if BUILDFLAG(IS_LINUX)
 IN_PROC_BROWSER_TEST_F(HeadlessModeBrowserTest, OzonePlatformHeadless) {
@@ -77,14 +88,6 @@ IN_PROC_BROWSER_TEST_F(HeadlessModeBrowserTest, OzonePlatformHeadless) {
   EXPECT_EQ(ui::OzonePlatform::GetPlatformNameForTest(), "headless");
 }
 #endif  // BUILDFLAG(IS_LINUX)
-
-#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
-IN_PROC_BROWSER_TEST_F(HeadlessModeBrowserTest, BrowserDesktopWindowHidden) {
-  // On Windows and Mac, the Native Headless Chrome browser window exists but is
-  // hidden.
-  EXPECT_FALSE(browser()->window()->IsVisible());
-}
-#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
 
 class HeadlessModeBrowserTestWithUserDataDir : public HeadlessModeBrowserTest {
  public:

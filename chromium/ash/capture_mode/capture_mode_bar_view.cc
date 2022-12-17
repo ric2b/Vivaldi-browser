@@ -14,12 +14,14 @@
 #include "ash/capture_mode/capture_mode_source_view.h"
 #include "ash/capture_mode/capture_mode_toggle_button.h"
 #include "ash/capture_mode/capture_mode_type_view.h"
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/resources/vector_icons/vector_icons.h"
 #include "ash/shelf/shelf.h"
 #include "ash/shelf/shelf_layout_manager.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
+#include "ash/style/system_shadow.h"
 #include "base/bind.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -30,6 +32,7 @@
 #include "ui/strings/grit/ui_strings.h"
 #include "ui/views/background.h"
 #include "ui/views/controls/separator.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/style/platform_style.h"
 
@@ -43,7 +46,7 @@ constexpr gfx::Size kFullBarSize{376, 64};
 
 constexpr auto kBarPadding = gfx::Insets::VH(14, 16);
 
-constexpr gfx::RoundedCornersF kBorderRadius{20.f};
+constexpr int kBorderRadius = 20;
 
 constexpr int kSeparatorHeight = 20;
 
@@ -68,14 +71,17 @@ CaptureModeBarView::CaptureModeBarView(bool projector_mode)
       close_button_(AddChildView(std::make_unique<CaptureModeButton>(
           base::BindRepeating(&CaptureModeBarView::OnCloseButtonPressed,
                               base::Unretained(this)),
-          kCaptureModeCloseIcon))) {
+          kCaptureModeCloseIcon))),
+      shadow_(this,
+              SystemShadow::GetElevationFromType(
+                  SystemShadow::Type::kElevation12)) {
   SetPaintToLayer();
   auto* color_provider = AshColorProvider::Get();
   SkColor background_color = color_provider->GetBaseLayerColor(
       AshColorProvider::BaseLayerType::kTransparent80);
   SetBackground(views::CreateSolidBackground(background_color));
   layer()->SetFillsBoundsOpaquely(false);
-  layer()->SetRoundedCornerRadius(kBorderRadius);
+  layer()->SetRoundedCornerRadius(gfx::RoundedCornersF(kBorderRadius));
   layer()->SetBackgroundBlur(ColorProvider::kBackgroundBlurSigma);
   layer()->SetBackdropFilterQuality(ColorProvider::kBackgroundBlurQuality);
 
@@ -102,12 +108,20 @@ CaptureModeBarView::CaptureModeBarView(bool projector_mode)
   const SkColor separator_color = color_provider->GetContentLayerColor(
       AshColorProvider::ContentLayerType::kSeparatorColor);
   separator_1_->SetColor(separator_color);
-  separator_1_->SetPreferredHeight(kSeparatorHeight);
+  separator_1_->SetPreferredLength(kSeparatorHeight);
   separator_2_->SetColor(separator_color);
-  separator_2_->SetPreferredHeight(kSeparatorHeight);
+  separator_2_->SetPreferredLength(kSeparatorHeight);
 
   close_button_->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_APP_ACCNAME_CLOSE));
+
+  if (features::IsDarkLightModeEnabled()) {
+    SetBorder(std::make_unique<views::HighlightBorder>(
+        kBorderRadius, views::HighlightBorder::Type::kHighlightBorder2,
+        /*use_light_colors=*/false));
+  }
+  shadow_.shadow()->SetShadowStyle(gfx::ShadowStyle::kChromeOSSystemUI);
+  shadow_.SetRoundedCornerRadius(kBorderRadius);
 }
 
 CaptureModeBarView::~CaptureModeBarView() = default;

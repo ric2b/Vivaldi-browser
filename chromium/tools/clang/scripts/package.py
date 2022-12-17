@@ -437,10 +437,14 @@ def main():
 
   # Check that all non-glob wanted files exist on disk.
   want = [w.replace('$V', RELEASE_VERSION) for w in want]
+  found_all_wanted_files = True
   for w in want:
     if '*' in w: continue
     if os.path.exists(os.path.join(LLVM_RELEASE_DIR, w)): continue
     print('wanted file "%s" but it did not exist' % w, file=sys.stderr)
+    found_all_wanted_files = False
+
+  if not found_all_wanted_files:
     return 1
 
   # Check that all reclient inputs are in the package.
@@ -471,7 +475,10 @@ def main():
       dest = os.path.join(pdir, f)
       shutil.copy(src, dest)
       # Strip libraries.
-      if sys.platform == 'darwin' and f.endswith('.dylib'):
+      if 'libclang_rt.builtins' in f and 'android' in f:
+        # Keep the builtins' DWARF info for unwinding.
+        pass
+      elif sys.platform == 'darwin' and f.endswith('.dylib'):
         subprocess.call(['strip', '-x', dest])
       elif (sys.platform.startswith('linux') and
             os.path.splitext(f)[1] in ['.so', '.a']):

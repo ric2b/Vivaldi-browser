@@ -108,7 +108,7 @@ class EncryptedReportingUploadProviderTest : public ::testing::Test {
 
   Status CallRequestUploadEncryptedRecord(
       bool need_encryption_key,
-      std::unique_ptr<std::vector<EncryptedRecord>> records) {
+      std::vector<EncryptedRecord> records) {
     test::TestEvent<Status> result;
     service_provider_->RequestUploadEncryptedRecords(
         need_encryption_key, std::move(records), result.cb());
@@ -124,9 +124,7 @@ class EncryptedReportingUploadProviderTest : public ::testing::Test {
   std::unique_ptr<TestEncryptedReportingUploadProvider> service_provider_;
 };
 
-// Disabled due to flakiness. See crbug.com/1308890.
-TEST_F(EncryptedReportingUploadProviderTest,
-       DISABLED_SuccessfullyUploadsRecord) {
+TEST_F(EncryptedReportingUploadProviderTest, SuccessfullyUploadsRecord) {
   test::TestMultiEvent<SequenceInformation, bool /*force*/> uploaded_event;
   EXPECT_CALL(*this, ReportSuccessfulUpload(_, _))
       .WillOnce([&uploaded_event](SequenceInformation seq_info, bool force) {
@@ -134,10 +132,10 @@ TEST_F(EncryptedReportingUploadProviderTest,
       });
   EXPECT_CALL(cloud_policy_client_,
               UploadEncryptedReport(IsDataUploadRequestValid(), _, _))
-      .WillOnce(::reporting::MakeUploadEncryptedReportAction());
+      .WillOnce(MakeUploadEncryptedReportAction());
 
-  auto records = std::make_unique<std::vector<EncryptedRecord>>();
-  records->push_back(record_);
+  std::vector<EncryptedRecord> records;
+  records.push_back(record_);
   const auto status = CallRequestUploadEncryptedRecord(
       /*need_encryption_key=*/false, std::move(records));
   EXPECT_OK(status) << status;

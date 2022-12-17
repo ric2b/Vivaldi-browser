@@ -95,7 +95,7 @@
 #include "third_party/blink/public/mojom/media/renderer_audio_input_stream_factory.mojom.h"
 #include "third_party/blink/public/mojom/navigation/navigation_params.mojom-forward.h"
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom.h"
-#include "third_party/blink/public/mojom/use_counter/css_property_id.mojom.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/css_property_id.mojom.h"
 #include "third_party/blink/public/platform/child_url_loader_factory_bundle.h"
 #include "third_party/blink/public/platform/web_media_player.h"
 #include "third_party/blink/public/platform/websocket_handshake_throttle_provider.h"
@@ -147,6 +147,7 @@ class MediaPermission;
 
 namespace url {
 class Origin;
+class SchemeHostPort;
 }
 
 namespace content {
@@ -179,6 +180,7 @@ class CONTENT_EXPORT RenderFrameImpl
       RenderViewImpl* render_view,
       blink::WebFrame* opener,
       bool is_for_nested_main_frame,
+      bool is_for_scalable_page,
       blink::mojom::FrameReplicationStatePtr replication_state,
       const base::UnguessableToken& devtools_frame_token,
       mojom::CreateLocalMainFrameParamsPtr params);
@@ -401,12 +403,15 @@ class CONTENT_EXPORT RenderFrameImpl
                         const int32_t flags) override;
 
   // blink::mojom::ResourceLoadInfoNotifier implementation:
+#if BUILDFLAG(IS_ANDROID)
+  void NotifyUpdateUserGestureCarryoverInfo() override;
+#endif
   void NotifyResourceRedirectReceived(
       const net::RedirectInfo& redirect_info,
       network::mojom::URLResponseHeadPtr redirect_response) override;
   void NotifyResourceResponseReceived(
       int64_t request_id,
-      const GURL& response_url,
+      const url::SchemeHostPort& final_response_url,
       network::mojom::URLResponseHeadPtr head,
       network::mojom::RequestDestination request_destination) override;
   void NotifyResourceTransferSizeUpdated(int64_t request_id,
@@ -569,13 +574,17 @@ class CONTENT_EXPORT RenderFrameImpl
   void WillFreezePage() override;
   void DidOpenDocumentInputStream(const blink::WebURL& url) override;
   void DidSetPageLifecycleState() override;
+  void NotifyCurrentHistoryItemChanged() override;
   void DidUpdateCurrentHistoryItem() override;
   base::UnguessableToken GetDevToolsFrameToken() override;
   void AbortClientNavigation() override;
   void DidChangeSelection(bool is_empty_selection,
                           blink::SyncCondition force_sync) override;
   void FocusedElementChanged(const blink::WebElement& element) override;
-  void OnMainFrameIntersectionChanged(const gfx::Rect& intersect_rect) override;
+  void OnMainFrameIntersectionChanged(
+      const gfx::Rect& main_frame_intersection_rect) override;
+  void OnMainFrameViewportRectangleChanged(
+      const gfx::Rect& main_frame_viewport_rect) override;
   void WillSendRequest(blink::WebURLRequest& request,
                        ForRedirect for_redirect) override;
   void OnOverlayPopupAdDetected() override;
@@ -732,7 +741,7 @@ class CONTENT_EXPORT RenderFrameImpl
   // browser.
   void OnDroppedNavigation();
 
-  void DidStartResponse(const GURL& response_url,
+  void DidStartResponse(const url::SchemeHostPort& final_response_url,
                         int request_id,
                         network::mojom::URLResponseHeadPtr response_head,
                         network::mojom::RequestDestination request_destination);
@@ -867,16 +876,6 @@ class CONTENT_EXPORT RenderFrameImpl
       mojo::PendingRemote<mojom::FrameHTMLSerializerHandler> handler_remote)
       override;
 
-  // IPC message handlers ------------------------------------------------------
-  //
-  // The documentation for these functions should be in
-  // content/common/*_messages.h for the message that the function is handling.
-  void OnShowContextMenu(const gfx::Point& location);
-  void OnMoveCaret(const gfx::Point& point);
-  void OnScrollFocusedEditableNodeIntoRect(const gfx::Rect& rect);
-  void OnSelectRange(const gfx::Point& base, const gfx::Point& extent);
-  void OnSuppressFurtherDialogs();
-
   // Callback scheduled from SerializeAsMHTML for when writing serialized
   // MHTML to the handle has been completed in the file thread.
   void OnWriteMHTMLComplete(
@@ -981,7 +980,7 @@ class CONTENT_EXPORT RenderFrameImpl
 
   // |transition_type| corresponds to the document which triggered this request.
   void WillSendRequestInternal(blink::WebURLRequest& request,
-                               bool for_main_frame,
+                               bool for_outermost_main_frame,
                                ui::PageTransition transition_type,
                                ForRedirect for_redirect);
 
@@ -1406,8 +1405,12 @@ class CONTENT_EXPORT RenderFrameImpl
   std::unique_ptr<AXTreeDistiller> ax_tree_distiller_;
 
   // Used for tracking a frame's main frame document intersection and
-  // and replicating it to the browser when it changes.
-  absl::optional<gfx::Rect> mainframe_intersection_rect_;
+  // replicating it to the browser when it changes.
+  absl::optional<gfx::Rect> main_frame_intersection_rect_;
+
+  // Used for tracking the main frame viewport rectangle (i.e. dimensions and
+  // scroll offset) within the main frame document.
+  absl::optional<gfx::Rect> main_frame_viewport_rect_;
 
   std::unique_ptr<blink::WebSocketHandshakeThrottleProvider>
       websocket_handshake_throttle_provider_;

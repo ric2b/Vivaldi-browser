@@ -339,10 +339,10 @@ export class PluginController implements ContentController {
     });
   }
 
-  setReadOnly(enableReadOnly: boolean) {
+  setPresentationMode(enablePresentationMode: boolean) {
     this.postMessage_({
-      type: 'setReadOnly',
-      enableReadOnly: enableReadOnly,
+      type: 'setPresentationMode',
+      enablePresentationMode,
     });
   }
 
@@ -422,6 +422,9 @@ export class PluginController implements ContentController {
     switch (messageData.type) {
       case 'gesture':
         this.viewport_.dispatchGesture(messageData.gesture);
+        break;
+      case 'swipe':
+        this.viewport_.dispatchSwipe(messageData.direction);
         break;
       case 'goToPage':
         this.viewport_.goToPage(messageData.page);

@@ -25,6 +25,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_DOM_ELEMENT_H_
 
+#include "base/check_op.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/types/pass_key.h"
@@ -42,6 +43,7 @@
 #include "third_party/blink/renderer/core/dom/element_data.h"
 #include "third_party/blink/renderer/core/dom/events/simulated_click_options.h"
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
+#include "third_party/blink/renderer/core/dom/has_invalidation_flags.h"
 #include "third_party/blink/renderer/core/dom/names_map.h"
 #include "third_party/blink/renderer/core/dom/whitespace_attacher.h"
 #include "third_party/blink/renderer/core/html_names.h"
@@ -53,6 +55,7 @@
 #include "third_party/blink/renderer/platform/weborigin/kurl.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string.h"
 #include "third_party/blink/renderer/platform/wtf/text/atomic_string_table.h"
+#include "third_party/blink/renderer/platform/wtf/wtf_size_t.h"
 #include "ui/gfx/geometry/rect_f.h"
 
 namespace gfx {
@@ -100,6 +103,7 @@ class ResizeObservation;
 class ResizeObserver;
 class ResizeObserverSize;
 class ScrollIntoViewOptions;
+class IsVisibleOptions;
 class ScrollToOptions;
 class ShadowRoot;
 class ShadowRootInit;
@@ -157,13 +161,25 @@ enum class NamedItemType {
 
 enum class PopupValueType {
   kNone,
-  kPopup,
+  kAuto,
   kHint,
   kAsync,
 };
-constexpr const char* kPopupTypeValuePopup = "popup";
+constexpr const char* kPopupTypeValueAuto = "auto";
 constexpr const char* kPopupTypeValueHint = "hint";
 constexpr const char* kPopupTypeValueAsync = "async";
+
+enum class PopupTriggerAction {
+  kNone,
+  kToggle,
+  kShow,
+  kHide,
+};
+
+enum class HidePopupFocusBehavior {
+  kNone,
+  kFocusPreviousElement,
+};
 
 typedef HeapVector<Member<Attr>> AttrNodeList;
 
@@ -501,7 +517,13 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   NamedNodeMap* attributesForBindings() const;
   Vector<AtomicString> getAttributeNames() const;
 
-  enum class AttributeModificationReason { kDirectly, kByParser, kByCloning };
+  enum class AttributeModificationReason {
+    kDirectly,
+    kByParser,
+    kByCloning,
+    kByMoveToNewDocument,
+    kBySynchronizationOfLazyAttribute
+  };
   struct AttributeModificationParams {
     STACK_ALLOCATED();
 
@@ -540,9 +562,11 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void UpdatePopupAttribute(String);
   bool HasValidPopupAttribute() const;
   PopupData* GetPopupData() const;
+  PopupValueType PopupType() const;
   bool popupOpen() const;
-  void showPopup();
-  void hidePopup();
+  void showPopup(ExceptionState& exception_state);
+  void hidePopup(ExceptionState& exception_state);
+  void hidePopupInternal(HidePopupFocusBehavior focus_behavior);
   static const Element* NearestOpenAncestralPopup(Node* start_node);
   static void HandlePopupLightDismiss(const Event& event);
   void InvokePopup(Element* invoker);
@@ -638,9 +662,6 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
       ShadowRootType,
       FocusDelegation focus_delegation = FocusDelegation::kNone,
       SlotAssignmentMode slot_assignment_mode = SlotAssignmentMode::kNamed);
-  void InitializeShadowRootInternal(ShadowRoot&,
-                                    FocusDelegation,
-                                    SlotAssignmentMode);
 
   // Returns the shadow root attached to this element if it is a shadow host.
   ShadowRoot* GetShadowRoot() const;
@@ -722,13 +743,15 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   Element* GetFocusableArea() const;
   Element* GetAutofocusDelegate() const;
   // Element focus function called through IDL (i.e. element.focus() in JS)
+  // Delegates to virtual Focus() with focus type set to kScript
   void focusForBindings();
   void focusForBindings(const FocusOptions*);
   // Element focus function called from outside IDL (user focus,
   // accessibility, etc...)
-  virtual void focus(const FocusParams&);
-  void focus();
-  void focus(const FocusOptions*);
+  virtual void Focus(const FocusParams&);
+  // Delegates to virtual Focus() with focus type set to kNone
+  void Focus();
+  void Focus(const FocusOptions*);
 
   void UpdateSelectionOnFocus(SelectionBehaviorOnFocus);
   // This function is called after SetFocused(true) before dispatching 'focus'
@@ -907,6 +930,7 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual bool IsScriptElement() const { return false; }
   virtual bool IsVTTCueBackgroundBox() const { return false; }
   virtual bool IsSliderThumbElement() const { return false; }
+  virtual bool IsOutputElement() const { return false; }
 
   // Elements that may have an insertion mode other than "in body" should
   // override this and return true.
@@ -1078,8 +1102,9 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetAffectedByNonSubjectHas();
   bool AncestorsOrAncestorSiblingsAffectedByHas() const;
   void SetAncestorsOrAncestorSiblingsAffectedByHas();
-  bool SiblingsAffectedByHas() const;
-  void SetSiblingsAffectedByHas();
+  unsigned GetSiblingsAffectedByHasFlags() const;
+  bool HasSiblingsAffectedByHasFlags(unsigned flags) const;
+  void SetSiblingsAffectedByHasFlags(unsigned flags);
   bool AffectedByPseudoInHas() const;
   void SetAffectedByPseudoInHas();
   bool AncestorsOrSiblingsAffectedByHoverInHas() const;
@@ -1090,6 +1115,8 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void SetAncestorsOrSiblingsAffectedByFocusInHas();
   bool AncestorsOrSiblingsAffectedByFocusVisibleInHas() const;
   void SetAncestorsOrSiblingsAffectedByFocusVisibleInHas();
+  bool AffectedByLogicalCombinationsInHas() const;
+  void SetAffectedByLogicalCombinationsInHas();
 
   void SaveIntrinsicSize(ResizeObserverSize* size);
   const ResizeObserverSize* LastIntrinsicSize() const;
@@ -1112,6 +1139,17 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   bool IsInertRoot();
 
   FocusgroupFlags GetFocusgroupFlags() const;
+
+  bool isVisible(IsVisibleOptions* options) const;
+
+  bool IsDocumentElement() const;
+
+  // Not all Elements are presently supported by the Region Capture feature.
+  // Those that are override and this method and return true.
+  // TODO(crbug.com/1332641): Remove this after adding support for all subtypes.
+  virtual bool IsSupportedByRegionCapture() const { return false; }
+
+  bool IsReplacedElementRespectingCSSOverflow() const;
 
  protected:
   const ElementData* GetElementData() const { return element_data_.Get(); }
@@ -1339,18 +1377,14 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   virtual void DidAddUserAgentShadowRoot(ShadowRoot&) {}
   virtual bool AlwaysCreateUserAgentShadowRoot() const { return false; }
 
-  enum SynchronizationOfLazyAttribute {
-    kNotInSynchronizationOfLazyAttribute = 0,
-    kInSynchronizationOfLazyAttribute
-  };
-
   void DidAddAttribute(const QualifiedName&, const AtomicString&);
   void WillModifyAttribute(const QualifiedName&,
                            const AtomicString& old_value,
                            const AtomicString& new_value);
   void DidModifyAttribute(const QualifiedName&,
                           const AtomicString& old_value,
-                          const AtomicString& new_value);
+                          const AtomicString& new_value,
+                          AttributeModificationReason reason);
   void DidRemoveAttribute(const QualifiedName&, const AtomicString& old_value);
 
   void SynchronizeAllAttributes() const;
@@ -1364,21 +1398,24 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
   void UpdateName(const AtomicString& old_name, const AtomicString& new_name);
 
   void UpdateFocusgroup(const AtomicString& input);
+  void UpdateFocusgroupInShadowRootIfNeeded();
 
   void ClientQuads(Vector<gfx::QuadF>& quads) const;
 
   NodeType getNodeType() const final;
   bool ChildTypeAllowed(NodeType) const final;
 
+  // Returns the attribute's index or `kNotFound` if not found.
+  wtf_size_t FindAttributeIndex(const QualifiedName&);
+
   void SetAttributeInternal(wtf_size_t index,
                             const QualifiedName&,
                             const AtomicString& value,
-                            SynchronizationOfLazyAttribute);
+                            AttributeModificationReason);
   void AppendAttributeInternal(const QualifiedName&,
                                const AtomicString& value,
-                               SynchronizationOfLazyAttribute);
-  void RemoveAttributeInternal(wtf_size_t index,
-                               SynchronizationOfLazyAttribute);
+                               AttributeModificationReason);
+  void RemoveAttributeInternal(wtf_size_t index, AttributeModificationReason);
   SpecificTrustedType ExpectedTrustedTypeForAttribute(
       const QualifiedName&) const;
 
@@ -1515,6 +1552,12 @@ class CORE_EXPORT Element : public ContainerNode, public Animatable {
 
   void PseudoStateChanged(CSSSelector::PseudoType pseudo,
                           AffectedByPseudoStateChange&&);
+
+  // Highlight pseudos inherit all properties from the corresponding highlight
+  // in the parent, but virtually all existing content uses universal rules
+  // like *::selection. To improve runtime and keep copy-on-write inheritance,
+  // avoid recalc if neither parent nor child matched any non-universal rules.
+  bool CanSkipRecalcForHighlightPseudos(const ComputedStyle& new_style) const;
 
   Member<ElementData> element_data_;
 };

@@ -41,11 +41,44 @@ class ModelProviderFactoryImplTest : public testing::Test {
 
 TEST_F(ModelProviderFactoryImplTest, ProviderCreated) {
   EXPECT_TRUE(provider_factory_->CreateProvider(
-      optimization_guide::proto::OptimizationTarget::
-          OPTIMIZATION_TARGET_SEGMENTATION_VOICE));
+      proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_VOICE));
   EXPECT_TRUE(provider_factory_->CreateProvider(
-      optimization_guide::proto::OptimizationTarget::
-          OPTIMIZATION_TARGET_SEGMENTATION_SHARE));
+      proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE));
+}
+
+class DummyModelProviderFactoryImplTest : public ModelProviderFactoryImplTest {
+ public:
+  void SetUp() override {
+    task_runner_ = base::MakeRefCounted<base::TestSimpleTaskRunner>();
+    provider_factory_ =
+        std::make_unique<ModelProviderFactoryImpl>(nullptr, task_runner_);
+  }
+};
+
+TEST_F(DummyModelProviderFactoryImplTest, ProviderCreated) {
+  EXPECT_TRUE(provider_factory_->CreateProvider(
+      proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_VOICE));
+
+  auto provider = provider_factory_->CreateProvider(
+      proto::SegmentId::OPTIMIZATION_TARGET_SEGMENTATION_SHARE);
+  ASSERT_TRUE(provider);
+
+  EXPECT_FALSE(provider->ModelAvailable());
+
+  // This callback should never be invoked. Send a null callback and chrome
+  // should not crash by invoking it.
+  provider->InitAndFetchModel(ModelProvider::ModelUpdatedCallback());
+
+  base::RunLoop wait;
+  provider->ExecuteModelWithInput(
+      {1, 2.5},
+      base::BindOnce(
+          [](base::OnceClosure quit, const absl::optional<float>& output) {
+            EXPECT_FALSE(output);
+            std::move(quit).Run();
+          },
+          wait.QuitClosure()));
+  wait.Run();
 }
 
 }  // namespace segmentation_platform

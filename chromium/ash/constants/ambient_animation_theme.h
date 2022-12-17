@@ -5,17 +5,16 @@
 #ifndef ASH_CONSTANTS_AMBIENT_ANIMATION_THEME_H_
 #define ASH_CONSTANTS_AMBIENT_ANIMATION_THEME_H_
 
-#include <ostream>
-
 #include "base/component_export.h"
+#include "base/strings/string_piece.h"
 
 namespace ash {
 
 // Each corresponds to an animation design for ambient mode that UX created and
 // has its own Lottie file.
 //
-// These values are persisted in user pref storage, so they should never be
-// renumbered or reused.
+// These values are persisted in user pref storage and logs, so they should
+// never be renumbered or reused.
 enum class AmbientAnimationTheme {
   // This is the one exception in the list, and it describes the mode where
   // IMAX photos are displayed at full screen in a slideshow fashion. This is
@@ -30,8 +29,10 @@ enum class AmbientAnimationTheme {
 inline constexpr AmbientAnimationTheme kDefaultAmbientAnimationTheme =
     AmbientAnimationTheme::kSlideshow;
 
+// The returned StringPiece is guaranteed to be null-terminated and point to
+// memory valid for the lifetime of the program.
 COMPONENT_EXPORT(ASH_CONSTANTS)
-std::ostream& operator<<(std::ostream& os, AmbientAnimationTheme theme);
+base::StringPiece ToString(AmbientAnimationTheme theme);
 
 }  // namespace ash
 

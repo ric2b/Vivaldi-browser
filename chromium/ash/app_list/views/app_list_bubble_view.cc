@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "ash/accessibility/accessibility_controller_impl.h"
 #include "ash/app_list/app_list_model_provider.h"
 #include "ash/app_list/app_list_util.h"
 #include "ash/app_list/model/app_list_folder_item.h"
@@ -32,7 +33,6 @@
 #include "ash/search_box/search_box_constants.h"
 #include "ash/shell.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/highlight_border.h"
 #include "base/bind.h"
 #include "base/check.h"
 #include "base/check_op.h"
@@ -56,6 +56,7 @@
 #include "ui/views/controls/scroll_view.h"
 #include "ui/views/controls/textfield/textfield.h"
 #include "ui/views/focus/focus_manager.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/layout/fill_layout.h"
 
@@ -75,6 +76,11 @@ AppListConfig* GetAppListConfig() {
       AppListConfigType::kDense, /*can_create=*/true);
 }
 
+// Returns true if ChromeVox (spoken feedback) is enabled.
+bool IsSpokenFeedbackEnabled() {
+  return Shell::Get()->accessibility_controller()->spoken_feedback().enabled();
+}
+
 // A simplified horizontal separator that uses a solid color layer for painting.
 // This is more efficient than using a views::Separator, which would require
 // SetPaintToLayer(ui::LAYER_TEXTURED).
@@ -82,8 +88,7 @@ class SeparatorWithLayer : public views::View {
  public:
   SeparatorWithLayer() {
     SetPaintToLayer(ui::LAYER_SOLID_COLOR);
-    layer()->SetColor(ColorProvider::Get()->GetContentLayerColor(
-        ColorProvider::ContentLayerType::kSeparatorColor));
+    // Color is set in OnThemeChanged().
     layer()->SetFillsBoundsOpaquely(false);
   }
   SeparatorWithLayer(const SeparatorWithLayer&) = delete;
@@ -94,6 +99,12 @@ class SeparatorWithLayer : public views::View {
   gfx::Size CalculatePreferredSize() const override {
     // The parent's layout manager will stretch it horizontally.
     return gfx::Size(1, 1);
+  }
+
+  void OnThemeChanged() override {
+    views::View::OnThemeChanged();
+    layer()->SetColor(ColorProvider::Get()->GetContentLayerColor(
+        ColorProvider::ContentLayerType::kSeparatorColor));
   }
 };
 
@@ -300,6 +311,13 @@ void AppListBubbleView::StartShowAnimation(bool is_side_shelf) {
     Layout();
   DCHECK(!needs_layout());
 
+  ui::AnimationThroughputReporter reporter(
+      layer()->GetAnimator(),
+      metrics_util::ForSmoothness(base::BindRepeating([](int value) {
+        base::UmaHistogramPercentage(
+            "Apps.ClamshellLauncher.AnimationSmoothness.Open", value);
+      })));
+
   // Animation specification for bottom shelf:
   //
   // Y Position: Down 8px → End position (visually moves up)
@@ -356,6 +374,17 @@ void AppListBubbleView::StartHideAnimation(
   // Ensure any in-progress animations have their cleanup callbacks called.
   AbortAllAnimations();
 
+  if (current_page_ == AppListBubblePage::kApps)
+    apps_page_->PrepareForHideLauncher();
+
+  const gfx::Rect target_bounds = layer()->GetTargetBounds();
+
+  if (view_delegate_->ShouldDismissImmediately()) {
+    // Don't animate, just clean up.
+    OnHideAnimationEnded(target_bounds);
+    return;
+  }
+
   ui::AnimationThroughputReporter reporter(
       layer()->GetAnimator(),
       metrics_util::ForSmoothness(base::BindRepeating([](int value) {
@@ -376,12 +405,8 @@ void AppListBubbleView::StartHideAnimation(
   // Opacity: 100% → 0%
   // Duration: 100ms
   // Ease: Linear
-  const gfx::Rect target_bounds = layer()->GetTargetBounds();
   const gfx::Rect final_bounds =
       GetShowHideAnimationBounds(is_side_shelf, target_bounds);
-
-  if (current_page_ == AppListBubblePage::kApps)
-    apps_page_->AnimateHideLauncher();
 
   views::AnimationBuilder()
       .OnEnded(base::BindOnce(&AppListBubbleView::OnHideAnimationEnded,
@@ -457,6 +482,8 @@ void AppListBubbleView::ShowPage(AppListBubblePage page) {
       MaybeFocusAndActivateSearchBox();
       break;
     case AppListBubblePage::kAssistant:
+      if (showing_folder_)
+        HideFolderView(/*animate=*/false, /*hide_for_reparent=*/false);
       if (previous_page == AppListBubblePage::kApps)
         apps_page_->AnimateHidePage();
       else
@@ -485,6 +512,10 @@ void AppListBubbleView::ShowEmbeddedAssistantUI() {
 int AppListBubbleView::GetHeightToFitAllApps() const {
   return apps_page_->scroll_view()->contents()->bounds().height() +
          search_box_view_->GetPreferredSize().height();
+}
+
+void AppListBubbleView::UpdateContinueSectionVisibility() {
+  apps_page_->UpdateContinueSectionVisibility();
 }
 
 void AppListBubbleView::UpdateForNewSortingOrder(
@@ -549,10 +580,10 @@ void AppListBubbleView::OnThemeChanged() {
       AshColorProvider::Get()->GetBaseLayerColor(
           AshColorProvider::BaseLayerType::kTransparent80),
       kBubbleCornerRadius));
-  SetBorder(std::make_unique<HighlightBorder>(
-      kBubbleCornerRadius, HighlightBorder::Type::kHighlightBorder1,
+  SetBorder(std::make_unique<views::HighlightBorder>(
+      kBubbleCornerRadius, views::HighlightBorder::Type::kHighlightBorder1,
       /*use_light_colors=*/false,
-      /*insets_type=*/HighlightBorder::InsetsType::kHalfInsets));
+      /*insets_type=*/views::HighlightBorder::InsetsType::kHalfInsets));
 }
 
 void AppListBubbleView::Layout() {
@@ -632,8 +663,10 @@ void AppListBubbleView::ShowFolderForItemView(AppListItemView* folder_item_view,
                                           /*hide_for_reparent=*/false);
   if (focus_name_input) {
     folder_view_->FocusNameInput();
-  } else if (apps_page_->scrollable_apps_grid_view()->has_selected_view()) {
-    // If the user is keyboard navigating, move focus into the folder.
+  } else if (apps_page_->scrollable_apps_grid_view()->has_selected_view() ||
+             IsSpokenFeedbackEnabled()) {
+    // If the user is keyboard navigating, or using ChromeVox (spoken feedback),
+    // move focus into the folder.
     folder_view_->FocusFirstItem(/*silently=*/false);
   } else {
     // Release focus so that disabling the views below does not shift focus

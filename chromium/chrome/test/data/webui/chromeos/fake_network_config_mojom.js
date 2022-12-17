@@ -114,6 +114,7 @@ export class FakeNetworkConfig {
 
     this.globalPolicy_ =
         /** @type {!chromeos.networkConfig.mojom.GlobalPolicy} */ ({
+          allow_cellular_sim_lock: true,
           allow_only_policy_cellular_networks: false,
           allow_only_policy_networks_to_autoconnect: false,
           allow_only_policy_wifi_networks_to_connect: false,
@@ -144,6 +145,7 @@ export class FakeNetworkConfig {
      'setProperties',
      'setCellularSimState',
      'startConnect',
+     'startDisconnect',
      'configureNetwork',
      'getAlwaysOnVpn',
      'getSupportedVpnTypes',
@@ -161,7 +163,7 @@ export class FakeNetworkConfig {
    * @private
    */
   getResolver_(methodName) {
-    let method = this.resolverMap_.get(methodName);
+    const method = this.resolverMap_.get(methodName);
     assert(!!method, `Method '${methodName}' not found.`);
     return method;
   }
@@ -306,6 +308,24 @@ export class FakeNetworkConfig {
       this.methodCalled('startConnect');
       resolve(
           {result: chromeos.networkConfig.mojom.StartConnectResult.kCanceled});
+    });
+  }
+
+  /**
+   * @param { !string } guid
+   * @return {!Promise<{
+        success: !boolean,
+   *  }>}
+   */
+  startDisconnect(guid) {
+    return new Promise(resolve => {
+      const network = this.networkStates_.find(state => {
+        return state.guid === guid;
+      });
+      network.connectionState =
+          chromeos.networkConfig.mojom.ConnectionStateType.kNotConnected;
+      this.methodCalled('startDisconnect');
+      resolve({success: true});
     });
   }
 
@@ -547,7 +567,7 @@ export class FakeNetworkConfig {
 
       // This is only called by cellular networks.
       const type = chromeos.networkConfig.mojom.NetworkType.kCellular;
-      let deviceState = this.deviceStates_.get(type);
+      const deviceState = this.deviceStates_.get(type);
       let simLockStatus = deviceState.simLockStatus;
       const pin = this.testPin ? this.testPin : DEFAULT_CELLULAR_PIN;
 

@@ -3,7 +3,7 @@
 # found in the LICENSE file.
 
 load("//lib/branches.star", "branches")
-load("//lib/builders.star", "cpu")
+load("//lib/builders.star", "builders", "cpu")
 load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 load("//project.star", "settings")
@@ -14,6 +14,7 @@ ci.defaults.set(
     build_numbers = True,
     cpu = cpu.X86_64,
     triggered_by = ["chromium-gitiles-trigger"],
+    free_space = builders.free_space.standard,
 )
 
 luci.bucket(
@@ -62,6 +63,7 @@ luci.gitiles_poller(
         "chromium.linux",
         "chromium.chromiumos",
         "chromium.android",
+        "chromium.fuchsia",
         "chromium.angle",
         "chrome",
         "chromium.memory",
@@ -101,8 +103,7 @@ consoles.console_view(
     title = "Fuchsia Sheriff Console",
     ordering = {
         "*type*": consoles.ordering(short_names = ["a64", "x64"]),
-        None: ["ci", "fyi", "astro", "sherlock", "misc"],
-        "chromium.mac": "*type*",
+        None: ["ci", "fuchsia ci", "hardware", "fyi"],
         "chromium.fyi|13": "*type*",
     },
 )
@@ -114,25 +115,28 @@ consoles.console_view(
     category = category,
     short_name = short_name,
 ) for name, category, short_name in (
-    ("fuchsia-fyi-arm64-size", "fyi", "a64-size"),
-    ("fuchsia-fyi-astro", "astro", "gpu"),
-    ("fuchsia-fyi-atlas", "atlas", "gpu"),
-    ("fuchsia-fyi-sherlock", "sherlock", "gpu"),
-    ("fuchsia-builder-perf-fyi", "fyi", "builder-perf"),
-    ("fuchsia-builder-perf-x64", "fyi", "builder-perf-x64"),
-    ("fuchsia-perf-fyi", "astro", "perf"),
-    ("fuchsia-perf-atlas-fyi", "atlas", "perf"),
-    ("fuchsia-perf-sherlock-fyi", "sherlock", "perf"),
-    ("fuchsia-x64", "ci", "x64-chrome"),
+    ("fuchsia-fyi-arm64-size", "fuchsia ci", "a64-size"),
+    ("fuchsia-fyi-astro", "hardware", "ast"),
+    ("fuchsia-fyi-atlas", "hardware", "atl"),
+    ("fuchsia-fyi-sherlock", "hardware", "slk"),
+    ("fuchsia-builder-perf-fyi", "fuchsia ci", "builder-perf"),
+    ("fuchsia-builder-perf-x64", "fuchsia ci", "builder-perf-x64"),
+    ("fuchsia-perf-fyi", "hardware", "ast-perf"),
+    ("fuchsia-perf-atlas-fyi", "hardware", "atl-perf"),
+    ("fuchsia-perf-sherlock-fyi", "hardware", "slk-perf"),
+    ("fuchsia-x64", "fuchsia ci", "x64-chrome"),
 )]
 
 exec("./ci/chromium.star")
+exec("./ci/chromium.accessibility.star")
 exec("./ci/chromium.android.star")
 exec("./ci/chromium.android.fyi.star")
 exec("./ci/chromium.angle.star")
 exec("./ci/chromium.chromiumos.star")
 exec("./ci/chromium.clang.star")
 exec("./ci/chromium.dawn.star")
+exec("./ci/chromium.fuchsia.star")
+exec("./ci/chromium.fuchsia.fyi.star")
 exec("./ci/chromium.fuzz.star")
 exec("./ci/chromium.fyi.star")
 exec("./ci/chromium.gpu.star")

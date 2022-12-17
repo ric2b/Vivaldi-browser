@@ -61,6 +61,23 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
         type: String,
         value: '',
       },
+
+      /**
+       * Whether the {prefers-color-scheme: dark}
+       * @private {boolean}
+       */
+      isDarkModeActive_: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * @private {boolean}
+       */
+      isTabletMode_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -142,7 +159,7 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
     this.$['loading-animation'].hidden = true;
 
     for (let i = 0; i < MAX_INDEX; ++i) {
-      let entry = this.$['voice-entry-' + i];
+      const entry = this.$['voice-entry-' + i];
       entry.removeAttribute('active');
       entry.removeAttribute('completed');
     }
@@ -154,6 +171,7 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
   reloadContent(data) {
     this.equalWeightButtons_ = data['equalWeightButtons'];
     this.childName_ = data['childName'];
+    this.isTabletMode_ = data['isTabletMode'];
   }
 
   /**
@@ -180,7 +198,7 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
       announceAccessibleMessage(
           loadTimeData.getString('assistantVoiceMatchA11yMessage'));
     }
-    let currentEntry = this.$['voice-entry-' + this.currentIndex_];
+    const currentEntry = this.$['voice-entry-' + this.currentIndex_];
     currentEntry.setAttribute('active', true);
   }
 
@@ -188,7 +206,7 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
    * Called when the server has detected and processing hotword.
    */
   processingHotword() {
-    let currentEntry = this.$['voice-entry-' + this.currentIndex_];
+    const currentEntry = this.$['voice-entry-' + this.currentIndex_];
     currentEntry.removeAttribute('active');
     currentEntry.setAttribute('completed', true);
     this.currentIndex_++;
@@ -276,6 +294,16 @@ class AssistantVoiceMatch extends AssistantVoiceMatchBase {
       return this.i18nAdvanced(
           'assistantVoiceMatchFooterForChild', {substitutions: [childName]});
     }
+  }
+
+  getReadyImgUrl_(isDarkMode) {
+    return './assistant_optin/assistant_ready_' + (isDarkMode ? 'dm' : 'lm') +
+        '.json';
+  }
+
+  getVoiceMatchAnimationUrl_(isDarkMode, isTabletMode) {
+    return './assistant_optin/voice_' + (isTabletMode ? 'tablet' : 'laptop') +
+        '_' + (isDarkMode ? 'dm' : 'lm') + '.json';
   }
 }
 

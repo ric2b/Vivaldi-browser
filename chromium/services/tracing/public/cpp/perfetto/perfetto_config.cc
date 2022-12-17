@@ -71,6 +71,7 @@ perfetto::TraceConfig::DataSource* AddDataSourceConfig(
          base_config.category_filter().disabled_categories()) {
       te_cfg.add_enabled_categories(disabled);
     }
+    te_cfg.set_enable_thread_time_sampling(true);
     source_config->set_track_event_config_raw(te_cfg.SerializeAsString());
   }
 #endif  // BUILDFLAG(USE_PERFETTO_CLIENT_LIBRARY)
@@ -152,6 +153,13 @@ void AddDataSourceConfigs(
                         chrome_config_string, privacy_filtering_enabled,
                         convert_to_legacy_json, client_priority,
                         json_agent_label_filter);
+  }
+
+  if (source_names.count(tracing::mojom::kSamplerProfilerSourceName) == 1) {
+    AddDataSourceConfig(
+        perfetto_config, tracing::mojom::kSamplerProfilerSourceName,
+        chrome_config_string, privacy_filtering_enabled, convert_to_legacy_json,
+        client_priority, json_agent_label_filter);
   }
 
   if (stripped_config.IsCategoryGroupEnabled(

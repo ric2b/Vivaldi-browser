@@ -24,11 +24,11 @@
 #include "content/public/browser/browser_thread.h"
 #include "content/public/common/content_switches.h"
 #include "media/base/video_frame.h"
+#include "media/base/video_types.h"
 #include "media/capture/mojom/video_capture_types.mojom.h"
 #include "media/capture/video/video_capture_buffer_pool.h"
 #include "media/capture/video/video_capture_buffer_tracker_factory_impl.h"
 #include "media/capture/video/video_capture_device_client.h"
-#include "mojo/public/cpp/system/platform_handle.h"
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/compositor/image_transport_factory.h"
@@ -230,11 +230,7 @@ void VideoCaptureController::BufferContext::DecreaseConsumerCount() {
 
 media::mojom::VideoBufferHandlePtr
 VideoCaptureController::BufferContext::CloneBufferHandle() {
-  // Unable to use buffer_handle_->Clone(), because shared_buffer does not
-  // support the copy constructor.
-  media::mojom::VideoBufferHandlePtr result =
-      media::mojom::VideoBufferHandle::New();
-  if (buffer_handle_->is_shared_buffer_handle()) {
+  if (buffer_handle_->is_unsafe_shmem_region()) {
     // Buffer handles are always writable as they come from
     // VideoCaptureBufferPool which, among other use cases, provides decoder
     // output buffers.
@@ -242,23 +238,21 @@ VideoCaptureController::BufferContext::CloneBufferHandle() {
     // TODO(crbug.com/793446): BroadcastingReceiver::BufferContext also defines
     // CloneBufferHandle and independently decides on handle permissions. The
     // permissions should be coordinated between these two classes.
-    result->set_shared_buffer_handle(
-        buffer_handle_->get_shared_buffer_handle()->Clone(
-            mojo::SharedBufferHandle::AccessMode::READ_WRITE));
-    DCHECK(result->get_shared_buffer_handle()->is_valid());
+    return media::mojom::VideoBufferHandle::NewUnsafeShmemRegion(
+        buffer_handle_->get_unsafe_shmem_region().Duplicate());
   } else if (buffer_handle_->is_read_only_shmem_region()) {
-    result->set_read_only_shmem_region(
+    return media::mojom::VideoBufferHandle::NewReadOnlyShmemRegion(
         buffer_handle_->get_read_only_shmem_region().Duplicate());
-    DCHECK(result->get_read_only_shmem_region().IsValid());
   } else if (buffer_handle_->is_mailbox_handles()) {
-    result->set_mailbox_handles(buffer_handle_->get_mailbox_handles()->Clone());
+    return media::mojom::VideoBufferHandle::NewMailboxHandles(
+        buffer_handle_->get_mailbox_handles()->Clone());
   } else if (buffer_handle_->is_gpu_memory_buffer_handle()) {
-    result->set_gpu_memory_buffer_handle(
+    return media::mojom::VideoBufferHandle::NewGpuMemoryBufferHandle(
         buffer_handle_->get_gpu_memory_buffer_handle().Clone());
   } else {
     NOTREACHED() << "Unexpected video buffer handle type";
+    return media::mojom::VideoBufferHandlePtr();
   }
-  return result;
 }
 
 VideoCaptureController::FrameDropLogState::FrameDropLogState(
@@ -311,7 +305,8 @@ void VideoCaptureController::AddClient(
       !(params.requested_format.pixel_format == media::PIXEL_FORMAT_I420 ||
         params.requested_format.pixel_format == media::PIXEL_FORMAT_Y16 ||
         params.requested_format.pixel_format == media::PIXEL_FORMAT_ARGB ||
-        params.requested_format.pixel_format == media::PIXEL_FORMAT_NV12)) {
+        params.requested_format.pixel_format == media::PIXEL_FORMAT_NV12 ||
+        params.requested_format.pixel_format == media::PIXEL_FORMAT_UNKNOWN)) {
     // Crash in debug builds since the renderer should not have asked for
     // invalid or unsupported parameters.
     LOG(DFATAL) << "Invalid or unsupported video capture parameters requested: "
@@ -830,7 +825,16 @@ void VideoCaptureController::Crop(
     base::OnceCallback<void(media::mojom::CropRequestResult)> callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::IO);
   DCHECK(launched_device_);
+
   EmitLogMessage(__func__, 3);
+
+  was_crop_ever_called_ = true;
+
+  if (controller_clients_.size() != 1) {
+    std::move(callback).Run(media::mojom::CropRequestResult::kNotImplemented);
+    return;
+  }
+
   launched_device_->Crop(crop_id, crop_version, std::move(callback));
 }
 

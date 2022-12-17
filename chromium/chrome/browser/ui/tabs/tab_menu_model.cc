@@ -35,7 +35,7 @@ TabMenuModel::TabMenuModel(ui::SimpleMenuModel::Delegate* delegate,
   Build(tab_strip, index);
 }
 
-TabMenuModel::~TabMenuModel() {}
+TabMenuModel::~TabMenuModel() = default;
 
 void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
   std::vector<int> indices;
@@ -61,8 +61,8 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
   if (ExistingTabGroupSubMenuModel::ShouldShowSubmenu(tab_strip, index)) {
     // Create submenu with existing groups
     add_to_existing_group_submenu_ =
-        std::make_unique<ExistingTabGroupSubMenuModel>(delegate(), tab_strip,
-                                                       index);
+        std::make_unique<ExistingTabGroupSubMenuModel>(
+            delegate(), tab_menu_model_delegate_, tab_strip, index);
     AddSubMenu(TabStripModel::CommandAddToExistingGroup,
                l10n_util::GetPluralStringFUTF16(IDS_TAB_CXMENU_ADD_TAB_TO_GROUP,
                                                 num_tabs),
@@ -125,7 +125,7 @@ void TabMenuModel::Build(TabStripModel* tab_strip, int index) {
                           IDS_TAB_CXMENU_UNFOLLOW_SITE);
     }
   }
-  if (send_tab_to_self::ShouldOfferFeature(
+  if (send_tab_to_self::ShouldDisplayEntryPoint(
           tab_strip->GetWebContentsAt(index))) {
     AddSeparator(ui::NORMAL_SEPARATOR);
 #if BUILDFLAG(IS_MAC)

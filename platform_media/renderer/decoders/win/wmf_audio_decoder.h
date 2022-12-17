@@ -18,14 +18,12 @@
 namespace media {
 
 // Decodes AAC audio streams using Windows Media Foundation library.
-class MEDIA_EXPORT WMFAudioDecoder : public AudioDecoder {
+class WMFAudioDecoder : public AudioDecoder {
  public:
   WMFAudioDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~WMFAudioDecoder() override;
   WMFAudioDecoder(const WMFAudioDecoder&) = delete;
   WMFAudioDecoder& operator=(const WMFAudioDecoder&) = delete;
-
-  static bool IsEnabled();
 
   // AudioDecoder implementation.
   void Initialize(const AudioDecoderConfig& config,

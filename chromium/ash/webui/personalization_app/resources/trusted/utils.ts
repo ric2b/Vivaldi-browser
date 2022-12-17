@@ -6,12 +6,14 @@
  * @fileoverview Utility functions to be used in trusted code.
  */
 
+import {assert} from 'chrome://resources/js/assert_ts.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {FilePath} from 'chrome://resources/mojo/mojo/public/mojom/base/file_path.mojom-webui.js';
 import {String16} from 'chrome://resources/mojo/mojo/public/mojom/base/string16.mojom-webui.js';
 import {Url} from 'chrome://resources/mojo/url/mojom/url.mojom-webui.js';
 
-import {AmbientModeAlbum, GooglePhotosPhoto, TopicSource, WallpaperImage, WallpaperLayout} from '../trusted/personalization_app.mojom-webui.js';
+import {DefaultImageSymbol, DisplayableImage, kDefaultImageSymbol} from '../common/constants.js';
+import {AmbientModeAlbum, CurrentWallpaper, GooglePhotosPhoto, TopicSource, WallpaperImage, WallpaperLayout, WallpaperType} from '../trusted/personalization_app.mojom-webui.js';
 
 
 export function isWallpaperImage(obj: any): obj is WallpaperImage {
@@ -22,10 +24,64 @@ export function isFilePath(obj: any): obj is FilePath {
   return !!obj && typeof obj.path === 'string' && obj.path;
 }
 
+export function isDefaultImage(obj: any): obj is DefaultImageSymbol {
+  return obj === kDefaultImageSymbol;
+}
+
 /** Checks whether |obj| is an instance of |GooglePhotosPhoto|. */
 export function isGooglePhotosPhoto(obj: any): obj is GooglePhotosPhoto {
   return !!obj && typeof obj.id === 'string';
 }
+
+/** Returns whether |image| is a match for the specified |key|. */
+export function isImageAMatchForKey(
+    image: DisplayableImage, key: string|DefaultImageSymbol): boolean {
+  if (isWallpaperImage(image)) {
+    return key === image.assetId.toString();
+  }
+  if (isDefaultImage(image)) {
+    return key === kDefaultImageSymbol;
+  }
+  if (isFilePath(image)) {
+    // TODO(b/229420564): Update key extraction for local images.
+    return key === image.path.substr(image.path.lastIndexOf('/') + 1);
+  }
+  assert(isGooglePhotosPhoto(image));
+  // NOTE: Old clients may not support |dedupKey| when setting Google Photos
+  // wallpaper, so use |id| in such cases for backwards compatibility.
+  return (image.dedupKey && key === image.dedupKey) || key === image.id;
+}
+
+/**
+ * Compare an image from the list of selectable images with the currently
+ * selected user wallpaper.
+ * @param image a selectable image that the user can choose
+ * @param selected currently selected user walpaper
+ * @return boolean whether they are considered the same image
+ */
+export function isImageEqualToSelected(
+    image: DisplayableImage, selected: CurrentWallpaper): boolean {
+  if (isDefaultImage(image)) {
+    // Special case for default images. Mojom generated code for type
+    // |CurrentWallpaper.key| cannot include javascript symbols.
+    return selected.type === WallpaperType.kDefault;
+  }
+  return isImageAMatchForKey(image, selected.key);
+}
+
+/**
+ * Subtly different than |getImageKey|, which returns just the file part of the
+ * path. |getPathOrSymbol| returns the whole path for local images.
+ */
+export function getPathOrSymbol(image: FilePath|DefaultImageSymbol): string|
+    DefaultImageSymbol {
+  if (isFilePath(image)) {
+    return image.path;
+  }
+  assert(image === kDefaultImageSymbol, 'only one symbol should be present');
+  return image;
+}
+
 
 /**
  * Convert a string layout value to the corresponding enum.

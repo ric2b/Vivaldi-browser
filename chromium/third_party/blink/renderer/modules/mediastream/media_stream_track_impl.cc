@@ -71,13 +71,6 @@ namespace blink {
 
 namespace {
 
-static const char kContentHintStringNone[] = "";
-static const char kContentHintStringAudioSpeech[] = "speech";
-static const char kContentHintStringAudioMusic[] = "music";
-static const char kContentHintStringVideoMotion[] = "motion";
-static const char kContentHintStringVideoDetail[] = "detail";
-static const char kContentHintStringVideoText[] = "text";
-
 // The set of constrainable properties for image capture is available at
 // https://w3c.github.io/mediacapture-image/#constrainable-properties
 // TODO(guidou): Integrate image-capture constraints processing with the
@@ -206,9 +199,7 @@ void DidCloneMediaStreamTrack(MediaStreamComponent* original,
 
   switch (clone->Source()->GetType()) {
     case MediaStreamSource::kTypeAudio:
-      // TODO(crbug.com/704136): Use per thread task runner.
-      MediaStreamUtils::CreateNativeAudioMediaStreamTrack(
-          clone, Thread::MainThread()->GetTaskRunner());
+      MediaStreamAudioSource::From(clone->Source())->ConnectToTrack(clone);
       break;
     case MediaStreamSource::kTypeVideo:
       CloneNativeVideoMediaStreamTrack(original, clone);
@@ -249,12 +240,6 @@ MediaStreamTrack* MediaStreamTrackImpl::Create(ExecutionContext* context,
       (display_surface_type == media::mojom::DisplayCaptureSurfaceType::WINDOW);
 
   if (is_tab_capture && RuntimeEnabledFeatures::RegionCaptureEnabled(context)) {
-    // Note:
-    // * ConditionalFocus is `implied_by` RegionCapture.
-    // * BrowserCaptureMediaStreamTrack a subclass of FocusableMediaStreamTrack.
-    // Therefore, tab-capture with ConditionalFocus/RegionCapture active
-    // instantiates a track on which focus() is exposed - as intended.
-    DCHECK(RuntimeEnabledFeatures::ConditionalFocusEnabled(context));
     return MakeGarbageCollected<BrowserCaptureMediaStreamTrack>(
         context, component, std::move(callback), descriptor_id);
   } else if ((is_tab_capture || is_window_capture) &&
@@ -375,24 +360,7 @@ bool MediaStreamTrackImpl::muted() const {
 }
 
 String MediaStreamTrackImpl::ContentHint() const {
-  WebMediaStreamTrack::ContentHintType hint = component_->ContentHint();
-  switch (hint) {
-    case WebMediaStreamTrack::ContentHintType::kNone:
-      return kContentHintStringNone;
-    case WebMediaStreamTrack::ContentHintType::kAudioSpeech:
-      return kContentHintStringAudioSpeech;
-    case WebMediaStreamTrack::ContentHintType::kAudioMusic:
-      return kContentHintStringAudioMusic;
-    case WebMediaStreamTrack::ContentHintType::kVideoMotion:
-      return kContentHintStringVideoMotion;
-    case WebMediaStreamTrack::ContentHintType::kVideoDetail:
-      return kContentHintStringVideoDetail;
-    case WebMediaStreamTrack::ContentHintType::kVideoText:
-      return kContentHintStringVideoText;
-  }
-
-  NOTREACHED();
-  return String();
+  return ContentHintToString(component_->ContentHint());
 }
 
 void MediaStreamTrackImpl::SetContentHint(const String& hint) {
@@ -438,19 +406,7 @@ void MediaStreamTrackImpl::SetContentHint(const String& hint) {
 String MediaStreamTrackImpl::readyState() const {
   if (Ended())
     return "ended";
-
-  // Although muted is tracked as a ReadyState, only "live" and "ended" are
-  // visible externally.
-  switch (ready_state_) {
-    case MediaStreamSource::kReadyStateLive:
-    case MediaStreamSource::kReadyStateMuted:
-      return "live";
-    case MediaStreamSource::kReadyStateEnded:
-      return "ended";
-  }
-
-  NOTREACHED();
-  return String();
+  return ReadyStateToString(ready_state_);
 }
 
 void MediaStreamTrackImpl::setReadyState(
@@ -474,6 +430,13 @@ void MediaStreamTrackImpl::stopTrack(ExecutionContext* execution_context) {
   SendLogMessage(String::Format("%s()", __func__));
   if (Ended())
     return;
+
+  if (auto* track = Component()->GetPlatformTrack()) {
+    // Synchronously disable the platform track to prevent media from flowing,
+    // even if the stopTrack() below is completed asynchronously.
+    // See https://crbug.com/1320312.
+    track->SetEnabled(false);
+  }
 
   setReadyState(MediaStreamSource::kReadyStateEnded);
   feature_handle_for_scheduler_.reset();
@@ -747,15 +710,22 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
 
   auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
   ScriptPromise promise = resolver->Promise();
+  applyConstraints(resolver, constraints);
+  return promise;
+}
 
+void MediaStreamTrackImpl::applyConstraints(
+    ScriptPromiseResolver* resolver,
+    const MediaTrackConstraints* constraints) {
   MediaErrorState error_state;
-  ExecutionContext* execution_context = ExecutionContext::From(script_state);
+  ExecutionContext* execution_context =
+      ExecutionContext::From(resolver->GetScriptState());
   MediaConstraints web_constraints = media_constraints_impl::Create(
       execution_context, constraints, error_state);
   if (error_state.HadException()) {
     resolver->Reject(
         OverconstrainedError::Create(String(), "Cannot parse constraints"));
-    return promise;
+    return;
   }
 
   if (image_capture_) {
@@ -766,7 +736,7 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
           String(),
           "Mixing ImageCapture and non-ImageCapture "
           "constraints is not currently supported"));
-      return promise;
+      return;
     }
 
     if (ConstraintsAreEmpty(constraints)) {
@@ -776,7 +746,7 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
       image_capture_->ClearMediaTrackConstraints();
     } else if (ConstraintsHaveImageCapture(constraints)) {
       applyConstraintsImageCapture(resolver, constraints);
-      return promise;
+      return;
     }
   }
 
@@ -787,7 +757,7 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
   if (ConstraintsAreEmpty(constraints)) {
     SetConstraints(web_constraints);
     resolver->Resolve();
-    return promise;
+    return;
   }
 
   UserMediaController* user_media =
@@ -795,12 +765,12 @@ ScriptPromise MediaStreamTrackImpl::applyConstraints(
   if (!user_media) {
     resolver->Reject(OverconstrainedError::Create(
         String(), "Cannot apply constraints due to unexpected error"));
-    return promise;
+    return;
   }
 
   user_media->ApplyConstraints(MakeGarbageCollected<ApplyConstraintsRequest>(
       Component(), web_constraints, resolver));
-  return promise;
+  return;
 }
 
 void MediaStreamTrackImpl::applyConstraintsImageCapture(
@@ -970,7 +940,8 @@ void MediaStreamTrackImpl::EnsureFeatureHandleForScheduler() {
   feature_handle_for_scheduler_ =
       window->GetFrame()->GetFrameScheduler()->RegisterFeature(
           SchedulingPolicy::Feature::kWebRTC,
-          SchedulingPolicy::DisableAggressiveThrottling());
+          {SchedulingPolicy::DisableAggressiveThrottling(),
+           SchedulingPolicy::DisableAlignWakeUps()});
 }
 
 void MediaStreamTrackImpl::AddObserver(MediaStreamTrack::Observer* observer) {

@@ -4,9 +4,14 @@
 
 #include "chrome/browser/commerce/shopping_service_factory.h"
 
+#include "chrome/browser/bookmarks/bookmark_model_factory.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
+#include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/incognito_helpers.h"
+#include "chrome/browser/profiles/profile.h"
 #include "components/commerce/core/shopping_service.h"
 #include "components/keyed_service/content/browser_context_dependency_manager.h"
+#include "components/prefs/pref_service.h"
 
 namespace commerce {
 
@@ -33,16 +38,27 @@ ShoppingService* ShoppingServiceFactory::GetForBrowserContextIfExists(
 ShoppingServiceFactory::ShoppingServiceFactory()
     : BrowserContextKeyedServiceFactory(
           "ShoppingService",
-          BrowserContextDependencyManager::GetInstance()) {}
+          BrowserContextDependencyManager::GetInstance()) {
+  DependsOn(BookmarkModelFactory::GetInstance());
+  DependsOn(OptimizationGuideKeyedServiceFactory::GetInstance());
+}
 
 KeyedService* ShoppingServiceFactory::BuildServiceInstanceFor(
     content::BrowserContext* context) const {
-  return new ShoppingService();
+  Profile* profile = Profile::FromBrowserContext(context);
+  PrefService* prefs = profile ? profile->GetPrefs() : nullptr;
+  return new ShoppingService(
+      BookmarkModelFactory::GetInstance()->GetForBrowserContext(context),
+      OptimizationGuideKeyedServiceFactory::GetForProfile(profile), prefs);
 }
 
 content::BrowserContext* ShoppingServiceFactory::GetBrowserContextToUse(
     content::BrowserContext* context) const {
   return chrome::GetBrowserContextRedirectedInIncognito(context);
+}
+
+bool ShoppingServiceFactory::ServiceIsCreatedWithBrowserContext() const {
+  return true;
 }
 
 bool ShoppingServiceFactory::ServiceIsNULLWhileTesting() const {

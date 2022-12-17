@@ -710,7 +710,7 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::LayoutRow(
     // lowest value of those. This will serve as the column stretch amount, if
     // we determine that stretching them is necessary and possible (column
     // balancing).
-    LayoutUnit minimal_space_shortage(LayoutUnit::Max());
+    absl::optional<LayoutUnit> minimal_space_shortage;
 
     min_break_appeal = absl::nullopt;
 
@@ -739,10 +739,12 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::LayoutRow(
       LogicalOffset logical_offset(column_inline_offset, row_offset);
       new_columns.emplace_back(result, logical_offset);
 
-      LayoutUnit space_shortage = result->MinimalSpaceShortage();
-      if (space_shortage > LayoutUnit()) {
+      absl::optional<LayoutUnit> space_shortage =
+          result->MinimalSpaceShortage();
+      if (space_shortage && *space_shortage > LayoutUnit()) {
         minimal_space_shortage =
-            std::min(minimal_space_shortage, space_shortage);
+            std::min(minimal_space_shortage.value_or(LayoutUnit::Max()),
+                     *space_shortage);
       }
       actual_column_count++;
 
@@ -757,7 +759,7 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::LayoutRow(
       if (result->HasForcedBreak())
         forced_break_count++;
 
-      column_break_token = To<NGBlockBreakToken>(column.BreakToken());
+      column_break_token = column.BreakToken();
 
       // If we're participating in an outer fragmentation context, we'll only
       // allow as many columns as the used value of column-count, so that we
@@ -848,14 +850,8 @@ const NGLayoutResult* NGColumnLayoutAlgorithm::LayoutRow(
         break;
       new_column_block_size = FragmentainerSpaceAtBfcStart(ConstraintSpace());
     } else {
-      // minimal_space_shortage should be set to something meaningful during
-      // layout, but if the column block-size was already "infinite", that's not
-      // possible. We'll then stay at "infinite" block-size and break out of the
-      // loop, since we're not able to get any taller columns.
-      DCHECK(minimal_space_shortage != LayoutUnit::Max() ||
-             column_size.block_size == LayoutUnit::Max());
-
-      new_column_block_size = column_size.block_size + minimal_space_shortage;
+      new_column_block_size = column_size.block_size +
+                              minimal_space_shortage.value_or(LayoutUnit());
     }
     new_column_block_size =
         ConstrainColumnBlockSize(new_column_block_size, row_offset);
@@ -1242,7 +1238,7 @@ LayoutUnit NGColumnLayoutAlgorithm::CalculateBalancedColumnBlockSizeInternal(
     if (result->HasForcedBreak())
       forced_break_count++;
 
-    break_token = To<NGBlockBreakToken>(fragment.BreakToken());
+    break_token = fragment.BreakToken();
   } while (break_token);
 
   if (ConstraintSpace().IsInitialColumnBalancingPass()) {

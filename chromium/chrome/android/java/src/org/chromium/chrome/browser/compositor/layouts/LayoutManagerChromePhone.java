@@ -9,7 +9,6 @@ import android.view.ViewGroup;
 
 import org.chromium.base.jank_tracker.JankTracker;
 import org.chromium.base.supplier.ObservableSupplier;
-import org.chromium.base.supplier.OneshotSupplierImpl;
 import org.chromium.base.supplier.Supplier;
 import org.chromium.chrome.browser.compositor.LayerTitleCache;
 import org.chromium.chrome.browser.compositor.layouts.content.TabContentManager;
@@ -54,20 +53,20 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
      * Creates an instance of a {@link LayoutManagerChromePhone}.
      * @param host         A {@link LayoutManagerHost} instance.
      * @param contentContainer A {@link ViewGroup} for Android views to be bound to.
-     * @param startSurface An interface to talk to the Grid Tab Switcher. If it's NULL, VTS
-     *                     should be used, otherwise GTS should be used.
+     * @param startSurfaceSupplier Supplier for an interface to talk to the Grid Tab Switcher. Used
+     *         to create overviewLayout if it has value, otherwise will use the accessibility
+     *         overview layout.
      * @param tabContentManagerSupplier Supplier of the {@link TabContentManager} instance.
-     * @param overviewModeBehaviorSupplier Supplier of the {@link OverviewModeBehavior}.
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
+     * @param jankTracker tracker for surface jank.
      */
     public LayoutManagerChromePhone(LayoutManagerHost host, ViewGroup contentContainer,
-            StartSurface startSurface,
+            Supplier<StartSurface> startSurfaceSupplier,
             ObservableSupplier<TabContentManager> tabContentManagerSupplier,
-            OneshotSupplierImpl<OverviewModeBehavior> overviewModeBehaviorSupplier,
             Supplier<TopUiThemeColorProvider> topUiThemeColorProvider, JankTracker jankTracker,
             ActivityLifecycleDispatcher lifecycleDispatcher) { // Vivaldi
-        super(host, contentContainer, true, startSurface, tabContentManagerSupplier,
-                overviewModeBehaviorSupplier, topUiThemeColorProvider, jankTracker, null, null);
+        super(host, contentContainer, startSurfaceSupplier, tabContentManagerSupplier,
+                topUiThemeColorProvider, jankTracker, null, null);
 
         // Note(david@vivaldi.com): We create two tab strips here. The first one is the main strip.
         // The second one is the stack strip.
@@ -87,12 +86,6 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
         };
         SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
         updateGlobalSceneOverlay();
-    }
-
-    @Override
-    protected void tabModelSwitched(boolean incognito) {
-        super.tabModelSwitched(incognito);
-        getTabModelSelector().commitAllTabClosures();
     }
 
     @Override
@@ -196,7 +189,7 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
             // smoothly.
             getActiveLayout().onTabCreating(sourceId);
         } else if (animationsEnabled()) {
-            if (!overviewVisible()) {
+            if (!isLayoutVisible(LayoutType.TAB_SWITCHER)) {
                 if (getActiveLayout() != null && getActiveLayout().isStartingToHide()) {
                     setNextLayout(mSimpleAnimationLayout, true);
                     // The method Layout#doneHiding() will automatically show the next layout.
@@ -290,6 +283,12 @@ public class LayoutManagerChromePhone extends LayoutManagerChrome {
     public void releaseResourcesForTab(int tabId) {
         super.releaseResourcesForTab(tabId);
         mLayerTitleCache.remove(tabId);
+    }
+
+    @Override
+    protected void tabModelSwitched(boolean incognito) {
+        super.tabModelSwitched(incognito);
+        getTabModelSelector().commitAllTabClosures();
     }
 
     /** Vivaldi **/

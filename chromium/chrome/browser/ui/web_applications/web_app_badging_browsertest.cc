@@ -15,6 +15,7 @@
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/browser/web_applications/web_app_registrar.h"
@@ -57,7 +58,7 @@ class WebAppBadgingBrowserTest : public WebAppControllerBrowserTest {
     auto sub_app_info = std::make_unique<WebAppInstallInfo>();
     sub_app_info->start_url = sub_start_url;
     sub_app_info->scope = sub_start_url;
-    sub_app_info->user_display_mode = DisplayMode::kStandalone;
+    sub_app_info->user_display_mode = UserDisplayMode::kStandalone;
     sub_app_id_ = InstallWebApp(std::move(sub_app_info));
 
     content::WebContents* web_contents = OpenApplication(main_app_id_);
@@ -69,7 +70,7 @@ class WebAppBadgingBrowserTest : public WebAppControllerBrowserTest {
     auto frames = CollectAllRenderFrameHosts(web_contents->GetPrimaryPage());
     ASSERT_EQ(4u, frames.size());
 
-    main_frame_ = web_contents->GetMainFrame();
+    main_frame_ = web_contents->GetPrimaryMainFrame();
     for (auto* frame : frames) {
       if (frame->GetLastCommittedURL() == sub_start_url) {
         sub_app_frame_ = frame;
@@ -475,7 +476,7 @@ IN_PROC_BROWSER_TEST_F(WebAppBadgingBrowserTest,
       OpenURLOffTheRecord(profile(), main_frame_->GetLastCommittedURL());
   RenderFrameHost* incognito_frame = incognito_browser->tab_strip_model()
                                          ->GetActiveWebContents()
-                                         ->GetMainFrame();
+                                         ->GetPrimaryMainFrame();
 
   ASSERT_TRUE(
       content::ExecuteScript(incognito_frame, "navigator.setAppBadge()"));

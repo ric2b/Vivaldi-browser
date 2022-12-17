@@ -75,6 +75,7 @@ void BookmarkModelObserverImpl::BookmarkNodeMoved(
   // Mark the entity that it needs to be committed.
   bookmark_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
+  bookmark_tracker_->CheckAllNodesTracked(model);
 }
 
 void BookmarkModelObserverImpl::BookmarkNodeAdded(
@@ -119,6 +120,10 @@ void BookmarkModelObserverImpl::BookmarkNodeAdded(
   // Mark the entity that it needs to be committed.
   bookmark_tracker_->IncrementSequenceNumber(entity);
   nudge_for_commit_closure_.Run();
+
+  // Do not check if all nodes are tracked because it's still possible that some
+  // nodes are untracked, e.g. if current node has been just restored and its
+  // children will be added soon.
 }
 
 void BookmarkModelObserverImpl::OnWillRemoveBookmarks(
@@ -130,7 +135,7 @@ void BookmarkModelObserverImpl::OnWillRemoveBookmarks(
     return;
   }
   bookmark_tracker_->CheckAllNodesTracked(model);
-  ProcessDelete(parent, node);
+  ProcessDelete(node);
   nudge_for_commit_closure_.Run();
 }
 
@@ -147,11 +152,13 @@ void BookmarkModelObserverImpl::BookmarkNodeRemoved(
 
 void BookmarkModelObserverImpl::OnWillRemoveAllUserBookmarks(
     bookmarks::BookmarkModel* model) {
+  bookmark_tracker_->CheckAllNodesTracked(model);
   const bookmarks::BookmarkNode* root_node = model->root_node();
   for (const auto& permanent_node : root_node->children()) {
     for (const auto& child : permanent_node->children()) {
-      if (model->client()->CanSyncNode(child.get()))
-        ProcessDelete(permanent_node.get(), child.get());
+      if (model->client()->CanSyncNode(child.get())) {
+        ProcessDelete(child.get());
+      }
     }
   }
   nudge_for_commit_closure_.Run();
@@ -161,6 +168,7 @@ void BookmarkModelObserverImpl::BookmarkAllUserNodesRemoved(
     bookmarks::BookmarkModel* model,
     const std::set<GURL>& removed_urls) {
   // All the work should have already been done in OnWillRemoveAllUserBookmarks.
+  bookmark_tracker_->CheckAllNodesTracked(model);
 }
 
 void BookmarkModelObserverImpl::BookmarkNodeChanged(
@@ -261,15 +269,14 @@ void BookmarkModelObserverImpl::BookmarkNodeChildrenReordered(
 
   // The given node's children got reordered. We need to reorder all the
   // corresponding sync node.
-
-  // TODO(crbug/com/516866): Make sure that single-move case doesn't produce
-  // unnecessary updates. One approach would be something like:
+  // TODO(crbug.com/1321519): children reordering is used to move one bookmark
+  // on Android, it should be either taken into account here or another bridge
+  // interface should be provided. One approach would be something like:
   // 1. Find a subsequence of elements in the beginning of the vector that is
   //    already sorted.
   // 2. The same for the end.
   // 3. If the two overlap, adjust so they don't.
   // 4. Sort the middle, using Between (e.g. recursive implementation).
-
   syncer::UniquePosition position;
   for (const auto& child : node->children()) {
     const SyncedBookmarkTrackerEntity* entity =
@@ -386,11 +393,11 @@ void BookmarkModelObserverImpl::ProcessUpdate(
 }
 
 void BookmarkModelObserverImpl::ProcessDelete(
-    const bookmarks::BookmarkNode* parent,
     const bookmarks::BookmarkNode* node) {
   // If not a leaf node, process all children first.
-  for (const auto& child : node->children())
-    ProcessDelete(node, child.get());
+  for (const auto& child : node->children()) {
+    ProcessDelete(child.get());
+  }
   // Process the current node.
   const SyncedBookmarkTrackerEntity* entity =
       bookmark_tracker_->GetEntityForBookmarkNode(node);

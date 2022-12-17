@@ -147,6 +147,7 @@ bool ImportantFileWriter::WriteFileAtomicallyImpl(const FilePath& path,
                                                   StringPiece data,
                                                   StringPiece histogram_suffix,
                                                   bool from_instance) {
+  const TimeTicks write_start = TimeTicks::Now();
   if (!from_instance)
     ImportantFileWriterCleaner::AddDirectory(path.DirName());
 
@@ -192,7 +193,8 @@ bool ImportantFileWriter::WriteFileAtomicallyImpl(const FilePath& path,
   int bytes_written = 0;
   for (const char *scan = data.data(), *const end = scan + data.length();
        scan < end; scan += bytes_written) {
-    const int write_amount = std::min(kMaxWriteAmount, end - scan);
+    const int write_amount =
+        static_cast<int>(std::min(kMaxWriteAmount, end - scan));
     bytes_written = tmp_file.WriteAtCurrentPos(scan, write_amount);
     if (bytes_written != write_amount) {
       DPLOG(WARNING) << "Failed to write " << write_amount << " bytes to temp "
@@ -258,6 +260,10 @@ bool ImportantFileWriter::WriteFileAtomicallyImpl(const FilePath& path,
     DPLOG(WARNING) << "Failed to replace " << path << " with " << tmp_file_path;
     DeleteTmpFileWithRetry(File(), tmp_file_path);
   }
+
+  const TimeDelta write_duration = TimeTicks::Now() - write_start;
+  UmaHistogramTimesWithSuffix("ImportantFile.WriteDuration", histogram_suffix,
+                              write_duration);
 
   return result;
 }

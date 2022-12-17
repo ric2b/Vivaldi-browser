@@ -99,9 +99,13 @@ class VideoFrameHandleReleaserImpl final
 
 MojoVideoDecoderService::MojoVideoDecoderService(
     MojoMediaClient* mojo_media_client,
-    MojoCdmServiceContext* mojo_cdm_service_context)
+    MojoCdmServiceContext* mojo_cdm_service_context,
+    mojo::PendingRemote<stable::mojom::StableVideoDecoder>
+        oop_video_decoder_pending_remote)
     : mojo_media_client_(mojo_media_client),
-      mojo_cdm_service_context_(mojo_cdm_service_context) {
+      mojo_cdm_service_context_(mojo_cdm_service_context),
+      oop_video_decoder_pending_remote_(
+          std::move(oop_video_decoder_pending_remote)) {
   DVLOG(1) << __func__;
   DCHECK(mojo_media_client_);
   DCHECK(mojo_cdm_service_context_);
@@ -151,7 +155,7 @@ void MojoVideoDecoderService::Construct(
   DVLOG(1) << __func__;
   TRACE_EVENT0("media", "MojoVideoDecoderService::Construct");
 
-  if (decoder_) {
+  if (media_log_) {
     mojo::ReportBadMessage("Construct() already called");
     return;
   }
@@ -175,7 +179,7 @@ void MojoVideoDecoderService::Construct(
       task_runner, media_log_.get(), std::move(command_buffer_id),
       base::BindRepeating(
           &MojoVideoDecoderService::OnDecoderRequestedOverlayInfo, weak_this_),
-      target_color_space);
+      target_color_space, std::move(oop_video_decoder_pending_remote_));
 }
 
 void MojoVideoDecoderService::Initialize(
@@ -195,6 +199,15 @@ void MojoVideoDecoderService::Initialize(
       CdmContext::CdmIdToString(base::OptionalOrNullptr(cdm_id)));
 
   init_cb_ = std::move(callback);
+
+  // Prevent creation of too many hardware decoding instances since it may lead
+  // to system instability. Note: This will break decoding entirely for codecs
+  // which don't have software fallback, so we use a conservative limit. Most
+  // platforms will self-limit and never reach this limit.
+  if (!config.is_encrypted() && g_num_active_mvd_instances >= 128) {
+    OnDecoderInitialized(DecoderStatus::Codes::kTooManyDecoders);
+    return;
+  }
 
   if (!decoder_) {
     OnDecoderInitialized(DecoderStatus::Codes::kFailedToCreateDecoder);

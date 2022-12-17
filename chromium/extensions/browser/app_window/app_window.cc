@@ -986,7 +986,7 @@ void AppWindow::ToggleFullscreenModeForTab(content::WebContents* source,
 
   if (!IsExtensionWithPermissionOrSuggestInConsole(
           mojom::APIPermissionID::kFullscreen, extension,
-          source->GetMainFrame())) {
+          source->GetPrimaryMainFrame())) {
     return;
   }
 

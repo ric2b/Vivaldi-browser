@@ -22,6 +22,7 @@
 #include "ash/components/audio/sounds.h"
 #include "ash/constants/ash_constants.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/events/accessibility_event_rewriter.h"
 #include "ash/events/select_to_speak_event_handler.h"
 #include "ash/high_contrast/high_contrast_controller.h"
@@ -379,7 +380,7 @@ void ShowAccessibilityNotification(
           text, display_source, GURL(),
           message_center::NotifierId(
               message_center::NotifierType::SYSTEM_COMPONENT,
-              kNotifierAccessibility),
+              kNotifierAccessibility, NotificationCatalogName::kAccessibility),
           options, nullptr, GetNotificationIcon(type), warning);
   notification->set_pinned(pinned);
   message_center->AddNotification(std::move(notification));
@@ -2317,11 +2318,8 @@ void AccessibilityControllerImpl::UpdateFeatureFromPref(FeatureType feature) {
       UpdateAccessibilityHighlightingFromPrefs();
       break;
     case FeatureType::kDictation:
-      if (enabled &&
-          ::features::IsExperimentalAccessibilityDictationCommandsEnabled()) {
+      if (enabled) {
         if (!dictation_bubble_controller_) {
-          // The Dictation bubble is hidden behind a flag; only create the
-          // controller if the flag is enabled.
           dictation_bubble_controller_ =
               std::make_unique<DictationBubbleController>();
         }

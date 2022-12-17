@@ -244,11 +244,6 @@
         "type": "object",
         "description": "Identifies broadcast type. Only one property should be used.",
         "properties": {
-          "minimizeAll": {
-            "description": "Minimize all windows.",
-            "type": "boolean",
-            "optional": true
-          },
           "open": {
             "description": "Open urls in other window.",
             "type": "object",
@@ -367,6 +362,16 @@
               }
             }
           },
+          "updateMacMenu": {
+            "type": "object",
+            "optional": true,
+            "properties": {
+              "winId": {
+                "type": "number",
+                "description": "The window that needs update."
+              }
+            }
+          },
           "translate": {
             "type": "object",
             "optional": true,
@@ -382,46 +387,6 @@
               "text": {
                 "type": "string",
                 "description": "Text to be translated."
-              }
-            }
-          },
-          "windowActiveStateChanged": {
-            "optional": true,
-            "description": "A window has changed active state.",
-            "type": "object",
-            "properties": {
-              "windowId": {
-                "type": "number",
-                "description": "Identifier for the window owning the state."
-              },
-              "activated": {
-                "type": "boolean",
-                "description": "Window is active."
-              }
-            }
-          },
-          "windowAdded": {
-            "optional": true,
-            "description": "A window has been added.",
-            "type": "object",
-            "properties": {
-              "windowId": {
-                "type": "number",
-                "description": "Identifier for the window being added."
-              },
-              "windowState": {
-                "$ref": "WindowProperties"
-              }
-            }
-          },
-          "windowRemoved": {
-            "optional": true,
-            "description": "A window has been removed.",
-            "type": "object",
-            "properties": {
-              "windowId": {
-                "type": "number",
-                "description": "Identifier for the window being removed."
               }
             }
           }

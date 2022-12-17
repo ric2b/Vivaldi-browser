@@ -466,7 +466,10 @@ WebContents* GuestViewBase::GetOwnerWebContents() {
 }
 
 const GURL& GuestViewBase::GetOwnerSiteURL() const {
-  return owner_web_contents()->GetMainFrame()->GetSiteInstance()->GetSiteURL();
+  return owner_web_contents()
+      ->GetPrimaryMainFrame()
+      ->GetSiteInstance()
+      ->GetSiteURL();
 }
 
 bool GuestViewBase::ShouldDestroyOnDetach() const {
@@ -629,7 +632,7 @@ double GuestViewBase::PhysicalPixelsToLogicalPixels(int physical_pixels) const {
 
 void GuestViewBase::DidStopLoading() {
   content::RenderViewHost* rvh =
-      web_contents()->GetMainFrame()->GetRenderViewHost();
+      web_contents()->GetPrimaryMainFrame()->GetRenderViewHost();
 
   if (IsPreferredSizeModeEnabled())
     rvh->EnablePreferredSizeMode();
@@ -656,9 +659,9 @@ void GuestViewBase::WebContentsDestroyed() {
 
 void GuestViewBase::DidFinishNavigation(
     content::NavigationHandle* navigation_handle) {
-  // TODO(https://crbug.com/1218946): With MPArch there may be multiple main
-  // frames. This caller was converted automatically to the primary main frame
-  // to preserve its semantics. Follow up to confirm correctness.
+  // TODO(crbug.com/1261928): Due to the use of inner WebContents, a
+  // GuestViewBase's main frame is considered primary. This will no
+  // longer be the case once we migrate guest views to MPArch.
   if (!navigation_handle->IsInPrimaryMainFrame() ||
       !navigation_handle->HasCommitted())
     return;

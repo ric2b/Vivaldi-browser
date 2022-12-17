@@ -21,6 +21,7 @@
 #include "chrome/browser/web_applications/web_app_install_manager.h"
 #include "chrome/browser/web_applications/web_app_install_params.h"
 #include "chrome/browser/web_applications/web_app_install_utils.h"
+#include "chrome/browser/web_applications/web_app_logging.h"
 #include "chrome/browser/web_applications/web_app_url_loader.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -57,10 +58,7 @@ class WebAppInstallTask : content::WebContentsObserver {
   using RetrieveWebAppInstallInfoWithIconsCallback =
       base::OnceCallback<void(WebAppInstallInfoOrErrorCode)>;
 
-  using WebAppInstallFlow = WebAppInstallManager::WebAppInstallFlow;
-
   WebAppInstallTask(Profile* profile,
-                    WebAppInstallManager* install_manager,
                     WebAppInstallFinalizer* install_finalizer,
                     std::unique_ptr<WebAppDataRetriever> data_retriever,
                     WebAppRegistrar* registrar,
@@ -105,36 +103,20 @@ class WebAppInstallTask : content::WebContentsObserver {
       WebAppInstallDialogCallback dialog_callback,
       OnceInstallCallback callback);
 
-  // Load |launch_url| and do silent background install with
-  // |InstallWebAppFromManifestWithFallback|. Posts |LoadUrl| task to
-  // |url_loader| immediately. Doesn't memorize |url_loader| pointer.
-  void LoadAndInstallWebAppFromManifestWithFallback(
-      const GURL& launch_url,
-      content::WebContents* web_contents,
-      WebAppUrlLoader* url_loader,
-      OnceInstallCallback callback);
-
   // Load |install_url| and install SubApp. Posts |LoadUrl| task to |url_loader|
   // immediately. Doesn't memorize |url_loader| pointer.
   void LoadAndInstallSubAppFromURL(const GURL& install_url,
+                                   const AppId& expected_app_id,
                                    content::WebContents* contents,
                                    WebAppUrlLoader* url_loader,
+                                   WebAppInstallDialogCallback dialog_callback,
                                    OnceInstallCallback install_callback);
 
-  // Fetches the icon URLs in |web_application_info| to populate the icon
-  // bitmaps. Once fetched uses the contents of |web_application_info| as the
-  // entire web app installation data.
-  void InstallWebAppFromInfoRetrieveIcons(
-      content::WebContents* web_contents,
-      std::unique_ptr<WebAppInstallInfo> web_application_info,
-      WebAppInstallFinalizer::FinalizeOptions finalize_options,
-      OnceInstallCallback callback);
-
   // Starts a web app installation process using prefilled
-  // |web_application_info| which holds all the data needed for installation.
+  // |web_app_install_info| which holds all the data needed for installation.
   // WebAppInstallManager doesn't fetch a manifest.
   void InstallWebAppFromInfo(
-      std::unique_ptr<WebAppInstallInfo> web_application_info,
+      std::unique_ptr<WebAppInstallInfo> web_app_install_info,
       bool overwrite_existing_manifest_fields,
       OnceInstallCallback callback);
 
@@ -145,6 +127,22 @@ class WebAppInstallTask : content::WebContentsObserver {
   void InstallWebAppWithParams(content::WebContents* web_contents,
                                const WebAppInstallParams& install_params,
                                OnceInstallCallback callback);
+
+  // Perform installation after manifest is retrieved and validated, starts the
+  // installation flow from `OnDidPerformInstallableCheck`.
+  //
+  // When |dialog_callback| is null (aka |base::NullCallback|) the command
+  // doesn't show installation prompt in UI and installs the application in
+  // background.
+  void InstallWebAppOnManifestValidated(
+      content::WebContents* contents,
+      WebAppInstallDialogCallback dialog_callback,
+      OnceInstallCallback install_callback,
+      std::unique_ptr<WebAppInstallInfo> web_app_info,
+      blink::mojom::ManifestPtr opt_manifest,
+      const GURL& manifest_url,
+      WebAppInstallFlow flow,
+      absl::optional<WebAppInstallParams> install_params);
 
   // Obtains WebAppInstallInfo about web app located at |start_url|, fallbacks
   // to title/favicon if manifest is not present.
@@ -176,6 +174,10 @@ class WebAppInstallTask : content::WebContentsObserver {
 
   void SetFlowForTesting(WebAppInstallFlow flow) { flow_ = flow; }
 
+  static void UpdateFinalizerClientData(
+      const absl::optional<WebAppInstallParams>& params,
+      WebAppInstallFinalizer::FinalizeOptions* options);
+
  private:
   void CheckInstallPreconditions();
   void RecordInstallEvent();
@@ -205,11 +207,6 @@ class WebAppInstallTask : content::WebContentsObserver {
                                      bool is_installable);
 
   void OnGetWebAppInstallInfo(std::unique_ptr<WebAppInstallInfo> web_app_info);
-
-  // Makes amendments to |web_app_info| based on the options set in
-  // |install_params|.
-  void ApplyParamsToWebAppInstallInfo(const WebAppInstallParams& install_params,
-                                      WebAppInstallInfo& web_app_info);
 
   void OnDidPerformInstallableCheck(
       std::unique_ptr<WebAppInstallInfo> web_app_info,
@@ -278,25 +275,7 @@ class WebAppInstallTask : content::WebContentsObserver {
       IconsDownloadedResult result,
       const DownloadedIconsHttpResults& icons_http_results);
 
-  void LogHeaderIfLogEmpty(const std::string& url);
-  void LogErrorObject(const char* stage,
-                      const std::string& url,
-                      base::Value object);
-
-  void LogUrlLoaderError(const char* stage,
-                         const std::string& url,
-                         WebAppUrlLoader::Result result);
-  void LogExpectedAppIdError(const char* stage,
-                             const std::string& url,
-                             const AppId& app_id);
-  void LogDownloadedIconsErrors(
-      const WebAppInstallInfo& web_app_info,
-      IconsDownloadedResult icons_downloaded_result,
-      const IconsMap& icons_map,
-      const DownloadedIconsHttpResults& icons_http_results);
-
   std::unique_ptr<WebAppDataRetriever> data_retriever_;
-  raw_ptr<WebAppInstallManager> install_manager_;
   raw_ptr<WebAppInstallFinalizer> install_finalizer_;
   const raw_ptr<Profile> profile_;
   raw_ptr<WebAppRegistrar> registrar_;
@@ -309,7 +288,7 @@ class WebAppInstallTask : content::WebContentsObserver {
 
   // Whether we should just obtain WebAppInstallInfo instead of the actual
   // installation.
-  bool only_retrieve_web_application_info_ = false;
+  bool only_retrieve_web_app_install_info_ = false;
 
   WebAppInstallDialogCallback dialog_callback_;
   OnceInstallCallback install_callback_;
@@ -318,10 +297,10 @@ class WebAppInstallTask : content::WebContentsObserver {
   absl::optional<AppId> expected_app_id_;
   bool background_installation_ = false;
 
-  absl::optional<WebAppInstallInfo> web_application_info_;
+  absl::optional<WebAppInstallInfo> web_app_install_info_;
   std::unique_ptr<content::WebContents> web_contents_;
 
-  std::unique_ptr<base::Value> error_dict_;
+  InstallErrorLogEntry log_entry_;
 
   // TODO(crbug.com/1216457): Make this enum const and set its value in the
   // constructor.

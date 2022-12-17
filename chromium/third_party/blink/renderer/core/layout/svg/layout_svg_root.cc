@@ -188,7 +188,7 @@ LayoutUnit LayoutSVGRoot::ComputeReplacedLogicalHeight(
 
 double LayoutSVGRoot::LogicalSizeScaleFactorForPercentageLengths() const {
   NOT_DESTROYED();
-  if (!IsDocumentElement() || !GetDocument().IsInMainFrame())
+  if (!IsDocumentElement() || !GetDocument().IsInOutermostMainFrame())
     return 1;
   if (GetDocument().GetLayoutView()->ShouldUsePrintingLayout())
     return 1;
@@ -286,7 +286,8 @@ bool LayoutSVGRoot::ShouldApplyViewportClip() const {
   // scrollbars should be hidden if overflow=hidden.
   return StyleRef().OverflowX() == EOverflow::kHidden ||
          StyleRef().OverflowX() == EOverflow::kAuto ||
-         StyleRef().OverflowX() == EOverflow::kScroll || IsDocumentElement();
+         StyleRef().OverflowX() == EOverflow::kScroll ||
+         StyleRef().OverflowX() == EOverflow::kClip || IsDocumentElement();
 }
 
 void LayoutSVGRoot::RecalcVisualOverflow() {

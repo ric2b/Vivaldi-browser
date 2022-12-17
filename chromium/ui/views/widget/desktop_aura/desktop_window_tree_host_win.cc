@@ -191,7 +191,7 @@ void DesktopWindowTreeHostWin::Init(const Widget::InitParams& params) {
   // We don't have an HWND yet, so scale relative to the nearest screen.
   gfx::Rect pixel_bounds =
       display::win::ScreenWin::DIPToScreenRect(nullptr, params.bounds);
-  message_handler_->Init(parent_hwnd, pixel_bounds);
+  message_handler_->Init(parent_hwnd, pixel_bounds, params.headless_mode);
   CreateCompositor(params.force_software_compositing);
   OnAcceleratedWidgetAvailable();
   InitHost();
@@ -522,7 +522,7 @@ void DesktopWindowTreeHostWin::SetFullscreen(bool fullscreen) {
 }
 
 bool DesktopWindowTreeHostWin::IsFullscreen() const {
-  return message_handler_->fullscreen_handler()->fullscreen();
+  return message_handler_->IsFullscreen();
 }
 
 void DesktopWindowTreeHostWin::SetOpacity(float opacity) {
@@ -1172,6 +1172,17 @@ void DesktopWindowTreeHostWin::HandleWindowScaleFactorChanged(
 DesktopNativeCursorManager*
 DesktopWindowTreeHostWin::GetSingletonDesktopNativeCursorManager() {
   return new DesktopNativeCursorManagerWin();
+}
+
+void DesktopWindowTreeHostWin::SetBoundsInDIP(const gfx::Rect& bounds) {
+  // The window parameter is intentionally passed as nullptr on Windows because
+  // a non-null window parameter causes errors when restoring windows to saved
+  // positions in variable-DPI situations. See https://crbug.com/1224715 for
+  // details.
+  aura::Window* root = nullptr;
+  const gfx::Rect bounds_in_pixels =
+      display::Screen::GetScreen()->DIPToScreenRectInWindow(root, bounds);
+  AsWindowTreeHost()->SetBoundsInPixels(bounds_in_pixels);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

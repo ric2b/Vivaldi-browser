@@ -23,6 +23,8 @@
 #include "components/guest_view/browser/guest_view_base.h"
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 // Used to handle upgrading/fallback for tests using EmbeddedTestServer which
@@ -86,6 +88,7 @@ void HttpsOnlyModeUpgradeInterceptor::MaybeCreateLoader(
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // If this is a GuestView (e.g., Chrome Apps <webview>) then HTTPS-First Mode
   // should not apply. See crbug.com/1233889 for more details.
+  if (!vivaldi::IsVivaldiRunning())
   if (guest_view::GuestViewBase::IsGuest(web_contents)) {
     std::move(callback).Run({});
     return;

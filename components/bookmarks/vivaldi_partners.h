@@ -35,6 +35,8 @@ struct PartnerDetails {
   base::GUID guid;
   base::GUID guid2;
   std::string thumbnail;
+  std::string favicon;
+  std::string favicon_url;
   bool folder = false;
   bool speeddial = false;
 };

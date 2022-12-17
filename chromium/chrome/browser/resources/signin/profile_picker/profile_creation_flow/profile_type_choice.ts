@@ -5,7 +5,7 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_icon_button/cr_icon_button.m.js';
 import 'chrome://resources/cr_elements/shared_vars_css.m.js';
-import './shared_css.js';
+import './profile_creation_shared.css.js';
 
 import {CrButtonElement} from 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import {assert} from 'chrome://resources/js/assert.m.js';
@@ -143,7 +143,7 @@ export class ProfileTypeChoiceElement extends ProfileTypeChoiceElementBase {
     // Explicitly record the page visit as this step is not pushed to the
     // history stack.
     recordPageVisited(ProfileCreationSteps.LOAD_SIGNIN);
-    this.manageProfilesBrowserProxy_.loadSignInProfileCreationFlow(
+    this.manageProfilesBrowserProxy_.selectAccountLacros(
         this.profileThemeInfo.color, '');
   }
 

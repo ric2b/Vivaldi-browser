@@ -52,6 +52,7 @@
 #include "third_party/blink/public/common/input/web_input_event_attribution.h"
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/blob/blob_url_store.mojom-blink.h"
+#include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-blink.h"
 #include "third_party/blink/public/mojom/favicon/favicon_url.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom-blink.h"
@@ -1445,6 +1446,19 @@ bool LocalFrame::ShouldThrottleRendering() const {
   return View() && View()->ShouldThrottleRendering();
 }
 
+void LocalFrame::PortalStateChanged() {
+  if (Document* document = GetDocument())
+    document->ClearAXObjectCache();
+
+  if (IsOutermostMainFrame()) {
+    intersection_state_.occlusion_state =
+        mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded;
+  } else {
+    intersection_state_.occlusion_state =
+        mojom::blink::FrameOcclusionState::kUnknown;
+  }
+}
+
 LocalFrame::LocalFrame(LocalFrameClient* client,
                        Page& page,
                        FrameOwner* owner,
@@ -1519,10 +1533,15 @@ LocalFrame::LocalFrame(LocalFrameClient* client,
   attribution_src_loader_ = MakeGarbageCollected<AttributionSrcLoader>(this);
   inspector_task_runner_->InitIsolate(isolate);
 
+  if (IsOutermostMainFrame()) {
+    intersection_state_.occlusion_state =
+        mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded;
+  }
+
   DCHECK(ad_tracker_ ? RuntimeEnabledFeatures::AdTaggingEnabled()
                      : !RuntimeEnabledFeatures::AdTaggingEnabled());
 
-  absl::optional<AdTracker::AdScriptIdentifier> ad_script_on_stack;
+  absl::optional<AdScriptIdentifier> ad_script_on_stack;
   // See SubresourceFilterAgent::Initialize for why we don't set this here for
   // fenced frames.
   is_subframe_created_by_ad_script_ =
@@ -2072,9 +2091,13 @@ bool LocalFrame::ClipsContent() const {
 void LocalFrame::SetViewportIntersectionFromParent(
     const mojom::blink::ViewportIntersectionState& intersection_state) {
   DCHECK(IsLocalRoot());
-  // Notify the render frame observers when the main frame intersection changes.
+  DCHECK(!IsOutermostMainFrame());
+  // Notify the render frame observers when the main frame intersection or the
+  // transform changes.
   if (intersection_state_.main_frame_intersection !=
-      intersection_state.main_frame_intersection) {
+          intersection_state.main_frame_intersection ||
+      intersection_state_.main_frame_transform !=
+          intersection_state.main_frame_transform) {
     gfx::RectF transform_rect =
         gfx::RectF(gfx::Rect(intersection_state.main_frame_intersection));
 
@@ -2115,13 +2138,12 @@ gfx::Size LocalFrame::GetMainFrameViewportSize() const {
              : local_root.intersection_state_.main_frame_viewport_size;
 }
 
-gfx::Point LocalFrame::GetMainFrameScrollOffset() const {
+gfx::Point LocalFrame::GetMainFrameScrollPosition() const {
   LocalFrame& local_root = LocalFrameRoot();
   return local_root.IsMainFrame()
-             // TODO(crbug.com/1274078): Should this return ScrollPosition()?
-             ? gfx::ToFlooredPoint(gfx::PointAtOffsetFromOrigin(
-                   local_root.View()->GetScrollableArea()->GetScrollOffset()))
-             : local_root.intersection_state_.main_frame_scroll_offset;
+             ? gfx::ToFlooredPoint(
+                   local_root.View()->LayoutViewport()->ScrollPosition())
+             : local_root.intersection_state_.main_frame_scroll_position;
 }
 
 void LocalFrame::SetOpener(Frame* opener_frame) {
@@ -2142,9 +2164,6 @@ void LocalFrame::SetOpener(Frame* opener_frame) {
 mojom::blink::FrameOcclusionState LocalFrame::GetOcclusionState() const {
   if (hidden_)
     return mojom::blink::FrameOcclusionState::kPossiblyOccluded;
-  // TODO(dcheng): Get rid of this branch for the main frame.
-  if (IsMainFrame())
-    return mojom::blink::FrameOcclusionState::kGuaranteedNotOccluded;
   if (IsLocalRoot())
     return intersection_state_.occlusion_state;
   return LocalFrameRoot().GetOcclusionState();
@@ -2177,16 +2196,19 @@ void LocalFrame::ForceSynchronousDocumentInstall(
           .WithWindow(DomWindow(), nullptr)
           .WithTypeFrom(mime_type)
           .ForPrerendering(GetPage()->IsPrerendering()));
+  DCHECK_EQ(document, GetDocument());
   DocumentParser* parser = document->OpenForNavigation(
       kForceSynchronousParsing, mime_type, AtomicString("UTF-8"));
   for (const auto& segment : *data)
     parser->AppendBytes(segment.data(), segment.size());
   parser->Finish();
 
-  // Upon loading of SVGImages, log PageVisits in UseCounter.
+  // Upon loading of SVGImages, log PageVisits in UseCounter if we did not
+  // replace the document in `parser->Finish()`, which may happen when XSLT
+  // finishes processing.
   // Do not track PageVisits for inspector, web page popups, and validation
   // message overlays (the other callers of this method).
-  if (document->IsSVGDocument())
+  if (document == GetDocument() && document->IsSVGDocument())
     loader_.GetDocumentLoader()->GetUseCounter().DidCommitLoad(this);
 }
 
@@ -2614,8 +2636,10 @@ void LocalFrame::CountUseIfFeatureWouldBeBlockedByPermissionsPolicy(
   const SecurityOrigin* topOrigin =
       Tree().Top().GetSecurityContext()->GetSecurityOrigin();
 
-  // Check if this frame is same-origin with the top-level
-  if (!GetSecurityContext()->GetSecurityOrigin()->CanAccess(topOrigin)) {
+  // Check if this frame is same-origin with the top-level or is in
+  // a fenced frame tree.
+  if (!GetSecurityContext()->GetSecurityOrigin()->CanAccess(topOrigin) ||
+      IsInFencedFrameTree()) {
     // This frame is cross-origin with the top-level frame, and so would be
     // blocked without a permissions policy.
     UseCounter::Count(GetDocument(), blocked_cross_origin);
@@ -3025,7 +3049,7 @@ void LocalFrame::AdvanceFocusForIME(mojom::blink::FocusType focus_type) {
     return;
 
   next_element->scrollIntoViewIfNeeded(true /*centerIfNeeded*/);
-  next_element->focus();
+  next_element->Focus();
 }
 
 void LocalFrame::PostMessageEvent(
@@ -3067,7 +3091,7 @@ void LocalFrame::PostMessageEvent(
   message_event->initMessageEvent(
       "message", false, false, std::move(message.message), source_origin,
       "" /*lastEventId*/, window, ports, user_activation,
-      message.delegate_payment_request);
+      message.delegated_capability);
 
   // If the agent cluster id had a value it means this was locked when it
   // was serialized.
@@ -3202,8 +3226,10 @@ void LocalFrame::WriteIntoTrace(perfetto::TracedValue ctx) const {
   perfetto::TracedDictionary dict = std::move(ctx).WriteDictionary();
   dict.Add("document", GetDocument());
   dict.Add("is_main_frame", IsMainFrame());
-  dict.Add("is_cross_origin_to_parent", IsCrossOriginToParentFrame());
-  dict.Add("is_cross_origin_to_main_frame", IsCrossOriginToMainFrame());
+  dict.Add("is_outermost_main_frame", IsOutermostMainFrame());
+  dict.Add("is_cross_origin_to_parent", IsCrossOriginToParentOrOuterDocument());
+  dict.Add("is_cross_origin_to_outermost_main_frame",
+           IsCrossOriginToOutermostMainFrame());
 }
 
 }  // namespace blink

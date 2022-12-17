@@ -6,6 +6,7 @@ namespace sessions {
 
 LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     LiveTabContext* existing_context,
+    SessionWindow::WindowType type,
     const std::string& app_name,
     const gfx::Rect& bounds,
     ui::WindowShowState show_state,
@@ -13,13 +14,14 @@ LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data) {
   const std::string dummy_ext_data;
-  return CreateLiveTabContext(existing_context, app_name, bounds, show_state,
+  return CreateLiveTabContext(existing_context, type, app_name, bounds, show_state,
                               workspace, user_title, extra_data,
                               dummy_ext_data);
 }
 
 LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     LiveTabContext* existing_context,
+    SessionWindow::WindowType type,
     const std::string& app_name,
     const gfx::Rect& bounds,
     ui::WindowShowState show_state,
@@ -27,7 +29,7 @@ LiveTabContext* TabRestoreServiceClient::CreateLiveTabContext(
     const std::string& user_title,
     const std::map<std::string, std::string>& extra_data,
     const std::string& viv_ext_data) {
-  return CreateLiveTabContext(existing_context, app_name, bounds, show_state,
+  return CreateLiveTabContext(existing_context, type, app_name, bounds, show_state,
                               workspace, user_title, extra_data);
 }
 

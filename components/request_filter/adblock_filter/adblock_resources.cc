@@ -9,11 +9,11 @@
 #include "base/containers/fixed_flat_set.h"
 #include "base/files/file_path.h"
 #include "base/path_service.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_piece.h"
-#include "base/task/post_task.h"
+#include "base/task/sequenced_task_runner.h"
 #include "build/build_config.h"
 #include "chrome/common/chrome_paths.h"
-#include "net/base/escape.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include "base/android/apk_assets.h"
@@ -232,7 +232,7 @@ absl::optional<std::string> Resources::GetRedirect(
     return absl::nullopt;
 
   return std::string("data:") + std::string(mimetype_it->second) +
-         net::EscapeUrlEncodedData(*resource, false);
+         base::EscapeUrlEncodedData(*resource, false);
 }
 
 std::map<std::string, base::StringPiece> Resources::GetInjections() {

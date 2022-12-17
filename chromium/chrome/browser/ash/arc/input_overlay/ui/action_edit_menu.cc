@@ -16,7 +16,7 @@
 namespace arc {
 namespace input_overlay {
 namespace {
-constexpr char kFontSytle[] = "Roboto";
+constexpr char kFontStyle[] = "Roboto";
 constexpr int kFontSize = 16;
 constexpr int kCornerRadius = 6;
 constexpr int kMenuHeight = 192;
@@ -46,7 +46,7 @@ class ActionEditMenu::BindingButton : public views::LabelButton {
         views::Button::STATE_HOVERED,
         color_provider->GetContentLayerColor(
             ash::AshColorProvider::ContentLayerType::kTextColorPrimary));
-    label()->SetFontList(gfx::FontList({kFontSytle}, gfx::Font::NORMAL,
+    label()->SetFontList(gfx::FontList({kFontStyle}, gfx::Font::NORMAL,
                                        kFontSize, gfx::Font::Weight::NORMAL));
     auto key_size = CalculatePreferredSize();
     SetMinSize(gfx::Size(key_size.width(), kButtonHeight));
@@ -155,12 +155,15 @@ void ActionEditMenu::InitActionTapEditMenu() {
   if (IsKeyboardBound(binding))
     keyboard_key_->OnBinding();
   if (IsMouseBound(binding)) {
-    if (binding.mouse_action() == kPrimaryClick) {
-      mouse_left_->OnBinding();
-    } else if (binding.mouse_action() == kSecondaryClick) {
-      mouse_right_->OnBinding();
-    } else {
-      NOTREACHED();
+    switch (binding.mouse_action()) {
+      case MouseAction::PRIMARY_CLICK:
+        mouse_left_->OnBinding();
+        break;
+      case MouseAction::SECONDARY_CLICK:
+        mouse_right_->OnBinding();
+        break;
+      default:
+        NOTREACHED();
     }
   }
 }

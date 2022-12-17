@@ -787,9 +787,11 @@ TEST_F(HoldingSpaceKeyedServiceTest, PersistenceOfInProgressItems) {
             persisted_holding_space_items);
 }
 
+// TODO(crbug.com/1315122): Fix flakes and re-enable.
 // Verifies that when a file backing a holding space item is moved, the holding
 // space item is updated in place and persistence storage is updated.
-TEST_F(HoldingSpaceKeyedServiceTest, UpdatePersistentStorageAfterMove) {
+TEST_F(HoldingSpaceKeyedServiceTest,
+       DISABLED_UpdatePersistentStorageAfterMove) {
   // Create a file system mount point.
   std::unique_ptr<ScopedTestMountPoint> downloads_mount =
       ScopedTestMountPoint::CreateAndMountDownloads(GetProfile());
@@ -2214,9 +2216,9 @@ TEST_F(HoldingSpaceKeyedServiceTest, InterruptAndResumeDownload) {
   EXPECT_TRUE(model->items()[0]->progress().IsComplete());
 }
 
-// Base class for tests which verify adding items to holding space works as
-// intended, parameterized by holding space item type.
-class HoldingSpaceKeyedServiceAddItemTest
+// Base class for tests which verify adding and removing items from holding
+// space works as intended, parameterized by holding space item type.
+class HoldingSpaceKeyedServiceAddAndRemoveItemTest
     : public HoldingSpaceKeyedServiceTest,
       public ::testing::WithParamInterface<HoldingSpaceItem::Type> {
  public:
@@ -2229,15 +2231,16 @@ class HoldingSpaceKeyedServiceAddItemTest
   HoldingSpaceItem::Type GetType() const { return GetParam(); }
 
   // Adds an item of `type` to the holding space belonging to `profile`, backed
-  // by the file at the specified absolute `file_path`.
-  void AddItem(Profile* profile,
-               HoldingSpaceItem::Type type,
-               const base::FilePath& file_path) {
+  // by the file at the specified absolute `file_path`. Returns the `id` of the
+  // added holding space item.
+  const std::string& AddItem(Profile* profile,
+                             HoldingSpaceItem::Type type,
+                             const base::FilePath& file_path) {
     auto* const holding_space_service = GetService(profile);
-    ASSERT_TRUE(holding_space_service);
+    EXPECT_TRUE(holding_space_service);
     const auto* holding_space_model =
         holding_space_service->model_for_testing();
-    ASSERT_TRUE(holding_space_model);
+    EXPECT_TRUE(holding_space_model);
 
     switch (type) {
       case HoldingSpaceItem::Type::kArcDownload:
@@ -2280,14 +2283,18 @@ class HoldingSpaceKeyedServiceAddItemTest
                 .empty());
         break;
     }
+
+    const auto* item = holding_space_model->GetItem(type, file_path);
+    EXPECT_TRUE(item);
+    return item->id();
   }
 };
 
 INSTANTIATE_TEST_SUITE_P(All,
-                         HoldingSpaceKeyedServiceAddItemTest,
+                         HoldingSpaceKeyedServiceAddAndRemoveItemTest,
                          ::testing::ValuesIn(GetHoldingSpaceItemTypes()));
 
-TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItem) {
+TEST_P(HoldingSpaceKeyedServiceAddAndRemoveItemTest, AddAndRemoveItem) {
   // Wait for the holding space model to attach.
   TestingProfile* profile = GetProfile();
   HoldingSpaceModelAttachedWaiter(profile).Wait();
@@ -2306,13 +2313,14 @@ TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItem) {
       /*relative_path=*/base::FilePath("foo"), /*content=*/"foo");
 
   // Add a holding space item of the type under test.
-  AddItem(profile, GetType(), file_path);
+  const auto& id = AddItem(profile, GetType(), file_path);
 
   // Verify a holding space item has been added to the model.
   ASSERT_EQ(model->items().size(), 1u);
 
   // Verify holding space `item` metadata.
   HoldingSpaceItem* const item = model->items()[0].get();
+  EXPECT_EQ(item->id(), id);
   EXPECT_EQ(item->type(), GetType());
   EXPECT_EQ(item->GetText(), file_path.BaseName().LossyDisplayName());
   EXPECT_EQ(item->file_path(), file_path);
@@ -2334,9 +2342,13 @@ TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItem) {
   // Attempts to add already represented items should be ignored.
   ASSERT_EQ(model->items().size(), 1u);
   EXPECT_EQ(model->items()[0].get(), item);
+
+  // Remove the holding space item.
+  GetService(profile)->RemoveItem(id);
+  EXPECT_TRUE(model->items().empty());
 }
 
-TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItemOfType) {
+TEST_P(HoldingSpaceKeyedServiceAddAndRemoveItemTest, AddAndRemoveItemOfType) {
   // Wait for the holding space model to attach.
   TestingProfile* profile = GetProfile();
   HoldingSpaceModelAttachedWaiter(profile).Wait();
@@ -2385,6 +2397,10 @@ TEST_P(HoldingSpaceKeyedServiceAddItemTest, AddItemOfType) {
   // Attempts to add already represented items should be ignored.
   ASSERT_EQ(model->items().size(), 1u);
   EXPECT_EQ(model->items()[0].get(), item);
+
+  // Remove the holding space item.
+  GetService(profile)->RemoveItem(id);
+  EXPECT_TRUE(model->items().empty());
 }
 
 class HoldingSpaceKeyedServiceNearbySharingTest

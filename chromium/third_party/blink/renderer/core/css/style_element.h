@@ -24,11 +24,11 @@
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/css/css_style_sheet.h"
 #include "third_party/blink/renderer/core/css/pending_sheet_type.h"
+#include "third_party/blink/renderer/platform/loader/fetch/render_blocking_behavior.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 
 namespace blink {
 
-class BlockingAttribute;
 class ContainerNode;
 class Document;
 class Element;
@@ -45,7 +45,6 @@ class CORE_EXPORT StyleElement : public GarbageCollectedMixin {
 
   virtual const AtomicString& type() const = 0;
   virtual const AtomicString& media() const = 0;
-  virtual BlockingAttribute* blocking() const = 0;
 
   // Returns whether |this| and |node| are the same object. Helps us verify
   // parameter validity in certain member functions with an Element parameter
@@ -59,11 +58,15 @@ class CORE_EXPORT StyleElement : public GarbageCollectedMixin {
   void SetToPendingState(Document&, Element& element);
 
   void RemovedFrom(Element&, ContainerNode& insertion_point);
+  void BlockingAttributeChanged(Element&);
   ProcessingResult ProcessStyleSheet(Document&, Element&);
   ProcessingResult ChildrenChanged(Element&);
   ProcessingResult FinishParsingChildren(Element&);
 
   Member<CSSStyleSheet> sheet_;
+
+ protected:
+  bool CreatedByParser() const { return created_by_parser_; }
 
  private:
   ProcessingResult CreateSheet(Element&, const String& text = String());
@@ -76,6 +79,7 @@ class CORE_EXPORT StyleElement : public GarbageCollectedMixin {
   bool created_by_parser_ : 1;
   TextPosition start_position_;
   PendingSheetType pending_sheet_type_;
+  RenderBlockingBehavior render_blocking_behavior_;
 };
 
 }  // namespace blink

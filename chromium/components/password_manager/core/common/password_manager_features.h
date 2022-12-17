@@ -38,6 +38,7 @@ extern const base::Feature kInferConfirmationPasswordField;
 extern const base::Feature kIOSEnablePasswordManagerBrandingUpdate;
 extern const base::Feature kMuteCompromisedPasswords;
 extern const base::Feature kPasswordNotes;
+extern const base::Feature kPasswordViewPageInSettings;
 extern const base::Feature kSendPasswords;
 extern const base::Feature kLeakDetectionUnauthenticated;
 extern const base::Feature kPasswordChange;
@@ -121,6 +122,10 @@ extern const char kTouchToFillPasswordSubmissionWithConservativeHeuristics[];
 // Returns true if any of the password script fetching related flags are
 // enabled.
 bool IsPasswordScriptsFetchingEnabled();
+
+// Returns true if any of the features that unlock entry points for password
+// change flows are enabled.
+bool IsAutomatedPasswordChangeEnabled();
 
 #if BUILDFLAG(IS_ANDROID)
 // Returns true if the unified password manager feature is active and in a stage

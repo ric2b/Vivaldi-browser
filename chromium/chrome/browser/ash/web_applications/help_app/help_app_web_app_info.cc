@@ -11,6 +11,7 @@
 #include "ash/webui/grit/ash_help_app_resources.h"
 #include "ash/webui/help_app_ui/url_constants.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/grit/generated_resources.h"
@@ -55,7 +56,7 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForHelpWebApp() {
   }
 
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
-  info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+  info->user_display_mode = web_app::UserDisplayMode::kStandalone;
   return info;
 }
 
@@ -68,10 +69,10 @@ gfx::Rect GetDefaultBoundsForHelpApp(Browser*) {
 }
 
 HelpAppSystemAppDelegate::HelpAppSystemAppDelegate(Profile* profile)
-    : web_app::SystemWebAppDelegate(web_app::SystemAppType::HELP,
-                                    "Help",
-                                    GURL("chrome://help-app/pwa.html"),
-                                    profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::HELP,
+                                "Help",
+                                GURL("chrome://help-app/pwa.html"),
+                                profile) {}
 
 gfx::Rect HelpAppSystemAppDelegate::GetDefaultBounds(Browser* browser) const {
   return GetDefaultBoundsForHelpApp(browser);
@@ -89,10 +90,10 @@ std::vector<int> HelpAppSystemAppDelegate::GetAdditionalSearchTerms() const {
   return {IDS_GENIUS_APP_NAME, IDS_HELP_APP_PERKS, IDS_HELP_APP_OFFERS};
 }
 
-absl::optional<web_app::SystemAppBackgroundTaskInfo>
+absl::optional<ash::SystemWebAppBackgroundTaskInfo>
 HelpAppSystemAppDelegate::GetTimerInfo() const {
   if (base::FeatureList::IsEnabled(features::kHelpAppBackgroundPage)) {
-    return web_app::SystemAppBackgroundTaskInfo(
+    return ash::SystemWebAppBackgroundTaskInfo(
         absl::nullopt, GURL("chrome://help-app/background"),
         /*open_immediately=*/true);
   } else {

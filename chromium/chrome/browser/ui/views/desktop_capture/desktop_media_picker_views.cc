@@ -15,7 +15,6 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/media/webrtc/desktop_media_list.h"
 #include "chrome/browser/media/webrtc/desktop_media_picker_manager.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -157,9 +156,9 @@ void RecordUmaSelection(DialogType dialog_type,
       // list of all available tabs.
       const bool current_tab_selected =
           web_contents &&
-          web_contents->GetMainFrame()->GetProcess()->GetID() ==
+          web_contents->GetPrimaryMainFrame()->GetProcess()->GetID() ==
               selected_media.web_contents_id.render_process_id &&
-          web_contents->GetMainFrame()->GetRoutingID() ==
+          web_contents->GetPrimaryMainFrame()->GetRoutingID() ==
               selected_media.web_contents_id.main_render_frame_id;
 
       if (dialog_type == DialogType::kPreferCurrentTab) {
@@ -488,7 +487,6 @@ DesktopMediaPickerDialogView::DesktopMediaPickerDialogView(
     widget = CreateDialogWidget(this, params.context, nullptr);
     widget->Show();
   }
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::DESKTOP_MEDIA_PICKER);
 
 #if BUILDFLAG(IS_MAC)
   // On Mac, even modals are shown using separate native windows.

@@ -166,7 +166,6 @@ LayerTreeImpl::LayerTreeImpl(
       needs_full_tree_sync_(true),
       needs_surface_ranges_sync_(false),
       next_activation_forces_redraw_(false),
-      has_ever_been_drawn_(false),
       handle_visibility_changed_(false),
       have_scroll_event_handlers_(false),
       event_listener_properties_(),
@@ -735,8 +734,6 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
   if (commit_state.force_send_metadata_request)
     RequestForceSendMetadata();
 
-  set_has_ever_been_drawn(false);
-
   // TODO(ericrk): The viewport changes caused by |top_controls_shown_ratio_|
   // changes should propagate back to the main tree. This does not currently
   // happen, so we must force the impl tree to update its viewports if
@@ -755,6 +752,10 @@ void LayerTreeImpl::PullLayerTreePropertiesFrom(CommitState& commit_state) {
   // Transfer page transition directives.
   for (auto& request : commit_state.document_transition_requests)
     AddDocumentTransitionRequest(std::move(request));
+
+  SetVisualUpdateDurations(
+      commit_state.previous_surfaces_visual_update_duration,
+      commit_state.visual_update_duration);
 }
 
 void LayerTreeImpl::PushPropertyTreesTo(LayerTreeImpl* target_tree) {
@@ -844,6 +845,7 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   // This should match the property synchronization in
   // LayerTreeHost::finishCommitOnImplThread().
   target_tree->set_source_frame_number(source_frame_number());
+  target_tree->set_trace_id(trace_id());
   target_tree->set_background_color(background_color());
   target_tree->set_have_scroll_event_handlers(have_scroll_event_handlers());
   target_tree->set_event_listener_properties(
@@ -862,8 +864,6 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
   else
     target_tree->set_hud_layer(nullptr);
 
-  target_tree->has_ever_been_drawn_ = false;
-
   // Note: this needs to happen after SetPropertyTrees.
   target_tree->HandleTickmarksVisibilityChange();
   target_tree->HandleScrollbarShowRequests();
@@ -881,6 +881,9 @@ void LayerTreeImpl::PushPropertiesTo(LayerTreeImpl* target_tree) {
 
   for (auto& request : TakeDocumentTransitionRequests())
     target_tree->AddDocumentTransitionRequest(std::move(request));
+
+  target_tree->SetVisualUpdateDurations(
+      previous_surfaces_visual_update_duration_, visual_update_duration_);
 }
 
 void LayerTreeImpl::HandleTickmarksVisibilityChange() {
@@ -1153,23 +1156,45 @@ void LayerTreeImpl::UpdateTransformAnimation(ElementId element_id,
                                              int transform_node_index) {
   // This includes all animations, even those that are finished but
   // haven't yet been deleted.
-  if (mutator_host()->HasAnyAnimationTargetingProperty(
-          element_id, TargetProperty::TRANSFORM)) {
-    TransformTree& transform_tree = property_trees()->transform_tree_mutable();
-    if (TransformNode* node = transform_tree.Node(transform_node_index)) {
-      ElementListType list_type = GetElementTypeForAnimation();
-      bool has_potential_animation =
-          mutator_host()->HasPotentiallyRunningTransformAnimation(element_id,
-                                                                  list_type);
-      if (node->has_potential_animation != has_potential_animation) {
-        node->has_potential_animation = has_potential_animation;
-        node->maximum_animation_scale =
-            mutator_host()->MaximumScale(element_id, list_type);
-        transform_tree.set_needs_update(true);
-        set_needs_update_draw_properties();
+
+  // A given ElementId should be associated with only a single transform
+  // property.  However, the ElementId is opaque to cc.  (If it comes from
+  // blink, it was constructed with a CompositorElementIdNamespace specific to
+  // the correct property.  Otherwise, only the transform property should be
+  // used.)
+  const TargetProperty::Type transform_properties[] = {
+      TargetProperty::TRANSFORM, TargetProperty::SCALE, TargetProperty::ROTATE,
+      TargetProperty::TRANSLATE};
+#if DCHECK_IS_ON()
+  unsigned property_count = 0u;
+#endif
+
+  for (TargetProperty::Type property : transform_properties) {
+    if (mutator_host()->HasAnyAnimationTargetingProperty(element_id,
+                                                         property)) {
+#if DCHECK_IS_ON()
+      ++property_count;
+#endif
+      TransformTree& transform_tree =
+          property_trees()->transform_tree_mutable();
+      if (TransformNode* node = transform_tree.Node(transform_node_index)) {
+        ElementListType list_type = GetElementTypeForAnimation();
+        bool has_potential_animation =
+            mutator_host()->HasPotentiallyRunningAnimationForProperty(
+                element_id, list_type, property);
+        if (node->has_potential_animation != has_potential_animation) {
+          node->has_potential_animation = has_potential_animation;
+          node->maximum_animation_scale =
+              mutator_host()->MaximumScale(element_id, list_type);
+          transform_tree.set_needs_update(true);
+          set_needs_update_draw_properties();
+        }
       }
     }
   }
+#if DCHECK_IS_ON()
+  DCHECK_LE(property_count, 1u);
+#endif
 }
 
 void LayerTreeImpl::UpdatePageScaleNode() {
@@ -1187,7 +1212,7 @@ void LayerTreeImpl::SetPageScaleOnActiveTree(float active_page_scale) {
   float clamped_page_scale = ClampPageScaleFactorToLimits(active_page_scale);
   // Temporary crash logging for https://crbug.com/845097.
   static bool has_dumped_without_crashing = false;
-  if (host_impl_->settings().is_layer_tree_for_subframe &&
+  if (!host_impl_->settings().is_for_scalable_page &&
       clamped_page_scale != 1.f && !has_dumped_without_crashing) {
     has_dumped_without_crashing = true;
     static auto* psf_oopif_error = base::debug::AllocateCrashKeyString(
@@ -1196,10 +1221,8 @@ void LayerTreeImpl::SetPageScaleOnActiveTree(float active_page_scale) {
         psf_oopif_error, base::StringPrintf("%f", clamped_page_scale));
     base::debug::DumpWithoutCrashing();
   }
-  if (page_scale_factor()->SetCurrent(clamped_page_scale)) {
+  if (page_scale_factor()->SetCurrent(clamped_page_scale))
     DidUpdatePageScale();
-    UpdatePageScaleNode();
-  }
 }
 
 void LayerTreeImpl::PushPageScaleFromMainThread(float page_scale_factor,
@@ -1230,10 +1253,6 @@ void LayerTreeImpl::PushPageScaleFactorAndLimits(const float* page_scale_factor,
 
   if (changed_page_scale)
     DidUpdatePageScale();
-
-  DCHECK(lifecycle().AllowsPropertyTreeAccess());
-  if (page_scale_factor)
-    UpdatePageScaleNode();
 }
 
 void LayerTreeImpl::SetBrowserControlsParams(
@@ -1338,27 +1357,33 @@ bool LayerTreeImpl::SetPageScaleFactorLimits(float min_page_scale_factor,
 }
 
 void LayerTreeImpl::DidUpdatePageScale() {
-  if (IsActiveTree())
+  if (IsActiveTree()) {
     page_scale_factor()->SetCurrent(
         ClampPageScaleFactorToLimits(current_page_scale_factor()));
 
-  set_needs_update_draw_properties();
+    // Ensure the other trees are kept in sync.
+    if (host_impl_->pending_tree())
+      host_impl_->pending_tree()->DidUpdatePageScale();
+    if (host_impl_->recycle_tree())
+      host_impl_->recycle_tree()->DidUpdatePageScale();
 
-  // Viewport scrollbar sizes depend on the page scale factor.
-  SetScrollbarGeometriesNeedUpdate();
-
-  if (IsActiveTree()) {
     if (settings().scrollbar_flash_after_any_scroll_update) {
       host_impl_->FlashAllScrollbars(true);
-      return;
-    }
-    if (auto* scroll_node = host_impl_->OuterViewportScrollNode()) {
+    } else if (auto* scroll_node = host_impl_->OuterViewportScrollNode()) {
       if (ScrollbarAnimationController* controller =
               host_impl_->ScrollbarAnimationControllerForElementId(
                   scroll_node->element_id))
         controller->DidScrollUpdate();
     }
   }
+
+  DCHECK(lifecycle().AllowsPropertyTreeAccess());
+  UpdatePageScaleNode();
+
+  set_needs_update_draw_properties();
+
+  // Viewport scrollbar sizes depend on the page scale factor.
+  SetScrollbarGeometriesNeedUpdate();
 }
 
 void LayerTreeImpl::SetDeviceScaleFactor(float device_scale_factor) {
@@ -1564,11 +1589,14 @@ bool LayerTreeImpl::UpdateDrawProperties(
         this, &render_surface_list_, output_update_layer_list_for_testing);
 
     if (const char* client_name = GetClientNameForMetrics()) {
-      UMA_HISTOGRAM_COUNTS_1M(
-          base::StringPrintf(
-              "Compositing.%s.LayerTreeImpl.CalculateDrawPropertiesUs",
-              client_name),
-          timer.Elapsed().InMicroseconds());
+      // This metric is only recorded for the Browser.
+      if (settings().single_thread_proxy_scheduler) {
+        UMA_HISTOGRAM_COUNTS_1M(
+            base::StringPrintf(
+                "Compositing.%s.LayerTreeImpl.CalculateDrawPropertiesUs",
+                client_name),
+            timer.Elapsed().InMicroseconds());
+      }
       UMA_HISTOGRAM_COUNTS_100(
           base::StringPrintf("Compositing.%s.NumRenderSurfaces", client_name),
           base::saturated_cast<int>(render_surface_list_.size()));
@@ -1852,6 +1880,10 @@ bool LayerTreeImpl::IsRecycleTree() const {
 
 bool LayerTreeImpl::IsSyncTree() const {
   return host_impl_->sync_tree() == this;
+}
+
+bool LayerTreeImpl::HasPendingTree() const {
+  return host_impl_->pending_tree() != nullptr;
 }
 
 LayerImpl* LayerTreeImpl::FindActiveTreeLayerById(int id) {
@@ -2153,6 +2185,11 @@ void LayerTreeImpl::RegisterScrollbar(ScrollbarLayerImplBase* scrollbar_layer) {
   }
 
   *scrollbar_layer_id = scrollbar_layer->id();
+
+  if (IsActiveTree()) {
+    host_impl_->DidRegisterScrollbarLayer(scroll_element_id,
+                                          scrollbar_layer->orientation());
+  }
 
   if (IsActiveTree() && scrollbar_layer->is_overlay_scrollbar() &&
       scrollbar_layer->GetScrollbarAnimator() !=
@@ -2893,6 +2930,27 @@ LayerTreeImpl::TakeDocumentTransitionRequests() {
 
 bool LayerTreeImpl::HasDocumentTransitionRequests() const {
   return !document_transition_requests_.empty();
+}
+
+bool LayerTreeImpl::IsReadyToActivate() const {
+  return host_impl_->IsReadyToActivate();
+}
+
+void LayerTreeImpl::ClearVisualUpdateDurations() {
+  previous_surfaces_visual_update_duration_ = base::TimeDelta();
+  visual_update_duration_ = base::TimeDelta();
+}
+
+void LayerTreeImpl::SetVisualUpdateDurations(
+    base::TimeDelta previous_surfaces_visual_update_duration,
+    base::TimeDelta visual_update_duration) {
+  previous_surfaces_visual_update_duration_ =
+      previous_surfaces_visual_update_duration;
+  visual_update_duration_ = visual_update_duration;
+}
+
+void LayerTreeImpl::RequestImplSideInvalidationForRerasterTiling() {
+  host_impl_->RequestImplSideInvalidationForRerasterTiling();
 }
 
 }  // namespace cc

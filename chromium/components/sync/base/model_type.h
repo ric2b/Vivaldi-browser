@@ -134,6 +134,8 @@ enum ModelType {
   // used by the server and Play Services, not Chrome itself.
   // (crbug.com/1223853)
   // WEBAUTHN_CREDENTIAL,
+  // Synced history. An entity roughly corresponds to a navigation.
+  HISTORY,
 
   // Notes items
   NOTES,
@@ -233,6 +235,8 @@ enum class ModelTypeForHistograms {
   kSharingMessage = 48,
   kAutofillWalletOffer = 49,
   kWorkspaceDesk = 50,
+  kHistory = 51,
+
   // Vivaldi
   kNotes = 300,
   kMaxValue = kNotes
@@ -258,7 +262,8 @@ constexpr ModelTypeSet ProtocolTypes() {
       DEVICE_INFO, PRIORITY_PREFERENCES, SUPERVISED_USER_SETTINGS, APP_LIST,
       ARC_PACKAGE, PRINTERS, READING_LIST, USER_EVENTS, NIGORI, USER_CONSENTS,
       SEND_TAB_TO_SELF, SECURITY_EVENTS, WEB_APPS, WIFI_CONFIGURATIONS,
-      OS_PREFERENCES, OS_PRIORITY_PREFERENCES, SHARING_MESSAGE, WORKSPACE_DESK);
+      OS_PREFERENCES, OS_PRIORITY_PREFERENCES, SHARING_MESSAGE, WORKSPACE_DESK,
+      HISTORY);
 }
 
 // These are the normal user-controlled types. This is to distinguish from
@@ -269,7 +274,11 @@ constexpr ModelTypeSet UserTypes() {
 }
 
 // User types, which are not user-controlled.
-ModelTypeSet AlwaysPreferredUserTypes();
+constexpr ModelTypeSet AlwaysPreferredUserTypes() {
+  return ModelTypeSet(DEVICE_INFO, USER_CONSENTS, SECURITY_EVENTS,
+                      SEND_TAB_TO_SELF, SUPERVISED_USER_SETTINGS,
+                      SHARING_MESSAGE);
+}
 
 // User types which are always encrypted.
 constexpr ModelTypeSet AlwaysEncryptedUserTypes() {

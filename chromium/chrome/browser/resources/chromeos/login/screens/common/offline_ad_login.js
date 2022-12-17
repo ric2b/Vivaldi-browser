@@ -114,7 +114,7 @@ class OfflineAdLogin extends OfflineAdLoginBase {
       /**
        * ID of localized welcome message on top of the UI.
        */
-      adWelcomeMessageKey: String,
+      adWelcomeMessageKey: {type: String, value: 'loginWelcomeMessage'},
       /**
        * Error message for the machine name input.
        */
@@ -258,20 +258,17 @@ class OfflineAdLogin extends OfflineAdLoginBase {
     if (this.isDomainJoin) {
       this.setupEncList();
     } else {
-      this.initializeLoginScreen('ActiveDirectoryLoginScreen', {
-        resetAllowed: true,
-      });
+      this.initializeLoginScreen('ActiveDirectoryLoginScreen');
     }
   }
 
   onBeforeShow(data) {
     if (data) {
       this.realm = data['realm'];
-      if ('emailDomain' in data)
+      if ('emailDomain' in data) {
         this.userRealm = '@' + data['emailDomain'];
+      }
     }
-    if (!this.adWelcomeMessageKey)
-      this.adWelcomeMessageKey = 'loginWelcomeMessage';
     this.focus();
   }
 
@@ -320,8 +317,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
   }
 
   errorStateObserver_() {
-    if (this.errorStateLocked_)
+    if (this.errorStateLocked_) {
       return;
+    }
     // Prevent updateErrorStateOnInputInvalidStateChange_ from changing
     // errorState.
     this.errorStateLocked_ = true;
@@ -336,8 +334,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
         this.errorState == ActiveDirectoryErrorState.BAD_UNLOCK_PASSWORD;
 
     // Clear password.
-    if (this.errorState == ActiveDirectoryErrorState.NONE)
+    if (this.errorState == ActiveDirectoryErrorState.NONE) {
       this.$.passwordInput.value = '';
+    }
     this.errorStateLocked_ = false;
   }
 
@@ -372,27 +371,32 @@ class OfflineAdLogin extends OfflineAdLoginBase {
 
   /** @private */
   onSubmit_() {
-    if (this.disabled)
+    if (this.disabled) {
       return;
+    }
 
     if (this.isDomainJoin) {
       this.machineNameInvalid = !this.$.machineNameInput.validate();
-      if (this.machineNameInvalid)
+      if (this.machineNameInvalid) {
         return;
+      }
     }
 
     this.userInvalid = !this.$.userInput.validate();
-    if (this.userInvalid)
+    if (this.userInvalid) {
       return;
+    }
 
     this.authPasswordInvalid = !this.$.passwordInput.validate();
-    if (this.authPasswordInvalid)
+    if (this.authPasswordInvalid) {
       return;
+    }
 
     var user = /** @type {string} */ (this.$.userInput.value);
     const password = /** @type {string} / */ (this.$.passwordInput.value);
-    if (!user.includes('@') && this.userRealm)
+    if (!user.includes('@') && this.userRealm) {
       user += this.userRealm;
+    }
 
     if (this.isDomainJoin) {
       const msg = {
@@ -465,8 +469,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
 
   /** @private */
   onBackToUnlock_() {
-    if (this.disabled)
+    if (this.disabled) {
       return;
+    }
     this.setUIStep(ADLoginStep.UNLOCK);
     this.focus();
   }
@@ -481,8 +486,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
 
   /** @private */
   onJoinConfigSelected_(value) {
-    if (this.selectedConfigOption_ == this.joinConfigOptions_[value])
+    if (this.selectedConfigOption_ == this.joinConfigOptions_[value]) {
       return;
+    }
     this.errorState = ActiveDirectoryErrorState.NONE;
     this.previousSelectedConfigOption_ = this.selectedConfigOption_;
     this.selectedConfigOption_ = this.joinConfigOptions_[value];
@@ -526,12 +532,14 @@ class OfflineAdLogin extends OfflineAdLoginBase {
    * @private
    */
   calculateInputValue_(inputElementId, key, option) {
-    if (option && key in option)
+    if (option && key in option) {
       return option[key];
+    }
 
     if (this.previousSelectedConfigOption_ &&
-        key in this.previousSelectedConfigOption_)
+        key in this.previousSelectedConfigOption_) {
       return '';
+    }
 
     // No changes.
     return this.$[inputElementId].value;
@@ -558,22 +566,24 @@ class OfflineAdLogin extends OfflineAdLoginBase {
   }
 
   getMachineNameError_(locale, errorState) {
-    if (errorState == ActiveDirectoryErrorState.MACHINE_NAME_TOO_LONG)
-      return this.i18nDynamic(locale, 'adJoinErrorMachineNameTooLong');
+    if (errorState == ActiveDirectoryErrorState.MACHINE_NAME_TOO_LONG) {
+      return this.i18n('adJoinErrorMachineNameTooLong');
+    }
     if (errorState == ActiveDirectoryErrorState.MACHINE_NAME_INVALID) {
       if (this.machineNameInputPattern_) {
-        return this.i18nDynamic(locale, 'adJoinErrorMachineNameInvalidFormat');
+        return this.i18n('adJoinErrorMachineNameInvalidFormat');
       }
     }
-    return this.i18nDynamic(locale, 'adJoinErrorMachineNameInvalid');
+    return this.i18n('adJoinErrorMachineNameInvalid');
   }
 
   onKeydownUnlockPassword_(e) {
     if (e.key == 'Enter') {
-      if (this.$.unlockPasswordInput.value.length == 0)
+      if (this.$.unlockPasswordInput.value.length == 0) {
         this.onSkipClicked_();
-      else
+      } else {
         this.onUnlockPasswordEntered_();
+      }
     }
     this.errorState = ActiveDirectoryErrorState.NONE;
   }
@@ -588,8 +598,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
 
   onKeydownUserInput_(e) {
     this.errorState = ActiveDirectoryErrorState.NONE;
-    if (e.key == 'Enter')
+    if (e.key == 'Enter') {
       this.switchTo_('passwordInput') || this.onSubmit_();
+    }
   }
 
   userNameObserver_() {
@@ -605,8 +616,9 @@ class OfflineAdLogin extends OfflineAdLoginBase {
 
   onKeydownAuthPasswordInput_(e) {
     this.errorState = ActiveDirectoryErrorState.NONE;
-    if (e.key == 'Enter')
+    if (e.key == 'Enter') {
       this.onSubmit_();
+    }
   }
 
   switchTo_(inputId) {
@@ -637,21 +649,24 @@ class OfflineAdLogin extends OfflineAdLoginBase {
   }
 
   setErrorState_(isInvalid, error) {
-    if (this.errorStateLocked_)
+    if (this.errorStateLocked_) {
       return;
+    }
     this.errorStateLocked_ = true;
-    if (isInvalid)
+    if (isInvalid) {
       this.errorState = error;
-    else
+    } else {
       this.errorState = ActiveDirectoryErrorState.NONE;
+    }
     this.errorStateLocked_ = false;
   }
 
   disabledObserver_(disabled) {
-    if (disabled)
+    if (disabled) {
       this.$.credsStep.classList.add('full-disabled');
-    else
+    } else {
       this.$.credsStep.classList.remove('full-disabled');
+    }
   }
 }
 

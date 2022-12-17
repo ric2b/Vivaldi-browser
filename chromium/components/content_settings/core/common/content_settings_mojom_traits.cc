@@ -101,7 +101,11 @@ bool StructTraits<content_settings::mojom::RendererContentSettingRulesDataView,
          data.ReadScriptRules(&out->script_rules) &&
          data.ReadPopupRedirectRules(&out->popup_redirect_rules) &&
          data.ReadMixedContentRules(&out->mixed_content_rules) &&
-         data.ReadAutoDarkContentRules(&out->auto_dark_content_rules);
+         data.ReadAutoDarkContentRules(&out->auto_dark_content_rules)
+#if defined(VIVALDI_BUILD)
+         && data.ReadAutoplayRules(&out->autoplay_rules)
+#endif  // defined(VIVALDI_BUILD)
+        ;
 }
 
 }  // namespace mojo

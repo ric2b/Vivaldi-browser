@@ -153,6 +153,8 @@ class UnifiedMessageListView::MessageViewContainer
 
   // Reset rounding the corner of the view. This is called when we end a slide.
   void ResetCornerRadius() {
+    need_update_corner_radius_ = true;
+
     int corner_radius = features::IsNotificationsRefreshEnabled()
                             ? kMessageCenterNotificationCornerRadius
                             : 0;
@@ -272,8 +274,9 @@ class UnifiedMessageListView::MessageViewContainer
 
     if (!features::IsNotificationsRefreshEnabled() ||
         notification_id != GetNotificationId() ||
-        message_view_->GetSlideAmount() == 0 || !need_update_corner_radius_)
+        message_view_->GetSlideAmount() == 0 || !need_update_corner_radius_) {
       return;
+    }
 
     need_update_corner_radius_ = false;
 
@@ -302,14 +305,21 @@ class UnifiedMessageListView::MessageViewContainer
         notification_id != GetNotificationId())
       return;
 
+    int index = list_view_->GetIndexOf(this);
+    if (index < 0)
+      return;
+    auto list_child_views = list_view_->children();
+    above_view_ = (index == 0) ? nullptr : AsMVC(list_child_views[index - 1]);
+    below_view_ = (index == static_cast<int>(list_child_views.size()) - 1)
+                      ? nullptr
+                      : AsMVC(list_child_views[index + 1]);
+
     // Reset the corner radius of views to their normal state.
     ResetCornerRadius();
     if (above_view_ && !above_view_->is_slid_out())
       above_view_->ResetCornerRadius();
     if (below_view_ && !below_view_->is_slid_out())
       below_view_->ResetCornerRadius();
-
-    need_update_corner_radius_ = true;
   }
 
   void OnPreSlideOut(const std::string& notification_id) override {
@@ -402,7 +412,7 @@ UnifiedMessageListView::UnifiedMessageListView(
       is_notifications_refresh_enabled_(
           features::IsNotificationsRefreshEnabled()),
       message_view_width_(is_notifications_refresh_enabled_
-                              ? kTrayMenuWidth - (2 * kMessageCenterSidePadding)
+                              ? kTrayMenuWidth - (2 * kMessageCenterPadding)
                               : kTrayMenuWidth) {
   message_center_observation_.Observe(MessageCenter::Get());
   animation_->SetCurrentValue(1.0);
@@ -428,7 +438,10 @@ void UnifiedMessageListView::Init() {
     auto* view =
         new MessageViewContainer(CreateMessageView(*notification), this);
     view->LoadExpandedState(model_.get(), is_latest);
-    AddChildViewAt(view, 0);
+    // The insertion order for notifications will be reversed when
+    // is_notifications_refresh_enabled_.
+    AddChildViewAt(view,
+                   is_notifications_refresh_enabled_ ? children().size() : 0);
     MessageCenter::Get()->DisplayedNotification(
         notification->id(), message_center::DISPLAY_SOURCE_MESSAGE_CENTER);
     is_latest = false;
@@ -498,6 +511,22 @@ UnifiedMessageListView::GetNotificationsAboveY(int y_offset) const {
           AsMVC(view)->GetNotificationId());
       if (notification)
         notifications.insert(notifications.begin(), notification);
+    }
+  }
+  return notifications;
+}
+
+std::vector<message_center::Notification*>
+UnifiedMessageListView::GetNotificationsBelowY(int y_offset) const {
+  std::vector<message_center::Notification*> notifications;
+  for (views::View* view : children()) {
+    const int bottom_limit =
+        view->bounds().y() + kNotificationIconStackThreshold;
+    if (bottom_limit >= y_offset) {
+      auto* notification = MessageCenter::Get()->FindVisibleNotificationById(
+          AsMVC(view)->GetNotificationId());
+      if (notification)
+        notifications.push_back(notification);
     }
   }
   return notifications;
@@ -644,6 +673,11 @@ const char* UnifiedMessageListView::GetClassName() const {
   return "UnifiedMessageListView";
 }
 
+void UnifiedMessageListView::AnimateResize() {
+  // TODO(crbug/1330026): Refactor UnifiedMessageListView animations to use
+  // animation builder instead of the existing layout based animations.
+}
+
 message_center::MessageView*
 UnifiedMessageListView::GetMessageViewForNotificationId(const std::string& id) {
   auto it =
@@ -662,8 +696,10 @@ UnifiedMessageListView::GetMessageViewForNotificationId(const std::string& id) {
 void UnifiedMessageListView::ConvertNotificationViewToGroupedNotificationView(
     const std::string& ungrouped_notification_id,
     const std::string& new_grouped_notification_id) {
-  GetMessageViewForNotificationId(ungrouped_notification_id)
-      ->set_notification_id(new_grouped_notification_id);
+  auto* message_view =
+      GetMessageViewForNotificationId(ungrouped_notification_id);
+  if (message_view)
+    message_view->set_notification_id(new_grouped_notification_id);
 }
 
 void UnifiedMessageListView::ConvertGroupedNotificationViewToNotificationView(
@@ -678,10 +714,23 @@ void UnifiedMessageListView::OnNotificationAdded(const std::string& id) {
   if (!notification)
     return;
 
+  // A group child notification should be added to its parent's message view.
+  if (is_notifications_refresh_enabled_ && notification->group_child())
+    return;
+
   InterruptClearAll();
 
   // Collapse all notifications before adding new one.
   CollapseAllNotifications();
+
+  // We only need to update if we already have a message view associated with
+  // the notification. This happens when we convert a single notification to a
+  // group notification, ConvertNotificationViewToGroupedNotificationView()
+  // changes the id of the single notification to the parent's.
+  if (is_notifications_refresh_enabled_ && GetNotificationById(id)) {
+    OnNotificationUpdated(id);
+    return;
+  }
 
   // Find the correct index to insert the new notification based on the sorted
   // order.
@@ -696,8 +745,14 @@ void UnifiedMessageListView::OnNotificationAdded(const std::string& id) {
     if (!child_notification)
       break;
 
-    if (!message_center_utils::CompareNotifications(notification,
-                                                    child_notification)) {
+    // The insertion order for notifications will be reversed when
+    // is_notifications_refresh_enabled_.
+    if ((is_notifications_refresh_enabled_ &&
+         !message_center_utils::CompareNotifications(child_notification,
+                                                     notification)) ||
+        (!is_notifications_refresh_enabled_ &&
+         !message_center_utils::CompareNotifications(notification,
+                                                     child_notification))) {
       index_to_insert = i;
       break;
     }
@@ -893,6 +948,13 @@ UnifiedMessageListView::GetNotificationById(const std::string& id) const {
 
 UnifiedMessageListView::MessageViewContainer*
 UnifiedMessageListView::GetNextRemovableNotification() {
+  if (is_notifications_refresh_enabled_) {
+    const auto i =
+        std::find_if(children().rbegin(), children().rend(),
+                     [](const auto* v) { return !AsMVC(v)->IsPinned(); });
+    return (i == children().rend()) ? nullptr : AsMVC(*i);
+  }
+
   const auto i =
       std::find_if(children().cbegin(), children().cend(),
                    [](const auto* v) { return !AsMVC(v)->IsPinned(); });

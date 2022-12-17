@@ -60,6 +60,7 @@
 #include "net/base/host_port_pair.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
+#include "third_party/abseil-cpp/absl/utility/utility.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "url/gurl.h"
@@ -202,15 +203,15 @@ class ResourceLoadingCancellingThrottle
     resource->is_complete = true;
     resource->is_primary_frame_resource = true;
     resources.push_back(std::move(resource));
-    auto timing = mojom::PageLoadTimingPtr(base::in_place);
+    auto timing = mojom::PageLoadTimingPtr(absl::in_place);
     InitPageLoadTimingForTest(timing.get());
     observer->OnTimingUpdated(
         navigation_handle()->GetRenderFrameHost(), std::move(timing),
-        mojom::FrameMetadataPtr(base::in_place),
+        mojom::FrameMetadataPtr(absl::in_place),
         std::vector<blink::UseCounterFeature>(), resources,
-        mojom::FrameRenderDataUpdatePtr(base::in_place),
-        mojom::CpuTimingPtr(base::in_place),
-        mojom::InputTimingPtr(base::in_place), blink::MobileFriendliness());
+        mojom::FrameRenderDataUpdatePtr(absl::in_place),
+        mojom::CpuTimingPtr(absl::in_place),
+        mojom::InputTimingPtr(absl::in_place), blink::MobileFriendliness());
   }
 };
 
@@ -481,7 +482,7 @@ class AdsPageLoadMetricsObserverTest
 
   // Returns the final RenderFrameHost after navigation commits.
   RenderFrameHost* NavigateMainFrame(const std::string& url) {
-    return NavigateFrame(url, web_contents()->GetMainFrame());
+    return NavigateFrame(url, web_contents()->GetPrimaryMainFrame());
   }
 
   void OnCpuTimingUpdate(RenderFrameHost* render_frame_host,
@@ -516,11 +517,7 @@ class AdsPageLoadMetricsObserverTest
   std::unique_ptr<NavigationSimulator> CreateNavigationSimulator(
       const std::string& url,
       content::RenderFrameHost* frame) {
-    if (WithFencedFrames() && !frame->IsInPrimaryMainFrame()) {
-      return NavigationSimulator::CreateForFencedFrame(GURL(url), frame);
-    } else {
-      return NavigationSimulator::CreateRendererInitiated(GURL(url), frame);
-    }
+    return NavigationSimulator::CreateRendererInitiated(GURL(url), frame);
   }
 
   // Returns the final RenderFrameHost after navigation commits.
@@ -1248,8 +1245,8 @@ TEST_P(AdsPageLoadMetricsObserverTest, UntaggingAdFrame) {
 
 TEST_P(AdsPageLoadMetricsObserverTest, MainFrameResource) {
   // Start main-frame navigation
-  auto navigation_simulator =
-      CreateNavigationSimulator(kNonAdUrl, web_contents()->GetMainFrame());
+  auto navigation_simulator = CreateNavigationSimulator(
+      kNonAdUrl, web_contents()->GetPrimaryMainFrame());
   navigation_simulator->Start();
   navigation_simulator->Commit();
 
@@ -1293,8 +1290,8 @@ TEST_P(AdsPageLoadMetricsObserverTest, MainFrameResource) {
 
 TEST_P(AdsPageLoadMetricsObserverTest, NoBytesLoaded_NoHistogramsRecorded) {
   // Start main-frame navigation
-  auto navigation_simulator =
-      CreateNavigationSimulator(kNonAdUrl, web_contents()->GetMainFrame());
+  auto navigation_simulator = CreateNavigationSimulator(
+      kNonAdUrl, web_contents()->GetPrimaryMainFrame());
   navigation_simulator->Start();
   navigation_simulator->Commit();
 

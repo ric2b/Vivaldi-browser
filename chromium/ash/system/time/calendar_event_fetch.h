@@ -44,7 +44,13 @@ class ASH_EXPORT CalendarEventFetch {
   CalendarEventFetch& operator=(const CalendarEventFetch& other) = delete;
   ~CalendarEventFetch();
 
+  // Cancels the fetch request, invokes `cancel_closure_`.
+  void Cancel();
+
  private:
+  // Sends the request for an event list. Cancels any in-progress fetch request.
+  void SendFetchRequest();
+
   // Callback invoked when results of a fetch are available.
   void OnResultReceived(
       google_apis::ApiErrorCode error,
@@ -54,7 +60,10 @@ class ASH_EXPORT CalendarEventFetch {
   void OnTimeout();
 
   // Start of the month whose events we're fetching.
-  base::Time start_of_month_;
+  const base::Time start_of_month_;
+
+  // Fetch start/end times.
+  const std::pair<base::Time, base::Time> time_range_;
 
   // Callback invoked when the fetch is complete.
   FetchCompleteCallback complete_callback_;
@@ -68,6 +77,9 @@ class ASH_EXPORT CalendarEventFetch {
   // Timer we run at the start of a fetch, to ensure that we terminate if we
   // go too long without a response.
   base::OneShotTimer timeout_;
+
+  // Closure to be invoked if the request needs to be canceled.
+  base::OnceClosure cancel_closure_;
 
   base::WeakPtrFactory<CalendarEventFetch> weak_factory_{this};
 };

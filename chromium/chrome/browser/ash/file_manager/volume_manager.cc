@@ -11,6 +11,7 @@
 
 #include "ash/components/disks/disk.h"
 #include "ash/components/disks/disk_mount_manager.h"
+#include "ash/constants/ash_features.h"
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
@@ -43,10 +44,11 @@
 #include "chrome/browser/ash/file_manager/volume_manager_factory.h"
 #include "chrome/browser/ash/file_manager/volume_manager_observer.h"
 #include "chrome/browser/ash/file_system_provider/provided_file_system_info.h"
+#include "chrome/browser/ash/guest_os/public/types.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/media_galleries/fileapi/mtp_device_map_service.h"
 #include "chrome/browser/profiles/profile.h"
-#include "chrome/common/pref_names.h"
+#include "chromeos/components/disks/disks_prefs.h"
 #include "components/prefs/pref_service.h"
 #include "components/storage_monitor/storage_monitor.h"
 #include "content/public/browser/browser_context.h"
@@ -191,7 +193,7 @@ std::string GetMountPointNameForMediaStorage(
 }
 
 chromeos::MountAccessMode GetExternalStorageAccessMode(const Profile* profile) {
-  return profile->GetPrefs()->GetBoolean(prefs::kExternalStorageReadOnly)
+  return profile->GetPrefs()->GetBoolean(disks::prefs::kExternalStorageReadOnly)
              ? chromeos::MOUNT_ACCESS_MODE_READ_ONLY
              : chromeos::MOUNT_ACCESS_MODE_READ_WRITE;
 }
@@ -235,6 +237,9 @@ std::string MediaViewDocumentIdToLabel(std::string root_document_id) {
   } else if (root_document_id == arc::kVideosRootDocumentId) {
     return l10n_util::GetStringUTF8(
         IDS_FILE_BROWSER_MEDIA_VIEW_VIDEOS_ROOT_LABEL);
+  } else if (root_document_id == arc::kDocumentsRootDocumentId) {
+    return l10n_util::GetStringUTF8(
+        IDS_FILE_BROWSER_MEDIA_VIEW_DOCUMENTS_ROOT_LABEL);
   }
   NOTREACHED();
   return "";
@@ -397,7 +402,8 @@ std::unique_ptr<Volume> Volume::CreateForFuseBoxMTP(
   volume->volume_id_ = util::kFuseBox;
   volume->volume_id_.append(kMtpVolumeIdPrefix + label);
   volume->volume_label_ = label;
-  volume->volume_label_.insert(0, "fusebox ");
+  if (ash::features::IsFileManagerFuseBoxDebugEnabled())
+    volume->volume_label_.insert(0, "fusebox ");
   return volume;
 }
 
@@ -412,7 +418,8 @@ std::unique_ptr<Volume> Volume::CreateForMediaView(
       arc::kMediaDocumentsProviderAuthority, root_document_id);
   volume->mount_condition_ = ash::disks::MOUNT_CONDITION_NONE;
   volume->volume_label_ = MediaViewDocumentIdToLabel(root_document_id);
-  volume->is_read_only_ = true;
+  volume->is_read_only_ =
+      arc::ArcDocumentsProviderRootMap::IsDocumentProviderRootReadOnly();
   volume->watchable_ = false;
   volume->volume_id_ = arc::GetMediaViewVolumeId(root_document_id);
   return volume;
@@ -441,7 +448,8 @@ std::unique_ptr<Volume> Volume::CreateForSshfsCrostini(
 std::unique_ptr<Volume> Volume::CreateForSftpGuestOs(
     const std::string display_name,
     const base::FilePath& sftp_mount_path,
-    const base::FilePath& remote_mount_path) {
+    const base::FilePath& remote_mount_path,
+    const guest_os::VmType vm_type) {
   std::unique_ptr<Volume> volume(new Volume());
   volume->type_ = VOLUME_TYPE_GUEST_OS;
   volume->device_type_ = chromeos::DEVICE_TYPE_UNKNOWN;
@@ -453,6 +461,7 @@ std::unique_ptr<Volume> Volume::CreateForSftpGuestOs(
   volume->volume_id_ = GenerateVolumeId(*volume);
   volume->volume_label_ = display_name;
   volume->watchable_ = false;
+  volume->vm_type_ = vm_type;
   return volume;
 }
 
@@ -668,11 +677,11 @@ void VolumeManager::Initialize() {
   // Subscribe to Profile Preference change.
   pref_change_registrar_.Init(profile_->GetPrefs());
   pref_change_registrar_.Add(
-      prefs::kExternalStorageDisabled,
+      disks::prefs::kExternalStorageDisabled,
       base::BindRepeating(&VolumeManager::OnExternalStorageDisabledChanged,
                           weak_ptr_factory_.GetWeakPtr()));
   pref_change_registrar_.Add(
-      prefs::kExternalStorageReadOnly,
+      disks::prefs::kExternalStorageReadOnly,
       base::BindRepeating(&VolumeManager::OnExternalStorageReadOnlyChanged,
                           weak_ptr_factory_.GetWeakPtr()));
 
@@ -802,10 +811,11 @@ void VolumeManager::AddSshfsCrostiniVolume(
 void VolumeManager::AddSftpGuestOsVolume(
     const std::string display_name,
     const base::FilePath& sftp_mount_path,
-    const base::FilePath& remote_mount_path) {
+    const base::FilePath& remote_mount_path,
+    const guest_os::VmType vm_type) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   std::unique_ptr<Volume> volume = Volume::CreateForSftpGuestOs(
-      display_name, sftp_mount_path, remote_mount_path);
+      display_name, sftp_mount_path, remote_mount_path, vm_type);
   // Ignore if volume already exists.
   if (mounted_volumes_.find(volume->volume_id()) != mounted_volumes_.end())
     return;
@@ -819,7 +829,7 @@ void VolumeManager::RemoveSshfsCrostiniVolume(
   disk_mount_manager_->UnmountPath(
       sshfs_mount_path.value(),
       base::BindOnce(&VolumeManager::OnSshfsCrostiniUnmountCallback,
-                     base::Unretained(this), sshfs_mount_path,
+                     weak_ptr_factory_.GetWeakPtr(), sshfs_mount_path,
                      std::move(callback)));
 }
 
@@ -830,7 +840,7 @@ void VolumeManager::RemoveSftpGuestOsVolume(
   disk_mount_manager_->UnmountPath(
       sftp_mount_path.value(),
       base::BindOnce(&VolumeManager::OnSftpGuestOsUnmountCallback,
-                     base::Unretained(this), sftp_mount_path,
+                     weak_ptr_factory_.GetWeakPtr(), sftp_mount_path,
                      std::move(callback)));
 }
 
@@ -975,7 +985,8 @@ void VolumeManager::OnAutoMountableDiskEvent(
 
       bool mounting = false;
       if (disk.mount_path().empty() && disk.has_media() &&
-          !profile_->GetPrefs()->GetBoolean(prefs::kExternalStorageDisabled)) {
+          !profile_->GetPrefs()->GetBoolean(
+              disks::prefs::kExternalStorageDisabled)) {
         // TODO(crbug.com/774890): Remove |mount_label| when the issue gets
         // resolved. Currently we suggest a mount point name, because in case
         // when disk's name contains '#', content will not load in Files App.
@@ -1268,6 +1279,7 @@ void VolumeManager::OnArcPlayStoreEnabledChanged(bool enabled) {
   if (enabled == arc_volumes_mounted_)
     return;
 
+  // Need to mount all roots declared in in arc_media_view_util.cc.
   if (enabled) {
     DoMountEvent(chromeos::MOUNT_ERROR_NONE,
                  Volume::CreateForMediaView(arc::kImagesRootDocumentId));
@@ -1275,6 +1287,8 @@ void VolumeManager::OnArcPlayStoreEnabledChanged(bool enabled) {
                  Volume::CreateForMediaView(arc::kVideosRootDocumentId));
     DoMountEvent(chromeos::MOUNT_ERROR_NONE,
                  Volume::CreateForMediaView(arc::kAudioRootDocumentId));
+    DoMountEvent(chromeos::MOUNT_ERROR_NONE,
+                 Volume::CreateForMediaView(arc::kDocumentsRootDocumentId));
     DoMountEvent(
         chromeos::MOUNT_ERROR_NONE,
         Volume::CreateForAndroidFiles(base::FilePath(util::kAndroidFilesPath)));
@@ -1285,6 +1299,8 @@ void VolumeManager::OnArcPlayStoreEnabledChanged(bool enabled) {
                    *Volume::CreateForMediaView(arc::kVideosRootDocumentId));
     DoUnmountEvent(chromeos::MOUNT_ERROR_NONE,
                    *Volume::CreateForMediaView(arc::kAudioRootDocumentId));
+    DoUnmountEvent(chromeos::MOUNT_ERROR_NONE,
+                   *Volume::CreateForMediaView(arc::kDocumentsRootDocumentId));
     DoUnmountEvent(chromeos::MOUNT_ERROR_NONE,
                    *Volume::CreateForAndroidFiles(
                        base::FilePath(util::kAndroidFilesPath)));
@@ -1298,7 +1314,8 @@ void VolumeManager::OnExternalStorageDisabledChanged() {
   // If the policy just got disabled we have to unmount every device currently
   // mounted. The opposite is fine - we can let the user re-plug their device to
   // make it available.
-  if (profile_->GetPrefs()->GetBoolean(prefs::kExternalStorageDisabled)) {
+  if (profile_->GetPrefs()->GetBoolean(
+          disks::prefs::kExternalStorageDisabled)) {
     // We do not iterate on mount_points directly, because mount_points can
     // be changed by UnmountPath(). Also, a failing unmount shouldn't be retried
     // indefinitely. So make a set of all the mount points that should be
@@ -1332,7 +1349,7 @@ void VolumeManager::OnRemovableStorageAttached(
     const storage_monitor::StorageInfo& info) {
   if (!storage_monitor::StorageInfo::IsMTPDevice(info.device_id()))
     return;
-  if (profile_->GetPrefs()->GetBoolean(prefs::kExternalStorageDisabled))
+  if (profile_->GetPrefs()->GetBoolean(disks::prefs::kExternalStorageDisabled))
     return;
 
   // Resolve mtp storage name and get MtpStorageInfo.
@@ -1622,7 +1639,8 @@ void VolumeManager::DoMountEvent(chromeos::MountError error_code,
 
   // Filter out removable disks if forbidden by policy for this profile.
   if (volume->type() == VOLUME_TYPE_REMOVABLE_DISK_PARTITION &&
-      profile_->GetPrefs()->GetBoolean(prefs::kExternalStorageDisabled)) {
+      profile_->GetPrefs()->GetBoolean(
+          disks::prefs::kExternalStorageDisabled)) {
     return;
   }
 
@@ -1687,12 +1705,15 @@ void VolumeManager::OnSftpGuestOsUnmountCallback(
       (error_code == chromeos::MOUNT_ERROR_PATH_NOT_MOUNTED)) {
     // Remove metadata associated with the mount. It will be a no-op if it
     // wasn't mounted or unmounted out of band. We need the VolumeId to be
-    // consistent, which means the mount path needs to be the same. display_name
-    // and remote_mount_path aren't needed and we don't know them at unmount so
-    // leave them blank.
-    DoUnmountEvent(
-        chromeos::MOUNT_ERROR_NONE,
-        *Volume::CreateForSftpGuestOs("", sftp_mount_path, base::FilePath()));
+    // consistent, which means the mount path needs to be the same.
+    // display_name, remote_mount_path and vm_type aren't needed and we don't
+    // know them at unmount so leave them blank.
+    DoUnmountEvent(chromeos::MOUNT_ERROR_NONE,
+                   // TODO(b/230667118): Once http://crrev/3627129 makes it into
+                   // Chrome change the type to unknown.
+                   *Volume::CreateForSftpGuestOs(
+                       "", sftp_mount_path, base::FilePath(),
+                       guest_os::VmType::ApplicationList_VmType_TERMINA));
     if (callback)
       std::move(callback).Run(true);
     return;

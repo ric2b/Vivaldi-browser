@@ -6,11 +6,13 @@
 #define BASE_MEMORY_PLATFORM_SHARED_MEMORY_REGION_H_
 
 #include "base/base_export.h"
+#include "base/containers/span.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/platform_shared_memory_handle.h"
-#include "base/memory/platform_shared_memory_mapper.h"
+#include "base/memory/shared_memory_mapper.h"
 #include "base/unguessable_token.h"
 #include "build/build_config.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 #include <stdint.h>
 
@@ -122,7 +124,7 @@ class BASE_EXPORT PlatformSharedMemoryRegion {
       Mode mode,
       size_t size,
       const UnguessableToken& guid);
-#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_POSIX) && !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_APPLE)
   // Specialized version of Take() for POSIX that takes only one file descriptor
   // instead of pair. Cannot be used with kWritable |mode|.
   static PlatformSharedMemoryRegion Take(ScopedFD handle,
@@ -171,13 +173,13 @@ class BASE_EXPORT PlatformSharedMemoryRegion {
   // kWritable mode, all other modes will CHECK-fail. The object will have
   // kReadOnly mode after this call on success.
   bool ConvertToReadOnly();
-#if BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_APPLE)
   // Same as above, but |mapped_addr| is used as a hint to avoid additional
   // mapping of the memory object.
   // |mapped_addr| must be mapped location of |memory_object_|. If the location
   // is unknown, |mapped_addr| should be |nullptr|.
   bool ConvertToReadOnly(void* mapped_addr);
-#endif  // BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_APPLE)
 
   // Converts the region to unsafe. Returns whether the operation succeeded.
   // Makes the current instance invalid on failure. Can be called only in
@@ -186,17 +188,15 @@ class BASE_EXPORT PlatformSharedMemoryRegion {
   bool ConvertToUnsafe();
 
   // Maps |size| bytes of the shared memory region starting with the given
-  // |offset| into the caller's address space. |offset| must be aligned to value
-  // of |SysInfo::VMAllocationGranularity()|. Fails if requested bytes are out
-  // of the region limits.
-  // Returns true and sets |memory| and |mapped_size| on success, returns false
-  // and leaves output parameters in unspecified state otherwise. The mapped
-  // address is guaranteed to have an alignment of at least
-  // |kMapMinimumAlignment|.
-  bool MapAt(uint64_t offset,
-             size_t size,
-             void** memory,
-             size_t* mapped_size) const;
+  // |offset| into the caller's address space using the provided
+  // |SharedMemoryMapper|. |offset| must be aligned to value of
+  // |SysInfo::VMAllocationGranularity()|. Fails if requested bytes are out of
+  // the region limits. Returns the mapping as span on success, or absl::nullopt
+  // on failure. The mapped address is guaranteed to have an alignment of at
+  // least |kMapMinimumAlignment|.
+  absl::optional<span<uint8_t>> MapAt(uint64_t offset,
+                                      size_t size,
+                                      SharedMemoryMapper* mapper) const;
 
   const UnguessableToken& GetGUID() const { return guid_; }
 

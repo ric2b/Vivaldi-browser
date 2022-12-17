@@ -20,9 +20,8 @@ namespace eche_app {
 extern const char kEcheAppScreenLockNotifierId[];
 extern const char kEcheAppRetryConnectionNotifierId[];
 extern const char kEcheAppInactivityNotifierId[];
-extern const char kEcheAppFromWebWithoudButtonNotifierId[];
+extern const char kEcheAppFromWebWithoutButtonNotifierId[];
 extern const char kEcheAppLearnMoreUrl[];
-extern const char kEcheAppHelpUrl[];
 
 // Controller class to show notifications.
 class EcheAppNotificationController {
@@ -38,7 +37,7 @@ class EcheAppNotificationController {
 
   // Shows the notification when screen lock is already enabled on the phone,
   // but the ChromeOS is not enabled.
-  void ShowScreenLockNotification(const absl::optional<std::u16string>& title);
+  void ShowScreenLockNotification(const std::u16string& title);
   // Shows the notification which was generated from WebUI and carry title and
   // message.
   void ShowNotificationFromWebUI(
@@ -58,7 +57,6 @@ class EcheAppNotificationController {
   virtual void LaunchSettings();
   virtual void LaunchLearnMore();
   virtual void LaunchTryAgain();
-  virtual void LaunchHelp();
 
  private:
   // NotificationDelegate implementation for handling click events.

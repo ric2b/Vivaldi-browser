@@ -12,6 +12,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "build/build_config.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/ui/profile_chooser_constants.h"
 #include "chrome/browser/ui/signin_modal_dialog.h"
 #include "chrome/browser/ui/webui/signin/signin_utils.h"
@@ -19,7 +20,7 @@
 #include "third_party/skia/include/core/SkColor.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/ui/webui/signin/signin_email_confirmation_dialog.h"
 #endif
 
@@ -71,9 +72,6 @@ class SigninViewController {
 
   virtual ~SigninViewController();
 
-  // Returns true if the signin flow should be shown for |mode|.
-  static bool ShouldShowSigninForMode(profiles::BubbleViewMode mode);
-
 #if BUILDFLAG(ENABLE_DICE_SUPPORT)
   // Shows the signin attached to |browser_|'s active web contents.
   // |access_point| indicates the access point used to open the Gaia sign in
@@ -104,13 +102,6 @@ class SigninViewController {
   // out SAML accounts completely (see https://crbug.com/1069421).
   void ShowGaiaLogoutTab(signin_metrics::SourceForRefreshTokenOperation source);
 
-  // Shows the modal sign-in email confirmation dialog as a tab-modal dialog on
-  // top of the currently displayed WebContents in |browser_|.
-  void ShowModalSigninEmailConfirmationDialog(
-      const std::string& last_email,
-      const std::string& email,
-      SigninEmailConfirmationDialog::Callback callback);
-
   // Shows the reauth prompt for |account_id| as either:
   // - a tab-modal dialog on top of the currently active tab, or
   // - a new tab
@@ -133,6 +124,15 @@ class SigninViewController {
       const CoreAccountId& account_id,
       bool is_forced_intercept);
 #endif  // BUILDFLAG(ENABLE_DICE_SUPPORT)
+
+#if BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  // Shows the modal sign-in email confirmation dialog as a tab-modal dialog on
+  // top of the currently displayed WebContents in |browser_|.
+  void ShowModalSigninEmailConfirmationDialog(
+      const std::string& last_email,
+      const std::string& email,
+      SigninEmailConfirmationDialog::Callback callback);
+#endif  // BUILDFLAG(ENABLE_DICE_SUPPORT) || BUILDFLAG(IS_CHROMEOS_LACROS)
 
   // Shows the modal sync confirmation dialog as a browser-modal dialog on top
   // of the |browser_|'s window.

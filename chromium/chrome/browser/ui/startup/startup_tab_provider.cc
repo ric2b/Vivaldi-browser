@@ -53,7 +53,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -69,7 +69,7 @@
 #include "app/vivaldi_constants.h"
 #include "app/vivaldi_resources.h"
 #include "browser/vivaldi_runtime_feature.h"
-#include "net/base/escape.h"
+#include "base/strings/escape.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
@@ -86,9 +86,13 @@ bool ProfileHasOtherTabbedBrowser(Profile* profile) {
   return other_tabbed_browser != browser_list->end();
 }
 
-// Validates the URL whether it is allowed to be opened at launching.
+// Validates the URL whether it is allowed to be opened at launching. Dangerous
+// schemes are excluded to prevent untrusted external applications from opening
+// them except on Lacros where URLs coming from untrusted applications are
+// checked in a different layer (such as the dbus UrlHandlerService and the
+// ArcIntentHelperBridge). Thus, chrome:// URLs are allowed on Lacros so that
+// trusted calls in Ash can open them.
 bool ValidateUrl(const GURL& url) {
-  // Exclude dangerous schemes.
   if (!url.is_valid())
     return false;
 
@@ -117,6 +121,9 @@ bool ValidateUrl(const GURL& url) {
   auto* policy = content::ChildProcessSecurityPolicy::GetInstance();
   return policy->IsWebSafeScheme(url.scheme()) ||
          url.SchemeIs(url::kFileScheme) ||
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+         url.SchemeIs(content::kChromeUIScheme) ||
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
          url_points_to_an_approved_settings_page ||
          url.spec() == url::kAboutBlankURL;
 }
@@ -305,7 +312,7 @@ CommandLineTabsPresent StartupTabProviderImpl::HasCommandLineTabs(
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 StartupTabs StartupTabProviderImpl::GetCrosapiTabs() const {
-  auto* init_params = chromeos::LacrosService::Get()->init_params();
+  auto* init_params = chromeos::BrowserInitParams::Get();
   if (init_params->initial_browser_action !=
           crosapi::mojom::InitialBrowserAction::kOpenWindowWithUrls ||
       !init_params->startup_urls.has_value()) {
@@ -559,7 +566,7 @@ StartupTabProviderImpl::ParseTabFromCommandLineArg(
     if (base::StartsWith(arg, FILE_PATH_LITERAL("mailto:"))) {
       std::string internal_mailto_url =
           vivaldi::kVivaldiMailURL + ("?path=composer&mailto=" +
-            net::EscapeQueryParamValue(base::FilePath(arg).MaybeAsASCII(),
+            base::EscapeQueryParamValue(base::FilePath(arg).MaybeAsASCII(),
                                        true));
       return {CommandLineTabsPresent::kYes,
               GURL(internal_mailto_url)};

@@ -12,7 +12,6 @@
 #include "chrome/grit/generated_resources.h"
 #include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
-#include "components/renderer_context_menu/views/toolkit_delegate_views.h"
 #include "content/public/browser/context_menu_params.h"
 #include "content/public/browser/web_contents.h"
 #include "extensions/api/menubar_menu/menubar_menu_api.h"
@@ -89,10 +88,6 @@ bool ContextMenuController::Show() {
                                        force_views, rv_context_menu_));
 
   if (rv_context_menu_) {
-    // Give access to the toolkit delegate. Needed for containers that populate
-    // content on demand (when folder opens).
-    std::unique_ptr<ToolkitDelegateViews> delegate(new ToolkitDelegateViews);
-    rv_context_menu_->set_toolkit_delegate(std::move(delegate));
     menu_->SetParentView(rv_context_menu_->parent_view());
   }
 
@@ -144,6 +139,16 @@ void ContextMenuController::InitModel() {
 
   SanitizeModel(root_menu_model_);
 }
+
+std::string ContextMenuController::GetEmptyIcon() {
+  // Base64 of a 1x1 transparent PNG.
+  std::string icon =
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAACXBIWXMAAAsTAAALEwEAmpwYAAA"\
+  "AAXNSR0IArs4c6QAAAARnQU1BAACxjwv8YQUAAAAQSURBVHgBAQUA+v8AAAAAAAAFAAFkeJU4AA"\
+  "AAAElFTkSuQmCC";
+  return icon;
+}
+
 
 void ContextMenuController::PopulateModel(const Element& child,
                                           bool dark_text_color,
@@ -223,10 +228,23 @@ void ContextMenuController::PopulateModel(const Element& child,
       SetIcon(id, params_->properties.icons.at(0), menu_model);
       // Attempt loading a favicon that will replace the default.
       id_to_url_map_[id] = item.url.get();
-      LoadFavicon(id, *item.url);
+      LoadFavicon(id, *item.url, true);
     } else if (item.icons && item.icons->size() == 2) {
-      // Using same format as main menus api.
-      SetIcon(id, item.icons->at(dark_text_color ? 0 : 1), menu_model);
+      const std::string icon = item.icons->at(dark_text_color ? 0 : 1);
+      if (GURL(icon).SchemeIsHTTPOrHTTPS()) {
+        // Loading a favicon from a url (or local cache) is asynchronous. We
+        // have to ensure there is at least one icon present in the model before
+        // showing the menu to ensure the model can signal to the layout to set
+        // aside proper space for it. So we load an empty icon.
+        // We use a SimpleMenuModel that we do not create ourself for the
+        // document menu so we can not override it (if we did we could
+        // have reimplemented SimpleMenuModel::HasIcons()).
+        SetIcon(id, GetEmptyIcon(), menu_model);
+        LoadFavicon(id, icon, false);
+      } else {
+        // Allows for hardcoded png data.
+        SetIcon(id, icon, menu_model);
+      }
     } else if (rv_context_menu_ && item.action) {
       ui::ImageModel img = rv_context_menu_->GetImageForAction(*item.action);
       if (!img.IsEmpty()) {
@@ -343,7 +361,8 @@ void ContextMenuController::SetIcon(int command_id,
 }
 
 void ContextMenuController::LoadFavicon(int command_id,
-                                        const std::string& url) {
+                                        const std::string& url,
+                                        bool is_page) {
   if (!favicon_service_) {
     favicon_service_ = FaviconServiceFactory::GetForProfile(
         GetProfile(), ServiceAccessType::EXPLICIT_ACCESS);
@@ -355,18 +374,39 @@ void ContextMenuController::LoadFavicon(int command_id,
       base::BindOnce(&ContextMenuController::OnFaviconDataAvailable,
                      base::Unretained(this), command_id);
 
-  favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
-                                              &cancelable_task_tracker_);
+  if (is_page) {
+    favicon_service_->GetFaviconImageForPageURL(GURL(url), std::move(callback),
+                                                &cancelable_task_tracker_);
+  } else {
+    favicon_service_->GetFaviconImage(GURL(url), std::move(callback),
+                                      &cancelable_task_tracker_);
+  }
 }
 
 void ContextMenuController::OnFaviconDataAvailable(
     int command_id,
     const favicon_base::FaviconImageResult& image_result) {
   if (!image_result.image.IsEmpty()) {
-    // We do not update the model. The MenuItemView class we use to paint the
-    // menu does not support dynamic updates of icons through the model. We have
-    // to set it directly.
+    // Update the menu directly so that a visible menu will be updated, The
+    // MenuItemView class we use to paint the menu does not support dynamic
+    // updates of icons through the model.
     menu_->SetIcon(image_result.image, command_id);
+    // We have to update the model as well so that if a menu reloads utself
+    // due to a dynamic update the model can provide the state at that point.
+    int index = root_menu_model_->GetIndexOfCommandId(command_id);
+    if (index != -1) {
+      root_menu_model_->SetIcon(index,
+        ui::ImageModel::FromImage(image_result.image));
+    } else {
+      for (unsigned i = 0; i < models_.size(); i++ ) {
+        ui::SimpleMenuModel* model = models_[i].get();
+        index = model->GetIndexOfCommandId(command_id);
+        if (index != -1) {
+          model->SetIcon(index, ui::ImageModel::FromImage(image_result.image));
+          break;
+        }
+      }
+    }
   }
 }
 

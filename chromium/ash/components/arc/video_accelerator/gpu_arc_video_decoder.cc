@@ -12,6 +12,8 @@
 #include "ash/components/arc/video_accelerator/protected_buffer_manager.h"
 #include "base/bind.h"
 #include "base/files/scoped_file.h"
+#include "base/memory/platform_shared_memory_region.h"
+#include "base/memory/unsafe_shared_memory_region.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/threading/sequenced_task_runner_handle.h"
@@ -105,7 +107,8 @@ void GpuArcVideoDecoder::Initialize(
       std::make_unique<media::VdaVideoFramePool>(video_frame_pool_->WeakThis(),
                                                  client_task_runner_),
       std::make_unique<media::VideoFrameConverter>(),
-      std::make_unique<media::NullMediaLog>());
+      std::make_unique<media::NullMediaLog>(),
+      /*oop_video_decoder=*/{});
 
   if (!decoder_) {
     VLOGF(1) << "Failed to create video decoder";
@@ -395,7 +398,7 @@ scoped_refptr<media::DecoderBuffer> GpuArcVideoDecoder::CreateDecoderBuffer(
     uint32_t bytes_used) {
   // TODO(b/189278506) integrate additional memory buffer verification for
   // protected buffers (see crrev.com/3306795).
-  base::subtle::PlatformSharedMemoryRegion shm_region;
+  base::UnsafeSharedMemoryRegion shm_region;
   if (*secure_mode_) {
     // Use protected shared memory associated with the given file descriptor.
     shm_region = protected_buffer_manager_->GetProtectedSharedMemoryRegionFor(
@@ -410,9 +413,11 @@ scoped_refptr<media::DecoderBuffer> GpuArcVideoDecoder::CreateDecoderBuffer(
       VLOGF(1) << "Failed to get size for fd";
       return nullptr;
     }
-    shm_region = base::subtle::PlatformSharedMemoryRegion::Take(
-        std::move(fd), base::subtle::PlatformSharedMemoryRegion::Mode::kUnsafe,
-        size, base::UnguessableToken::Create());
+    shm_region = base::UnsafeSharedMemoryRegion::Deserialize(
+        base::subtle::PlatformSharedMemoryRegion::Take(
+            std::move(fd),
+            base::subtle::PlatformSharedMemoryRegion::Mode::kUnsafe, size,
+            base::UnguessableToken::Create()));
     if (!shm_region.IsValid()) {
       VLOGF(1) << "Cannot take file descriptor based shared memory";
       return nullptr;

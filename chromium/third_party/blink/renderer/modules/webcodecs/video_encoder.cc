@@ -33,7 +33,7 @@
 #include "media/video/gpu_video_accelerator_factories.h"
 #include "media/video/video_encode_accelerator_adapter.h"
 #include "media/video/video_encoder_fallback.h"
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/bindings/core/v8/native_value_traits_impl.h"
@@ -294,22 +294,10 @@ VideoEncoderTraits::ParsedConfig* ParseConfigStatic(
   return result;
 }
 
-const base::Feature kWebCodecsAv1Encoding{"WebCodecsAv1Encoding",
-                                          base::FEATURE_ENABLED_BY_DEFAULT};
-
 bool VerifyCodecSupportStatic(VideoEncoderTraits::ParsedConfig* config,
                               ExceptionState* exception_state) {
   switch (config->codec) {
     case media::VideoCodec::kAV1:
-      if (!base::FeatureList::IsEnabled(kWebCodecsAv1Encoding)) {
-        if (exception_state) {
-          exception_state->ThrowDOMException(
-              DOMExceptionCode::kNotSupportedError,
-              "AV1 encoding is not supported yet.");
-        }
-        return false;
-      }
-
       if (config->profile !=
           media::VideoCodecProfile::AV1PROFILE_PROFILE_MAIN) {
         if (exception_state) {
@@ -653,10 +641,11 @@ void VideoEncoder::ProcessEncode(Request* request) {
   DCHECK_EQ(request->type, Request::Type::kEncode);
   DCHECK_GT(requested_encodes_, 0u);
 
+  auto frame = request->input->frame();
   bool keyframe = request->encodeOpts->hasKeyFrameNonNull() &&
                   request->encodeOpts->keyFrameNonNull();
   active_encodes_++;
-  request->StartTracingVideoEncode(keyframe);
+  request->StartTracingVideoEncode(keyframe, frame->timestamp());
 
   auto done_callback = [](VideoEncoder* self, Request* req,
                           media::EncoderStatus status) {
@@ -674,8 +663,6 @@ void VideoEncoder::ProcessEncode(Request* request) {
     req->EndTracing();
     self->ProcessRequests();
   };
-
-  scoped_refptr<media::VideoFrame> frame = request->input->frame();
 
   // Currently underlying encoders can't handle frame backed by textures,
   // so let's readback pixel data to CPU memory.
@@ -701,6 +688,8 @@ void VideoEncoder::ProcessEncode(Request* request) {
              base::TimeDelta timestamp, media::VideoFrameMetadata metadata,
              media::VideoEncoder::EncoderStatusCB done_callback,
              scoped_refptr<media::VideoFrame> frame) {
+            TRACE_EVENT_NESTABLE_ASYNC_END0(
+                "media", "CopyRGBATextureToVideoFrame", self);
             if (!self || self->reset_count_ != reset_count || !frame)
               return;
 
@@ -744,6 +733,9 @@ void VideoEncoder::ProcessEncode(Request* request) {
           gfx::ColorSpace::PrimaryID::BT709, gfx::ColorSpace::TransferID::SRGB,
           gfx::ColorSpace::MatrixID::SMPTE170M,
           gfx::ColorSpace::RangeID::LIMITED);
+
+      TRACE_EVENT_NESTABLE_ASYNC_BEGIN1("media", "CopyRGBATextureToVideoFrame",
+                                        this, "timestamp", frame->timestamp());
       if (accelerated_frame_pool_->CopyRGBATextureToVideoFrame(
               format, frame->coded_size(), frame->ColorSpace(), origin,
               frame->mailbox_holder(0), dst_color_space,
@@ -755,6 +747,9 @@ void VideoEncoder::ProcessEncode(Request* request) {
         request->input->close();
         return;
       }
+
+      TRACE_EVENT_NESTABLE_ASYNC_END0("media", "CopyRGBATextureToVideoFrame",
+                                      this);
 
       // Error occurred, fall through to normal readback path below.
       blocking_request_in_progress_ = false;
@@ -922,10 +917,6 @@ void VideoEncoder::CallOutputCallback(
     auto* svc_metadata = SvcOutputMetadata::Create();
     svc_metadata->setTemporalLayerId(output.temporal_id);
     metadata->setSvc(svc_metadata);
-
-    // TODO(https://crbug.com/1275024): Remove these lines after deprecating.
-    if (!base::FeatureList::IsEnabled(kRemoveWebCodecsSpecViolations))
-      metadata->setTemporalLayerId(output.temporal_id);
   }
 
   // TODO(https://crbug.com/1241448): All encoders should output color space.

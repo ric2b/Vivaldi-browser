@@ -1366,6 +1366,9 @@ TEST_P(LtrRtlShelfViewTest, HomeButtonMetricsInTablet) {
 }
 
 TEST_P(LtrRtlShelfViewTest, ShouldHideTooltipTest) {
+  // Set a screen size large enough to have space between the home button and
+  // app buttons.
+  UpdateDisplay("2000x600");
   ShelfID app_button_id = AddAppShortcut();
   ShelfID platform_button_id = AddApp();
   // TODO(manucornet): It should not be necessary to call this manually. The
@@ -2510,9 +2513,10 @@ TEST_F(GhostImageShelfViewTest, RemoveGhostImageForRipOffDrag) {
   EXPECT_EQ(-1, shelf_view_->current_ghost_view_index());
 }
 
+// Disabled as likely to cause builder failure, see  https://crbug.com/1334936.
 // Tests that the ghost image is reinserted if the app is dragged within the
 // bounds of the shelf after a rip off.
-TEST_F(GhostImageShelfViewTest, ReinsertGhostImageAfterRipOffDrag) {
+TEST_F(GhostImageShelfViewTest, DISABLED_ReinsertGhostImageAfterRipOffDrag) {
   std::vector<std::pair<ShelfID, views::View*>> id_map;
   SetupForDragTest(&id_map);
   ShelfAppButton* first_app = GetButtonByID(id_map[0].first);
@@ -3203,18 +3207,17 @@ class ShelfViewFocusTest : public ShelfViewTest {
 
   void DoTab() {
     ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-    generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EventFlags::EF_NONE);
+    generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_NONE);
   }
 
   void DoShiftTab() {
     ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-    generator.PressKey(ui::KeyboardCode::VKEY_TAB,
-                       ui::EventFlags::EF_SHIFT_DOWN);
+    generator.PressKey(ui::KeyboardCode::VKEY_TAB, ui::EF_SHIFT_DOWN);
   }
 
   void DoEnter() {
     ui::test::EventGenerator generator(Shell::GetPrimaryRootWindow());
-    generator.PressKey(ui::KeyboardCode::VKEY_RETURN, ui::EventFlags::EF_NONE);
+    generator.PressKey(ui::KeyboardCode::VKEY_RETURN, ui::EF_NONE);
   }
 };
 
@@ -3284,7 +3287,7 @@ TEST_F(ShelfViewFocusTest, FocusCyclingBetweenShelfAndStatusWidget) {
   EXPECT_TRUE(test_api_->GetViewAt(2)->HasFocus());
 
   // This is the last element. Tabbing once more should go into the status
-  // area.
+  // area. If calendar view is enabled it is focusing on the date tray.
   DoTab();
   ExpectNotFocused(shelf_view_);
   ExpectFocused(status_area_);
@@ -3298,6 +3301,14 @@ TEST_F(ShelfViewFocusTest, FocusCyclingBetweenShelfAndStatusWidget) {
   DoTab();
   ExpectNotFocused(shelf_view_);
   ExpectFocused(status_area_);
+
+  // If calendar view is enabled, move the focusing ring from the date tray to
+  // the unified tray.
+  if (features::IsCalendarViewEnabled()) {
+    DoTab();
+    ExpectNotFocused(shelf_view_);
+    ExpectFocused(status_area_);
+  }
 
   // And keep going forward, now we should be cycling back to the first shelf
   // element.
@@ -3321,6 +3332,14 @@ TEST_F(ShelfViewFocusTest, UnfocusWithEsc) {
   DoShiftTab();
   ExpectNotFocused(shelf_view_);
   ExpectFocused(status_area_);
+
+  // If calendar view is enabled, move the focusing ring from the unified tray
+  // to the date tray.
+  if (features::IsCalendarViewEnabled()) {
+    DoShiftTab();
+    ExpectNotFocused(shelf_view_);
+    ExpectFocused(status_area_);
+  }
 
   // Advance backwards to the last element of the shelf.
   DoShiftTab();
@@ -3430,6 +3449,99 @@ TEST_F(ShelfViewGestureTapTest, MouseClickInterruptionAfterGestureLongPress) {
   GetEventGenerator()->ClickLeftButton();
   EXPECT_FALSE(shelf_view_->IsShowingMenu());
   EXPECT_EQ(views::InkDropState::HIDDEN, GetInkDropStateOfAppIcon1());
+}
+
+// Verifies that removing an item that is still waiting for the context menu
+// model works as expected.
+TEST_F(ShelfViewGestureTapTest, InterruptContextMenuShowByItemRemoval) {
+  // Add two shelf app buttons.
+  const ShelfID id1 = AddAppShortcut();
+  const ShelfID id2 = AddAppShortcut();
+
+  auto item_delegate_owned =
+      std::make_unique<AsyncContextMenuShelfItemDelegate>();
+  AsyncContextMenuShelfItemDelegate* item_delegate = item_delegate_owned.get();
+  model_->ReplaceShelfItemDelegate(id1, std::move(item_delegate_owned));
+
+  ShelfAppButton* app_button = GetButtonByID(id1);
+  GetEventGenerator()->MoveTouch(app_button->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->PressTouch();
+
+  // Fast forward to generate the ET_GESTURE_SHOW_PRESS event.
+  task_environment()->FastForwardBy(base::Milliseconds(200));
+
+  // Fast forward to generate the ET_GESTURE_LONG_PRESS event to show the
+  // context menu.
+  task_environment()->FastForwardBy(base::Milliseconds(1000));
+  EXPECT_TRUE(item_delegate->HasPendingContextMenuCallback());
+
+  // Remove the shelf item indexed by `id` before handling the pending context
+  // menu model request.
+  const int index = ShelfModel::Get()->ItemIndexByID(id1);
+  ShelfModel::Get()->RemoveItemAt(index);
+  EXPECT_FALSE(shelf_view_->drag_view());
+
+  // Initialize the mouse drag on the shelf app button specified by `id2`.
+  ShelfAppButton* app_button2 = GetButtonByID(id2);
+  GetEventGenerator()->MoveMouseTo(
+      app_button2->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->PressLeftButton();
+  task_environment()->FastForwardBy(base::Milliseconds(200));
+
+  // Move the mouse. Verify that the shelf view has a view under drag.
+  GetEventGenerator()->MoveMouseBy(0, -100);
+  EXPECT_TRUE(shelf_view_->drag_view());
+}
+
+TEST_F(ShelfViewGestureTapTest,
+       PressEscapeKeyBeforeReleaseLongPressOnAppButton) {
+  const ShelfID id = AddAppShortcut();
+  auto item_delegate_owned =
+      std::make_unique<AsyncContextMenuShelfItemDelegate>();
+  AsyncContextMenuShelfItemDelegate* item_delegate = item_delegate_owned.get();
+  model_->ReplaceShelfItemDelegate(id, std::move(item_delegate_owned));
+
+  ShelfAppButton* app_button = GetButtonByID(id);
+  GetEventGenerator()->MoveTouch(app_button->GetBoundsInScreen().CenterPoint());
+  GetEventGenerator()->PressTouch();
+
+  // Fast forward to generate the ET_GESTURE_SHOW_PRESS event.
+  task_environment()->FastForwardBy(base::Milliseconds(200));
+
+  // Fast forward to generate the ET_GESTURE_LONG_PRESS event to show the
+  // context menu.
+  task_environment()->FastForwardBy(base::Milliseconds(1000));
+  EXPECT_TRUE(item_delegate->HasPendingContextMenuCallback());
+
+  // Build a dummy context menu and show it.
+  {
+    auto menu_model = std::make_unique<ui::SimpleMenuModel>(nullptr);
+    menu_model->AddItem(203, u"item");
+    item_delegate->RunPendingContextMenuCallback(std::move(menu_model));
+    EXPECT_TRUE(shelf_view_->IsShowingMenuForView(app_button));
+  }
+
+  // Press Escape. The context menu should be closed.
+  GetEventGenerator()->PressAndReleaseKey(ui::VKEY_ESCAPE);
+  EXPECT_FALSE(shelf_view_->IsShowingMenu());
+  EXPECT_FALSE(item_delegate->HasPendingContextMenuCallback());
+
+  // Release the gesture press. The context menu should show again.
+  GetEventGenerator()->ReleaseTouch();
+  task_environment()->FastForwardBy(base::Milliseconds(1000));
+  EXPECT_TRUE(item_delegate->HasPendingContextMenuCallback());
+  {
+    auto menu_model = std::make_unique<ui::SimpleMenuModel>(nullptr);
+    menu_model->AddItem(203, u"item");
+    item_delegate->RunPendingContextMenuCallback(std::move(menu_model));
+    EXPECT_TRUE(shelf_view_->IsShowingMenuForView(app_button));
+  }
+
+  // Verify that the ink drop of the app button for which the context menu shows
+  // for is activated.
+  EXPECT_EQ(
+      views::InkDropState::ACTIVATED,
+      views::InkDrop::Get(app_button)->GetInkDrop()->GetTargetInkDropState());
 }
 
 // Verifies the shelf app button's inkdrop behavior when the mouse click

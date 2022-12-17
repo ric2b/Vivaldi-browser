@@ -48,6 +48,7 @@ import org.chromium.base.ThreadUtils;
 import org.chromium.base.test.BaseJUnit4ClassRunner;
 import org.chromium.base.test.util.Batch;
 import org.chromium.base.test.util.MaxAndroidSdkLevel;
+import org.chromium.base.test.util.MinAndroidSdkLevel;
 import org.chromium.components.external_intents.ExternalNavigationDelegate.IntentToAutofillAllowingAppResult;
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingAsyncActionType;
 import org.chromium.components.external_intents.ExternalNavigationHandler.OverrideUrlLoadingResult;
@@ -86,7 +87,6 @@ public class ExternalNavigationHandlerTest {
 
     private static final boolean IS_CUSTOM_TAB_INTENT = true;
     private static final boolean SEND_TO_EXTERNAL_APPS = true;
-    private static final boolean IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED = true;
     private static final boolean HANDLES_INSTANT_APP_LAUNCHING_INTERNALLY = true;
     private static final boolean INTENT_STARTED_TASK = true;
 
@@ -328,12 +328,14 @@ public class ExternalNavigationHandlerTest {
                 .withPageTransition(PageTransition.FORM_SUBMIT)
                 .withIsRedirect(true)
                 .withHasUserGesture(false)
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+                .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
         checkUrl("http://youtube.com://")
                 .withPageTransition(PageTransition.FORM_SUBMIT)
                 .withIsRedirect(true)
                 .withHasUserGesture(false)
-                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+                .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                        START_OTHER_ACTIVITY);
     }
 
     @Test
@@ -345,8 +347,7 @@ public class ExternalNavigationHandlerTest {
 
         redirectHandler.updateIntent(
                 Intent.parseUri("http://example.test", Intent.URI_INTENT_SCHEME),
-                !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+                !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(
                 PageTransition.LINK | PageTransition.FROM_API, false, false, 0, 0, true);
         redirectHandler.updateNewUrlLoading(PageTransition.FORM_SUBMIT, false, false, 0, 0, false);
@@ -427,12 +428,6 @@ public class ExternalNavigationHandlerTest {
     @Test
     @SmallTest
     public void testWtai() {
-        // Start the telephone application with the given number.
-        checkUrl("wtai://wp/mc;0123456789")
-                .withIsIncognito(true)
-                .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
-                        START_OTHER_ACTIVITY | INTENT_SANITIZATION_EXCEPTION);
-
         // These two cases are currently unimplemented.
         checkUrl("wtai://wp/sd;0123456789")
                 .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE,
@@ -638,8 +633,8 @@ public class ExternalNavigationHandlerTest {
 
         // Ignore if url is redirected, transition type is IncomingIntent and a new intent doesn't
         // have any new resolver.
-        redirectHandler.updateIntent(ytIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                ytIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl(YOUTUBE_MOBILE_URL)
@@ -650,8 +645,8 @@ public class ExternalNavigationHandlerTest {
                 .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
 
         // Do not ignore if a new intent has any new resolver.
-        redirectHandler.updateIntent(fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl(YOUTUBE_MOBILE_URL)
@@ -663,8 +658,8 @@ public class ExternalNavigationHandlerTest {
                         START_OTHER_ACTIVITY);
 
         // Do not ignore if a new intent cannot be handled by Chrome.
-        redirectHandler.updateIntent(fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl("intent://myownurl")
@@ -687,8 +682,8 @@ public class ExternalNavigationHandlerTest {
         int transTypeLinkFromIntent = PageTransition.LINK | PageTransition.FROM_API;
 
         // Ignore if an initial Intent was heading to Chrome.
-        redirectHandler.updateIntent(fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl(YOUTUBE_MOBILE_URL)
@@ -699,8 +694,8 @@ public class ExternalNavigationHandlerTest {
                 .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
 
         // Do not ignore if the URI has an external protocol.
-        redirectHandler.updateIntent(fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl("market://1234")
@@ -723,8 +718,8 @@ public class ExternalNavigationHandlerTest {
         // In Custom Tabs, if the first url is not a redirect, stay in chrome.
         Intent barIntent = Intent.parseUri(YOUTUBE_URL, Intent.URI_INTENT_SCHEME);
         barIntent.setPackage(mContext.getPackageName());
-        redirectHandler.updateIntent(barIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                barIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         checkUrl(YOUTUBE_URL)
                 .withPageTransition(transTypeLinkFromIntent)
@@ -735,8 +730,8 @@ public class ExternalNavigationHandlerTest {
         // In Custom Tabs, if the first url is a redirect, don't allow it to intent out.
         Intent fooIntent = Intent.parseUri("http://foo.com/", Intent.URI_INTENT_SCHEME);
         fooIntent.setPackage(mContext.getPackageName());
-        redirectHandler.updateIntent(fooIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl(YOUTUBE_URL)
@@ -750,8 +745,8 @@ public class ExternalNavigationHandlerTest {
         // url is a redirect.
         Intent extraIntent2 = Intent.parseUri(YOUTUBE_URL, Intent.URI_INTENT_SCHEME);
         extraIntent2.setPackage(mContext.getPackageName());
-        redirectHandler.updateIntent(extraIntent2, IS_CUSTOM_TAB_INTENT, SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                extraIntent2, IS_CUSTOM_TAB_INTENT, SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
         checkUrl(YOUTUBE_URL)
@@ -764,8 +759,8 @@ public class ExternalNavigationHandlerTest {
 
         Intent extraIntent3 = Intent.parseUri(YOUTUBE_URL, Intent.URI_INTENT_SCHEME);
         extraIntent3.setPackage(mContext.getPackageName());
-        redirectHandler.updateIntent(extraIntent3, IS_CUSTOM_TAB_INTENT, SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                extraIntent3, IS_CUSTOM_TAB_INTENT, SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         checkUrl(YOUTUBE_URL)
@@ -777,8 +772,8 @@ public class ExternalNavigationHandlerTest {
                         START_OTHER_ACTIVITY);
 
         // External intent for a user-initiated navigation should always be allowed.
-        redirectHandler.updateIntent(fooIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         // Simulate a real user navigation.
         redirectHandler.updateNewUrlLoading(
@@ -801,8 +796,8 @@ public class ExternalNavigationHandlerTest {
         Intent fooIntent = Intent.parseUri("http://foo.com/", Intent.URI_INTENT_SCHEME);
         fooIntent.putExtra(CustomTabsIntent.EXTRA_ENABLE_INSTANT_APPS, true);
         fooIntent.setPackage(mContext.getPackageName());
-        redirectHandler.updateIntent(fooIntent, IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, IS_CUSTOM_TAB_INTENT, SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
 
@@ -863,8 +858,8 @@ public class ExternalNavigationHandlerTest {
         RedirectHandler redirectHandler = RedirectHandler.create();
         Intent fooIntent =
                 Intent.parseUri("http://instantappenabled.com", Intent.URI_INTENT_SCHEME);
-        redirectHandler.updateIntent(fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS,
-                IS_CCT_EXTERNAL_LINK_HANDLING_ENABLED, !INTENT_STARTED_TASK);
+        redirectHandler.updateIntent(
+                fooIntent, !IS_CUSTOM_TAB_INTENT, !SEND_TO_EXTERNAL_APPS, !INTENT_STARTED_TASK);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, false, false, 0, 0, false);
         redirectHandler.updateNewUrlLoading(transTypeLinkFromIntent, true, false, 0, 0, false);
 
@@ -912,7 +907,7 @@ public class ExternalNavigationHandlerTest {
                 + "https%3A%2F%2Fwww.google.com;end";
 
         mUrlHandler.mIsSerpReferrer = true;
-        mDelegate.setIsIntentToInstantApp(true);
+        mDelegate.setHandlesInstantAppLaunchingInternally(true);
         checkUrl(intentUrl).expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
                 START_OTHER_ACTIVITY | PROXY_FOR_INSTANT_APPS);
         Assert.assertTrue(
@@ -922,14 +917,34 @@ public class ExternalNavigationHandlerTest {
         mUrlHandler.mIsSerpReferrer = false;
         checkUrl(intentUrl).expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
 
-        // Check that that just having the SERP referrer alone doesn't cause intents to be treated
-        // as intents to instant apps if the delegate indicates that they shouldn't be.
+        // Check that that just having the SERP referrer alone doesn't cause instant app intents to
+        // launched through the proxy.
         mUrlHandler.mIsSerpReferrer = true;
-        mDelegate.setIsIntentToInstantApp(false);
-        checkUrl(intentUrl).expecting(
-                OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT, START_OTHER_ACTIVITY);
-        Assert.assertFalse(
-                mUrlHandler.mStartActivityIntent.getBooleanExtra(IS_INSTANT_APP_EXTRA, true));
+        mDelegate.setHandlesInstantAppLaunchingInternally(false);
+        checkUrl(intentUrl).expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+    }
+
+    @Test
+    @SmallTest
+    public void testIsIntentToInstantApp() {
+        // Check that the delegate correctly distinguishes instant app intents from others.
+        String instantAppIntentUrlPrefix = "intent://buzzfeed.com/tasty#Intent;scheme=http;";
+
+        mUrlHandler.mIsSerpReferrer = true;
+        mDelegate.setHandlesInstantAppLaunchingInternally(true);
+
+        // Check that Supervisor is detected by action even without package.
+        for (String action : ExternalNavigationHandler.INSTANT_APP_START_ACTIONS) {
+            String intentUrl = instantAppIntentUrlPrefix + "action=" + action + ";end";
+            checkUrl(intentUrl).expecting(
+                    OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                    START_OTHER_ACTIVITY | PROXY_FOR_INSTANT_APPS);
+        }
+
+        String intentUrl = instantAppIntentUrlPrefix
+                + "package=" + ExternalNavigationHandler.INSTANT_APP_SUPERVISOR_PKG + ";end";
+        checkUrl(intentUrl).expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_EXTERNAL_INTENT,
+                START_OTHER_ACTIVITY | PROXY_FOR_INSTANT_APPS);
     }
 
     @Test
@@ -1837,8 +1852,49 @@ public class ExternalNavigationHandlerTest {
     @SuppressLint("SdCardPath")
     @SmallTest
     @MaxAndroidSdkLevel(Build.VERSION_CODES.S)
-    public void testFileAccess() {
+    public void testFileAccessHtml() {
         String fileUrl = "file:///sdcard/Downloads/test.html";
+
+        mUrlHandler.mShouldRequestFileAccess = false;
+        // Verify no overrides if file access is allowed (under different load conditions).
+        checkUrl(fileUrl).expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+        checkUrl(fileUrl)
+                .withPageTransition(PageTransition.RELOAD)
+                .withIsRendererInitiated(false)
+                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+        checkUrl(fileUrl)
+                .withPageTransition(PageTransition.AUTO_TOPLEVEL)
+                .withIsRendererInitiated(false)
+                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+
+        mUrlHandler.mShouldRequestFileAccess = true;
+        // Verify that the file intent action is triggered if file access is not allowed.
+        checkUrl(fileUrl)
+                .withPageTransition(PageTransition.AUTO_TOPLEVEL)
+                .withIsRendererInitiated(false)
+                .expecting(OverrideUrlLoadingResultType.OVERRIDE_WITH_ASYNC_ACTION,
+                        OverrideUrlLoadingAsyncActionType.UI_GATING_BROWSER_NAVIGATION, START_FILE);
+    }
+
+    @Test
+    @SmallTest
+    @MinAndroidSdkLevel(33) // TODO(twellington): Replace with version code when available.
+    public void testFileAccessHtml_AndroidT() {
+        String fileUrl = "file:///sdcard/Downloads/test.html";
+
+        mUrlHandler.mShouldRequestFileAccess = true;
+        // Verify that the file intent is not triggered if the mime type can't be handled.
+        checkUrl(fileUrl)
+                .withPageTransition(PageTransition.AUTO_TOPLEVEL)
+                .withIsRendererInitiated(false)
+                .expecting(OverrideUrlLoadingResultType.NO_OVERRIDE, IGNORE);
+    }
+
+    @Test
+    @SuppressLint("SdCardPath")
+    @SmallTest
+    public void testFileAccessImage() {
+        String fileUrl = "file://file.png";
 
         mUrlHandler.mShouldRequestFileAccess = false;
         // Verify no overrides if file access is allowed (under different load conditions).
@@ -2527,7 +2583,7 @@ public class ExternalNavigationHandlerTest {
         public boolean mShouldRequestFileAccess;
         public String mNewUrlAfterClobbering;
         public String mReferrerUrlForClobbering;
-        public boolean mStartFileIntentCalled;
+        public boolean mRequestFilePermissionsCalled;
         public Intent mStartActivityInIncognitoIntent;
         public boolean mStartIncognitoIntentCalled;
         public boolean mCanShowIncognitoDialog;
@@ -2545,11 +2601,6 @@ public class ExternalNavigationHandlerTest {
         protected boolean isValidWebApk(String packageName) {
             return packageName.startsWith(WEBAPK_PACKAGE_PREFIX)
                     && !packageName.equals(INVALID_WEBAPK_PACKAGE_NAME);
-        }
-
-        @Override
-        public boolean blockExternalFormRedirectsWithoutGesture() {
-            return true;
         }
 
         @Override
@@ -2589,13 +2640,14 @@ public class ExternalNavigationHandlerTest {
         }
 
         @Override
-        protected boolean shouldRequestFileAccess(GURL url) {
+        protected boolean shouldRequestFileAccess(GURL url, String permissionNeeded) {
             return mShouldRequestFileAccess;
         }
 
         @Override
-        protected void startFileIntent(ExternalNavigationParams params) {
-            mStartFileIntentCalled = true;
+        protected void requestFilePermissions(
+                ExternalNavigationParams params, String permissionNeeded) {
+            mRequestFilePermissionsCalled = true;
         }
 
         @Override
@@ -2706,7 +2758,7 @@ public class ExternalNavigationHandlerTest {
 
         @Override
         public boolean handlesInstantAppLaunchingInternally() {
-            return false;
+            return mHandlesInstantAppLaunchingInternally;
         }
 
         @Override
@@ -2803,11 +2855,6 @@ public class ExternalNavigationHandlerTest {
         }
 
         @Override
-        public boolean isIntentToInstantApp(Intent intent) {
-            return mIsIntentToInstantApp;
-        }
-
-        @Override
         public boolean isIntentToAutofillAssistant(Intent intent) {
             return mIsIntentToAutofillAssistant;
         }
@@ -2898,10 +2945,6 @@ public class ExternalNavigationHandlerTest {
             mShouldDisableExternalIntentRequests = disable;
         }
 
-        public void setIsIntentToInstantApp(boolean value) {
-            mIsIntentToInstantApp = value;
-        }
-
         public void setIsIntentToAutofillAssistant(boolean value) {
             mIsIntentToAutofillAssistant = value;
         }
@@ -2939,6 +2982,10 @@ public class ExternalNavigationHandlerTest {
             mShouldEmbedderInitiatedNavigationsStayInBrowser = value;
         }
 
+        public void setHandlesInstantAppLaunchingInternally(boolean value) {
+            mHandlesInstantAppLaunchingInternally = value;
+        }
+
         public boolean startIncognitoIntentCalled;
         public boolean maybeSetRequestMetadataCalled;
         public Callback<Boolean> incognitoDialogUserDecisionCallback;
@@ -2953,7 +3000,6 @@ public class ExternalNavigationHandlerTest {
         public boolean mIsChromeAppInForeground = true;
         private boolean mIsCallingAppTrusted;
         private boolean mShouldDisableExternalIntentRequests;
-        private boolean mIsIntentToInstantApp;
         private boolean mIsIntentToAutofillAssistant;
         private @IntentToAutofillAllowingAppResult int mAutofillAssistantAllowAppOverrideResult;
         private boolean mCanLoadUrlInTab;
@@ -2964,6 +3010,7 @@ public class ExternalNavigationHandlerTest {
         private boolean mWillResolveToDisambiguationDialog;
         private Context mContext;
         private boolean mShouldEmbedderInitiatedNavigationsStayInBrowser = true;
+        private boolean mHandlesInstantAppLaunchingInternally = true;
     }
 
     private void checkIntentSanity(Intent intent, String name) {
@@ -3109,7 +3156,7 @@ public class ExternalNavigationHandlerTest {
             Assert.assertEquals(expectStartIncognito, mUrlHandler.mStartIncognitoIntentCalled);
             Assert.assertEquals(expectStartActivity, startActivityCalled);
             Assert.assertEquals(expectStartWebApk, startWebApkCalled);
-            Assert.assertEquals(expectStartFile, mUrlHandler.mStartFileIntentCalled);
+            Assert.assertEquals(expectStartFile, mUrlHandler.mRequestFilePermissionsCalled);
             Assert.assertEquals(expectProxyForIA, mUrlHandler.mCalledWithProxy);
 
             if (startActivityCalled && expectSaneIntent) {

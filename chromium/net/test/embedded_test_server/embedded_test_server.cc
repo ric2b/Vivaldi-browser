@@ -277,11 +277,7 @@ EmbeddedTestServer::EmbeddedTestServer() : EmbeddedTestServer(TYPE_HTTP) {}
 
 EmbeddedTestServer::EmbeddedTestServer(Type type,
                                        HttpConnection::Protocol protocol)
-    : is_using_ssl_(type == TYPE_HTTPS),
-      protocol_(protocol),
-      connection_listener_(nullptr),
-      port_(0),
-      cert_(CERT_OK) {
+    : is_using_ssl_(type == TYPE_HTTPS), protocol_(protocol) {
   DCHECK(thread_checker_.CalledOnValidThread());
   // HTTP/2 is only valid by negotiation via TLS ALPN
   DCHECK(protocol_ != HttpConnection::Protocol::kHttp2 || type == TYPE_HTTPS);
@@ -418,6 +414,7 @@ bool EmbeddedTestServer::GenerateCertAndKey() {
   std::unique_ptr<CertBuilder> static_root = CertBuilder::FromStaticCertFile(
       certs_dir.AppendASCII("root_ca_cert.pem"));
 
+  auto now = base::Time::Now();
   // Will be nullptr if cert_config_.intermediate == kNone.
   std::unique_ptr<CertBuilder> intermediate;
   std::unique_ptr<CertBuilder> leaf;
@@ -427,6 +424,7 @@ bool EmbeddedTestServer::GenerateCertAndKey() {
         certs_dir.AppendASCII("intermediate_ca_cert.pem"), static_root.get());
     if (!intermediate)
       return false;
+    intermediate->SetValidity(now - base::Days(100), now + base::Days(1000));
 
     leaf = CertBuilder::FromFile(certs_dir.AppendASCII("ok_cert.pem"),
                                  intermediate.get());
@@ -439,6 +437,8 @@ bool EmbeddedTestServer::GenerateCertAndKey() {
 
   std::vector<GURL> leaf_ca_issuers_urls;
   std::vector<GURL> leaf_ocsp_urls;
+
+  leaf->SetValidity(now - base::Days(1), now + base::Days(20));
 
   if (!cert_config_.policy_oids.empty()) {
     leaf->SetCertificatePolicies(cert_config_.policy_oids);

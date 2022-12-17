@@ -63,6 +63,7 @@
 
 #include "ash/ambient/resources/ambient_animation_static_resources.h"
 #include "ash/ambient/util/ambient_util.h"
+#include "ash/public/cpp/ambient/ambient_metrics.h"
 #include "ash/utility/cropping_util.h"
 #include "ash/utility/lottie_util.h"
 #include "base/bind.h"
@@ -105,35 +106,10 @@ cc::SkottieFrameData BuildSkottieFrameData(const gfx::ImageSkia& image,
   };
 }
 
-class StaticImageAssetImpl : public cc::SkottieFrameDataProvider::ImageAsset {
- public:
-  StaticImageAssetImpl(base::StringPiece asset_id,
-                       const AmbientAnimationStaticResources& static_resources)
-      : image_(static_resources.GetStaticImageAsset(asset_id)) {
-    DCHECK(!IsCustomizableLottieId(asset_id));
-    DCHECK(!image_.isNull())
-        << "Static image asset " << asset_id << " is unknown.";
-    DVLOG(1) << "Loaded static asset " << asset_id;
-  }
-
-  cc::SkottieFrameData GetFrameData(float t, float scale_factor) override {
-    if (!current_frame_data_.image ||
-        current_frame_data_scale_factor_ != scale_factor) {
-      current_frame_data_ = BuildSkottieFrameData(image_, scale_factor);
-      current_frame_data_scale_factor_ = scale_factor;
-    }
-    return current_frame_data_;
-  }
-
- private:
-  // Private destructor since cc::SkottieFrameDataProvider::ImageAsset is a
-  // ref-counted API.
-  ~StaticImageAssetImpl() override = default;
-
-  const gfx::ImageSkia image_;
-  cc::SkottieFrameData current_frame_data_;
-  float current_frame_data_scale_factor_ = 0;
-};
+bool IsPortrait(const gfx::Size& size) {
+  DCHECK(!size.IsEmpty());
+  return size.height() > size.width();
+}
 
 // Provides images for dynamic assets based on the following UX requirements:
 // * Make a best effort to assign portrait images to portrait assets and same
@@ -192,12 +168,6 @@ class DynamicImageProvider {
     // 0 when all topics from all TopicSets have been exhausted.
     size_t current_topic_idx = 0;
   };
-
-  static bool IsPortrait(const gfx::Size& size) {
-    DCHECK(!size.IsEmpty());
-    return size.height() > size.width();
-  }
-
   static const PhotoWithDetails* GetNextTopicFromTopicSet(TopicSet& topic_set) {
     if (topic_set.current_topic_idx >= topic_set.topics.size())
       return nullptr;
@@ -229,6 +199,44 @@ class DynamicImageProvider {
 };
 
 }  // namespace
+
+class AmbientAnimationPhotoProvider::StaticImageAssetImpl
+    : public cc::SkottieFrameDataProvider::ImageAsset {
+ public:
+  StaticImageAssetImpl(base::StringPiece asset_id,
+                       const AmbientAnimationStaticResources& static_resources)
+      : image_(static_resources.GetStaticImageAsset(asset_id)) {
+    DCHECK(!IsCustomizableLottieId(asset_id));
+    DCHECK(!image_.isNull())
+        << "Static image asset " << asset_id << " is unknown.";
+    DVLOG(1) << "Loaded static asset " << asset_id;
+  }
+
+  cc::SkottieFrameData GetFrameData(float t, float scale_factor) override {
+    if (!enabled_)
+      return cc::SkottieFrameData();
+
+    if (!current_frame_data_.image ||
+        current_frame_data_scale_factor_ != scale_factor) {
+      current_frame_data_ = BuildSkottieFrameData(image_, scale_factor);
+      current_frame_data_scale_factor_ = scale_factor;
+    }
+    return current_frame_data_;
+  }
+
+  bool enabled() const { return enabled_; }
+  void set_enabled(bool enabled) { enabled_ = enabled; }
+
+ private:
+  // Private destructor since cc::SkottieFrameDataProvider::ImageAsset is a
+  // ref-counted API.
+  ~StaticImageAssetImpl() override = default;
+
+  const gfx::ImageSkia image_;
+  cc::SkottieFrameData current_frame_data_;
+  float current_frame_data_scale_factor_ = 0;
+  bool enabled_ = true;
+};
 
 class AmbientAnimationPhotoProvider::DynamicImageAssetImpl
     : public cc::SkottieFrameDataProvider::ImageAsset {
@@ -393,8 +401,10 @@ AmbientAnimationPhotoProvider::LoadImageAsset(
     // For static assets, the |size| isn't needed. It should match the size of
     // the image loaded from animation's |static_resources_| since that is the
     // very image created by UX when the animation was built.
-    return base::MakeRefCounted<StaticImageAssetImpl>(asset_id,
-                                                      *static_resources_);
+    auto static_asset = base::MakeRefCounted<StaticImageAssetImpl>(
+        asset_id, *static_resources_);
+    static_assets_[cc::HashSkottieResourceId(asset_id)] = static_asset;
+    return static_asset;
   }
 }
 
@@ -404,6 +414,18 @@ void AmbientAnimationPhotoProvider::AddObserver(Observer* obs) {
 
 void AmbientAnimationPhotoProvider::RemoveObserver(Observer* obs) {
   observers_.RemoveObserver(obs);
+}
+
+bool AmbientAnimationPhotoProvider::ToggleStaticImageAsset(
+    cc::SkottieResourceIdHash asset_id,
+    bool enabled) {
+  auto iter = static_assets_.find(asset_id);
+  if (iter == static_assets_.end()) {
+    return false;
+  } else {
+    iter->second->set_enabled(enabled);
+    return true;
+  }
 }
 
 // Invoked whenever an asset detects a new animation cycle has started. In
@@ -444,6 +466,7 @@ AmbientAnimationPhotoProvider::GenerateNextTopicForDynamicAsset(
     }
   }
   NotifyObserverOfNewTopics();
+  RecordDynamicAssetMetrics();
   topic_for_target_asset = ExtractPendingTopicForDynamicAsset(target_asset);
   DCHECK(!topic_for_target_asset.photo.isNull())
       << "GenerateNextTopicForDynamicAsset() for unknown asset "
@@ -518,6 +541,35 @@ void AmbientAnimationPhotoProvider::NotifyObserverOfNewTopics() {
   for (Observer& obs : observers_) {
     obs.OnDynamicImageAssetsRefreshed(new_topics);
   }
+}
+
+void AmbientAnimationPhotoProvider::RecordDynamicAssetMetrics() {
+  DCHECK_EQ(pending_dynamic_asset_topics_.size(), total_num_dynamic_assets_)
+      << "RecordDynamicAssetMetrics() must be called when a new topic has been "
+         "assigned to each dynamic asset in the animation";
+  int num_photo_orientation_matches = 0;
+  int total_num_assets_with_size = 0;
+  for (const auto& [asset, topic] : pending_dynamic_asset_topics_) {
+    if (!asset->size()) {
+      DVLOG(4) << "Ignoring dynamic image asset with no size specified in "
+                  "animation file";
+      continue;
+    }
+
+    ++total_num_assets_with_size;
+    if (IsPortrait(asset->size().value()) == IsPortrait(topic.photo.size()))
+      ++num_photo_orientation_matches;
+  }
+
+  if (total_num_assets_with_size == 0) {
+    LOG(WARNING) << "Found no image assets in animation with a specified size";
+    return;
+  }
+
+  float match_percentage =
+      num_photo_orientation_matches * 100.f / total_num_assets_with_size;
+  ambient::RecordAmbientModePhotoOrientationMatch(
+      match_percentage, static_resources_->GetAmbientAnimationTheme());
 }
 
 }  // namespace ash

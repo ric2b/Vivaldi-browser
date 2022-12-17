@@ -44,6 +44,7 @@ class ExternalMountPoints;
 
 namespace media {
 class VideoDecodePerfHistory;
+class WebrtcVideoPerfHistory;
 namespace learning {
 class LearningSession;
 }
@@ -84,7 +85,6 @@ class DownloadManager;
 class DownloadManagerDelegate;
 class FederatedIdentityActiveSessionPermissionContextDelegate;
 class FederatedIdentityApiPermissionContextDelegate;
-class FederatedIdentityRequestPermissionContextDelegate;
 class FederatedIdentitySharingPermissionContextDelegate;
 class FileSystemAccessPermissionContext;
 class PermissionController;
@@ -270,6 +270,12 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // directly, so privacy is not compromised.
   media::VideoDecodePerfHistory* GetVideoDecodePerfHistory();
 
+  // Gets media service for storing/retrieving WebRTC video performance stats.
+  // Exposed here rather than StoragePartition because all SiteInstances should
+  // have similar encode/decode performance and stats are not exposed to the web
+  // directly, so privacy is not compromised.
+  media::WebrtcVideoPerfHistory* GetWebrtcVideoPerfHistory();
+
   // Returns a LearningSession associated with |this|. Used as the central
   // source from which to retrieve LearningTaskControllers for media machine
   // learning.
@@ -420,10 +426,6 @@ class CONTENT_EXPORT BrowserContext : public base::SupportsUserData {
   // nullptr otherwise.
   virtual FederatedIdentityActiveSessionPermissionContextDelegate*
   GetFederatedIdentityActiveSessionPermissionContext();
-  // Gets the permission context for issuing WebID requests if one exists, or
-  // nullptr otherwise.
-  virtual FederatedIdentityRequestPermissionContextDelegate*
-  GetFederatedIdentityRequestPermissionContext();
   // Gets the permission context for WebID identity token sharing if one
   // exists, or nullptr otherwise.
   virtual FederatedIdentitySharingPermissionContextDelegate*

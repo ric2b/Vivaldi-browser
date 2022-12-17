@@ -104,6 +104,10 @@
 #include "ui/devtools/devtools_connector.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
 
+#include "chrome/browser/ui/browser_navigator.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
+#include "chrome/browser/ui/browser_tabstrip.h"
+
 using vivaldi::IsVivaldiApp;
 using vivaldi::IsVivaldiRunning;
 
@@ -351,7 +355,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   }
 
   RenderProcessHost* owner_render_process_host =
-      owner_web_contents()->GetMainFrame()->GetProcess();
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess();
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
 
   std::string storage_partition_id;
@@ -418,7 +422,7 @@ void WebViewGuest::CreateWebContents(const base::DictionaryValue& create_params,
   //
   // TODO(dcheng): Is granting commit origin really the right thing to do here?
   content::ChildProcessSecurityPolicy::GetInstance()->GrantCommitOrigin(
-      new_contents->GetMainFrame()->GetProcess()->GetID(),
+      new_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
       url::Origin::Create(GetOwnerSiteURL()));
 
   std::move(callback).Run(new_contents);
@@ -464,13 +468,13 @@ void WebViewGuest::DidInitialize(const base::DictionaryValue& create_params) {
 #endif
 
   rules_registry_id_ = GetOrGenerateRulesRegistryID(
-      owner_web_contents()->GetMainFrame()->GetProcess()->GetID(),
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
       view_instance_id());
 
   // We must install the mapping from guests to WebViews prior to resuming
   // suspended resource loads so that the WebRequest API will catch resource
   // requests.
-  PushWebViewStateToIOThread(web_contents()->GetMainFrame());
+  PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
 
   ApplyAttributes(create_params);
 }
@@ -581,17 +585,17 @@ void WebViewGuest::GuestDestroyed() {
   // RenderFrameDeleted(), such as when destroying unattached guests that never
   // had a RenderFrame created.
   WebViewRendererState::GetInstance()->RemoveGuest(
-      web_contents()->GetMainFrame()->GetProcess()->GetID(),
-      web_contents()->GetMainFrame()->GetRoutingID());
+      web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
+      web_contents()->GetPrimaryMainFrame()->GetRoutingID());
 }
 
 void WebViewGuest::GuestReady() {
   // The guest RenderView should always live in an isolated guest process.
 #ifndef VIVALDI_BUILD
-  CHECK(web_contents()->GetMainFrame()->GetProcess()->IsForGuestsOnly());
+  CHECK(web_contents()->GetPrimaryMainFrame()->GetProcess()->IsForGuestsOnly());
 #endif // VIVALDI_BUILD
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->GetLocalFrame(web_contents()->GetPrimaryMainFrame())
       ->SetFrameName(name_);
 
   if (IsVivaldiRunning() &&
@@ -840,10 +844,13 @@ void WebViewGuest::Stop() {
 
 void WebViewGuest::Terminate() {
   base::RecordAction(UserMetricsAction("WebView.Guest.Terminate"));
-  base::ProcessHandle process_handle =
-      web_contents()->GetMainFrame()->GetProcess()->GetProcess().Handle();
+  base::ProcessHandle process_handle = web_contents()
+                                           ->GetPrimaryMainFrame()
+                                           ->GetProcess()
+                                           ->GetProcess()
+                                           .Handle();
   if (process_handle) {
-    web_contents()->GetMainFrame()->GetProcess()->Shutdown(
+    web_contents()->GetPrimaryMainFrame()->GetProcess()->Shutdown(
         content::RESULT_CODE_KILLED);
   }
 }
@@ -863,7 +870,7 @@ bool WebViewGuest::ClearData(base::Time remove_since,
     // First clear http cache data and then clear the code cache in
     // |ClearCodeCache| and the rest is cleared in |ClearDataInternal|.
     int render_process_id =
-        web_contents()->GetMainFrame()->GetProcess()->GetID();
+        web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID();
     // We need to clear renderer cache separately for our process because
     // StoragePartitionHttpCacheDataRemover::ClearData() does not clear that.
     web_cache::WebCacheManager::GetInstance()->ClearCacheForProcess(
@@ -959,7 +966,7 @@ void WebViewGuest::DidFinishNavigation(
   args->SetIntKey(webview::kInternalEntryCount,
                   web_contents()->GetController().GetEntryCount());
   args->SetIntKey(webview::kInternalProcessId,
-                  web_contents()->GetMainFrame()->GetProcess()->GetID());
+                  web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID());
   DispatchEventToView(std::make_unique<GuestViewEvent>(
       webview::kEventLoadCommit, std::move(args)));
 
@@ -1028,7 +1035,7 @@ void WebViewGuest::PrimaryMainFrameRenderProcessGone(
 
   auto args = std::make_unique<base::DictionaryValue>();
   args->SetIntKey(webview::kProcessId,
-                  web_contents()->GetMainFrame()->GetProcess()->GetID());
+                  web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID());
   args->SetStringKey(webview::kReason, TerminationStatusToString(status));
   DispatchEventToView(
       std::make_unique<GuestViewEvent>(webview::kEventExit, std::move(args)));
@@ -1122,7 +1129,7 @@ void WebViewGuest::RenderFrameHostChanged(content::RenderFrameHost* old_host,
   // remove live RenderFrameHosts here, as they could still need their
   // WebViewRendererState entry while in pending deletion state.  For those
   // cases, we rely on calling RemoveGuest() from RenderFrameDeleted().
-  if (!old_host->IsRenderFrameCreated()) {
+  if (!old_host->IsRenderFrameLive()) {
     WebViewRendererState::GetInstance()->RemoveGuest(
         old_host->GetProcess()->GetID(), old_host->GetRoutingID());
   }
@@ -1149,7 +1156,7 @@ void WebViewGuest::PushWebViewStateToIOThread(
 
   WebViewRendererState::WebViewInfo web_view_info;
   web_view_info.embedder_process_id =
-      owner_web_contents()->GetMainFrame()->GetProcess()->GetID();
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID();
   web_view_info.instance_id = view_instance_id();
   web_view_info.partition_id = storage_partition_config.partition_name();
   web_view_info.owner_host = owner_host();
@@ -1210,7 +1217,7 @@ void WebViewGuest::SignalWhenReady(base::OnceClosure callback) {
 
 void WebViewGuest::WillAttachToEmbedder() {
   rules_registry_id_ = GetOrGenerateRulesRegistryID(
-      owner_web_contents()->GetMainFrame()->GetProcess()->GetID(),
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
       view_instance_id());
 
   // We must install the mapping from guests to WebViews prior to resuming
@@ -1219,7 +1226,7 @@ void WebViewGuest::WillAttachToEmbedder() {
   //
   // TODO(alexmos): This may be redundant with the call in
   // RenderFrameCreated() and should be cleaned up.
-  PushWebViewStateToIOThread(web_contents()->GetMainFrame());
+  PushWebViewStateToIOThread(web_contents()->GetPrimaryMainFrame());
 }
 
 content::JavaScriptDialogManager* WebViewGuest::GetJavaScriptDialogManager(
@@ -1412,10 +1419,10 @@ void WebViewGuest::SetName(const std::string& name) {
 
   // Return early if this method is called before RenderFrameCreated().
   // In that case, we still have a chance to update the name at GuestReady().
-  if (!web_contents()->GetMainFrame()->IsRenderFrameLive())
+  if (!web_contents()->GetPrimaryMainFrame()->IsRenderFrameLive())
     return;
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->GetLocalFrame(web_contents()->GetPrimaryMainFrame())
       ->SetFrameName(name_);
 }
 
@@ -1424,7 +1431,7 @@ void WebViewGuest::SetSpatialNavigationEnabled(bool enabled) {
     return;
   is_spatial_navigation_enabled_ = enabled;
   ExtensionWebContentsObserver::GetForWebContents(web_contents())
-      ->GetLocalFrame(web_contents()->GetMainFrame())
+      ->GetLocalFrame(web_contents()->GetPrimaryMainFrame())
       ->SetSpatialNavigationEnabled(enabled);
 }
 
@@ -1461,7 +1468,7 @@ void WebViewGuest::SetAllowTransparency(bool allow) {
 
   allow_transparency_ = allow;
   if (!web_contents()
-           ->GetMainFrame()
+           ->GetPrimaryMainFrame()
            ->GetRenderViewHost()
            ->GetWidget()
            ->GetView())
@@ -1472,7 +1479,7 @@ void WebViewGuest::SetAllowTransparency(bool allow) {
 
 void WebViewGuest::SetTransparency() {
   auto* view = web_contents()
-                   ->GetMainFrame()
+                   ->GetPrimaryMainFrame()
                    ->GetRenderViewHost()
                    ->GetWidget()
                    ->GetView();
@@ -1498,7 +1505,7 @@ bool WebViewGuest::LoadDataWithBaseURL(const GURL& data_url,
     return false;
   }
   const url::Origin& owner_origin =
-      owner_web_contents()->GetMainFrame()->GetLastCommittedOrigin();
+      owner_web_contents()->GetPrimaryMainFrame()->GetLastCommittedOrigin();
   const bool base_in_owner_origin = owner_origin.IsSameOriginWith(base_url);
   // |base_url| must be a valid URL. It is also limited to URLs that the owner
   // is trusted to have control over.
@@ -1604,20 +1611,23 @@ WebContents* WebViewGuest::OpenURLFromTab(
     }
   }
 
-  // This code path is taken if RenderFrameImpl::DecidePolicyForNavigation
-  // decides that a fork should happen. At the time of writing this comment,
-  // the only way a well behaving guest could hit this code path is if it
-  // navigates to the New Tab page URL of the default search engine (see
-  // search::GetNewTabPageURL). Validity checks are performed inside
-  // LoadURLWithParams such that if the guest attempts to navigate to a URL that
-  // it is not allowed to navigate to, a 'loadabort' event will fire in the
-  // embedder, and the guest will be navigated to about:blank.
+  // This is mostly mimicking Browser::OpenURLFromTab. We must navigate in the
+  // specified target content, is needed. Not in the base content as we used.
+  // See VB-71066 for test-case.
   if (params.disposition == WindowOpenDisposition::CURRENT_TAB) {
-    LoadURLWithParams(params.url, params.referrer, params.transition,
-                      true /* force_navigation */, &params);
-    return web_contents();
+    Browser* browser = chrome::FindBrowserWithWebContents(source);
+    NavigateParams nav_params(browser, params.url, params.transition);
+    nav_params.FillNavigateParamsFromOpenURLParams(params);
+    nav_params.source_contents = source;
+    nav_params.tabstrip_add_types = TabStripModel::ADD_NONE;
+    if (params.user_gesture)
+      nav_params.window_action = NavigateParams::SHOW_WINDOW;
+    if (IsVivaldiRunning()) {
+      nav_params.should_create_guestframe = true;
+    }
+    Navigate(&nav_params);
+    return nullptr;
   }
-
 
   // This comes from a context menu where the owner might be the ui which always
   // run in non-incognito profile. Patch through to the correct browser.
@@ -1776,8 +1786,8 @@ void WebViewGuest::LoadURLWithParams(
   GURL validated_url(url);
   // If the embedder is Vivaldi do not filter the url, we want to open all urls.
   if (!IsVivaldiApp(owner_host()))
-  web_contents()->GetMainFrame()->GetProcess()->FilterURL(false,
-                                                          &validated_url);
+  web_contents()->GetPrimaryMainFrame()->GetProcess()->FilterURL(
+      false, &validated_url);
   // As guests do not swap processes on navigation, only navigations to
   // normal web URLs are supported.  No protocol handlers are installed for
   // other schemes (e.g., WebUI or extensions), and no permissions or bindings
@@ -1889,7 +1899,7 @@ void WebViewGuest::OnWebViewNewWindowResponse(
     bool allow,
     const std::string& user_input) {
   auto* guest = WebViewGuest::From(
-      owner_web_contents()->GetMainFrame()->GetProcess()->GetID(),
+      owner_web_contents()->GetPrimaryMainFrame()->GetProcess()->GetID(),
       new_window_instance_id);
   if (!guest)
     return;
@@ -1946,7 +1956,7 @@ void WebViewGuest::SetFullscreenState(bool is_fullscreen) {
   // Since we changed fullscreen state, sending a SynchronizeVisualProperties
   // message ensures that renderer/ sees the change.
   web_contents()
-      ->GetMainFrame()
+      ->GetPrimaryMainFrame()
       ->GetRenderViewHost()
       ->GetWidget()
       ->SynchronizeVisualProperties();

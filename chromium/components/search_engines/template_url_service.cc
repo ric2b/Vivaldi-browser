@@ -33,6 +33,7 @@
 #include "components/search_engines/template_url_prepopulate_data.h"
 #include "components/search_engines/template_url_service_client.h"
 #include "components/search_engines/template_url_service_observer.h"
+#include "components/search_engines/template_url_starter_pack_data.h"
 #include "components/search_engines/util.h"
 #include "components/sync/model/sync_change.h"
 #include "components/sync/model/sync_change_processor.h"
@@ -562,8 +563,10 @@ TemplateURL* TemplateURLService::GetTemplateURLForHost(
 
 const TemplateURL* TemplateURLService::GetTemplateURLForHost(
     const std::string& host) const {
-  if (loaded_)
+  if (loaded_) {
+    // `provider_map_` takes care of finding the best TemplateURL for `host`.
     return provider_map_->GetTemplateURLForHost(host);
+  }
   auto* result = std::find_if(
       initial_default_search_provider_.begin(),
       initial_default_search_provider_.end(),
@@ -574,6 +577,13 @@ const TemplateURL* TemplateURLService::GetTemplateURLForHost(
       });
   return result != initial_default_search_provider_.end() ? (*result).get()
                                                           : nullptr;
+}
+
+size_t TemplateURLService::GetTemplateURLCountForHostForLogging(
+    const std::string& host) const {
+  DCHECK(loaded_);
+  auto* host_urls = provider_map_->GetURLsForHost(host);
+  return host_urls ? host_urls->size() : 0;
 }
 
 TemplateURL* TemplateURLService::Add(
@@ -1033,9 +1043,8 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
   std::transform(default_search_provider_.begin(),
                  default_search_provider_.end(), dsp.begin(),
                  [](const raw_ptr<TemplateURL>& ptr) { return ptr.get(); });
-  ActionsFromPrepopulateData actions(CreateActionsFromCurrentPrepopulateData(
+  ActionsFromCurrentData actions(CreateActionsFromCurrentPrepopulateData(
       &prepopulated_urls, template_urls_, dsp));
-
   // Remove items.
   for (auto i = actions.removed_engines.begin();
        i < actions.removed_engines.end(); ++i)
@@ -1094,6 +1103,37 @@ void TemplateURLService::RepairPrepopulatedSearchEngines() {
   }
 }
 
+void TemplateURLService::RepairStarterPackEngines() {
+  DCHECK(loaded());
+
+  Scoper scoper(this);
+
+  std::vector<std::unique_ptr<TemplateURLData>> starter_pack_engines =
+      TemplateURLStarterPackData::GetStarterPackEngines();
+  DCHECK(!starter_pack_engines.empty());
+  ActionsFromCurrentData actions(CreateActionsFromCurrentStarterPackData(
+      &starter_pack_engines, template_urls_));
+
+  // Remove items.
+  for (auto i = actions.removed_engines.begin();
+       i < actions.removed_engines.end(); ++i) {
+    Remove(*i);
+  }
+
+  // Edit items.
+  for (auto i(actions.edited_engines.begin()); i < actions.edited_engines.end();
+       ++i) {
+    Update(i->first, TemplateURL(i->second));
+  }
+
+  // Add items.
+  for (std::vector<TemplateURLData>::const_iterator i =
+           actions.added_engines.begin();
+       i < actions.added_engines.end(); ++i) {
+    Add(std::make_unique<TemplateURL>(*i));
+  }
+}
+
 void TemplateURLService::AddObserver(TemplateURLServiceObserver* observer) {
   model_observers_.AddObserver(observer);
 }
@@ -1137,6 +1177,7 @@ void TemplateURLService::OnWebDataServiceRequestDone(
   std::unique_ptr<OwnedTemplateURLVector> template_urls =
       std::make_unique<OwnedTemplateURLVector>();
   int new_resource_keyword_version = 0;
+  int new_resource_starter_pack_version = 0;
   {
     std::array<TemplateURL*, kDefaultSearchTypeCount> default_search_provider;
     for (int i = 0; i < kDefaultSearchTypeCount; i++) {
@@ -1150,7 +1191,8 @@ void TemplateURLService::OnWebDataServiceRequestDone(
     GetSearchProvidersUsingKeywordResult(
         *result, web_data_service_.get(), prefs_, template_urls.get(),
         default_search_provider,
-        search_terms_data(), &new_resource_keyword_version, &pre_sync_deletes_);
+        search_terms_data(), &new_resource_keyword_version,
+        &new_resource_starter_pack_version, &pre_sync_deletes_);
   }
 
   Scoper scoper(this);
@@ -1171,6 +1213,10 @@ void TemplateURLService::OnWebDataServiceRequestDone(
 
     if (new_resource_keyword_version)
       web_data_service_->SetBuiltinKeywordVersion(new_resource_keyword_version);
+
+    if (new_resource_starter_pack_version)
+      web_data_service_->SetStarterPackKeywordVersion(
+          new_resource_starter_pack_version);
   }
 
   if (default_search_provider_[kDefaultSearchMain]) {
@@ -1625,6 +1671,7 @@ syncer::SyncData TemplateURLService::CreateSyncDataFromTemplateURL(
   for (size_t i = 0; i < turl.alternate_urls().size(); ++i)
     se_specifics->add_alternate_urls(turl.alternate_urls()[i]);
   se_specifics->set_is_active(ActiveStatusToSync(turl.is_active()));
+  se_specifics->set_starter_pack_id(turl.starter_pack_id());
   *se_specifics->mutable_unique_position() =
       turl.data().vivaldi_position.ToProto();
 
@@ -1702,6 +1749,7 @@ TemplateURLService::CreateTemplateURLFromTemplateURLAndSyncData(
   for (int i = 0; i < specifics.alternate_urls_size(); ++i)
     data.alternate_urls.push_back(specifics.alternate_urls(i));
   data.is_active = ActiveStatusFromSync(specifics.is_active());
+  data.starter_pack_id = specifics.starter_pack_id();
   data.vivaldi_position =
       syncer::UniquePosition::FromProto(specifics.unique_position());
 
@@ -1960,7 +2008,7 @@ void TemplateURLService::UpdateTemplateURLIfPrepopulated(
 
   for (const auto& url : prepopulated_urls) {
     if (url->prepopulate_id == prepopulate_id) {
-      MergeIntoPrepopulatedEngineData(template_url, url.get());
+      MergeIntoEngineData(template_url, url.get());
       url.get()->is_active = template_url->is_active();
       template_url->CopyFrom(TemplateURL(*url));
     }
@@ -2373,16 +2421,19 @@ void TemplateURLService::MergeInSyncTemplateURL(
     local_data->erase(guid);
   }
 
-  // Try to take over a local prepopulated entry, assuming we haven't already
-  // run into a keyword conflict.
-  if (local_duplicates.empty() && sync_turl->prepopulate_id() != 0) {
+  // Try to take over a local built-in (prepopulated or starter pack) entry,
+  // assuming we haven't already run into a keyword conflict.
+  if (local_duplicates.empty() &&
+      (sync_turl->prepopulate_id() != 0 || sync_turl->starter_pack_id() != 0)) {
     // Check for a turl with a conflicting prepopulate_id. This detects the case
     // where the user changes a prepopulated engine's keyword on one client,
     // then begins syncing on another client.  We want to reflect this keyword
     // change to that prepopulated URL on other clients instead of assuming that
     // the modified TemplateURL is a new entity.
-    TemplateURL* conflicting_prepopulated_turl =
-        FindPrepopulatedTemplateURL(sync_turl->prepopulate_id());
+    TemplateURL* conflicting_built_in_turl =
+        (sync_turl->prepopulate_id() != 0)
+            ? FindPrepopulatedTemplateURL(sync_turl->prepopulate_id())
+            : FindStarterPackTemplateURL(sync_turl->starter_pack_id());
 
     // If we found a conflict, and the sync entity is better, apply the remote
     // changes locally. We consider |sync_turl| better if it's been modified
@@ -2394,14 +2445,14 @@ void TemplateURLService::MergeInSyncTemplateURL(
     // be applied to other clients.
     // If we can't safely replace the local entry with the synced one, or merge
     // the relevant changes in, we give up and leave both intact.
-    if (conflicting_prepopulated_turl &&
-        !IsFromSync(conflicting_prepopulated_turl, sync_data) &&
+    if (conflicting_built_in_turl &&
+        !IsFromSync(conflicting_built_in_turl, sync_data) &&
         sync_turl->IsBetterThanEngineWithConflictingKeyword(
-            conflicting_prepopulated_turl)) {
-      std::string guid = conflicting_prepopulated_turl->sync_guid();
-      auto* default_search_provider = std::find(
-          default_search_provider_.begin(), default_search_provider_.end(),
-          conflicting_prepopulated_turl);
+            conflicting_built_in_turl)) {
+      std::string guid = conflicting_built_in_turl->sync_guid();
+      auto* default_search_provider =
+          std::find(default_search_provider_.begin(),
+                    default_search_provider_.end(), conflicting_built_in_turl);
 
       if (default_search_provider != default_search_provider_.end()) {
         auto type = std::distance(default_search_provider_.begin(), default_search_provider);
@@ -2422,7 +2473,7 @@ void TemplateURLService::MergeInSyncTemplateURL(
 
         should_add_sync_turl = false;
       } else {
-        Remove(conflicting_prepopulated_turl);
+        Remove(conflicting_built_in_turl);
       }
       // Remove the local data so it isn't written to sync.
       local_data->erase(guid);
@@ -2524,6 +2575,16 @@ TemplateURL* TemplateURLService::FindPrepopulatedTemplateURL(
   DCHECK(prepopulated_id);
   for (const auto& turl : template_urls_) {
     if (turl->prepopulate_id() == prepopulated_id)
+      return turl.get();
+  }
+  return nullptr;
+}
+
+TemplateURL* TemplateURLService::FindStarterPackTemplateURL(
+    int starter_pack_id) {
+  DCHECK(starter_pack_id);
+  for (const auto& turl : template_urls_) {
+    if (turl->starter_pack_id() == starter_pack_id)
       return turl.get();
   }
   return nullptr;
@@ -2685,17 +2746,26 @@ void TemplateURLService::ResetTemplateURL(
   }
 
   data.prepopulate_id = 0;
+  // Using a new guid will cause sync to add this as a new turl instead of
+  // updating the existing one.
+  data.GenerateSyncGUID();
+
+  TemplateURLData prepopulate_data(url->data());
+  prepopulate_data.is_active = TemplateURLData::ActiveStatus::kFalse;
+  prepopulate_data.id = kInvalidTemplateURLID;
+
   Update(url, TemplateURL(data));
 
   for (int i = 0; i < kDefaultSearchTypeCount; i++) {
-    if (url == default_search_provider_[i] &&
-        (!prefs_ || prefs_
-                        ->GetString(VivaldiGetDefaultProviderGuidPrefForType(
-                            DefaultSearchType(i)))
-                        .empty()))
-      default_search_manager_[i].SetUserSelectedDefaultSearchEngine(
-          url->data());
+    if (url == default_search_provider_[i] && prefs_)
+      prefs_->SetString(
+          VivaldiGetDefaultProviderGuidPrefForType(DefaultSearchType(i)),
+          data.sync_guid);
   }
+
+  // Re-add a disabled version of the prepopulated turl. Sync will pick this up
+  // and disable it on other clients.
+  Add(std::make_unique<TemplateURL>(prepopulate_data));
 }
 
 void TemplateURLService::VivaldiSetDefaultOverride(TemplateURL* url) {

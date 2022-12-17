@@ -15,6 +15,7 @@
 #include "chrome/browser/web_applications/web_app_registrar.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace content {
 class WebContents;
@@ -32,15 +33,17 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
  public:
   static void CreateForWebContents(content::WebContents* contents);
 
+  // Retrieves the WebAppTabHelper's app ID off |web_contents|, returns nullptr
+  // if there is no tab helper or app ID.
+  static const AppId* GetAppId(content::WebContents* web_contents);
+
   explicit WebAppTabHelper(content::WebContents* web_contents);
   WebAppTabHelper(const WebAppTabHelper&) = delete;
   WebAppTabHelper& operator=(const WebAppTabHelper&) = delete;
   ~WebAppTabHelper() override;
 
-  const AppId& GetAppId() const;
-  void SetAppId(const AppId& app_id);
+  void SetAppId(absl::optional<AppId> app_id);
   const base::UnguessableToken& GetAudioFocusGroupIdForTesting() const;
-  bool HasLoadedNonAboutBlankPage() const;
 
   bool acting_as_app() const { return acting_as_app_; }
   void set_acting_as_app(bool acting_as_app) { acting_as_app_ = acting_as_app; }
@@ -50,8 +53,7 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // content::WebContentsObserver:
   void ReadyToCommitNavigation(
       content::NavigationHandle* navigation_handle) override;
-  void DidFinishNavigation(
-      content::NavigationHandle* navigation_handle) override;
+  void PrimaryPageChanged(content::Page& page) override;
   void DidCloneToNewWebContents(
       content::WebContents* old_web_contents,
       content::WebContents* new_web_contents) override;
@@ -71,8 +73,8 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   void ResetAppId();
 
   // Runs any logic when the associated app either changes or is removed.
-  void OnAssociatedAppChanged(const AppId& previous_app_id,
-                              const AppId& new_app_id);
+  void OnAssociatedAppChanged(const absl::optional<AppId>& previous_app_id,
+                              const absl::optional<AppId>& new_app_id);
 
   // Updates the audio focus group id based on the current web app.
   void UpdateAudioFocusGroupId();
@@ -80,10 +82,10 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // Triggers a reinstall of a placeholder app for |url|.
   void ReinstallPlaceholderAppIfNecessary(const GURL& url);
 
-  AppId FindAppIdWithUrlInScope(const GURL& url) const;
+  absl::optional<AppId> FindAppWithUrlInScope(const GURL& url) const;
 
-  // WebApp associated with this tab. Empty string if no app associated.
-  AppId app_id_;
+  // WebApp associated with this tab.
+  absl::optional<AppId> app_id_;
 
   // True when the associated `WebContents` is acting as an app. Specifically,
   // this should only be true if `app_id_` is non empty, and the WebContents was
@@ -92,16 +94,9 @@ class WebAppTabHelper : public content::WebContentsUserData<WebAppTabHelper>,
   // be false if a user types the app's URL into a normal browser window.
   bool acting_as_app_ = false;
 
-  // Indicates if the current page is an error page (e.g. the page failed to
-  // load). We store this because it isn't accessible off a |WebContents| or a
-  // |RenderFrameHost|.
-  bool is_error_page_ = false;
-
   // The audio focus group id is used to group media sessions together for apps.
   // We store the applied group id locally on the helper for testing.
   base::UnguessableToken audio_focus_group_id_ = base::UnguessableToken::Null();
-
-  bool has_loaded_non_about_blank_page_ = false;
 
   // Use unique_ptr for lazy instantiation as most browser tabs have no need to
   // incur this memory overhead.

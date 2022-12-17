@@ -231,6 +231,10 @@ bool StrategyAllowInvalidListEntry(SchemaOnErrorStrategy strategy) {
   return strategy == SCHEMA_ALLOW_UNKNOWN_AND_INVALID_LIST_ENTRY;
 }
 
+bool StrategyAllowUnknownWithoutWarning(SchemaOnErrorStrategy strategy) {
+  return strategy == SCHEMA_ALLOW_UNKNOWN_WITHOUT_WARNING;
+}
+
 void SchemaErrorFound(std::string* out_error_path,
                       std::string* out_error,
                       const std::string& msg) {
@@ -1219,8 +1223,10 @@ bool Schema::Validate(const base::Value& value,
       SchemaList schema_list = GetMatchingProperties(dict_item.first);
       if (schema_list.empty()) {
         // Unknown property was detected.
-        SchemaErrorFound(out_error_path, out_error,
-                         "Unknown property: " + dict_item.first);
+        if (!StrategyAllowUnknownWithoutWarning(strategy)) {
+          SchemaErrorFound(out_error_path, out_error,
+                           "Unknown property: " + dict_item.first);
+        }
         if (!StrategyAllowUnknown(strategy))
           return false;
       } else {
@@ -1311,11 +1317,15 @@ bool Schema::Normalize(base::Value* value,
       SchemaList schema_list = GetMatchingProperties(dict_item.first);
       if (schema_list.empty()) {
         // Unknown property was detected.
-        SchemaErrorFound(out_error_path, out_error,
-                         "Unknown property: " + dict_item.first);
+        if (!StrategyAllowUnknownWithoutWarning(strategy)) {
+          SchemaErrorFound(out_error_path, out_error,
+                           "Unknown property: " + dict_item.first);
+        }
         if (!StrategyAllowUnknown(strategy))
           return false;
-        drop_list.push_back(dict_item.first);
+        if (!StrategyAllowUnknownWithoutWarning(strategy)) {
+          drop_list.push_back(dict_item.first);
+        }
       } else {
         for (const auto& subschema : schema_list) {
           std::string new_error;
@@ -1435,7 +1445,8 @@ absl::optional<base::Value> Schema::ParseToDictAndValidate(
     std::string* error) {
   base::JSONReader::ValueWithError value_with_error =
       base::JSONReader::ReadAndReturnValueWithError(
-          schema, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS);
+          schema, base::JSONParserOptions::JSON_ALLOW_TRAILING_COMMAS |
+                      base::JSONParserOptions::JSON_PARSE_CHROMIUM_EXTENSIONS);
   *error = value_with_error.error_message;
 
   if (!value_with_error.value)

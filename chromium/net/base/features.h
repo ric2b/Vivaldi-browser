@@ -422,13 +422,26 @@ NET_EXPORT extern const base::Feature kExtraCookieValidityChecks;
 // Android.
 NET_EXPORT extern const base::Feature kRecordRadioWakeupTrigger;
 
-// When enabled, certain operations in the HTTP cache are brokered to allow
-// the network process to be sandboxed.
-NET_EXPORT extern const base::Feature kSandboxHttpCache;
-
 // When enabled, cookies cannot have an expiry date further than 400 days in the
 // future.
 NET_EXPORT extern const base::Feature kClampCookieExpiryTo400Days;
+
+// Controls whether static key pinning is enforced.
+NET_EXPORT extern const base::Feature kStaticKeyPinningEnforcement;
+
+// When enabled, cookies with a non-ASCII domain attribute will be rejected.
+NET_EXPORT extern const base::Feature kCookieDomainRejectNonASCII;
+
+NET_EXPORT extern const base::Feature kOptimizeNetworkBuffers;
+
+NET_EXPORT
+extern const base::FeatureParam<int> kOptimizeNetworkBuffersBytesReadLimit;
+
+NET_EXPORT extern const base::FeatureParam<int>
+    kOptimizeNetworkBuffersMaxInputStreamBytesToReadWhenAvailableUnknown;
+
+NET_EXPORT extern const base::FeatureParam<int>
+    kOptimizeNetworkBuffersFilterSourceStreamBufferSize;
 
 }  // namespace features
 }  // namespace net

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/web_applications/commands/clear_browsing_data_command.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_test.h"
@@ -17,7 +18,6 @@ class ClearBrowsingDataCommandTest : public WebAppTest {
   void SetUp() override {
     WebAppTest::SetUp();
     web_app_provider_ = web_app::FakeWebAppProvider::Get(profile());
-    web_app_provider_->SkipAwaitingExtensionSystem();
     web_app_provider_->StartWithSubsystems();
   }
 
@@ -31,7 +31,7 @@ class ClearBrowsingDataCommandTest : public WebAppTest {
   FakeWebAppProvider* provider() { return web_app_provider_; }
 
  private:
-  FakeWebAppProvider* web_app_provider_;
+  raw_ptr<FakeWebAppProvider> web_app_provider_;
 };
 
 TEST_F(ClearBrowsingDataCommandTest, ClearLastLaunchTimeForAllTimes) {

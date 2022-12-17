@@ -10,15 +10,22 @@
 
 #include "platform_media/common/feature_toggles.h"
 
+#include <mftransform.h>
+#include <wrl/client.h>
+
 #include <string>
 
+#include "base/strings/string_piece.h"
+#include "base/task/sequenced_task_runner.h"
 #include "media/base/video_decoder.h"
-#include "platform_media/renderer/decoders/win/wmf_decoder_impl.h"
+#include "media/base/video_decoder_config.h"
+
+#include "platform_media/renderer/decoders/debug_buffer_logger.h"
 
 namespace media {
 
 // Decodes H.264 video streams using Windows Media Foundation library.
-class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
+class WMFVideoDecoder : public VideoDecoder {
  public:
   WMFVideoDecoder(scoped_refptr<base::SequencedTaskRunner> task_runner);
   ~WMFVideoDecoder() override;
@@ -38,7 +45,25 @@ class MEDIA_EXPORT WMFVideoDecoder : public VideoDecoder {
   bool NeedsBitstreamConversion() const override;
 
  private:
-  WMFDecoderImpl<DemuxerStream::VIDEO> impl_;
+  bool ConfigureDecoder();
+  bool SetInputMediaType();
+  bool SetOutputMediaType();
+
+  bool DoDecode(scoped_refptr<DecoderBuffer> buffer);
+
+  // Try to extract more output from the decoder. Return false on errors. Set
+  // need_more_input if the decoder cannot produce more output.
+  bool ProcessOutput(bool& need_more_input);
+
+  scoped_refptr<base::SequencedTaskRunner> task_runner_;
+  Microsoft::WRL::ComPtr<IMFTransform> decoder_;
+  VideoDecoderConfig config_;
+  OutputCB output_cb_;
+  Microsoft::WRL::ComPtr<IMFSample> output_sample_;
+  DWORD input_buffer_alignment_ = 0;
+  LONG stride_ = 0;
+
+  DebugBufferLogger debug_buffer_logger_;
 };
 
 }  // namespace media

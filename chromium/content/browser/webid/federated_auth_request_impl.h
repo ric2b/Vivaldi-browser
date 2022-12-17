@@ -16,6 +16,7 @@
 #include "base/timer/timer.h"
 #include "content/browser/webid/idp_network_request_manager.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/document_service.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
 #include "content/public/browser/web_contents.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom.h"
@@ -26,50 +27,52 @@ namespace content {
 
 class FederatedIdentityActiveSessionPermissionContextDelegate;
 class FederatedIdentityApiPermissionContextDelegate;
-class FederatedIdentityRequestPermissionContextDelegate;
 class FederatedIdentitySharingPermissionContextDelegate;
 class RenderFrameHostImpl;
 
-// FederatedAuthRequestImpl contains the state machines for executing federated
-// authentication requests. This can be owned either by a
-// FederatedAuthRequestService, when the invocation is done from the renderer
-// via a mojo call, or by a FederatedAuthNavigationThrottle, when the
-// invocation is from an intercepted HTTP request.
-class CONTENT_EXPORT FederatedAuthRequestImpl {
+// FederatedAuthRequestImpl handles mojo connections from the renderer to
+// fulfill WebID-related requests.
+//
+// In practice, it is owned and managed by a RenderFrameHost. It accomplishes
+// that via subclassing DocumentService, which observes the lifecycle of a
+// RenderFrameHost and manages its own memory.
+// Create() creates a self-managed instance of FederatedAuthRequestImpl and
+// binds it to the receiver.
+class CONTENT_EXPORT FederatedAuthRequestImpl
+    : public DocumentService<blink::mojom::FederatedAuthRequest> {
  public:
-  FederatedAuthRequestImpl(RenderFrameHostImpl* host,
-                           const url::Origin& origin);
+  static void Create(RenderFrameHostImpl*,
+                     mojo::PendingReceiver<blink::mojom::FederatedAuthRequest>);
 
   FederatedAuthRequestImpl(const FederatedAuthRequestImpl&) = delete;
   FederatedAuthRequestImpl& operator=(const FederatedAuthRequestImpl&) = delete;
 
-  ~FederatedAuthRequestImpl();
+  ~FederatedAuthRequestImpl() override;
 
-  void RequestIdToken(
-      const GURL& provider,
-      const std::string& client_id,
-      const std::string& nonce,
-      bool prefer_auto_sign_in,
-      blink::mojom::FederatedAuthRequest::RequestIdTokenCallback);
-  void CancelTokenRequest();
+  // blink::mojom::FederatedAuthRequest:
+  void RequestIdToken(const GURL& provider,
+                      const std::string& client_id,
+                      const std::string& nonce,
+                      bool prefer_auto_sign_in,
+                      RequestIdTokenCallback) override;
+  void CancelTokenRequest() override;
   void Revoke(const GURL& provider,
               const std::string& client_id,
               const std::string& account_id,
-              blink::mojom::FederatedAuthRequest::RevokeCallback);
+              RevokeCallback) override;
   void Logout(const GURL& provider,
               const std::string& account_id,
-              blink::mojom::FederatedAuthRequest::LogoutCallback callback);
+              LogoutCallback callback) override;
   void LogoutRps(std::vector<blink::mojom::LogoutRpsRequestPtr> logout_requests,
-                 blink::mojom::FederatedAuthRequest::LogoutRpsCallback);
+                 LogoutRpsCallback) override;
 
+  void SetIdTokenRequestDelayForTests(base::TimeDelta delay);
   void SetNetworkManagerForTests(
       std::unique_ptr<IdpNetworkRequestManager> manager);
   void SetDialogControllerForTests(
       std::unique_ptr<IdentityRequestDialogController> controller);
   void SetActiveSessionPermissionDelegateForTests(
       FederatedIdentityActiveSessionPermissionContextDelegate*);
-  void SetRequestPermissionDelegateForTests(
-      FederatedIdentityRequestPermissionContextDelegate*);
   void SetSharingPermissionDelegateForTests(
       FederatedIdentitySharingPermissionContextDelegate*);
   void SetApiPermissionDelegateForTests(
@@ -79,6 +82,12 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
   void OnRejectRequest();
 
  private:
+  friend class FederatedAuthRequestImplTest;
+
+  FederatedAuthRequestImpl(
+      RenderFrameHostImpl*,
+      mojo::PendingReceiver<blink::mojom::FederatedAuthRequest>);
+
   bool HasPendingRequest() const;
   GURL ResolveManifestUrl(const std::string& url);
 
@@ -88,34 +97,26 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
   enum FetchManifestType { kForToken, kForRevoke };
   void FetchManifest(FetchManifestType type);
   void OnManifestListFetched(IdpNetworkRequestManager::FetchStatus status,
-                             const std::set<std::string>& urls);
+                             const std::set<GURL>& urls);
   void OnManifestListFetchedForRevoke(
       IdpNetworkRequestManager::FetchStatus status,
-      const std::set<std::string>& urls);
+      const std::set<GURL>& urls);
   void OnManifestFetched(IdpNetworkRequestManager::FetchStatus status,
                          IdpNetworkRequestManager::Endpoints,
                          IdentityProviderMetadata idp_metadata);
   void OnManifestReady(IdentityProviderMetadata idp_metadata);
-  void OnBrandIconDownloaded(int icon_minimum_size,
-                             IdentityProviderMetadata idp_metadata,
-                             int id,
-                             int http_status_code,
-                             const GURL& image_url,
-                             const std::vector<SkBitmap>& bitmaps,
-                             const std::vector<gfx::Size>& sizes);
   void OnClientMetadataResponseReceived(
       IdentityProviderMetadata idp_metadata,
       IdpNetworkRequestManager::FetchStatus status,
       IdpNetworkRequestManager::ClientMetadata data);
 
-  void DownloadBitmap(const GURL& icon_url,
-                      int ideal_icon_size,
-                      WebContents::ImageDownloadCallback callback);
   void OnAccountsResponseReceived(
       IdentityProviderMetadata idp_metadata,
       IdpNetworkRequestManager::FetchStatus status,
       IdpNetworkRequestManager::AccountList accounts);
-  void OnAccountSelected(const std::string& account_id, bool is_sign_in);
+  void OnAccountSelected(const std::string& account_id,
+                         bool is_sign_in,
+                         bool should_embargo);
   void CompleteIdTokenRequest(IdpNetworkRequestManager::FetchStatus status,
                               const std::string& id_token);
   void OnTokenResponseReceived(IdpNetworkRequestManager::FetchStatus status,
@@ -147,8 +148,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
   FederatedIdentityActiveSessionPermissionContextDelegate*
   GetActiveSessionPermissionContext();
   FederatedIdentityApiPermissionContextDelegate* GetApiPermissionContext();
-  FederatedIdentityRequestPermissionContextDelegate*
-  GetRequestPermissionContext();
   FederatedIdentitySharingPermissionContextDelegate*
   GetSharingPermissionContext();
 
@@ -164,8 +163,9 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
   // information and then we can remove the console error messages.
   void AddConsoleErrorMessage(blink::mojom::FederatedAuthRequestResult result);
 
+  bool ShouldCompleteRequestImmediatelyOnError();
+
   const raw_ptr<RenderFrameHostImpl> render_frame_host_ = nullptr;
-  const url::Origin origin_;
 
   std::unique_ptr<IdpNetworkRequestManager> network_manager_;
   std::unique_ptr<IdentityRequestDialogController> request_dialog_controller_;
@@ -207,8 +207,6 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
       active_session_permission_delegate_ = nullptr;
   raw_ptr<FederatedIdentityApiPermissionContextDelegate>
       api_permission_delegate_ = nullptr;
-  raw_ptr<FederatedIdentityRequestPermissionContextDelegate>
-      request_permission_delegate_ = nullptr;
   raw_ptr<FederatedIdentitySharingPermissionContextDelegate>
       sharing_permission_delegate_ = nullptr;
 
@@ -223,13 +221,14 @@ class CONTENT_EXPORT FederatedAuthRequestImpl {
   base::TimeTicks select_account_time_;
   base::TimeTicks id_token_response_time_;
   base::DelayTimer delay_timer_;
-  blink::mojom::FederatedAuthRequest::RequestIdTokenCallback
-      auth_request_callback_;
+  base::TimeDelta id_token_request_delay_;
+  bool errors_logged_to_console_{false};
+  RequestIdTokenCallback auth_request_callback_;
 
   base::queue<blink::mojom::LogoutRpsRequestPtr> logout_requests_;
-  blink::mojom::FederatedAuthRequest::LogoutRpsCallback logout_callback_;
+  LogoutRpsCallback logout_callback_;
 
-  blink::mojom::FederatedAuthRequest::RevokeCallback revoke_callback_;
+  RevokeCallback revoke_callback_;
 
   base::WeakPtrFactory<FederatedAuthRequestImpl> weak_ptr_factory_{this};
 };

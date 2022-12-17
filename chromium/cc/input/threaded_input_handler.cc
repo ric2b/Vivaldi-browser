@@ -289,11 +289,12 @@ InputHandler::ScrollStatus ThreadedInputHandler::ScrollBegin(
     // InputHander::ScrollThread::SCROLL_ON_MAIN_THREAD
     scroll_status.main_thread_scrolling_reasons =
         MainThreadScrollingReason::kNoScrollingLayer;
-    if (compositor_delegate_.GetSettings().is_layer_tree_for_subframe) {
-      // OOPIFs never have a viewport scroll node so if we can't scroll
-      // we need to be bubble up to the parent frame. This happens by
-      // returning SCROLL_IGNORED.
-      TRACE_EVENT_INSTANT0("cc", "Ignored - No ScrollNode (OOPIF)",
+    if (compositor_delegate_.GetSettings().is_for_embedded_frame) {
+      // OOPIFs or fenced frames never have a viewport scroll node so if we
+      // can't scroll we need to be bubble up to the parent frame. This happens
+      // by returning SCROLL_IGNORED.
+      TRACE_EVENT_INSTANT0("cc",
+                           "Ignored - No ScrollNode (OOPIF or FencedFrame)",
                            TRACE_EVENT_SCOPE_THREAD);
     } else {
       // If we didn't hit a layer above we'd usually fallback to the
@@ -375,6 +376,7 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
   if (!CurrentlyScrollingNode())
     return InputHandlerScrollResult();
 
+  const ScrollNode& scroll_node = *CurrentlyScrollingNode();
   last_scroll_update_state_ = *scroll_state;
 
   // Snap on update if interacting with the scrollbar track or arrow buttons.
@@ -387,7 +389,7 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
   }
 
   gfx::Vector2dF resolvedScrollDelta = ResolveScrollGranularityToPixels(
-      *CurrentlyScrollingNode(),
+      scroll_node,
       gfx::Vector2dF(scroll_state->delta_x(), scroll_state->delta_y()),
       scroll_state->delta_granularity());
 
@@ -406,7 +408,7 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
   compositor_delegate_.AccumulateScrollDeltaForTracing(
       gfx::Vector2dF(scroll_state->delta_x(), scroll_state->delta_y()));
 
-  compositor_delegate_.WillScrollContent(CurrentlyScrollingNode()->element_id);
+  compositor_delegate_.WillScrollContent(scroll_node.element_id);
 
   float initial_top_controls_offset = compositor_delegate_.GetImplDeprecated()
                                           .browser_controls_manager()
@@ -418,10 +420,12 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
   bool did_scroll_y = scroll_state->caused_scroll_y();
   did_scroll_x_for_scroll_gesture_ |= did_scroll_x;
   did_scroll_y_for_scroll_gesture_ |= did_scroll_y;
+  delta_consumed_for_scroll_gesture_ |=
+      scroll_state->delta_consumed_for_scroll_sequence();
   bool did_scroll_content = did_scroll_x || did_scroll_y;
   if (did_scroll_content) {
     bool is_animated_scroll = ShouldAnimateScroll(*scroll_state);
-    compositor_delegate_.DidScrollContent(CurrentlyScrollingNode()->element_id,
+    compositor_delegate_.DidScrollContent(scroll_node.element_id,
                                           is_animated_scroll);
   } else {
     overscroll_delta_for_main_thread_ +=
@@ -437,7 +441,7 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
     accumulated_root_overscroll_.set_y(0);
 
   gfx::Vector2dF unused_root_delta;
-  if (GetViewport().ShouldScroll(*CurrentlyScrollingNode())) {
+  if (GetViewport().ShouldScroll(scroll_node)) {
     unused_root_delta =
         gfx::Vector2dF(scroll_state->delta_x(), scroll_state->delta_y());
   }
@@ -471,10 +475,14 @@ InputHandlerScrollResult ThreadedInputHandler::ScrollUpdate(
     UpdateRootLayerStateForSynchronousInputHandler();
   }
 
-  scroll_result.current_visual_offset =
-      GetVisualScrollOffset(*CurrentlyScrollingNode());
+  scroll_result.current_visual_offset = GetVisualScrollOffset(scroll_node);
   float scale_factor = ActiveTree().page_scale_factor_for_scroll();
   scroll_result.current_visual_offset.Scale(scale_factor);
+
+  if (base::FeatureList::IsEnabled(features::kScrollUnification) &&
+      !GetScrollTree().CanRealizeScrollsOnCompositor(scroll_node)) {
+    scroll_result.needs_main_thread_repaint = true;
+  }
 
   // Run animations which need to respond to updated scroll offset.
   compositor_delegate_.GetImplDeprecated().mutator_host()->TickScrollAnimations(
@@ -1124,6 +1132,12 @@ void ThreadedInputHandler::RootLayerStateMayHaveChanged() {
   UpdateRootLayerStateForSynchronousInputHandler();
 }
 
+void ThreadedInputHandler::DidRegisterScrollbar(
+    ElementId scroll_element_id,
+    ScrollbarOrientation orientation) {
+  scrollbar_controller_->DidRegisterScrollbar(scroll_element_id, orientation);
+}
+
 void ThreadedInputHandler::DidUnregisterScrollbar(
     ElementId scroll_element_id,
     ScrollbarOrientation orientation) {
@@ -1182,10 +1196,7 @@ ActivelyScrollingType ThreadedInputHandler::GetActivelyScrollingType() const {
   if (!last_scroll_update_state_)
     return ActivelyScrollingType::kNone;
 
-  bool did_scroll_content =
-      did_scroll_x_for_scroll_gesture_ || did_scroll_y_for_scroll_gesture_;
-
-  if (!did_scroll_content)
+  if (!delta_consumed_for_scroll_gesture_)
     return ActivelyScrollingType::kNone;
 
   if (ShouldAnimateScroll(last_scroll_update_state_.value()))
@@ -2157,6 +2168,7 @@ void ThreadedInputHandler::ClearCurrentlyScrollingNode() {
   accumulated_root_overscroll_ = gfx::Vector2dF();
   did_scroll_x_for_scroll_gesture_ = false;
   did_scroll_y_for_scroll_gesture_ = false;
+  delta_consumed_for_scroll_gesture_ = false;
   scroll_animating_snap_target_ids_ = TargetSnapAreaElementIds();
   latched_scroll_type_.reset();
   last_scroll_update_state_.reset();
@@ -2247,6 +2259,11 @@ gfx::Vector2dF ThreadedInputHandler::UserScrollableDelta(
 
 bool ThreadedInputHandler::ScrollbarScrollIsActive() {
   return scrollbar_controller_->ScrollbarScrollIsActive();
+}
+
+void ThreadedInputHandler::SetDeferBeginMainFrame(
+    bool defer_begin_main_frame) const {
+  compositor_delegate_.SetDeferBeginMainFrame(defer_begin_main_frame);
 }
 
 }  // namespace cc

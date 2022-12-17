@@ -113,11 +113,9 @@ void GbmSurfacelessWayland::SolidColorBufferHolder::EraseBuffers(
 GbmSurfacelessWayland::GbmSurfacelessWayland(
     WaylandBufferManagerGpu* buffer_manager,
     gfx::AcceleratedWidget widget)
-    : SurfacelessEGL(gfx::Size()),
+    : SurfacelessEGL(gl::GLSurfaceEGL::GetGLDisplayEGL(), gfx::Size()),
       buffer_manager_(buffer_manager),
       widget_(widget),
-      has_implicit_external_sync_(
-          HasEGLExtension("EGL_ARM_implicit_external_sync")),
       solid_color_buffers_holder_(std::make_unique<SolidColorBufferHolder>()),
       weak_factory_(this) {
   buffer_manager_->RegisterSurface(widget_, this);
@@ -125,30 +123,55 @@ GbmSurfacelessWayland::GbmSurfacelessWayland(
       std::make_unique<PendingFrame>(next_frame_id()));
 }
 
-void GbmSurfacelessWayland::QueueOverlayPlane(OverlayPlane plane,
-                                              BufferId buffer_id) {
-  unsubmitted_frames_.back()->planes.emplace_back(buffer_id, std::move(plane));
+void GbmSurfacelessWayland::QueueWaylandOverlayConfig(
+    wl::WaylandOverlayConfig config) {
+  unsubmitted_frames_.back()->configs.emplace_back(std::move(config));
 }
 
 bool GbmSurfacelessWayland::ScheduleOverlayPlane(
     gl::GLImage* image,
     std::unique_ptr<gfx::GpuFence> gpu_fence,
     const gfx::OverlayPlaneData& overlay_plane_data) {
+  auto* frame = unsubmitted_frames_.back().get();
+  // There are multiple scheduling submissions for the same frame. If the
+  // previous schedule failed, there is no reason to continue.
+  if (!frame->schedule_planes_succeeded)
+    return false;
+
+  // Solid color overlays are non-backed. Thus, queue them directly.
+  // TODO(msisov): reconsider this once Linux Wayland compositors also support
+  // creation of non-backed solid color wl_buffers.
   if (!image) {
     // Only solid color overlays can be non-backed.
-    if (!overlay_plane_data.solid_color.has_value()) {
+    if (!overlay_plane_data.is_solid_color) {
       LOG(WARNING) << "Only solid color overlay planes are allowed to be "
                       "scheduled without GLImage.";
+      frame->schedule_planes_succeeded = false;
       return false;
     }
     DCHECK(!gpu_fence);
-    unsubmitted_frames_.back()->non_backed_overlays.emplace_back(
-        overlay_plane_data);
+
+    BufferId buf_id = solid_color_buffers_holder_->GetOrCreateSolidColorBuffer(
+        overlay_plane_data.color.value(), buffer_manager_);
+    // Invalid buffer id.
+    if (buf_id == 0) {
+      frame->schedule_planes_succeeded = false;
+      return false;
+    }
+    frame->in_flight_color_buffers.push_back(buf_id);
+    QueueWaylandOverlayConfig(
+        {overlay_plane_data, nullptr, buf_id, surface_scale_factor()});
   } else {
-    unsubmitted_frames_.back()->overlays.emplace_back(
-        image, std::move(gpu_fence), overlay_plane_data);
+    std::vector<gfx::GpuFence> acquire_fences;
+    if (gpu_fence)
+      acquire_fences.push_back(std::move(*gpu_fence));
+
+    auto pixmap = image->GetNativePixmap();
+    DCHECK(pixmap);
+    frame->schedule_planes_succeeded = pixmap->ScheduleOverlayPlane(
+        widget_, overlay_plane_data, std::move(acquire_fences), {});
   }
-  return true;
+  return frame->schedule_planes_succeeded;
 }
 
 bool GbmSurfacelessWayland::IsOffscreen() {
@@ -187,16 +210,14 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
     return;
   }
 
-  // TODO(fangzhoug): remove glFlush since eglImageFlushExternalEXT called on
-  // the image should be enough (https://crbug.com/720045).
-  if (!no_gl_flush_for_tests_)
+  if ((!no_gl_flush_for_tests_ && !buffer_manager_->supports_acquire_fence()) ||
+      requires_gl_flush_on_swap_buffers_) {
     glFlush();
-  unsubmitted_frames_.back()->Flush();
+  }
 
   PendingFrame* frame = unsubmitted_frames_.back().get();
   frame->completion_callback = std::move(completion_callback);
   frame->presentation_callback = std::move(presentation_callback);
-  frame->ScheduleOverlayPlanes(this);
 
   unsubmitted_frames_.push_back(
       std::make_unique<PendingFrame>(next_frame_id()));
@@ -212,9 +233,12 @@ void GbmSurfacelessWayland::SwapBuffersAsync(
 
   base::OnceClosure fence_wait_task;
   std::vector<std::unique_ptr<gfx::GpuFence>> fences;
-  for (auto& plane : frame->planes) {
-    if (plane.second.gpu_fence)
-      fences.push_back(std::move(plane.second.gpu_fence));
+  for (auto& config : frame->configs) {
+    if (!config.access_fence_handle.is_null()) {
+      fences.push_back(std::make_unique<gfx::GpuFence>(
+          std::move(config.access_fence_handle)));
+      config.access_fence_handle = gfx::GpuFenceHandle();
+    }
   }
 
   fence_wait_task = base::BindOnce(&WaitForGpuFences, std::move(fences));
@@ -304,46 +328,6 @@ GbmSurfacelessWayland::PendingFrame::PendingFrame(uint32_t frame_id)
 
 GbmSurfacelessWayland::PendingFrame::~PendingFrame() = default;
 
-void GbmSurfacelessWayland::PendingFrame::ScheduleOverlayPlanes(
-    GbmSurfacelessWayland* surfaceless) {
-  DCHECK(surfaceless);
-  for (auto& overlay : overlays) {
-    if (!overlay.ScheduleOverlayPlane(surfaceless->widget_))
-      return;
-  }
-
-  // Solid color overlays are non-backed. Thus, queue them directly.
-  // TODO(msisov): reconsider this once Linux Wayland compositors also support
-  // creation of non-backed solid color wl_buffers.
-  for (auto& overlay_data : non_backed_overlays) {
-    // This mustn't happen, but let's be explicit here and fail scheduling if
-    // it is not a solid color overlay.
-    if (!overlay_data.solid_color.has_value()) {
-      schedule_planes_succeeded = false;
-      return;
-    }
-
-    BufferId buf_id =
-        surfaceless->solid_color_buffers_holder_->GetOrCreateSolidColorBuffer(
-            overlay_data.solid_color.value(), surfaceless->buffer_manager_);
-    // Invalid buffer id.
-    if (buf_id == 0) {
-      schedule_planes_succeeded = false;
-      return;
-    }
-    surfaceless->QueueOverlayPlane(OverlayPlane(nullptr, nullptr, overlay_data),
-                                   buf_id);
-  }
-
-  schedule_planes_succeeded = true;
-  return;
-}
-
-void GbmSurfacelessWayland::PendingFrame::Flush() {
-  for (const auto& overlay : overlays)
-    overlay.Flush();
-}
-
 void GbmSurfacelessWayland::MaybeSubmitFrames() {
   while (!unsubmitted_frames_.empty() && unsubmitted_frames_.front()->ready) {
     auto submitted_frame = std::move(unsubmitted_frames_.front());
@@ -362,19 +346,8 @@ void GbmSurfacelessWayland::MaybeSubmitFrames() {
       return;
     }
 
-    std::vector<ui::ozone::mojom::WaylandOverlayConfigPtr> overlay_configs;
-    for (auto& plane : submitted_frame->planes) {
-      overlay_configs.push_back(
-          ui::ozone::mojom::WaylandOverlayConfig::From(plane.second));
-      overlay_configs.back()->buffer_id = plane.first;
-      // The current scale factor of the surface, which is used to determine
-      // the size in pixels of resources allocated by the GPU process.
-      overlay_configs.back()->surface_scale_factor = surface_scale_factor_;
-      plane.second.gpu_fence.reset();
-    }
-
     buffer_manager_->CommitOverlays(widget_, submitted_frame->frame_id,
-                                    std::move(overlay_configs));
+                                    std::move(submitted_frame->configs));
     submitted_frames_.push_back(std::move(submitted_frame));
   }
 }
@@ -396,6 +369,10 @@ void GbmSurfacelessWayland::SetNoGLFlushForTests() {
   no_gl_flush_for_tests_ = true;
 }
 
+void GbmSurfacelessWayland::SetForceGlFlushOnSwapBuffers() {
+  requires_gl_flush_on_swap_buffers_ = true;
+}
+
 void GbmSurfacelessWayland::OnSubmission(uint32_t frame_id,
                                          const gfx::SwapResult& swap_result,
                                          gfx::GpuFenceHandle release_fence) {
@@ -408,12 +385,20 @@ void GbmSurfacelessWayland::OnSubmission(uint32_t frame_id,
 
   auto submitted_frame = std::move(submitted_frames_.front());
   submitted_frames_.erase(submitted_frames_.begin());
-  for (auto& plane : submitted_frame->planes) {
+  for (auto& buf : submitted_frame->in_flight_color_buffers) {
     // Let the holder mark this buffer as free to reuse.
-    solid_color_buffers_holder_->OnSubmission(plane.first, buffer_manager_);
+    solid_color_buffers_holder_->OnSubmission(buf, buffer_manager_);
   }
-  submitted_frame->planes.clear();
-  submitted_frame->overlays.clear();
+  submitted_frame->in_flight_color_buffers.clear();
+
+  // Check if the fence has retired.
+  if (!release_fence.is_null()) {
+    base::TimeTicks ticks;
+    auto status = gfx::GpuFence::GetStatusChangeTime(
+        release_fence.owned_fd.get(), &ticks);
+    if (status == gfx::GpuFence::kSignaled)
+      release_fence = {};
+  }
 
   std::move(submitted_frame->completion_callback)
       .Run(gfx::SwapCompletionResult(swap_result, std::move(release_fence)));

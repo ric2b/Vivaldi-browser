@@ -261,22 +261,29 @@ class TestOverlayProcessorOzone : public OverlayProcessorOzone {
 };
 
 TEST(OverlayProcessorOzoneTest, ObserveHardwareCapabilites) {
+  OverlayCandidateList candidates;
   // Enable 4 overlays
   const std::vector<base::test::ScopedFeatureList::FeatureAndParams>
       feature_and_params_list = {{features::kEnableOverlayPrioritization, {}},
                                  {features::kUseMultipleOverlays,
                                   {{features::kMaxOverlaysParam, "4"}}}};
-  base::test::ScopedFeatureList features;
-  features.InitWithFeaturesAndParameters(feature_and_params_list, {});
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitWithFeaturesAndParameters(feature_and_params_list, {});
+  // When overlay prioritization is explicitly disabled (Lacros) we should
+  // skip multiple overlays tests.
+  if (!features::IsOverlayPrioritizationEnabled()) {
+    GTEST_SKIP();
+  }
 
   auto fake_candidates_unique = std::make_unique<FakeOverlayCandidatesOzone>();
   auto* fake_candidates = fake_candidates_unique.get();
 
+  TestOverlayProcessorOzone processor(std::move(fake_candidates_unique), {},
+                                      nullptr);
   // No receive_callback yet.
   EXPECT_TRUE(fake_candidates->receive_callback().is_null());
 
-  TestOverlayProcessorOzone processor(std::move(fake_candidates_unique), {},
-                                      nullptr);
+  processor.CheckOverlaySupport(nullptr, &candidates);
 
   // Receive callback is set.
   EXPECT_FALSE(fake_candidates->receive_callback().is_null());
@@ -284,32 +291,44 @@ TEST(OverlayProcessorOzoneTest, ObserveHardwareCapabilites) {
   EXPECT_EQ(processor.MaxOverlaysConsidered(), 1);
 
   ui::HardwareCapabilities hc;
+  hc.is_valid = true;
   hc.num_overlay_capable_planes = 6;
   fake_candidates->receive_callback().Run(hc);
 
   // Uses max_overlays_config_ = 4.
   EXPECT_EQ(processor.MaxOverlaysConsidered(), 4);
 
+  hc.is_valid = true;
   hc.num_overlay_capable_planes = 4;
   fake_candidates->receive_callback().Run(hc);
 
   // Uses (num_overlay_capable_planes - 1) = 3.
   EXPECT_EQ(processor.MaxOverlaysConsidered(), 3);
+
+  hc.is_valid = false;
+  hc.num_overlay_capable_planes = 0;
+  fake_candidates->receive_callback().Run(hc);
+
+  // Defaults to 1 overlay when receiving an invalid response.
+  EXPECT_EQ(processor.MaxOverlaysConsidered(), 1);
 }
 
 TEST(OverlayProcessorOzoneTest, NoObserveHardwareCapabilites) {
+  OverlayCandidateList candidates;
   // Multiple overlays disabled.
-  base::test::ScopedFeatureList features;
-  features.InitAndDisableFeature(features::kUseMultipleOverlays);
+  base::test::ScopedFeatureList scoped_features;
+  scoped_features.InitAndDisableFeature(features::kUseMultipleOverlays);
 
   auto fake_candidates_unique = std::make_unique<FakeOverlayCandidatesOzone>();
   auto* fake_candidates = fake_candidates_unique.get();
 
+  OverlayProcessorOzone processor(std::move(fake_candidates_unique), {},
+                                  nullptr);
+
   // No receive_callback yet.
   EXPECT_TRUE(fake_candidates->receive_callback().is_null());
 
-  TestOverlayProcessorOzone processor(std::move(fake_candidates_unique), {},
-                                      nullptr);
+  processor.CheckOverlaySupport(nullptr, &candidates);
 
   // Receive callback is still unset because multiple overlays is disabled.
   EXPECT_TRUE(fake_candidates->receive_callback().is_null());

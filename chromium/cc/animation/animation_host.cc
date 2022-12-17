@@ -154,6 +154,15 @@ void AnimationHost::SetHasSmilAnimation(bool has_smil_animation) {
   has_smil_animation_.Write(*this) = has_smil_animation;
 }
 
+bool AnimationHost::HasSharedElementTransition() const {
+  return has_shared_element_transition_.Read(*this);
+}
+
+void AnimationHost::SetHasSharedElementTransition(
+    bool has_shared_element_transition) {
+  has_shared_element_transition_.Write(*this) = has_shared_element_transition;
+}
+
 void AnimationHost::SetCurrentFrameHadRaf(bool current_frame_had_raf) {
   current_frame_had_raf_.Write(*this) = current_frame_had_raf;
 }
@@ -179,6 +188,7 @@ void AnimationHost::RemoveElementId(ElementId element_id) {
   scoped_refptr<ElementAnimations> element_animations =
       GetElementAnimationsForElementId(element_id);
   if (element_animations) {
+    DCHECK(!element_animations->HasTickingKeyframeEffect());
     element_animations->RemoveKeyframeEffects();
   }
 }
@@ -187,6 +197,26 @@ void AnimationHost::RegisterAnimationForElement(ElementId element_id,
                                                 Animation* animation) {
   DCHECK(element_id);
   DCHECK(animation);
+#if DCHECK_IS_ON()
+  for (const auto& keyframe_model :
+       animation->keyframe_effect()->keyframe_models()) {
+    KeyframeModel* cc_keyframe_model =
+        KeyframeModel::ToCcKeyframeModel(keyframe_model.get());
+    ElementId model_element_id = cc_keyframe_model->element_id()
+                                     ? cc_keyframe_model->element_id()
+                                     : element_id;
+    DCHECK(cc_keyframe_model->affects_active_elements() ||
+           cc_keyframe_model->affects_pending_elements());
+    DCHECK(!cc_keyframe_model->affects_active_elements() ||
+           mutator_host_client()->IsElementInPropertyTrees(
+               model_element_id, ElementListType::ACTIVE));
+    // Test thread_instance_ because LayerTreeHost has no pending tree.
+    DCHECK(thread_instance_ == ThreadInstance::MAIN ||
+           !cc_keyframe_model->affects_pending_elements() ||
+           mutator_host_client()->IsElementInPropertyTrees(
+               model_element_id, ElementListType::PENDING));
+  }
+#endif
 
   scoped_refptr<ElementAnimations> element_animations =
       GetElementAnimationsForElementId(element_id);
@@ -307,6 +337,7 @@ void AnimationHost::PushPropertiesTo(MutatorHost* mutator_host_impl,
   host_impl->SetHasCanvasInvalidation(HasCanvasInvalidation());
   host_impl->SetHasInlineStyleMutation(HasJSAnimation());
   host_impl->SetHasSmilAnimation(HasSmilAnimation());
+  host_impl->SetHasSharedElementTransition(HasSharedElementTransition());
 
   if (needs_push_properties()) {
     needs_push_properties_.Write(*this) = false;
@@ -609,81 +640,23 @@ bool AnimationHost::ScrollOffsetAnimationWasInterrupted(
              : false;
 }
 
-bool AnimationHost::IsAnimatingFilterProperty(ElementId element_id,
-                                              ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsCurrentlyAnimatingProperty(
-                   TargetProperty::FILTER, list_type)
-             : false;
-}
-
-bool AnimationHost::IsAnimatingBackdropFilterProperty(
-    ElementId element_id,
-    ElementListType list_type) const {
+bool AnimationHost::IsAnimatingProperty(ElementId element_id,
+                                        ElementListType list_type,
+                                        TargetProperty::Type property) const {
   auto element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations ? element_animations->IsCurrentlyAnimatingProperty(
-                                  TargetProperty::BACKDROP_FILTER, list_type)
+                                  property, list_type)
                             : false;
 }
 
-bool AnimationHost::IsAnimatingOpacityProperty(
+bool AnimationHost::HasPotentiallyRunningAnimationForProperty(
     ElementId element_id,
-    ElementListType list_type) const {
+    ElementListType list_type,
+    TargetProperty::Type property) const {
   auto element_animations = GetElementAnimationsForElementId(element_id);
   return element_animations
-             ? element_animations->IsCurrentlyAnimatingProperty(
-                   TargetProperty::OPACITY, list_type)
-             : false;
-}
-
-bool AnimationHost::IsAnimatingTransformProperty(
-    ElementId element_id,
-    ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsCurrentlyAnimatingProperty(
-                   TargetProperty::TRANSFORM, list_type)
-             : false;
-}
-
-bool AnimationHost::HasPotentiallyRunningFilterAnimation(
-    ElementId element_id,
-    ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsPotentiallyAnimatingProperty(
-                   TargetProperty::FILTER, list_type)
-             : false;
-}
-
-bool AnimationHost::HasPotentiallyRunningBackdropFilterAnimation(
-    ElementId element_id,
-    ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsPotentiallyAnimatingProperty(
-                   TargetProperty::BACKDROP_FILTER, list_type)
-             : false;
-}
-
-bool AnimationHost::HasPotentiallyRunningOpacityAnimation(
-    ElementId element_id,
-    ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsPotentiallyAnimatingProperty(
-                   TargetProperty::OPACITY, list_type)
-             : false;
-}
-
-bool AnimationHost::HasPotentiallyRunningTransformAnimation(
-    ElementId element_id,
-    ElementListType list_type) const {
-  auto element_animations = GetElementAnimationsForElementId(element_id);
-  return element_animations
-             ? element_animations->IsPotentiallyAnimatingProperty(
-                   TargetProperty::TRANSFORM, list_type)
+             ? element_animations->IsPotentiallyAnimatingProperty(property,
+                                                                  list_type)
              : false;
 }
 
@@ -694,7 +667,8 @@ bool AnimationHost::HasAnyAnimationTargetingProperty(
   if (!element_animations)
     return false;
 
-  return element_animations->HasAnyAnimationTargetingProperty(property);
+  return element_animations->HasAnyAnimationTargetingProperty(property,
+                                                              element_id);
 }
 
 bool AnimationHost::AnimationsPreserveAxisAlignment(
@@ -708,7 +682,7 @@ bool AnimationHost::AnimationsPreserveAxisAlignment(
 float AnimationHost::MaximumScale(ElementId element_id,
                                   ElementListType list_type) const {
   if (auto element_animations = GetElementAnimationsForElementId(element_id))
-    return element_animations->MaximumScale(list_type);
+    return element_animations->MaximumScale(element_id, list_type);
   return kInvalidScale;
 }
 

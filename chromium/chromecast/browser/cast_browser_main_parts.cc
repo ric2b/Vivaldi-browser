@@ -82,7 +82,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/content_features.h"
 #include "content/public/common/content_switches.h"
-#include "content/public/common/main_function_params.h"
 #include "content/public/common/result_codes.h"
 #include "gpu/command_buffer/service/gpu_switches.h"
 #include "media/base/media.h"
@@ -145,10 +144,6 @@
 #include "components/keyed_service/content/browser_context_dependency_manager.h"  // nogncheck
 #include "extensions/browser/browser_context_keyed_service_factories.h"  // nogncheck
 #include "extensions/browser/extension_prefs.h"  // nogncheck
-#endif
-
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(USE_OZONE)
-#include "chromecast/browser/exo/wayland_server_controller.h"
 #endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_FUCHSIA)
@@ -403,11 +398,9 @@ void EnsureBrowserContextKeyedServiceFactoriesBuilt() {
 }  // namespace
 
 CastBrowserMainParts::CastBrowserMainParts(
-    content::MainFunctionParams parameters,
     CastContentBrowserClient* cast_content_browser_client)
     : BrowserMainParts(),
       cast_browser_process_(new CastBrowserProcess()),
-      parameters_(std::move(parameters)),
       cast_content_browser_client_(cast_content_browser_client),
       media_caps_(std::make_unique<media::MediaCapsImpl>()),
       metrics_helper_(std::make_unique<metrics::MetricsHelperImpl>()) {
@@ -750,11 +743,6 @@ int CastBrowserMainParts::PreMainMessageLoopRun() {
       cast_browser_process_->browser_context());
 #endif
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(USE_OZONE)
-  wayland_server_controller_ =
-      std::make_unique<WaylandServerController>(window_manager_.get());
-#endif
-
   // Initializing metrics service and network delegates must happen after cast
   // service is initialized because CastMetricsServiceClient,
   // CastURLLoaderThrottle and CastNetworkDelegate may use components
@@ -825,9 +813,6 @@ void CastBrowserMainParts::PostMainMessageLoopRun() {
 
   cast_browser_process_->cast_service()->Stop();
 
-#if (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && defined(USE_OZONE)
-  wayland_server_controller_.reset();
-#endif
 #if BUILDFLAG(ENABLE_CHROMECAST_EXTENSIONS)
   BrowserContextDependencyManager::GetInstance()->DestroyBrowserContextServices(
       browser_context());

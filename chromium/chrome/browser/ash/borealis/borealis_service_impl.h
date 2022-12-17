@@ -5,7 +5,7 @@
 #ifndef CHROME_BROWSER_ASH_BOREALIS_BOREALIS_SERVICE_IMPL_H_
 #define CHROME_BROWSER_ASH_BOREALIS_BOREALIS_SERVICE_IMPL_H_
 
-#include "chrome/browser/ash/borealis/borealis_app_launcher.h"
+#include "chrome/browser/ash/borealis/borealis_app_launcher_impl.h"
 #include "chrome/browser/ash/borealis/borealis_app_uninstaller.h"
 #include "chrome/browser/ash/borealis/borealis_context_manager_impl.h"
 #include "chrome/browser/ash/borealis/borealis_disk_manager_dispatcher.h"
@@ -14,7 +14,6 @@
 #include "chrome/browser/ash/borealis/borealis_launch_options.h"
 #include "chrome/browser/ash/borealis/borealis_service.h"
 #include "chrome/browser/ash/borealis/borealis_shutdown_monitor.h"
-#include "chrome/browser/ash/borealis/borealis_wayland_interface.h"
 #include "chrome/browser/ash/borealis/borealis_window_manager.h"
 
 namespace borealis {
@@ -35,12 +34,11 @@ class BorealisServiceImpl : public BorealisService {
   BorealisInstaller& Installer() override;
   BorealisLaunchOptions& LaunchOptions() override;
   BorealisShutdownMonitor& ShutdownMonitor() override;
-  BorealisWaylandInterface& WaylandInterface() override;
   BorealisWindowManager& WindowManager() override;
 
   Profile* const profile_;
 
-  BorealisAppLauncher app_launcher_;
+  BorealisAppLauncherImpl app_launcher_;
   BorealisAppUninstaller app_uninstaller_;
   BorealisContextManagerImpl context_manager_;
   BorealisDiskManagerDispatcher disk_manager_dispatcher_;
@@ -48,7 +46,6 @@ class BorealisServiceImpl : public BorealisService {
   BorealisInstallerImpl installer_;
   BorealisLaunchOptions launch_options_;
   BorealisShutdownMonitor shutdown_monitor_;
-  BorealisWaylandInterface wayland_interface_;
   BorealisWindowManager window_manager_;
 };
 

@@ -965,20 +965,17 @@ FileManagerPrivateInternalGetCrostiniSharedPathsFunction::Run() {
       Params;
   const std::unique_ptr<Params> params(Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
-  // TODO(crbug.com/1057591): Unexpected crashes in
-  // GuestOsSharePath::GetPersistedSharedPaths with null profile_.
-  CHECK(browser_context());
-  Profile* profile = Profile::FromBrowserContext(browser_context());
-  CHECK(profile);
-
+  // Use OriginalProfile since using crostini in incognito such as saving
+  // files into Linux files should still work.
+  Profile* profile =
+      Profile::FromBrowserContext(browser_context())->GetOriginalProfile();
   auto* guest_os_share_path =
       guest_os::GuestOsSharePath::GetForProfile(profile);
-  CHECK(guest_os_share_path);
   bool first_for_session = params->observe_first_for_session &&
                            guest_os_share_path->GetAndSetFirstForSession();
   auto shared_paths =
       guest_os_share_path->GetPersistedSharedPaths(params->vm_name);
-  auto entries = std::make_unique<base::ListValue>();
+  base::Value::List entries;
   for (const base::FilePath& path : shared_paths) {
     std::string mount_name;
     std::string file_system_name;
@@ -989,22 +986,20 @@ FileManagerPrivateInternalGetCrostiniSharedPathsFunction::Run() {
                  << Redact(path);
       continue;
     }
-    auto entry = std::make_unique<base::DictionaryValue>();
-    entry->SetStringKey(
-        "fileSystemRoot",
-        storage::GetExternalFileSystemRootURIString(source_url(), mount_name));
-    entry->SetStringKey("fileSystemName", file_system_name);
-    entry->SetStringKey("fileFullPath", full_path);
+    base::Value::Dict entry;
+    entry.Set("fileSystemRoot", storage::GetExternalFileSystemRootURIString(
+                                    source_url(), mount_name));
+    entry.Set("fileSystemName", file_system_name);
+    entry.Set("fileFullPath", full_path);
     // All shared paths should be directories.  Even if this is not true,
     // it is fine for foreground/js/crostini.js class to think so. We
     // verify that the paths are in fact valid directories before calling
     // seneschal/9p in GuestOsSharePath::CallSeneschalSharePath().
-    entry->SetBoolKey("fileIsDirectory", true);
-    entries->Append(std::move(entry));
+    entry.Set("fileIsDirectory", true);
+    entries.Append(std::move(entry));
   }
-  return RespondNow(
-      TwoArguments(base::Value::FromUniquePtrValue(std::move(entries)),
-                   base::Value(first_for_session)));
+  return RespondNow(TwoArguments(base::Value(std::move(entries)),
+                                 base::Value(first_for_session)));
 }
 
 ExtensionFunction::ResponseAction
@@ -1228,6 +1223,7 @@ FileManagerPrivateInternalGetRecentFilesFunction::Run() {
 
   model->GetRecentFiles(
       file_system_context.get(), source_url(), file_type,
+      params->invalidate_cache,
       base::BindOnce(
           &FileManagerPrivateInternalGetRecentFilesFunction::OnGetRecentFiles,
           this, params->restriction));
@@ -1345,10 +1341,26 @@ ExtensionFunction::ResponseAction FileManagerPrivateOpenWindowFunction::Run() {
 
   Profile* profile = Profile::FromBrowserContext(browser_context());
 
-  web_app::LaunchSystemWebAppAsync(
-      profile, web_app::SystemAppType::FILE_MANAGER, launch_params);
+  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::FILE_MANAGER,
+                                   launch_params);
 
   return RespondNow(OneArgument(base::Value(true)));
+}
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateSendFeedbackFunction::Run() {
+  GURL url;
+  if (GetSenderWebContents()) {
+    url = GetSenderWebContents()->GetVisibleURL();
+  }
+
+  Profile* profile = Profile::FromBrowserContext(browser_context());
+  chrome::ShowFeedbackPage(url, profile, chrome::kFeedbackSourceFilesApp,
+                           /*description_template=*/std::string(),
+                           /*description_placeholder_text=*/std::string(),
+                           /*category_tag=*/"chromeos-files-app",
+                           /*extra_diagnostics=*/std::string());
+  return RespondNow(NoArguments());
 }
 
 }  // namespace extensions

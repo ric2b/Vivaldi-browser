@@ -259,9 +259,6 @@ void RecordSourceIdConsistency(bool all_valid, bool all_unique) {
 
 }  // namespace
 
-DEFINE_SCOPED_UMA_HISTOGRAM_TIMER(PendingTreeRasterDurationHistogramTimer,
-                                  "Scheduling.%s.PendingTreeRasterDuration")
-
 void LayerTreeHostImpl::DidUpdateScrollAnimationCurve() {
   // Because we updated the animation target, notify the
   // `LatencyInfoSwapPromiseMonitor` to tell it that something happened that
@@ -318,6 +315,11 @@ void LayerTreeHostImpl::SetNeedsFullViewportRedraw() {
   // damage/redraw being set from scroll offset changes).
   SetFullViewportDamage();
   SetNeedsRedraw();
+}
+
+void LayerTreeHostImpl::SetDeferBeginMainFrame(
+    bool defer_begin_main_frame) const {
+  client_->SetDeferBeginMainFrameFromImpl(defer_begin_main_frame);
 }
 
 bool LayerTreeHostImpl::IsInHighLatencyMode() const {
@@ -385,7 +387,9 @@ LayerTreeHostImpl::LayerTreeHostImpl(
       current_begin_frame_tracker_(FROM_HERE),
       compositor_frame_reporting_controller_(
           std::make_unique<CompositorFrameReportingController>(
-              /*should_report_metrics=*/!settings.single_thread_proxy_scheduler,
+              /*should_report_histograms=*/!settings
+                  .single_thread_proxy_scheduler,
+              /*should_report_ukm=*/!settings.single_thread_proxy_scheduler,
               id)),
       settings_(settings),
       is_synchronous_single_threaded_(!task_runner_provider->HasImplThread() &&
@@ -455,14 +459,16 @@ LayerTreeHostImpl::LayerTreeHostImpl(
   compositor_frame_reporting_controller_->SetFrameSequenceTrackerCollection(
       &frame_trackers_);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
   const bool is_ui = settings.is_layer_tree_for_ui;
   if (is_ui) {
+    compositor_frame_reporting_controller_->set_event_latency_tracker(this);
+
+#if BUILDFLAG(IS_CHROMEOS_ASH)
     dropped_frame_counter_.EnableReporForUI();
     compositor_frame_reporting_controller_->SetThreadAffectsSmoothness(
         FrameInfo::SmoothEffectDrivingThread::kMain, true);
-  }
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+  }
 
   dropped_frame_counter_.set_total_counter(&total_frame_counter_);
   frame_trackers_.set_custom_tracker_results_added_callback(
@@ -520,11 +526,6 @@ const ThreadedInputHandler& LayerTreeHostImpl::GetInputHandler() const {
   DCHECK(input_delegate_) << "Requested InputHandler when one wasn't bound. "
                              "Call BindToInputHandler to bind to one";
   return static_cast<const ThreadedInputHandler&>(*input_delegate_.get());
-}
-
-void LayerTreeHostImpl::WillSendBeginMainFrame() {
-  if (scheduling_client_)
-    scheduling_client_->DidScheduleBeginMainFrame();
 }
 
 void LayerTreeHostImpl::DidSendBeginMainFrame(const viz::BeginFrameArgs& args) {
@@ -586,12 +587,14 @@ void LayerTreeHostImpl::ReadyToCommit(
   }
 }
 
-void LayerTreeHostImpl::BeginCommit(int source_frame_number) {
+void LayerTreeHostImpl::BeginCommit(int source_frame_number,
+                                    uint64_t trace_id) {
   TRACE_EVENT0("cc", "LayerTreeHostImpl::BeginCommit");
 
   if (!CommitToActiveTree())
     CreatePendingTree();
   sync_tree()->set_source_frame_number(source_frame_number);
+  sync_tree()->set_trace_id(trace_id);
 }
 
 // This function commits the LayerTreeHost, as represented by CommitState, to an
@@ -719,6 +722,10 @@ void LayerTreeHostImpl::CommitComplete() {
       mutator_host_->HasSmilAnimation()) {
     frame_trackers_.StartSequence(
         FrameSequenceTrackerType::kMainThreadAnimation);
+    if (mutator_host_->HasSharedElementTransition()) {
+      frame_trackers_.StartSequence(
+          FrameSequenceTrackerType::kSETMainThreadAnimation);
+    }
   }
 
   for (const auto& info : mutator_host_->TakePendingThroughputTrackerInfos()) {
@@ -750,8 +757,6 @@ void LayerTreeHostImpl::UpdateSyncTreeAfterCommitOrImplSideInvalidation() {
   // and the updated data for the image from the main frame.
   PaintImageIdFlatSet images_to_invalidate =
       tile_manager_.TakeImagesToInvalidateOnSyncTree();
-  if (ukm_manager_)
-    ukm_manager_->AddCheckerboardedImages(images_to_invalidate.size());
 
   const auto& animated_images =
       image_animation_controller_.AnimateForSyncTree(CurrentBeginFrameArgs());
@@ -914,10 +919,6 @@ void LayerTreeHostImpl::NotifyPendingTreeFullyPainted() {
     // Scheduler to wait for ReadyToDraw signal to avoid Checkerboard.
     if (CommitToActiveTree())
       NotifyReadyToDraw();
-  } else if (!CommitToActiveTree()) {
-    DCHECK(!pending_tree_raster_duration_timer_);
-    pending_tree_raster_duration_timer_ =
-        std::make_unique<PendingTreeRasterDurationHistogramTimer>();
   }
 }
 
@@ -1020,19 +1021,6 @@ void LayerTreeHostImpl::StartPageScaleAnimation(const gfx::Point& target_offset,
                                                 bool anchor_point,
                                                 float page_scale,
                                                 base::TimeDelta duration) {
-  // Temporary crash logging for https://crbug.com/845097.
-  static bool has_dumped_without_crashing = false;
-  if (settings().is_layer_tree_for_subframe && !has_dumped_without_crashing) {
-    has_dumped_without_crashing = true;
-    static auto* psf_oopif_animation_error =
-        base::debug::AllocateCrashKeyString("psf_oopif_animation_error",
-                                            base::debug::CrashKeySize::Size32);
-    base::debug::SetCrashKeyString(
-        psf_oopif_animation_error,
-        base::StringPrintf("%p", InnerViewportScrollNode()));
-    base::debug::DumpWithoutCrashing();
-  }
-
   if (!InnerViewportScrollNode())
     return;
 
@@ -1308,8 +1296,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   int num_missing_tiles = 0;
   int num_incomplete_tiles = 0;
   int64_t checkerboarded_no_recording_content_area = 0;
-  int64_t checkerboarded_needs_raster_content_area = 0;
-  int64_t total_visible_area = 0;
+
   bool have_copy_request =
       active_tree()->property_trees()->effect_tree().HasCopyRequests();
   bool have_missing_animated_tiles = false;
@@ -1389,9 +1376,7 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
       num_incomplete_tiles += append_quads_data.num_incomplete_tiles;
       checkerboarded_no_recording_content_area +=
           append_quads_data.checkerboarded_no_recording_content_area;
-      checkerboarded_needs_raster_content_area +=
-          append_quads_data.checkerboarded_needs_raster_content_area;
-      total_visible_area += append_quads_data.visible_layer_area;
+
       if (append_quads_data.num_missing_tiles > 0) {
         have_missing_animated_tiles |=
             layer->screen_space_transform_is_animating();
@@ -1490,30 +1475,6 @@ DrawResult LayerTreeHostImpl::CalculateRenderPasses(FrameData* frame) {
   frame->has_missing_content =
       num_missing_tiles > 0 || num_incomplete_tiles > 0;
 
-  if (ukm_manager_) {
-    ukm_manager_->AddCheckerboardStatsForFrame(
-        checkerboarded_no_recording_content_area +
-            checkerboarded_needs_raster_content_area,
-        num_missing_tiles, total_visible_area);
-  }
-
-  if (active_tree_->has_ever_been_drawn()) {
-    UMA_HISTOGRAM_COUNTS_100(
-        "Compositing.RenderPass.AppendQuadData.NumMissingTiles",
-        num_missing_tiles);
-    UMA_HISTOGRAM_COUNTS_100(
-        "Compositing.RenderPass.AppendQuadData.NumIncompleteTiles",
-        num_incomplete_tiles);
-    UMA_HISTOGRAM_COUNTS_1M(
-        "Compositing.RenderPass.AppendQuadData."
-        "CheckerboardedNoRecordingContentArea",
-        checkerboarded_no_recording_content_area);
-    UMA_HISTOGRAM_COUNTS_1M(
-        "Compositing.RenderPass.AppendQuadData."
-        "CheckerboardedNeedRasterContentArea",
-        checkerboarded_needs_raster_content_area);
-  }
-
   TRACE_EVENT_END2("cc,benchmark", "LayerTreeHostImpl::CalculateRenderPasses",
                    "draw_result", draw_result, "missing tiles",
                    num_missing_tiles);
@@ -1545,11 +1506,6 @@ void LayerTreeHostImpl::DidAnimateScrollOffset() {
 
 void LayerTreeHostImpl::SetViewportDamage(const gfx::Rect& damage_rect) {
   viewport_damage_rect_.Union(damage_rect);
-}
-
-void LayerTreeHostImpl::SetEnableFrameRateThrottling(
-    bool enable_frame_rate_throttling) {
-  enable_frame_rate_throttling_ = enable_frame_rate_throttling;
 }
 
 void LayerTreeHostImpl::InvalidateContentOnImplSide() {
@@ -1750,7 +1706,9 @@ void LayerTreeHostImpl::EvictTexturesForTesting() {
   UpdateTileManagerMemoryPolicy(ManagedMemoryPolicy(0));
 }
 
-void LayerTreeHostImpl::BlockNotifyReadyToActivateForTesting(bool block) {
+void LayerTreeHostImpl::BlockNotifyReadyToActivateForTesting(
+    bool block,
+    bool notify_if_blocked) {
   NOTREACHED();
 }
 
@@ -1923,24 +1881,23 @@ TargetColorParams LayerTreeHostImpl::GetTargetColorParams(
   if (!hdr_color_space.IsValid())
     return params;
 
-  // It's expensive to rasterize in HDR, so we only want to do so when we know
-  // we have HDR content to rasterize.
-  if (hdr_color_space.IsHDR() &&
-      content_color_usage != gfx::ContentColorUsage::kHDR) {
-    params.color_space = gfx::ColorSpace::CreateDisplayP3D65();
+  if (hdr_color_space.IsHDR()) {
+    if (content_color_usage == gfx::ContentColorUsage::kHDR) {
+      // Rasterization of HDR content is always done in extended-sRGB space.
+      params.color_space = gfx::ColorSpace::CreateExtendedSRGB();
+
+      // Only report the HDR capabilities if they are requested.
+      params.hdr_max_luminance_relative =
+          display_cs.GetHDRMaxLuminanceRelative();
+    } else {
+      // If the content is not HDR, then use Display P3 as the rasterization
+      // color space.
+      params.color_space = gfx::ColorSpace::CreateDisplayP3D65();
+    }
     return params;
   }
 
-  // The raster color space should contain sRGB to avoid artifacts during
-  // rasterization.
-  if (CheckColorSpaceContainsSrgb(hdr_color_space)) {
-    params.color_space = hdr_color_space;
-  }
-
-  // Only report the HDR capabilities if they are requested.
-  if (content_color_usage == gfx::ContentColorUsage::kHDR)
-    params.hdr_max_luminance_relative = display_cs.GetHDRMaxLuminanceRelative();
-
+  params.color_space = hdr_color_space;
   return params;
 }
 
@@ -2005,7 +1962,6 @@ void LayerTreeHostImpl::NotifyReadyToActivate() {
   // than wait for the TileManager to actually raster the content!
   if (!pending_tree_fully_painted_)
     return;
-  pending_tree_raster_duration_timer_.reset();
   client_->NotifyReadyToActivate();
 }
 
@@ -2186,23 +2142,6 @@ void LayerTreeHostImpl::ReclaimResources(
   // In OOM, we now might be able to release more resources that were held
   // because they were exported.
   if (resource_pool_) {
-    if (resource_pool_->memory_usage_bytes()) {
-      const size_t kMegabyte = 1024 * 1024;
-      // This is a good time to log memory usage. A chunk of work has just
-      // completed but none of the memory used for that work has likely been
-      // freed.
-      std::string client_suffix;
-      if (settings_.commit_to_active_tree) {
-        client_suffix = "Browser";
-      } else if (settings_.is_layer_tree_for_subframe) {
-        client_suffix = "OOPIF";
-      } else {
-        client_suffix = "Renderer";
-      }
-      base::UmaHistogramMemoryMB(
-          "Compositing.ResourcePoolMemoryUsage." + client_suffix,
-          static_cast<int>(resource_pool_->memory_usage_bytes() / kMegabyte));
-    }
     resource_pool_->ReduceResourceUsage();
   }
 
@@ -2274,6 +2213,11 @@ void LayerTreeHostImpl::OnCompositorFrameTransitionDirectiveProcessed(
     uint32_t sequence_id) {
   finished_transition_request_sequence_ids_.push_back(sequence_id);
   SetNeedsCommit();
+}
+
+void LayerTreeHostImpl::ReportEventLatency(
+    std::vector<EventLatencyTracker::LatencyData> latencies) {
+  client_->ReportEventLatency(std::move(latencies));
 }
 
 void LayerTreeHostImpl::OnCanDrawStateChangedForTree() {
@@ -2469,6 +2413,14 @@ RenderFrameMetadata LayerTreeHostImpl::MakeRenderFrameMetadata(
         child_local_surface_id_allocator_.GetCurrentLocalSurfaceId();
   }
 
+  metadata.previous_surfaces_visual_update_duration =
+      active_tree()->previous_surfaces_visual_update_duration();
+  metadata.current_surface_visual_update_duration =
+      active_tree()->visual_update_duration();
+  // We only want to report the durations from a Commit the first time. Not for
+  // subsequent Impl-only frames.
+  active_tree()->ClearVisualUpdateDurations();
+
   return metadata;
 }
 
@@ -2516,9 +2468,15 @@ absl::optional<LayerTreeHostImpl::SubmitInfo> LayerTreeHostImpl::DrawLayers(
   }
 
   base::TimeTicks submit_time = base::TimeTicks::Now();
-  layer_tree_frame_sink_->SubmitCompositorFrame(
-      std::move(compositor_frame),
-      /*hit_test_data_changed=*/false);
+  {
+    TRACE_EVENT_WITH_FLOW0(
+        "viz,benchmark", "MainFrame.SubmitCompositorFrame",
+        TRACE_ID_GLOBAL(active_tree()->trace_id()),
+        TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT);
+    layer_tree_frame_sink_->SubmitCompositorFrame(
+        std::move(compositor_frame),
+        /*hit_test_data_changed=*/false);
+  }
 
 #if DCHECK_IS_ON()
   if (!doing_sync_draw_) {
@@ -2554,6 +2512,11 @@ absl::optional<LayerTreeHostImpl::SubmitInfo> LayerTreeHostImpl::DrawLayers(
       !mutator_host_->HasSmilAnimation()) {
     frame_trackers_.StopSequence(
         FrameSequenceTrackerType::kMainThreadAnimation);
+    frame_trackers_.StopSequence(
+        FrameSequenceTrackerType::kSETMainThreadAnimation);
+  } else if (!mutator_host_->HasSharedElementTransition()) {
+    frame_trackers_.StopSequence(
+        FrameSequenceTrackerType::kSETMainThreadAnimation);
   }
 
   if (lcd_text_metrics_reporter_) {
@@ -2575,7 +2538,6 @@ absl::optional<LayerTreeHostImpl::SubmitInfo> LayerTreeHostImpl::DrawLayers(
   }
   active_tree_->ResetAllChangeTracking();
 
-  active_tree_->set_has_ever_been_drawn(true);
   devtools_instrumentation::DidDrawFrame(
       id_, frame->begin_frame_ack.frame_id.sequence_number);
   benchmark_instrumentation::IssueImplThreadRenderingStatsEvent(
@@ -2595,6 +2557,7 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
                          TRACE_ID_GLOBAL(CurrentBeginFrameArgs().trace_id),
                          TRACE_EVENT_FLAG_FLOW_IN | TRACE_EVENT_FLAG_FLOW_OUT,
                          "step", "GenerateCompositorFrame");
+
   rendering_stats_instrumentation_->IncrementFrameCount(1);
 
   memory_history_->SaveEntry(tile_manager_.memory_stats_from_last_assign());
@@ -2686,13 +2649,11 @@ viz::CompositorFrame LayerTreeHostImpl::GenerateCompositorFrame(
   constexpr auto kTwiceOfDefaultInterval =
       viz::BeginFrameArgs::DefaultInterval() * 2;
   constexpr auto kMinDelta = kTwiceOfDefaultInterval - kFudgeDelta;
-  if (enable_frame_rate_throttling_) {
-    metadata.preferred_frame_interval = viz::BeginFrameArgs::MaxInterval();
-  } else if (mutator_host_->MainThreadAnimationsCount() == 0 &&
-             !mutator_host_->HasSmilAnimation() &&
-             mutator_host_->NeedsTickAnimations() &&
-             !frame_rate_estimator_.input_priority_mode() &&
-             mutator_host_->MinimumTickInterval() > kMinDelta) {
+  if (mutator_host_->MainThreadAnimationsCount() == 0 &&
+      !mutator_host_->HasSmilAnimation() &&
+      mutator_host_->NeedsTickAnimations() &&
+      !frame_rate_estimator_.input_priority_mode() &&
+      mutator_host_->MinimumTickInterval() > kMinDelta) {
     // All animations are impl-thread animations that tick at no more than
     // half the default display compositing fps.
     // Here and below with FrameRateEstimator::GetPreferredInterval(), the
@@ -3326,12 +3287,6 @@ void LayerTreeHostImpl::ActivateSyncTree() {
         "pending_lsid",
         pending_tree_->local_surface_id_from_parent().ToString());
     active_tree_->lifecycle().AdvanceTo(LayerTreeLifecycle::kBeginningSync);
-
-    // In most cases, this will be reset in NotifyReadyToActivate, since we
-    // activate the pending tree only when its ready. But an activation may be
-    // forced, in the case of a context loss for instance, so reset it here as
-    // well.
-    pending_tree_raster_duration_timer_.reset();
 
     // Process any requests in the UI resource queue.  The request queue is
     // given in LayerTreeHost::FinishCommit.  This must take place before the
@@ -4169,7 +4124,7 @@ LayerTreeHostImpl::ProcessCompositorDeltas() {
   // We should never process non-unit page_scale_delta for an OOPIF subframe.
   // TODO(wjmaclean): Remove this DCHECK as a pre-condition to closing the bug.
   // https://crbug.com/845097
-  DCHECK(!settings().is_layer_tree_for_subframe ||
+  DCHECK(settings().is_for_scalable_page ||
          commit_data->page_scale_delta == 1.f);
   commit_data->top_controls_delta =
       active_tree()->top_controls_shown_ratio()->PullDeltaForMainThread();
@@ -4290,6 +4245,14 @@ bool LayerTreeHostImpl::AnimateLayers(base::TimeTicks monotonic_time,
         FrameSequenceTrackerType::kCompositorAnimation);
   }
 
+  if (animated && mutator_host_->HasSharedElementTransition()) {
+    frame_trackers_.StartSequence(
+        FrameSequenceTrackerType::kSETCompositorAnimation);
+  } else {
+    frame_trackers_.StopSequence(
+        FrameSequenceTrackerType::kSETCompositorAnimation);
+  }
+
   // TODO(crbug.com/551138): We could return true only if the animations are on
   // the active tree. There's no need to cause a draw to take place from
   // animations starting/ticking on the pending tree.
@@ -4331,6 +4294,13 @@ void LayerTreeHostImpl::RegisterScrollbarAnimationController(
   scrollbar_animation_controllers_[scroll_element_id] =
       active_tree_->CreateScrollbarAnimationController(scroll_element_id,
                                                        scrollbar_opacity);
+}
+
+void LayerTreeHostImpl::DidRegisterScrollbarLayer(
+    ElementId scroll_element_id,
+    ScrollbarOrientation orientation) {
+  if (input_delegate_)
+    input_delegate_->DidRegisterScrollbar(scroll_element_id, orientation);
 }
 
 void LayerTreeHostImpl::DidUnregisterScrollbarLayer(
@@ -4402,6 +4372,10 @@ void LayerTreeHostImpl::SetNeedsRedrawForScrollbarAnimation() {
 
 ScrollbarSet LayerTreeHostImpl::ScrollbarsFor(ElementId id) const {
   return active_tree_->ScrollbarsFor(id);
+}
+
+bool LayerTreeHostImpl::IsFluentScrollbar() const {
+  return settings().enable_fluent_scrollbar;
 }
 
 void LayerTreeHostImpl::AddVideoFrameController(
@@ -5148,6 +5122,15 @@ void LayerTreeHostImpl::RequestInvalidationForAnimatedImages() {
 
   // If we are animating an image, we want at least one draw of the active tree
   // before a new tree is activated.
+  bool needs_first_draw_on_activation = true;
+  client_->NeedsImplSideInvalidation(needs_first_draw_on_activation);
+}
+
+bool LayerTreeHostImpl::IsReadyToActivate() const {
+  return client_->IsReadyToActivate();
+}
+
+void LayerTreeHostImpl::RequestImplSideInvalidationForRerasterTiling() {
   bool needs_first_draw_on_activation = true;
   client_->NeedsImplSideInvalidation(needs_first_draw_on_activation);
 }

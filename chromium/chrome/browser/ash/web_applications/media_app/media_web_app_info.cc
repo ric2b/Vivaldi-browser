@@ -16,8 +16,10 @@
 #include "base/files/file_path.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chromeos/grit/chromeos_media_app_bundle_resources.h"
@@ -123,14 +125,13 @@ const apps::AppLaunchParams PickFileFromParams(
 }  // namespace
 
 MediaSystemAppDelegate::MediaSystemAppDelegate(Profile* profile)
-    : web_app::SystemWebAppDelegate(
-          web_app::SystemAppType::MEDIA,
+    : ash::SystemWebAppDelegate(
+          ash::SystemWebAppType::MEDIA,
           "Media",
           GURL("chrome://media-app/pwa.html"),
           profile,
-          web_app::OriginTrialsMap(
-              {{web_app::GetOrigin("chrome://media-app"), {"FileHandling"}}})) {
-}
+          ash::OriginTrialsMap(
+              {{ash::GetOrigin("chrome://media-app"), {"FileHandling"}}})) {}
 
 std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForMediaWebApp() {
   std::unique_ptr<WebAppInstallInfo> info =
@@ -189,7 +190,7 @@ std::unique_ptr<WebAppInstallInfo> CreateWebAppInfoForMediaWebApp() {
   }
 
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
-  info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+  info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
   // Add handlers for image+video and audio. We keep them separate since their
   // UX are sufficiently different (we don't want audio files to have a carousel
@@ -256,8 +257,7 @@ bool MediaSystemAppDelegate::ShouldShowInSearch() const {
 }
 
 bool MediaSystemAppDelegate::ShouldShowNewWindowMenuOption() const {
-  return base::FeatureList::IsEnabled(
-      chromeos::features::kMediaAppHandlesAudio);
+  return true;
 }
 
 bool MediaSystemAppDelegate::ShouldReuseExistingWindow() const {
@@ -282,7 +282,7 @@ Browser* MediaSystemAppDelegate::LaunchAndNavigateSystemWebApp(
 
   // For PDFs, launch all but the last file from scratch. Windows will cascade.
   for (size_t i = 0; i < params.launch_files.size() - 1; ++i) {
-    web_app::LaunchSystemWebAppImpl(profile, web_app::SystemAppType::MEDIA, url,
+    web_app::LaunchSystemWebAppImpl(profile, ash::SystemWebAppType::MEDIA, url,
                                     PickFileFromParams(params, i));
   }
   return SystemWebAppDelegate::LaunchAndNavigateSystemWebApp(

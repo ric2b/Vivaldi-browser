@@ -160,7 +160,7 @@ void ElementFragmentAnchor::Trace(Visitor* visitor) const {
   FragmentAnchor::Trace(visitor);
 }
 
-void ElementFragmentAnchor::PerformPreRafActions() {
+void ElementFragmentAnchor::PerformScriptableActions() {
   ApplyFocusIfNeeded();
 }
 
@@ -203,17 +203,13 @@ void ElementFragmentAnchor::ApplyFocusIfNeeded() {
   // clear focus, which matches the behavior of other browsers.
   auto* element = DynamicTo<Element>(anchor_node_.Get());
   if (element && element->IsFocusable()) {
-    element->focus();
+    element->Focus();
   } else {
     frame_->GetDocument()->SetSequentialFocusNavigationStartingPoint(
         anchor_node_);
     frame_->GetDocument()->ClearFocusedElement();
   }
   needs_focus_ = false;
-}
-
-bool ElementFragmentAnchor::Dismiss() {
-  return false;
 }
 
 }  // namespace blink

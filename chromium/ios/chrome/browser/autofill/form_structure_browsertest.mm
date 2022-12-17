@@ -188,7 +188,7 @@ FormStructureBrowserTest::FormStructureBrowserTest()
        autofill::features::kAutofillEnableAugmentedPhoneCountryCode,
        // TODO(crbug.com/1157405) Remove once launched.
        autofill::features::kAutofillEnableDependentLocalityParsing,
-       // TODO(crbug/1165780): Remove once shared labels are launched.
+       // TODO(crbug.com/1165780): Remove once shared labels are launched.
        autofill::features::kAutofillEnableSupportForParsingWithSharedLabels,
        // TODO(crbug.com/1150895) Remove once launched.
        autofill::features::kAutofillParsingPatternProvider,
@@ -231,7 +231,7 @@ void FormStructureBrowserTest::SetUp() {
   std::string locale("en");
   autofill::AutofillDriverIOS::PrepareForWebStateWebFrameAndDelegate(
       web_state(), autofill_client_.get(), /*autofill_agent=*/nil, locale,
-      autofill::BrowserAutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      autofill::AutofillManager::EnableDownloadManager(false));
 }
 
 void FormStructureBrowserTest::TearDown() {

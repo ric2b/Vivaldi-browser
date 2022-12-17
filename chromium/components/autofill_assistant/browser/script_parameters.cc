@@ -107,6 +107,13 @@ const char kSourceParameterName[] = "SOURCE";
 // Parameter to specify experiments.
 const char kExperimentsParameterName[] = "EXPERIMENT_IDS";
 
+// Parameter to disable CUP RPC signing. Intended for internal use only.
+const char kDisableRpcSigningParamaterName[] = "DISABLE_RPC_SIGNING";
+
+// Parameter to send the annotate DOM model version. Should only be used if we
+// expect the model to be used.
+const char kSendAnnotateDomModelVersion[] = "SEND_ANNOTATE_DOM_MODEL_VERSION";
+
 // The list of non sensitive script parameters that client requests are allowed
 // to send to the backend i.e., they do not require explicit approval in the
 // autofill-assistant onboarding. Even so, please always reach out to Chrome
@@ -275,6 +282,14 @@ std::vector<std::string> ScriptParameters::GetExperiments() const {
   return base::SplitString(*experiments_str, ",",
                            base::WhitespaceHandling::TRIM_WHITESPACE,
                            base::SplitResult::SPLIT_WANT_NONEMPTY);
+}
+
+absl::optional<bool> ScriptParameters::GetDisableRpcSigning() const {
+  return GetTypedParameter<bool>(parameters_, kDisableRpcSigningParamaterName);
+}
+
+absl::optional<bool> ScriptParameters::GetSendAnnotateDomModelVersion() const {
+  return GetTypedParameter<bool>(parameters_, kSendAnnotateDomModelVersion);
 }
 
 absl::optional<bool> ScriptParameters::GetDetailsShowInitial() const {

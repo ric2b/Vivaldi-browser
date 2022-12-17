@@ -150,6 +150,13 @@ struct StructTraits<
     return r.auto_dark_content_rules;
   }
 
+#if defined(VIVALDI_BUILD)
+  static const std::vector<ContentSettingPatternSource>&
+  autoplay_rules(const RendererContentSettingRules& r) {
+    return r.autoplay_rules;
+  }
+#endif  // defined(VIVALDI_BUILD)
+
   static bool Read(
       content_settings::mojom::RendererContentSettingRulesDataView data,
       RendererContentSettingRules* out);

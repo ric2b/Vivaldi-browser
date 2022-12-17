@@ -22,6 +22,16 @@ const char kBackgroundHistogramDocWriteBlockParseBlockedOnScriptLoad[] =
     "Background";
 }  // namespace internal
 
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+DocumentWritePageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class is interested in events that are dispatched only for the primary
+  // page or preprocessed by PageLoadTracker to be per-outermost page. So, no
+  // need to forward events at the observer layer.
+  return STOP_OBSERVING;
+}
+
 void DocumentWritePageLoadMetricsObserver::OnFirstContentfulPaintInPage(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   if (GetDelegate().GetMainFrameMetadata().behavior_flags &

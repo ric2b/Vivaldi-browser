@@ -107,7 +107,6 @@ public abstract class SyncConsentFragmentBase
     private final ProfileDataCache.Observer mProfileDataCacheObserver;
     protected @Nullable String mSelectedAccountName;
     private ProfileDataCache mProfileDataCache;
-    private boolean mDestroyed;
     // Set to true when the user clicks "Yes, I'm in" or "settings" and the class consequently
     // triggers sign-in (asynchronous). The buttons are not clickable in this state, see
     // areControlsEnabled().
@@ -309,7 +308,6 @@ public abstract class SyncConsentFragmentBase
         }
         mModalDialogManager.destroy();
         if (mRecordUndoSignin) RecordUserAction.record("Signin_Undo_Signin");
-        mDestroyed = true;
     }
 
     @Override
@@ -541,7 +539,7 @@ public abstract class SyncConsentFragmentBase
                         mConfirmSyncDataStateMachine = null;
 
                         // Don't start sign-in if this fragment has been destroyed.
-                        if (mDestroyed) return;
+                        if (getActivity().isDestroyed()) return;
 
                         SigninManager signinManager =
                                 IdentityServicesProvider.get().getSigninManager(

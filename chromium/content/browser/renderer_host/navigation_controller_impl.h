@@ -389,6 +389,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
 
   // Like NavigationController::CreateNavigationEntry, but takes an extra
   // argument, |source_site_instance|.
+  // `rewrite_virtual_urls` is true when it needs to rewrite virtual urls
+  // (e.g., for outermost frames).
   static std::unique_ptr<NavigationEntryImpl> CreateNavigationEntry(
       const GURL& url,
       Referrer referrer,
@@ -398,7 +400,8 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
       bool is_renderer_initiated,
       const std::string& extra_headers,
       BrowserContext* browser_context,
-      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory);
+      scoped_refptr<network::SharedURLLoaderFactory> blob_url_loader_factory,
+      bool rewrite_virtual_urls);
 
   // Called just before sending the commit to the renderer, or when restoring
   // from back/forward cache. Walks the session history entries for the relevant
@@ -422,6 +425,14 @@ class CONTENT_EXPORT NavigationControllerImpl : public NavigationController {
   // Returns whether the last NavigationEntry encountered a post-commit error.
   bool has_post_commit_error_entry() const {
     return entry_replaced_by_post_commit_error_ != nullptr;
+  }
+
+  // Whether the current call stack includes NavigateToPendingEntry, to avoid
+  // re-entrant calls to NavigateToPendingEntry.
+  // TODO(https://crbug.com/1327907): Don't expose this once we figure out the
+  // root cause for the navigation re-entrancy case in the linked bug.
+  bool in_navigate_to_pending_entry() const {
+    return in_navigate_to_pending_entry_;
   }
 
  private:

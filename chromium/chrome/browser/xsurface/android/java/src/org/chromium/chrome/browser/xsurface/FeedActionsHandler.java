@@ -142,19 +142,55 @@ public interface FeedActionsHandler {
      */
     default void reportNoticeDismissed(String key) {}
 
-    /** Types of feeds that can be invalidated. */
-    @IntDef({FeedIdentifier.ALL_FEEDS, FeedIdentifier.MAIN_FEED, FeedIdentifier.FOLLOWING_FEED})
+    /**
+     * Types of feeds that can be invalidated. These values must match the privately defined values
+     * of InvalidateCacheData.FeedType.
+     */
+    @IntDef({FeedIdentifier.UNSPECIFIED, FeedIdentifier.MAIN_FEED, FeedIdentifier.FOLLOWING_FEED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface FeedIdentifier {
-        int ALL_FEEDS = 0;
+        int UNSPECIFIED = 0;
         int MAIN_FEED = 1;
         int FOLLOWING_FEED = 2;
     }
 
     /**
-     * Requests that the cache of one or all feeds should be invalidated so that that their contents
-     * are re-fetched the next time the feed is shown.
-     * @param toInvalidate Identifies which feed or feeds should have their caches invalidated.
+     * Requests that the cache a feed be invalidated so that its contents are re-fetched the next
+     * time the feed is shown/loaded.
+     * @param feedToInvalidate Identifies which feed should have its cache invalidated. The request
+     *         will be dropped if set to FeedIdentifier.UNSPECIFIED.
      */
-    default void invalidateContentCacheFor(@FeedIdentifier int toInvalidate) {}
+    default void invalidateContentCacheFor(@FeedIdentifier int feedToInvalidate) {}
+
+    /**
+     * Reports that the info card is being tracked for its full visibility.
+     * @param type Type of the info card.
+     */
+    default void reportInfoCardTrackViewStarted(int type) {}
+
+    /**
+     * Reports that the info card is fully visible in the viewport.
+     * @param type Type of the info card.
+     * @param minimumViewIntervalSeconds The minimum interval in seconds from the last time the info
+     * card is viewed in order for it to be considered viewed again.
+     */
+    default void reportInfoCardViewed(int type, int minimumViewIntervalSeconds) {}
+
+    /**
+     * Reports that the user tapps the info card.
+     * @param type Type of the info card.
+     */
+    default void reportInfoCardClicked(int type) {}
+
+    /**
+     * Reports that the user dismisses the info card explicitly by tapping the close button.
+     * @param type Type of the info card.
+     */
+    default void reportInfoCardDismissedExplicitly(int type) {}
+
+    /**
+     * Resets all the states of the info card.
+     * @param type Type of the info card.
+     */
+    default void resetInfoCardStates(int type) {}
 }

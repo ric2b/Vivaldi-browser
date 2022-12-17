@@ -23,6 +23,7 @@
 #include "base/callback.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/bind.h"
+#include "components/app_restore/window_properties.h"
 #include "components/exo/buffer.h"
 #include "components/exo/permission.h"
 #include "components/exo/shell_surface_util.h"
@@ -1731,6 +1732,28 @@ TEST_F(ShellSurfaceTest, ServerStartResize) {
             size.width() + kDragAmount);
 }
 
+// Make sure that dragging to another display will update the origin to
+// correct value.
+TEST_F(ShellSurfaceTest, UpdateBoundsWhenDraggedToAnotherDisplay) {
+  UpdateDisplay("800x600, 800x600");
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({64, 64}).BuildShellSurface();
+  ui::test::EventGenerator* event_generator = GetEventGenerator();
+  shell_surface->SetWindowBounds({0, 0, 64, 64});
+
+  gfx::Point last_origin;
+  auto origin_change = [&](const gfx::Point& p) { last_origin = p; };
+
+  shell_surface->set_origin_change_callback(
+      base::BindLambdaForTesting(origin_change));
+  event_generator->MoveMouseTo(1, 1);
+  event_generator->PressLeftButton();
+  shell_surface->StartMove();
+  event_generator->MoveMouseTo(801, 1);
+  event_generator->ReleaseLeftButton();
+  EXPECT_EQ(last_origin, gfx::Point(800, 0));
+}
+
 // Make sure that resize shadow does not update until commit when the window
 // property |aura::client::kUseWindowBoundsForShadow| is false.
 TEST_F(ShellSurfaceTest, ResizeShadowIndependentBounds) {
@@ -2263,6 +2286,51 @@ TEST_F(ShellSurfaceTest, InitialCenteredBoundsWithConfigure) {
   EXPECT_EQ(expected, shell_surface->GetWidget()->GetWindowBoundsInScreen());
 }
 
+// Test that restore info is set correctly.
+TEST_F(ShellSurfaceTest, SetRestoreInfo) {
+  int32_t restore_session_id = 200;
+  int32_t restore_window_id = 100;
+
+  gfx::Size size(20, 30);
+  auto shell_surface =
+      test::ShellSurfaceBuilder(size).SetNoCommit().BuildShellSurface();
+
+  shell_surface->SetRestoreInfo(restore_session_id, restore_window_id);
+  shell_surface->Restore();
+  shell_surface->root_surface()->Commit();
+
+  EXPECT_TRUE(shell_surface->GetWidget()->IsVisible());
+  EXPECT_EQ(restore_session_id,
+            shell_surface->GetWidget()->GetNativeWindow()->GetProperty(
+                app_restore::kWindowIdKey));
+  EXPECT_EQ(restore_window_id,
+            shell_surface->GetWidget()->GetNativeWindow()->GetProperty(
+                app_restore::kRestoreWindowIdKey));
+}
+
+// Test that restore id is set correctly.
+TEST_F(ShellSurfaceTest, SetRestoreInfoWithWindowIdSource) {
+  int32_t restore_session_id = 200;
+  const std::string app_id = "app_id";
+
+  gfx::Size size(20, 30);
+  auto shell_surface =
+      test::ShellSurfaceBuilder(size).SetNoCommit().BuildShellSurface();
+
+  shell_surface->SetRestoreInfoWithWindowIdSource(restore_session_id, app_id);
+  shell_surface->Restore();
+  shell_surface->root_surface()->Commit();
+
+  EXPECT_TRUE(shell_surface->GetWidget()->IsVisible());
+
+  // FetchRestoreWindowId will return 0, because no app with id "app_id" is
+  // installed.
+  EXPECT_EQ(0, shell_surface->GetWidget()->GetNativeWindow()->GetProperty(
+                   app_restore::kRestoreWindowIdKey));
+  EXPECT_EQ(app_id, *shell_surface->GetWidget()->GetNativeWindow()->GetProperty(
+                        app_restore::kAppIdKey));
+}
+
 // Surfaces without non-client view should not crash.
 TEST_F(ShellSurfaceTest, NoNonClientViewWithConfigure) {
   // Popup windows don't have a non-client view.
@@ -2285,6 +2353,37 @@ TEST_F(ShellSurfaceTest, WindowIsResizableWithEmptySizeConstraints) {
                            .SetMaximumSize(gfx::Size(0, 0))
                            .BuildShellSurface();
   EXPECT_TRUE(shell_surface->GetWidget()->widget_delegate()->CanResize());
+}
+
+TEST_F(ShellSurfaceTest, SetSystemModal) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetMaximumSize(gfx::Size(10, 10))
+          .SetUseSystemModalContainer()
+          .SetNoCommit()
+          .BuildShellSurface();
+
+  shell_surface->SetSystemModal(true);
+  shell_surface->root_surface()->Commit();
+
+  EXPECT_EQ(ui::MODAL_TYPE_SYSTEM, shell_surface->GetModalType());
+  EXPECT_FALSE(shell_surface->frame_enabled());
+}
+
+TEST_F(ShellSurfaceTest, PipInitialPosition) {
+  std::unique_ptr<ShellSurface> shell_surface =
+      test::ShellSurfaceBuilder({256, 256})
+          .SetMaximumSize(gfx::Size(10, 10))
+          .SetUseSystemModalContainer()
+          .SetNoCommit()
+          .BuildShellSurface();
+  shell_surface->SetWindowBounds(gfx::Rect(20, 20, 256, 256));
+  shell_surface->SetPip();
+  shell_surface->root_surface()->Commit();
+  // PIP positioner place the PIP window to the edge that is closer to the given
+  // position
+  EXPECT_EQ(gfx::Rect(8, 20, 256, 256),
+            shell_surface->GetWidget()->GetWindowBoundsInScreen());
 }
 
 }  // namespace exo

@@ -4,20 +4,31 @@
 
 #include "android_webview/browser/tracing/background_tracing_field_trial.h"
 
-#include "base/callback_helpers.h"
+#include <utility>
+
+#include "components/tracing/common/background_tracing_utils.h"
 #include "content/public/browser/background_tracing_config.h"
 #include "content/public/browser/background_tracing_manager.h"
 #include "services/tracing/public/cpp/tracing_features.h"
 
 namespace {
 
+using tracing::BackgroundTracingSetupMode;
+
 const char kBackgroundTracingFieldTrial[] = "BackgroundWebviewTracing";
 
 void SetupBackgroundTracingFieldTrial(int allowed_modes) {
-  auto* manager = content::BackgroundTracingManager::GetInstance();
-  DCHECK(manager);
+  if (tracing::GetBackgroundTracingSetupMode() ==
+      BackgroundTracingSetupMode::kDisabledInvalidCommandLine)
+    return;
+
+  if (tracing::SetupBackgroundTracingFromCommandLine(
+          kBackgroundTracingFieldTrial))
+    return;
+
+  auto& manager = content::BackgroundTracingManager::GetInstance();
   std::unique_ptr<content::BackgroundTracingConfig> config =
-      manager->GetBackgroundTracingConfig(kBackgroundTracingFieldTrial);
+      manager.GetBackgroundTracingConfig(kBackgroundTracingFieldTrial);
 
   if (!config)
     return;
@@ -30,9 +41,8 @@ void SetupBackgroundTracingFieldTrial(int allowed_modes) {
   // go/public-webview-trace-collection).
   config->SetPackageNameFilteringEnabled(
       config->tracing_mode() != content::BackgroundTracingConfig::SYSTEM);
-
-  manager->SetActiveScenario(std::move(config),
-                             content::BackgroundTracingManager::ANONYMIZE_DATA);
+  manager.SetActiveScenario(std::move(config),
+                            content::BackgroundTracingManager::ANONYMIZE_DATA);
 }
 
 }  // namespace

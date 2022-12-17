@@ -297,10 +297,10 @@ IN_PROC_BROWSER_TEST_F(LoginApitest, UnlockManagedGuestSessionLockedWithApi) {
   ClearTestListeners();
   extensions::ResultCatcher catcher;
   ExtensionTestMessageListener login_screen_listener(listener_message(),
-                                                     /*will_reply=*/true);
+                                                     ReplyBehavior::kWillReply);
   login_screen_listener.set_extension_id(extension_id());
   ExtensionTestMessageListener in_session_listener(listener_message(),
-                                                   /*will_reply=*/true);
+                                                   ReplyBehavior::kWillReply);
   in_session_listener.set_extension_id(kInSessionExtensionId);
 
   SetUpInSessionExtension();
@@ -348,23 +348,25 @@ IN_PROC_BROWSER_TEST_F(LoginApitest, UnlockManagedGuestSessionNotLocked) {
 IN_PROC_BROWSER_TEST_F(LoginApitest, ExternalLogoutRequestExternalLogout) {
   SetUpDeviceLocalAccountPolicy();
   LogInWithPassword();
-  SetUpInSessionExtension();
-  LockScreen();
-
   ClearTestListeners();
-  extensions::ResultCatcher catcher;
-  ExtensionTestMessageListener login_screen_listener(listener_message(),
-                                                     /*will_reply=*/true);
-  login_screen_listener.set_extension_id(extension_id());
+
   ExtensionTestMessageListener in_session_listener(listener_message(),
-                                                   /*will_reply=*/true);
+                                                   ReplyBehavior::kWillReply);
   in_session_listener.set_extension_id(kInSessionExtensionId);
 
+  SetUpInSessionExtension();
+
+  ExtensionTestMessageListener login_screen_listener(listener_message(),
+                                                     ReplyBehavior::kWillReply);
+  login_screen_listener.set_extension_id(extension_id());
+
+  LockScreen();
+
+  extensions::ResultCatcher catcher;
   // Set up a `login.onRequestExternalLogout` listener on the in-session
   // extension.
   ExtensionTestMessageListener in_session_message_listener(
-      kOnRequestExternalLogoutInSessionMessage,
-      /*will_reply=*/false);
+      kOnRequestExternalLogoutInSessionMessage);
   in_session_message_listener.set_extension_id(kInSessionExtensionId);
   ASSERT_TRUE(in_session_listener.WaitUntilSatisfied());
   in_session_listener.Reply(kInSessionLoginOnRequestExternalLogout);
@@ -382,23 +384,25 @@ IN_PROC_BROWSER_TEST_F(LoginApitest, ExternalLogoutRequestExternalLogout) {
 IN_PROC_BROWSER_TEST_F(LoginApitest, ExternalLogoutNotifyExternalLogoutDone) {
   SetUpDeviceLocalAccountPolicy();
   LogInWithPassword();
-  SetUpInSessionExtension();
-  LockScreen();
-
   ClearTestListeners();
-  extensions::ResultCatcher catcher;
-  ExtensionTestMessageListener login_screen_listener(listener_message(),
-                                                     /*will_reply=*/true);
-  login_screen_listener.set_extension_id(extension_id());
+
   ExtensionTestMessageListener in_session_listener(listener_message(),
-                                                   /*will_reply=*/true);
+                                                   ReplyBehavior::kWillReply);
   in_session_listener.set_extension_id(kInSessionExtensionId);
 
+  SetUpInSessionExtension();
+
+  ExtensionTestMessageListener login_screen_listener(listener_message(),
+                                                     ReplyBehavior::kWillReply);
+  login_screen_listener.set_extension_id(extension_id());
+
+  LockScreen();
+
+  extensions::ResultCatcher catcher;
   // Set up a `login.onExternalLogoutDone` listener on the login screen
   // extension.
   ExtensionTestMessageListener login_screen_message_listener(
-      kOnExternalLogoutDoneLoginScreenMessage,
-      /*will_reply=*/false);
+      kOnExternalLogoutDoneLoginScreenMessage);
   login_screen_message_listener.set_extension_id(extension_id());
   ASSERT_TRUE(login_screen_listener.WaitUntilSatisfied());
   login_screen_listener.Reply(kLoginOnExternalLogoutDone);

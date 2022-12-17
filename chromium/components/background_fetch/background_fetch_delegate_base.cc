@@ -101,6 +101,7 @@ void BackgroundFetchDelegateBase::DownloadUrl(
                           weak_ptr_factory_.GetWeakPtr());
   params.traffic_annotation =
       net::MutableNetworkTrafficAnnotationTag(traffic_annotation);
+  params.request_params.update_first_party_url_on_redirect = false;
 
   JobDetails* job_details = GetJobDetails(job_id);
   if (job_details->job_state == JobDetails::State::kPendingWillStartPaused ||
@@ -178,16 +179,17 @@ void BackgroundFetchDelegateBase::CancelDownload(std::string job_id) {
   }
 }
 
-void BackgroundFetchDelegateBase::OnUiFinished(const std::string& job_id,
-                                               bool activated) {
+void BackgroundFetchDelegateBase::OnUiFinished(const std::string& job_id) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  if (activated) {
-    if (auto client = GetClient(job_id))
-      client->OnUIActivated(job_id);
-  }
 
   job_details_map_.erase(job_id);
   DoCleanUpUi(job_id);
+}
+
+void BackgroundFetchDelegateBase::OnUiActivated(const std::string& job_id) {
+  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
+  if (auto client = GetClient(job_id))
+    client->OnUIActivated(job_id);
 }
 
 JobDetails* BackgroundFetchDelegateBase::GetJobDetails(
@@ -234,7 +236,7 @@ void BackgroundFetchDelegateBase::MarkJobComplete(const std::string& job_id) {
   JobDetails* job_details = GetJobDetails(job_id);
 
   if (job_details->job_state == JobDetails::State::kCancelled) {
-    OnUiFinished(job_id, /*activated=*/false);
+    OnUiFinished(job_id);
     return;
   }
 

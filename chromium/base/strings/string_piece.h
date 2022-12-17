@@ -33,7 +33,6 @@
 #include "base/check.h"
 #include "base/check_op.h"
 #include "base/compiler_specific.h"
-#include "base/strings/char_traits.h"
 #include "base/strings/string_piece_forward.h"
 #include "build/build_config.h"
 
@@ -119,10 +118,8 @@ class GSL_POINTER BasicStringPiece {
       default;
   constexpr BasicStringPiece(const CharT* s, size_type count)
       : ptr_(s), length_(count) {}
-  // Note: This doesn't just use traits_type::length(), since that
-  // isn't constexpr until C++17.
   constexpr BasicStringPiece(const CharT* s)
-      : ptr_(s), length_(s ? CharTraits<CharT>::length(s) : 0) {
+      : ptr_(s), length_(s ? traits_type::length(s) : 0) {
     // Intentional STL deviation: Null-check instead of UB.
     CHECK(s);
   }
@@ -230,7 +227,7 @@ class GSL_POINTER BasicStringPiece {
 
   constexpr int compare(BasicStringPiece v) const noexcept {
     const size_type rlen = std::min(size(), v.size());
-    const int result = CharTraits<CharT>::compare(data(), v.data(), rlen);
+    const int result = traits_type::compare(data(), v.data(), rlen);
     if (result != 0)
       return result;
     if (size() == v.size())
@@ -283,7 +280,7 @@ class GSL_POINTER BasicStringPiece {
       return npos;
 
     const const_pointer result =
-        base::CharTraits<CharT>::find(data() + pos, size() - pos, ch);
+        traits_type::find(data() + pos, size() - pos, ch);
     return result ? static_cast<size_type>(result - data()) : npos;
   }
   constexpr size_type find(const CharT* s,
@@ -610,10 +607,10 @@ struct StringPieceHashImpl {
   // This is a custom hash function. We don't use the ones already defined for
   // string and std::u16string directly because it would require the string
   // constructors to be called, which we don't want.
-  std::size_t operator()(StringPieceType sp) const {
-    std::size_t result = 0;
+  size_t operator()(StringPieceType sp) const {
+    size_t result = 0;
     for (auto c : sp)
-      result = (result * 131) + c;
+      result = (result * 131) + static_cast<size_t>(c);
     return result;
   }
 };

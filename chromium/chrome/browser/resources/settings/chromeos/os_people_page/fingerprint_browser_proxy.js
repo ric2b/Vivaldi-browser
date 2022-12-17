@@ -2,15 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// clang-format off
-import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
-// clang-format on
+import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
 
-  /**
-   * @enum {number}
-   * These values must be kept in sync with the values in
-   * third_party/cros_system_api/dbus/service_constants.h.
-   */
+/**
+ * @enum {number}
+ * These values must be kept in sync with the values in
+ * third_party/cros_system_api/dbus/service_constants.h.
+ */
 export const FingerprintResultType = {
   SUCCESS: 0,
   PARTIAL: 1,
@@ -91,9 +89,6 @@ export class FingerprintBrowserProxy {
    */
   changeEnrollmentLabel(index, newLabel) {}
 
-  startAuthentication() {}
-  endCurrentAuthentication() {}
-
   /**
    * TODO(sammiequon): Temporary function to let the handler know when a
    * completed scan has been sent via click on the setup fingerprint dialog.
@@ -102,10 +97,23 @@ export class FingerprintBrowserProxy {
   fakeScanComplete() {}
 }
 
+/** @type {?FingerprintBrowserProxy} */
+let instance = null;
+
 /**
  * @implements {FingerprintBrowserProxy}
  */
 export class FingerprintBrowserProxyImpl {
+  /** @return {!FingerprintBrowserProxy} */
+  static getInstance() {
+    return instance || (instance = new FingerprintBrowserProxyImpl());
+  }
+
+  /** @param {!FingerprintBrowserProxy} obj */
+  static setInstance(obj) {
+    instance = obj;
+  }
+
   /** @override */
   getFingerprintsList() {
     return sendWithPromise('getFingerprintsList');
@@ -142,19 +150,7 @@ export class FingerprintBrowserProxyImpl {
   }
 
   /** @override */
-  startAuthentication() {
-    chrome.send('startAuthentication');
-  }
-
-  /** @override */
-  endCurrentAuthentication() {
-    chrome.send('endCurrentAuthentication');
-  }
-
-  /** @override */
   fakeScanComplete() {
     chrome.send('fakeScanComplete');
   }
 }
-
-addSingletonGetter(FingerprintBrowserProxyImpl);

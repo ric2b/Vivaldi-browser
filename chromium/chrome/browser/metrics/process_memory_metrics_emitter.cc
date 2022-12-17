@@ -216,6 +216,12 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
      ImageSizeMetricRange},
     {"history", "History", MetricSize::kSmall, kEffectiveSize,
      EmitTo::kSizeInUkmAndUma, &Memory_Experimental::SetHistory},
+#if BUILDFLAG(IS_MAC)
+    {"iosurface", "IOSurface", MetricSize::kLarge, kSize,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {"iosurface", "IOSurface.DirtyMemory", MetricSize::kLarge,
+     "resident_swapped", EmitTo::kSizeInUmaOnly, nullptr},
+#endif
     {"java_heap", "JavaHeap", MetricSize::kLarge, kEffectiveSize,
      EmitTo::kSizeInUkmAndUma, &Memory_Experimental::SetJavaHeap},
     {"leveldatabase", "LevelDatabase", MetricSize::kSmall, kEffectiveSize,
@@ -225,6 +231,18 @@ const Metric kAllocatorDumpNamesForMetrics[] = {
     {"malloc/allocated_objects", "Malloc.AllocatedObjects", MetricSize::kLarge,
      kEffectiveSize, EmitTo::kSizeInUkmAndUma,
      &Memory_Experimental::SetMalloc_AllocatedObjects},
+    {"malloc/allocated_objects", "Malloc.AllocatedObjects.ObjectCount",
+     MetricSize::kTiny, MemoryAllocatorDump::kNameObjectCount,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {"malloc/partitions/original", "Malloc.Original.ObjectCount",
+     MetricSize::kTiny, MemoryAllocatorDump::kNameObjectCount,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {"malloc/partitions/aligned", "Malloc.Aligned.ObjectCount",
+     MetricSize::kTiny, MemoryAllocatorDump::kNameObjectCount,
+     EmitTo::kSizeInUmaOnly, nullptr},
+    {"malloc/partitions/allocator", "Malloc.Allocator.ObjectCount",
+     MetricSize::kTiny, MemoryAllocatorDump::kNameObjectCount,
+     EmitTo::kSizeInUmaOnly, nullptr},
 #if BUILDFLAG(USE_BACKUP_REF_PTR)
     // TODO(keishi): Add brp_quarantined metrics for the Blink partitions.
     {"malloc/partitions/allocator", "Malloc.BRPQuarantined", MetricSize::kSmall,
@@ -1062,7 +1080,7 @@ int ProcessMemoryMetricsEmitter::GetNumberOfExtensions(base::ProcessId pid) {
 }
 
 absl::optional<base::TimeDelta> ProcessMemoryMetricsEmitter::GetProcessUptime(
-    const base::Time& now,
+    base::TimeTicks now,
     base::ProcessId pid) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
@@ -1094,7 +1112,7 @@ void ProcessMemoryMetricsEmitter::CollateResults() {
 
   TabFootprintAggregator per_tab_metrics;
 
-  base::Time now = base::Time::Now();
+  base::TimeTicks now = base::TimeTicks::Now();
   for (const auto& pmd : global_dump_->process_dumps()) {
     uint32_t process_pmf_kb = pmd.os_dump().private_footprint_kb;
     private_footprint_total_kb += process_pmf_kb;

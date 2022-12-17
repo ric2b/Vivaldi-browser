@@ -138,6 +138,7 @@
 <translation id="3360297538363969800">列印失敗。請檢查您的印表機，然後再試一次。</translation>
 <translation id="3378572629723696641">這個擴充功能可能已損毀。</translation>
 <translation id="3387614642886316601">使用進階拼字檢查</translation>
+<translation id="3393582007140394275">無法投放螢幕畫面。</translation>
 <translation id="3432227430032737297">將顯示的項目全部移除</translation>
 <translation id="345693547134384690">在新分頁開啟圖片(&amp;I)</translation>
 <translation id="3494769164076977169">在網站已下載第一個檔案，並且嘗試自動下載更多檔案時先詢問我 (建議使用)</translation>
@@ -210,8 +211,10 @@
 <translation id="488785315393301722">顯示詳細資訊</translation>
 <translation id="4907306957610201395">權限類別</translation>
 <translation id="4912643508233590958">閒置喚醒</translation>
+<translation id="49265687513387605">無法投放螢幕畫面，請查看你是否已確認相關提示訊息，以便開始分享螢幕畫面。</translation>
 <translation id="4927753642311223124">一切皆空，繼續前行。</translation>
 <translation id="4930714375720679147">開啟</translation>
+<translation id="4961318399572185831">投放螢幕</translation>
 <translation id="4988526792673242964">頁數</translation>
 <translation id="49896407730300355">逆時針旋轉(&amp;O)</translation>
 <translation id="4989966318180235467">檢查背景頁面(&amp;B)</translation>

@@ -364,18 +364,20 @@ suite('PasswordsUITest', function() {
 
   test('Credential urls is used in the subpage header', async function() {
     const SHOWN_URL = 'www.google.com';
-    loadTimeData.overrideValues({enablePasswordNotes: true});
+    loadTimeData.overrideValues({enablePasswordViewPage: true});
     Router.resetInstanceForTesting(buildRouter());
     routes.PASSWORD_VIEW =
         (Router.getInstance().getRoutes() as SettingsRoutes).PASSWORD_VIEW;
     const autofillSection = createAutofillPageSection();
-    autofillSection.credential =
-        createMultiStorePasswordEntry({url: SHOWN_URL, deviceId: 1});
 
     Router.getInstance().navigateTo(routes.PASSWORD_VIEW);
     await flushTasks();
     const subpage =
         autofillSection.shadowRoot!.querySelector('settings-subpage');
+
+    autofillSection.credential =
+        createMultiStorePasswordEntry({url: SHOWN_URL, deviceId: 1});
+    flush();
 
     assertTrue(!!subpage);
     assertEquals(`http://${SHOWN_URL}/login`, subpage.faviconSiteUrl);

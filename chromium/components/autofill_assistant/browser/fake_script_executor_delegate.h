@@ -45,6 +45,8 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   password_manager::PasswordChangeSuccessTracker*
   GetPasswordChangeSuccessTracker() override;
   content::WebContents* GetWebContents() override;
+  void SetJsFlowLibrary(const std::string& js_flow_library) override;
+  JsFlowDevtoolsWrapper* GetJsFlowDevtoolsWrapper() override;
   std::string GetEmailAddressForAccessTokenAccount() override;
   ukm::UkmRecorder* GetUkmRecorder() override;
   bool EnterState(AutofillAssistantState state) override;
@@ -69,6 +71,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
       ConfigureUiStateProto::OverlayBehavior overlay_behavior) override;
   void SetBrowseModeInvisible(bool invisible) override;
   ProcessedActionStatusDetailsProto& GetLogInfo() override;
+  bool MustUseBackendData() const override;
 
   bool ShouldShowWarning() override;
 
@@ -113,12 +116,18 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
 
   std::vector<std::string>* GetCurrentBrowseDomainsList();
 
+  void SetMustUseBackendData(bool must_use_backend_data) {
+    must_use_backend_data_ = must_use_backend_data;
+  }
+
  private:
   ClientSettings client_settings_;
   GURL current_url_;
   raw_ptr<Service> service_ = nullptr;
   raw_ptr<WebController> web_controller_ = nullptr;
   raw_ptr<content::WebContents> web_contents_ = nullptr;
+  std::unique_ptr<JsFlowDevtoolsWrapper> js_flow_devtools_wrapper_;
+  std::string js_flow_library_;
   std::unique_ptr<TriggerContext> trigger_context_;
   std::vector<AutofillAssistantState> state_history_;
   std::vector<ElementAreaProto> touchable_element_area_history_;
@@ -131,6 +140,7 @@ class FakeScriptExecutorDelegate : public ScriptExecutorDelegate {
   std::vector<std::string> browse_domains_;
   raw_ptr<UserModel> user_model_ = nullptr;
   ProcessedActionStatusDetailsProto log_info_;
+  bool must_use_backend_data_ = false;
 
   bool require_ui_ = false;
 };

@@ -11,10 +11,10 @@
 #include "base/compiler_specific.h"
 #include "base/files/file.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
 #include "components/services/filesystem/public/mojom/directory.mojom.h"
-#include "mojo/public/cpp/bindings/remote.h"
 #include "third_party/ced/src/compact_enc_det/compact_enc_det.h"
 #include "third_party/zlib/google/redact.h"
 #include "third_party/zlib/google/zip.h"
@@ -81,7 +81,7 @@ class Writer : public zip::FileWriterDelegate {
 
  private:
   const mojo::Remote<filesystem::mojom::Directory> owned_output_dir_;
-  filesystem::mojom::Directory* const output_dir_;
+  const raw_ptr<filesystem::mojom::Directory> output_dir_;
   const base::FilePath path_;
 };
 
@@ -181,11 +181,33 @@ Encoding GetEncoding(const base::File& zip_file) {
   return encoding;
 }
 
+void UnzipperImpl::Listener(const mojo::Remote<mojom::UnzipListener>& listener,
+                            uint64_t bytes) {
+  listener->OnProgress(bytes);
+}
+
+bool DoUnzip(base::File zip_file,
+             mojo::Remote<filesystem::mojom::Directory> output_dir,
+             std::string encoding_name,
+             std::string password,
+             zip::FilterCallback filter_cb,
+             zip::UnzipProgressCallback progress_cb) {
+  return zip::Unzip(
+      zip_file.GetPlatformFile(),
+      base::BindRepeating(&MakeFileWriterDelegate, output_dir.get()),
+      base::BindRepeating(&CreateDirectory, output_dir.get()),
+      {.encoding = std::move(encoding_name),
+       .filter = std::move(filter_cb),
+       .progress = std::move(progress_cb),
+       .password = std::move(password)});
+}
+
 void UnzipperImpl::Unzip(
     base::File zip_file,
     mojo::PendingRemote<filesystem::mojom::Directory> output_dir_remote,
     mojom::UnzipOptionsPtr set_options,
     mojo::PendingRemote<mojom::UnzipFilter> filter_remote,
+    mojo::PendingRemote<mojom::UnzipListener> listener_remote,
     UnzipCallback callback) {
   DCHECK(zip_file.IsValid());
 
@@ -198,6 +220,13 @@ void UnzipperImpl::Unzip(
         &Filter, mojo::Remote<mojom::UnzipFilter>(std::move(filter_remote)));
   }
 
+  zip::UnzipProgressCallback progress_cb;
+  if (listener_remote) {
+    mojo::Remote<mojom::UnzipListener> listener(std::move(listener_remote));
+    progress_cb =
+        base::BindRepeating(&UnzipperImpl::Listener, std::move(listener));
+  }
+
   std::string encoding_name;
   if (set_options->encoding == "auto") {
     Encoding encoding = GetEncoding(zip_file);
@@ -207,11 +236,13 @@ void UnzipperImpl::Unzip(
   } else {
     encoding_name = set_options->encoding;
   }
-  std::move(callback).Run(zip::Unzip(
-      zip_file.GetPlatformFile(),
-      base::BindRepeating(&MakeFileWriterDelegate, output_dir.get()),
-      base::BindRepeating(&CreateDirectory, output_dir.get()),
-      {.encoding = std::move(encoding_name), .filter = std::move(filter_cb)}));
+
+  base::SequencedTaskRunnerHandle::Get()->PostTaskAndReplyWithResult(
+      FROM_HERE,
+      base::BindOnce(&DoUnzip, std::move(zip_file), std::move(output_dir),
+                     std::move(encoding_name), std::move(set_options->password),
+                     std::move(filter_cb), std::move(progress_cb)),
+      base::BindOnce(std::move(callback)));
 }
 
 void UnzipperImpl::DetectEncoding(base::File zip_file,
@@ -220,6 +251,47 @@ void UnzipperImpl::DetectEncoding(base::File zip_file,
 
   const Encoding encoding = GetEncoding(zip_file);
   std::move(callback).Run(encoding);
+}
+
+void UnzipperImpl::GetExtractedInfo(base::File zip_file,
+                                    GetExtractedInfoCallback callback) {
+  DCHECK(zip_file.IsValid());
+
+  // Open ZIP archive for reading.
+  zip::ZipReader reader;
+  if (!reader.OpenFromPlatformFile(zip_file.GetPlatformFile())) {
+    LOG(ERROR) << "Cannot decode ZIP archive from file handle "
+               << zip_file.GetPlatformFile();
+    unzip::mojom::InfoPtr info = unzip::mojom::Info::New(false, 0, false);
+    std::move(callback).Run(std::move(info));
+    return;
+  }
+
+  int64_t size = 0;
+  bool valid = true;
+  bool has_encrypted_content = false;
+
+  // Iterate over file entries of the ZIP archive.
+  while (const zip::ZipReader::Entry* const entry = reader.Next()) {
+    // Check for (invalid) size stored.
+    if (entry->original_size < 0 ||
+        entry->original_size > std::numeric_limits<int64_t>::max() - size) {
+      LOG(ERROR) << "ZIP bad size info from file handle "
+                 << zip_file.GetPlatformFile();
+      valid = false;
+      break;
+    }
+    // Accumulate size (since original_size is signed, ignore invalid sizes).
+    if (entry->original_size > 0) {
+      size += entry->original_size;
+    }
+    if (entry->is_encrypted) {
+      has_encrypted_content = true;
+    }
+  }
+  unzip::mojom::InfoPtr info =
+      unzip::mojom::Info::New(valid, size, has_encrypted_content);
+  std::move(callback).Run(std::move(info));
 }
 
 }  // namespace unzip

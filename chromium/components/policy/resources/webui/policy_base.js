@@ -189,7 +189,9 @@ StatusBox.prototype = {
     }
 
     if (scope !== 'updater') {
-      this.setLabelAndShow_('.refresh-interval', status.refreshInterval);
+      if (status.refreshInterval) {
+        this.setLabelAndShow_('.refresh-interval', status.refreshInterval);
+      }
       this.setLabelAndShow_('.status', status.status);
       this.setLabelAndShow_(
           '.policy-push',
@@ -378,14 +380,14 @@ PolicyRow.prototype = {
 
       if (policy.conflicts) {
         policy.conflicts.forEach(conflict => {
-          const row = new PolicyConflict;
+          const row = new PolicyConflict();
           row.initialize(conflict, 'conflictValue');
           this.appendChild(row);
         });
       }
       if (policy.superseded) {
         policy.superseded.forEach(superseded => {
-          const row = new PolicyConflict;
+          const row = new PolicyConflict();
           row.initialize(superseded, 'supersededValue');
           this.appendChild(row);
         });
@@ -528,7 +530,7 @@ PolicyTable.prototype = {
           return a.value !== undefined ? -1 : 1;
         })
         .forEach(policy => {
-          const policyRow = new PolicyRow;
+          const policyRow = new PolicyRow();
           policyRow.initialize(policy);
           mainContent.appendChild(policyRow);
         });
@@ -540,7 +542,7 @@ PolicyTable.prototype = {
       const precedenceRowOld = this.querySelectorAll('.policy-precedence-data');
       precedenceRowOld.forEach(row => mainContent.removeChild(row));
 
-      const precedenceRow = new PolicyPrecedenceRow;
+      const precedenceRow = new PolicyPrecedenceRow();
       precedenceRow.initialize(dataModel.precedenceOrder);
       mainContent.appendChild(precedenceRow);
     }
@@ -708,7 +710,7 @@ export class Page {
   createOrUpdatePolicyTable(dataModel) {
     const id = `${dataModel.name}-${dataModel.id}`;
     if (!this.policyTables[id]) {
-      this.policyTables[id] = new PolicyTable;
+      this.policyTables[id] = new PolicyTable();
       this.mainSection.appendChild(this.policyTables[id]);
     }
     this.policyTables[id].update(dataModel);
@@ -731,7 +733,7 @@ export class Page {
 
     // Add a status box for each scope that has a cloud policy status.
     for (const scope in status) {
-      const box = new StatusBox;
+      const box = new StatusBox();
       box.initialize(scope, status[scope]);
       container.appendChild(box);
       // Show the status section.

@@ -65,9 +65,6 @@ extern const char kWebUITabStripOpened[];
 // The PWA was installed by the user.
 extern const char kDesktopPwaInstalled[];
 
-// Omnibox displayed the updated connection security indicator.
-extern const char kUpdatedConnectionSecurityIndicatorDisplayed[];
-
 // The user entered the special "focus help bubble" accelerator.
 extern const char kFocusHelpBubbleAcceleratorPressed[];
 
@@ -94,7 +91,7 @@ extern const char kViewedReadingList[];
 // The user has triggered the translate infobar manually.
 extern const char kTriggeredTranslateInfobar[];
 
-// The user has viewed the the BottomToolbar tip.
+// The user has viewed the BottomToolbar tip.
 extern const char kBottomToolbarOpened[];
 
 // The Discover feed has loaded content in the NTP.

@@ -479,6 +479,17 @@ void ATAudioDecoder::Initialize(
     return;
   }
 
+  // Chromium provides own code that uses MacOS API to play XHE_AAC audio that
+  // FFmpeg does not support. Rely on it, see
+  // chromium/media/filters/mac/audio_toolbox_audio_decoder.h
+  if (config.profile() == AudioCodecProfile::kXHE_AAC) {
+    task_runner_->PostTask(
+        FROM_HERE,
+        base::BindOnce(std::move(init_cb),
+                       DecoderStatus::Codes::kUnsupportedProfile));
+    return;
+  }
+
   if (!kAllowFfmpegDemuxer && config.platform_media_ffmpeg_demuxer_) {
     VLOG(1) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
             << " ffmpeg demuxer is not supported";

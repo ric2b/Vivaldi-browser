@@ -21,6 +21,7 @@
 #include "extensions/browser/guest_view/web_view/web_view_permission_types.h"
 #include "ppapi/buildflags/buildflags.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 
 #include "app/vivaldi_apptools.h"
 #include "base/command_line.h"
@@ -283,7 +284,7 @@ void WebViewPermissionHelper::RequestMediaAccessPermission(
       if (audio_setting == CONTENT_SETTING_BLOCK ||
           camera_setting == CONTENT_SETTING_BLOCK) {
         std::move(callback).Run(
-            blink::MediaStreamDevices(),
+            blink::mojom::StreamDevicesSet(),
             blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
             std::unique_ptr<content::MediaStreamUI>());
         return;
@@ -384,7 +385,7 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
 
   if (!allow) {
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
         std::unique_ptr<content::MediaStreamUI>());
     return;
@@ -392,7 +393,7 @@ void WebViewPermissionHelper::OnMediaPermissionResponse(
   if (!web_view_guest()->attached() ||
       !web_view_guest()->embedder_web_contents()->GetDelegate()) {
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::INVALID_STATE,
         std::unique_ptr<content::MediaStreamUI>());
     return;

@@ -8,7 +8,6 @@
 #include <memory>
 
 #include "base/base_export.h"
-#include "base/check_op.h"
 #include "base/compiler_specific.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
@@ -205,9 +204,13 @@ class Bus;
 namespace device {
 class UsbContext;
 }
+namespace base {
+class FilePath;
+}
 namespace disk_cache {
 class BackendImpl;
 class InFlightIO;
+bool CleanupDirectorySync(const base::FilePath&);
 }  // namespace disk_cache
 namespace enterprise_connectors {
 class LinuxKeyRotationCommand;
@@ -238,11 +241,6 @@ class AudioOutputDevice;
 class BlockingUrlProtocol;
 class FileVideoCaptureDeviceFactory;
 class PaintCanvasVideoRenderer;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-// IPCAudioDecoder needs to use base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope
-// to mimic a synchronous API for AudioFileReader
-class IPCAudioDecoder;
-#endif // USE_SYSTEM_PROPRIETARY_CODECS
 }  // namespace media
 namespace memory_instrumentation {
 class OSMetrics;
@@ -264,10 +262,6 @@ namespace core {
 class ScopedIPCSupport;
 }
 }  // namespace mojo
-namespace optimization_guide {
-template <class OutputType, class... InputTypes>
-class TFLiteModelExecutor;
-}
 namespace printing {
 class LocalPrinterHandlerDefault;
 #if BUILDFLAG(IS_MAC)
@@ -279,6 +273,9 @@ class PrinterQuery;
 }  // namespace printing
 namespace rlz_lib {
 class FinancialPing;
+}
+namespace storage {
+class ObfuscatedFileUtil;
 }
 namespace syncer {
 class GetLocalChangesRequest;
@@ -494,11 +491,13 @@ class BASE_EXPORT ScopedAllowBlocking {
   friend class weblayer::ProfileImpl;
   friend class weblayer::WebLayerPathProvider;
 
+  // Sorting with function name (with namespace), ignoring the return type.
   friend Profile* ::GetLastProfileMac();  // crbug.com/1176734
+  friend bool ::HasWaylandDisplay(base::Environment* env);  // crbug.com/1246928
   friend bool PathProviderWin(int, FilePath*);
   friend bool chromeos::system::IsCoreSchedulingAvailable();
   friend int chromeos::system::NumberOfPhysicalCores();
-  friend bool ::HasWaylandDisplay(base::Environment* env);  // crbug.com/1246928
+  friend bool disk_cache::CleanupDirectorySync(const base::FilePath&);
 
   ScopedAllowBlocking(const Location& from_here = Location::Current());
   ~ScopedAllowBlocking();
@@ -599,11 +598,10 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitives {
   friend class media::BlockingUrlProtocol;
   friend class mojo::core::ScopedIPCSupport;
   friend class net::MultiThreadedCertVerifierScopedAllowBaseSyncPrimitives;
-  template <class OutputType, class... InputTypes>
-  friend class optimization_guide::TFLiteModelExecutor;
   friend class rlz_lib::FinancialPing;
   friend class shell_integration_linux::
       LaunchXdgUtilityScopedAllowBaseSyncPrimitives;
+  friend class storage::ObfuscatedFileUtil;
   friend class syncer::HttpBridge;
   friend class syncer::GetLocalChangesRequest;
   friend class webrtc::DesktopConfigurationMonitor;
@@ -705,13 +703,6 @@ class BASE_EXPORT ScopedAllowBaseSyncPrimitivesOutsideBlockingScope {
   friend class service_manager::ServiceProcessLauncher;
   friend class ui::WindowResizeHelperMac;    // http://crbug.com/902829
   friend class content::TextInputClientMac;  // http://crbug.com/121917
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
-  // IPCAudioDecoder needs to use base::ScopedAllowBaseSyncPrimitivesOutsideBlockingScope
-  // to mimic a synchronous API for AudioFileReader
-  friend class media::IPCAudioDecoder;
-#endif // USE_SYSTEM_PROPRIETARY_CODECS
 
   ScopedAllowBaseSyncPrimitivesOutsideBlockingScope(
       const Location& from_here = Location::Current());

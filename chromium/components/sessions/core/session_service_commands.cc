@@ -24,19 +24,6 @@
 
 #include "components/sessions/vivaldi_session_service_commands.h"
 
-namespace {
-
-bool ReadSessionIdFromPickle(base::PickleIterator* iterator, SessionID* id) {
-  SessionID::id_type value;
-  if (!iterator->ReadInt(&value)) {
-    return false;
-  }
-  *id = SessionID::FromSerializedValue(value);
-  return true;
-}
-
-}  // namespace
-
 namespace sessions {
 
 // Identifier for commands written to file.
@@ -876,14 +863,10 @@ bool CreateTabsAndWindows(
       }
 
       case kCommandAddTabExtraData: {
-        std::unique_ptr<base::Pickle> pickle(command->PayloadAsPickle());
-        base::PickleIterator it(*pickle);
-
         SessionID tab_id = SessionID::InvalidValue();
         std::string key;
         std::string data;
-        if (!ReadSessionIdFromPickle(&it, &tab_id) || !it.ReadString(&key) ||
-            !it.ReadString(&data)) {
+        if (!RestoreAddExtraDataCommand(*command, &tab_id, &key, &data)) {
           DVLOG(1) << "Failed reading command " << command->id();
           return true;
         }
@@ -893,14 +876,10 @@ bool CreateTabsAndWindows(
       }
 
       case kCommandAddWindowExtraData: {
-        std::unique_ptr<base::Pickle> pickle(command->PayloadAsPickle());
-        base::PickleIterator it(*pickle);
-
         SessionID window_id = SessionID::InvalidValue();
         std::string key;
         std::string data;
-        if (!ReadSessionIdFromPickle(&it, &window_id) || !it.ReadString(&key) ||
-            !it.ReadString(&data)) {
+        if (!RestoreAddExtraDataCommand(*command, &window_id, &key, &data)) {
           DVLOG(1) << "Failed reading command " << command->id();
           return true;
         }
@@ -1170,19 +1149,6 @@ std::unique_ptr<SessionCommand> CreateSetTabDataCommand(
     pickle.WriteString(kv.second);
   }
   return std::make_unique<SessionCommand>(kCommandSetTabData, pickle);
-}
-
-std::unique_ptr<SessionCommand> CreateAddExtraDataCommand(
-    SessionCommand::id_type command,
-    const SessionID& session_id,
-    const std::string& key,
-    const std::string& data) {
-  base::Pickle pickle;
-  pickle.WriteInt(session_id.id());
-  pickle.WriteString(key);
-  pickle.WriteString(data);
-
-  return std::make_unique<SessionCommand>(command, pickle);
 }
 
 std::unique_ptr<SessionCommand> CreateAddTabExtraDataCommand(

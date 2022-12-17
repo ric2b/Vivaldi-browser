@@ -79,7 +79,7 @@ class JavaScriptDialogExtensionsClientImpl
     const Extension* extension = GetExtensionForWebContents(web_contents);
     if (extension &&
         alerting_frame_origin.IsSameOriginWith(
-            web_contents->GetMainFrame()->GetLastCommittedOrigin())) {
+            web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin())) {
       *name_out = extension->name();
       return true;
     }

@@ -21,6 +21,7 @@ import org.chromium.base.TraceEvent;
 import org.chromium.base.supplier.ObservableSupplier;
 import org.chromium.base.supplier.ObservableSupplierImpl;
 import org.chromium.base.supplier.Supplier;
+import org.chromium.chrome.browser.back_press.BackPressManager;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsStateProvider;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsUtils;
 import org.chromium.chrome.browser.browser_controls.BrowserControlsVisibilityManager;
@@ -62,6 +63,7 @@ import org.chromium.chrome.browser.toolbar.ControlContainer;
 import org.chromium.chrome.browser.toolbar.bottom.ScrollingBottomViewSceneLayer;
 import org.chromium.chrome.browser.toolbar.top.TopToolbarOverlayCoordinator;
 import org.chromium.chrome.browser.ui.native_page.NativePage;
+import org.chromium.components.browser_ui.widget.gesture.BackPressHandler;
 import org.chromium.components.browser_ui.widget.gesture.SwipeGestureListener.SwipeHandler;
 import org.chromium.components.embedder_support.util.UrlConstants;
 import org.chromium.ui.base.LocalizationUtils;
@@ -89,7 +91,8 @@ import org.vivaldi.browser.preferences.VivaldiPreferences;
  * A class that is responsible for managing an active {@link Layout} to show to the screen.  This
  * includes lifecycle managment like showing/hiding this {@link Layout}.
  */
-public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost, LayoutProvider {
+public class LayoutManagerImpl
+        implements ManagedLayoutManager, LayoutUpdateHost, LayoutProvider, BackPressHandler {
     /** Sampling at 60 fps. */
     private static final long FRAME_DELTA_TIME_MS = 16;
 
@@ -174,6 +177,10 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
 
     /** The supplier of {@link ThemeColorProvider} for top UI. */
     private final Supplier<TopUiThemeColorProvider> mTopUiThemeColorProvider;
+
+    /** The supplier of whether this is going to intercept back press gesture. */
+    private final ObservableSupplierImpl<Boolean> mHandleBackPressChangedSupplier =
+            new ObservableSupplierImpl<>();
 
     /** Vivaldi **/
     private boolean mForceOnSize;
@@ -804,6 +811,10 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
         getActiveLayout().onTabsAllClosing(incognito);
     }
 
+    protected Supplier<TopUiThemeColorProvider> getTopUiThemeColorProvider() {
+        return mTopUiThemeColorProvider;
+    }
+
     @Override
     public void initLayoutTabFromHost(final int tabId) {
         if (getTabModelSelector() == null || getActiveLayout() == null) return;
@@ -1130,9 +1141,40 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
             if (!mSceneOverlays.get(i).isSceneOverlayTreeShowing()) continue;
 
             // If the back button was consumed by any overlays, return true.
-            if (mSceneOverlays.get(i).onBackPressed()) return true;
+            if (mSceneOverlays.get(i).onBackPressed()) {
+                BackPressManager.record(BackPressHandler.Type.SCENE_OVERLAY);
+                return true;
+            }
         }
+        // Back press metrics of active layout is recorded by their implementations.
         return getActiveLayout() != null && getActiveLayout().onBackPressed();
+    }
+
+    @Override
+    public void handleBackPress() {
+        for (SceneOverlay sceneOverlay : mSceneOverlays) {
+            Boolean enabled = sceneOverlay.getHandleBackPressChangedSupplier().get();
+            if (enabled != null && enabled) {
+                sceneOverlay.handleBackPress();
+                return;
+            }
+        }
+    }
+
+    @Override
+    public ObservableSupplier<Boolean> getHandleBackPressChangedSupplier() {
+        return mHandleBackPressChangedSupplier;
+    }
+
+    private void onBackPressStateChanged() {
+        for (SceneOverlay sceneOverlay : mSceneOverlays) {
+            Boolean enabled = sceneOverlay.getHandleBackPressChangedSupplier().get();
+            if (enabled != null && enabled) {
+                mHandleBackPressChangedSupplier.set(true);
+                return;
+            }
+        }
+        mHandleBackPressChangedSupplier.set(false);
     }
 
     @Override
@@ -1151,6 +1193,7 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
         }
 
         mSceneOverlays.add(index, overlay);
+        overlay.getHandleBackPressChangedSupplier().addObserver((v) -> onBackPressStateChanged());
     }
 
     @VisibleForTesting
@@ -1196,6 +1239,11 @@ public class LayoutManagerImpl implements ManagedLayoutManager, LayoutUpdateHost
     @Override
     public boolean isLayoutVisible(int layoutType) {
         return getActiveLayout() != null && getActiveLayout().getLayoutType() == layoutType;
+    }
+
+    @Override
+    public boolean isLayoutStartingToHide(int layoutType) {
+        return isLayoutVisible(layoutType) && getActiveLayout().isStartingToHide();
     }
 
     @Override

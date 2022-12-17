@@ -11,6 +11,7 @@ const wchar_t kVivaldiDeltaPatchFailed[] = L"DeltaPatchFailed";
 const wchar_t kVivaldiKey[] = VIVALDI_REGISTRY_KEY;
 const wchar_t kVivaldiAutoUpdateKey[] = VIVALDI_REGISTRY_KEY "\\AutoUpdate";
 const wchar_t kVivaldiPinToTaskbarValue[] = L"EnablePinToTaskbar";
+const wchar_t kVivaldiToastActivatorCLSID[] = VIVALDI_REGISTRY_KEY "\\ToastActivatorCLSID";
 
 // Vivaldi installer settings from last install.
 const wchar_t kVivaldiInstallerDestinationFolder[] = L"DestinationFolder";
@@ -45,7 +46,7 @@ const char kVivaldiMini[] = VIVALDI_INSTALLER_SWITCH_MINI;
 const char kVivaldiRegisterStandalone[] = "vivaldi-register-standalone";
 
 // The update should run in the background with no interaction with the user.
-const char kVivaldiSilent[] = "vivaldi-silent";
+const char kVivaldiSilent[] = VIVALDI_INSTALLER_SWITCH_SILENT;
 
 // Install a stand-alone browser.
 const char kVivaldiStandalone[] = "vivaldi-standalone";

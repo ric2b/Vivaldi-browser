@@ -210,7 +210,7 @@ class PageInfoBubbleViewBrowserTest : public InProcessBrowserTest {
 
   void ExecuteJavaScriptForTests(const std::string& js) {
     base::RunLoop run_loop;
-    web_contents()->GetMainFrame()->ExecuteJavaScriptForTests(
+    web_contents()->GetPrimaryMainFrame()->ExecuteJavaScriptForTests(
         base::ASCIIToUTF16(js),
         base::BindOnce(
             [](base::OnceClosure quit_callback, base::Value result) {
@@ -340,7 +340,7 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, ChromeDevtoolsURL) {
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewBrowserTest, ViewSourceURL) {
   ASSERT_TRUE(
       ui_test_utils::NavigateToURL(browser(), GURL(url::kAboutBlankURL)));
-  web_contents()->GetMainFrame()->ViewSource();
+  web_contents()->GetPrimaryMainFrame()->ViewSource();
   OpenPageInfoBubble(browser());
   EXPECT_EQ(PageInfoBubbleView::BUBBLE_INTERNAL_PAGE,
             PageInfoBubbleView::GetShownBubbleType());
@@ -749,7 +749,9 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewPrerenderBrowserTest,
 class PageInfoBubbleViewAboutThisSiteBrowserTest : public InProcessBrowserTest {
  public:
   PageInfoBubbleViewAboutThisSiteBrowserTest() {
-    feature_list.InitAndEnableFeature(page_info::kPageInfoAboutThisSite);
+    feature_list.InitWithFeatures({page_info::kPageInfoAboutThisSiteEn,
+                                   page_info::kPageInfoAboutThisSiteNonEn},
+                                  {});
   }
 
   void SetUp() override {
@@ -805,10 +807,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   page_info->GetWidget()->CloseWithReason(
       views::Widget::ClosedReason::kEscKeyPressed);
   base::RunLoop().RunUntilIdle();
-  histograms.ExpectTotalCount("Security.PageInfo.TimeOpen.AboutThisSiteShown",
-                              1);
-  histograms.ExpectTotalCount(
-      "Security.PageInfo.TimeOpen.AboutThisSiteNotShown", 0);
 }
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
@@ -845,10 +843,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   page_info->GetWidget()->CloseWithReason(
       views::Widget::ClosedReason::kEscKeyPressed);
   base::RunLoop().RunUntilIdle();
-  histograms.ExpectTotalCount("Security.PageInfo.TimeOpen.AboutThisSiteShown",
-                              0);
-  histograms.ExpectTotalCount(
-      "Security.PageInfo.TimeOpen.AboutThisSiteNotShown", 1);
 }
 
 IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
@@ -878,10 +872,6 @@ IN_PROC_BROWSER_TEST_F(PageInfoBubbleViewAboutThisSiteBrowserTest,
   page_info->GetWidget()->CloseWithReason(
       views::Widget::ClosedReason::kEscKeyPressed);
   base::RunLoop().RunUntilIdle();
-  histograms.ExpectTotalCount("Security.PageInfo.TimeOpen.AboutThisSiteShown",
-                              0);
-  histograms.ExpectTotalCount(
-      "Security.PageInfo.TimeOpen.AboutThisSiteNotShown", 1);
 }
 
 // Test that no info is shown and "kUnknown" is logged when hints fetching is

@@ -5,6 +5,8 @@
 #import "ios/chrome/browser/ui/first_run/signin/signin_screen_mediator.h"
 
 #import "base/metrics/histogram_functions.h"
+#include "base/metrics/user_metrics.h"
+#import "base/metrics/user_metrics_action.h"
 #import "components/metrics/metrics_pref_names.h"
 #import "components/prefs/pref_service.h"
 #import "ios/chrome/browser/application_context.h"
@@ -155,7 +157,7 @@
     // See crbug.com/1312449.
     // TODO(crbug.com/1314012): Need test for this case.
     self.authenticationService->SignOut(signin_metrics::ABORT_SIGNIN,
-                                        /*force_clear_browsing_data=*/true,
+                                        /*force_clear_browsing_data=*/false,
                                         startSignInCompletion);
     return;
   }
@@ -183,7 +185,7 @@
     }
   };
   self.authenticationService->SignOut(signin_metrics::ABORT_SIGNIN,
-                                      /*force_clear_browsing_data=*/true,
+                                      /*force_clear_browsing_data=*/false,
                                       signOutCompletion);
 }
 
@@ -195,6 +197,12 @@
 }
 
 - (void)finishPresentingWithSignIn:(BOOL)signIn {
+  if (self.TOSLinkWasTapped) {
+    base::RecordAction(base::UserMetricsAction("MobileFreTOSLinkTapped"));
+  }
+  if (self.UMALinkWasTapped) {
+    base::RecordAction(base::UserMetricsAction("MobileFreUMALinkTapped"));
+  }
   if (self.showFREConsent) {
     first_run::FirstRunStage firstRunStage =
         signIn ? first_run::kWelcomeAndSigninScreenCompletionWithSignIn
@@ -240,10 +248,7 @@
       _consumer.signinStatus = SigninScreenConsumerSigninStatusDisabled;
       break;
   }
-  self.consumer.managedEnabled =
-      GetEnterpriseSignInRestrictions(self.authenticationService,
-                                      self.prefService, self.syncService) !=
-      kNoEnterpriseRestriction;
+  self.consumer.isManaged = IsApplicationManaged();
   if (!self.showFREConsent) {
     self.consumer.screenIntent = SigninScreenConsumerScreenIntentSigninOnly;
   } else {

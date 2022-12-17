@@ -23,7 +23,6 @@
 #include "base/values.h"
 #include "chrome/browser/ash/printing/oauth2/status_code.h"
 #include "chromeos/printing/uri.h"
-#include "net/base/escape.h"
 #include "net/http/http_status_code.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
@@ -72,11 +71,11 @@ bool ParseURLParameters(const std::string& params_str,
     } else {
       key = key_val;
     }
-    key = net::UnescapeBinaryURLComponent(key);
+    key = base::UnescapeBinaryURLComponent(key);
     if (key.empty() || results.contains(key)) {
       return false;
     }
-    results[key] = net::UnescapeBinaryURLComponent(val);
+    results[key] = base::UnescapeBinaryURLComponent(val);
   }
   return true;
 }
@@ -93,28 +92,27 @@ base::OnceCallback<void(StatusCode, const std::string&)> BindResult(
   return base::BindOnce(save_results, base::Unretained(&target));
 }
 
-base::flat_map<std::string, base::Value> BuildMetadata(
-    const std::string& authorization_server_uri,
-    const std::string& authorization_uri,
-    const std::string& token_uri,
-    const std::string& registration_uri,
-    const std::string& revocation_uri) {
-  base::flat_map<std::string, base::Value> fields;
-  fields["issuer"] = base::Value(authorization_server_uri);
-  fields["authorization_endpoint"] = base::Value(authorization_uri);
-  fields["token_endpoint"] = base::Value(token_uri);
+base::Value::Dict BuildMetadata(const std::string& authorization_server_uri,
+                                const std::string& authorization_uri,
+                                const std::string& token_uri,
+                                const std::string& registration_uri,
+                                const std::string& revocation_uri) {
+  base::Value::Dict dict;
+  dict.Set("issuer", authorization_server_uri);
+  dict.Set("authorization_endpoint", authorization_uri);
+  dict.Set("token_endpoint", token_uri);
   if (!registration_uri.empty()) {
-    fields["registration_endpoint"] = base::Value(registration_uri);
+    dict.Set("registration_endpoint", registration_uri);
   }
   if (!revocation_uri.empty()) {
-    fields["revocation_endpoint"] = base::Value(revocation_uri);
+    dict.Set("revocation_endpoint", revocation_uri);
   }
-  fields["response_types_supported"] = OneElementArray("code");
-  fields["response_modes_supported"] = OneElementArray("query");
-  fields["grant_types_supported"] = OneElementArray("authorization_code");
-  fields["token_endpoint_auth_methods_supported"] = OneElementArray("none");
-  fields["code_challenge_methods_supported"] = OneElementArray("S256");
-  return fields;
+  dict.Set("response_types_supported", OneElementArray("code"));
+  dict.Set("response_modes_supported", OneElementArray("query"));
+  dict.Set("grant_types_supported", OneElementArray("authorization_code"));
+  dict.Set("token_endpoint_auth_methods_supported", OneElementArray("none"));
+  dict.Set("code_challenge_methods_supported", OneElementArray("S256"));
+  return dict;
 }
 
 FakeAuthorizationServer::FakeAuthorizationServer() {
@@ -137,15 +135,13 @@ std::string FakeAuthorizationServer::ReceiveGET(const std::string& url) {
 
 std::string FakeAuthorizationServer::ReceivePOSTWithJSON(
     const std::string& url,
-    base::flat_map<std::string, base::Value>& out_params) {
+    base::Value::Dict& out_params) {
   std::string payload;
   auto msg = GetNextRequest("POST", url, "application/json", payload);
   auto content = base::JSONReader::Read(payload);
   out_params.clear();
-  if (content && content->type() == base::Value::Type::DICTIONARY) {
-    for (auto elem : content->GetDict()) {
-      out_params[elem.first] = std::move(elem.second);
-    }
+  if (content && content->is_dict()) {
+    out_params = std::move(content->GetDict());
   } else {
     msg += "Cannot parse the payload: \"" + payload.substr(0, 256) + "\"";
   }
@@ -166,10 +162,10 @@ std::string FakeAuthorizationServer::ReceivePOSTWithURLParams(
 
 void FakeAuthorizationServer::ResponseWithJSON(
     net::HttpStatusCode status,
-    const base::flat_map<std::string, base::Value>& params) {
+    const base::Value::Dict& params) {
   CHECK(current_request_);
   std::string response_content;
-  CHECK(base::JSONWriter::Write(base::Value(params), &response_content));
+  CHECK(base::JSONWriter::Write(params, &response_content));
   network::mojom::URLResponseHeadPtr response_head(
       network::CreateURLResponseHead(status));
   response_head->headers->SetHeader("Content-Type", "application/json");

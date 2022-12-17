@@ -79,6 +79,9 @@ class VivaldiRootDocumentHandler : public KeyedService,
   void AddObserver(VivaldiRootDocumentHandlerObserver* observer);
   void RemoveObserver(VivaldiRootDocumentHandlerObserver* observer);
 
+  content::WebContents* GetWebContents();
+  content::WebContents* GetOTRWebContents();
+
  private:
   ~VivaldiRootDocumentHandler() override;
 
@@ -88,7 +91,7 @@ class VivaldiRootDocumentHandler : public KeyedService,
                              content::WebContents* contents);
 
     // content::WebContentsObserver overrides.
-    void PrimaryMainDocumentElementAvailable() override;
+    void DOMContentLoaded(content::RenderFrameHost* render_frame_host) override;
 
    private:
     raw_ptr<VivaldiRootDocumentHandler> root_doc_handler_;
@@ -108,9 +111,6 @@ class VivaldiRootDocumentHandler : public KeyedService,
                            extensions::UnloadedExtensionReason reason) override;
 
   void InformObservers();
-
-  content::WebContents* GetWebContents();
-  content::WebContents* GetOTRWebContents();
 
   // These are the WebContents holders for our portal-windows. One document for
   // regular-windows and one for incognito-windows. Incognito is lazy loaded and

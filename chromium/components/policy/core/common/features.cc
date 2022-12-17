@@ -13,17 +13,11 @@ namespace features {
 const base::Feature kDefaultChromeAppsMigration{
     "EnableDefaultAppsMigration", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kUploadBrowserDeviceIdentifier{
-    "UploadBrowserDeviceIdentifier", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kLoginEventReporting{"LoginEventReporting",
                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kPasswordBreachEventReporting{
     "PasswordBreachEventReporting", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kChromeManagementPageAndroid{
-    "ChromeManagementPageAndroid", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableUserCloudSigninRestrictionPolicyFetcher{
     "UserCloudSigninRestrictionPolicyFetcher",
@@ -31,10 +25,17 @@ const base::Feature kEnableUserCloudSigninRestrictionPolicyFetcher{
 
 const base::Feature kActivateMetricsReportingEnabledPolicyAndroid{
     "ActivateMetricsReportingEnabledPolicyAndroid",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableCachedManagementStatus{
     "EnableCachedManagementStatus", base::FEATURE_ENABLED_BY_DEFAULT};
+
+const base::Feature kDmTokenDeletion{"DmTokenDeletion",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kPolicyScopeDetectionMac{"PolicyScopeDetectionMac",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
+
 }  // namespace features
 
 }  // namespace policy

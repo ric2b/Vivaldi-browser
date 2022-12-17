@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/callback_helpers.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/ref_counted.h"
 #include "base/time/time.h"
@@ -216,9 +217,8 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // Not safe to call after NotifyComplete() is invoked.
   virtual bool HasEstablishedConnection() const = 0;
 
-  // If the ConnectJobFailed, this method returns a list of failed attempts to
-  // connect to the destination server. Returns an empty list if connecting to a
-  // proxy.
+  // Returns a list of failed attempts to connect to the destination server.
+  // Returns an empty list if connecting to a proxy.
   virtual ConnectionAttempts GetConnectionAttempts() const;
 
   // Returns error information about any host resolution attempt.
@@ -244,6 +244,9 @@ class NET_EXPORT_PRIVATE ConnectJob {
   const LoadTimingInfo::ConnectTiming& connect_timing() const {
     return connect_timing_;
   }
+
+  // Sets |done_closure_| which will be called when |this| is deleted.
+  void set_done_closure(base::OnceClosure done_closure);
 
   const NetLogWithSource& net_log() const { return net_log_; }
 
@@ -321,6 +324,8 @@ class NET_EXPORT_PRIVATE ConnectJob {
   // ConnectJob has started / after it has completed.
   const bool top_level_job_;
   NetLogWithSource net_log_;
+  // This is called when |this| is deleted.
+  base::ScopedClosureRunner done_closure_;
   const NetLogEventType net_log_connect_event_type_;
 };
 

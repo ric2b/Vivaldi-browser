@@ -4,9 +4,12 @@
 
 #include "chrome/browser/ui/webui/signin/user_cloud_signin_restriction_policy_fetcher_chromeos.h"
 
+#include "base/command_line.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/strings/stringprintf.h"
+#include "base/values.h"
 #include "components/policy/core/browser/browser_policy_connector.h"
+#include "components/policy/core/common/policy_switches.h"
 #include "google_apis/gaia/gaia_constants.h"
 #include "google_apis/gaia/gaia_urls.h"
 #include "google_apis/gaia/google_service_auth_error.h"
@@ -22,10 +25,9 @@ namespace {
 const char kAuthorizationHeaderFormat[] = "Bearer %s";
 const char kSecureConnectApiGetSecondaryGoogleAccountUsageUrl[] =
     "https://secureconnect-pa.clients6.google.com/"
-    "v1:getManagedAccountsSigninRestriction";
+    "v1:getManagedAccountsSigninRestriction?policy_name="
+    "SecondaryGoogleAccountUsage";
 const char kJsonContentType[] = "application/json";
-const char kChromeOSPolicyHeader[] = "x-chromeos-policy";
-const char kSecondaryGoogleAccountUsage[] = "SecondaryGoogleAccountUsage";
 // Presence of this key in the user info response indicates whether the user is
 // on a hosted domain.
 const char kHostedDomainKey[] = "hd";
@@ -70,9 +72,7 @@ std::unique_ptr<network::SimpleURLLoader> CreateUrlLoader(
       net::HttpRequestHeaders::kAuthorization,
       base::StringPrintf(kAuthorizationHeaderFormat, access_token.c_str()));
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
-  // Add header to fetch the SecondaryGoogleAccountUsage policy from the API.
-  resource_request->headers.SetHeader(kChromeOSPolicyHeader,
-                                      kSecondaryGoogleAccountUsage);
+
   auto url_loader =
       network::SimpleURLLoader::Create(std::move(resource_request), annotation);
   return url_loader;
@@ -94,6 +94,8 @@ UserCloudSigninRestrictionPolicyFetcherChromeOS::
         scoped_refptr<network::SharedURLLoaderFactory> url_loader_factory)
     : email_(email), url_loader_factory_(url_loader_factory) {
   DCHECK(url_loader_factory_);
+  user_info_fetcher_ =
+      std::make_unique<policy::UserInfoFetcher>(this, url_loader_factory_);
 }
 
 UserCloudSigninRestrictionPolicyFetcherChromeOS::
@@ -123,7 +125,8 @@ void UserCloudSigninRestrictionPolicyFetcherChromeOS::FetchAccessToken() {
       GaiaUrls::GetInstance()->oauth2_chrome_client_id(),
       GaiaUrls::GetInstance()->oauth2_chrome_client_secret(),
       {GaiaConstants::kGoogleUserInfoEmail,
-       GaiaConstants::kGoogleUserInfoProfile});
+       GaiaConstants::kGoogleUserInfoProfile,
+       GaiaConstants::kSecureConnectOAuth2Scope});
 }
 
 void UserCloudSigninRestrictionPolicyFetcherChromeOS::OnGetTokenSuccess(
@@ -148,17 +151,15 @@ std::string UserCloudSigninRestrictionPolicyFetcherChromeOS::GetConsumerName()
 }
 
 void UserCloudSigninRestrictionPolicyFetcherChromeOS::FetchUserInfo() {
-  // TODO(b/224743604): Inject UserInfoFetcher as a dependency.
-  user_info_fetcher_ =
-      std::make_unique<policy::UserInfoFetcher>(this, url_loader_factory_);
   user_info_fetcher_->Start(access_token_);
 }
 
 void UserCloudSigninRestrictionPolicyFetcherChromeOS::OnGetUserInfoSuccess(
-    const base::DictionaryValue* user_info) {
+    const base::Value::Dict& user_info) {
   // Check if the user account has a hosted domain.
-  if (user_info->HasKey(kHostedDomainKey)) {
-    hosted_domain_ = user_info->FindKey(kHostedDomainKey)->GetString();
+  const std::string* hosted_domain = user_info.FindString(kHostedDomainKey);
+  if (hosted_domain) {
+    hosted_domain_ = *hosted_domain;
     GetSecondaryGoogleAccountUsageInternal();
   } else {
     // Non Enterprise accounts do not have restrictions.
@@ -181,7 +182,7 @@ void UserCloudSigninRestrictionPolicyFetcherChromeOS::
     GetSecondaryGoogleAccountUsageInternal() {
   // Each url loader can only be used for one request.
   url_loader_ =
-      CreateUrlLoader(GURL(kSecureConnectApiGetSecondaryGoogleAccountUsageUrl),
+      CreateUrlLoader(GURL(GetSecureConnectApiGetAccountSigninRestrictionUrl()),
                       access_token_, annotation);
   // base::Unretained is safe here because `url_loader_` is owned by `this`.
   url_loader_->DownloadToString(
@@ -231,6 +232,17 @@ void UserCloudSigninRestrictionPolicyFetcherChromeOS::
   }
 
   std::move(callback_).Run(status, restriction, hosted_domain_);
+}
+
+std::string UserCloudSigninRestrictionPolicyFetcherChromeOS::
+    GetSecureConnectApiGetAccountSigninRestrictionUrl() const {
+  base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
+  if (command_line->HasSwitch(policy::switches::kSecureConnectApiUrl)) {
+    return command_line->GetSwitchValueASCII(
+        policy::switches::kSecureConnectApiUrl);
+  }
+
+  return kSecureConnectApiGetSecondaryGoogleAccountUsageUrl;
 }
 
 }  // namespace ash

@@ -12,6 +12,7 @@
 #include "base/values.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "ui/gfx/image/image.h"
 
 // Helper to access Vivaldi resources
 class ResourceReader {
@@ -42,6 +43,8 @@ class ResourceReader {
   static absl::optional<base::Value> ReadJSON(
       base::StringPiece resource_directory,
       base::StringPiece resource_name);
+
+  static gfx::Image ReadPngImage(base::StringPiece resource_url);
 
   bool IsValid() const { return mapped_file_.IsValid(); }
 

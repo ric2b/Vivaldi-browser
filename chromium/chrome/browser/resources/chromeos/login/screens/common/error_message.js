@@ -175,6 +175,14 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
         type: Boolean,
         value: false,
       },
+
+      /**
+       * @private
+       */
+      hasUserPods_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -209,7 +217,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
    * @type {boolean}
    */
   get closable() {
-    return Oobe.getInstance().hasUserPods && !this.is_persistent_error_;
+    return this.hasUserPods_ && !this.is_persistent_error_;
   }
 
   /**
@@ -222,9 +230,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
 
   ready() {
     super.ready();
-    this.initializeLoginScreen('ErrorMessageScreen', {
-      resetAllowed: true,
-    });
+    this.initializeLoginScreen('ErrorMessageScreen');
 
     this.updateLocalizedContent();
   }
@@ -283,7 +289,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
     opts.attrs = opts.attrs.concat(['id', 'class', 'is']);
     opts.substitutions = opts.substitutions || [];
     for (const anchorId of anchor_ids) {
-      let attributes =
+      const attributes =
           ' class="oobe-local-link focus-on-show" is="action-link"';
       opts.substitutions = opts.substitutions.concat(
           ['<a id="' + anchorId + '"' + attributes + '>', '</a>']);
@@ -305,7 +311,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
     }
     for (const anchorId of anchor_ids) {
       /** @suppress {checkTypes} anchorId is a string */
-      let linkElement = this.shadowRoot.getElementById(anchorId);
+      const linkElement = this.shadowRoot.getElementById(anchorId);
       if (hidden) {
         linkElement.setAttribute('hidden', '');
       } else {
@@ -397,6 +403,7 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
   onBeforeShow(data) {
     this.enableWifiScans_ = true;
     this.$.backButton.disabled = !this.closable;
+    this.hasUserPods_ = data && ('hasUserPods' in data) && data.hasUserPods;
   }
 
   /**
@@ -471,8 +478,9 @@ class ErrorMessageScreen extends ErrorMessageScreenBase {
    * Cancels error screen and drops to user pods.
    */
   cancel() {
-    if (this.closable)
+    if (this.closable) {
       this.userActed('cancel');
+    }
   }
 
   /**

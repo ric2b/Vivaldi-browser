@@ -5,7 +5,7 @@
 import 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
 import 'chrome://resources/cr_elements/cr_lazy_render/cr_lazy_render.m.js';
 import './profile_picker_main_view.js';
-import './profile_picker_shared_css.js';
+import './profile_picker_shared.css.js';
 import './strings.m.js';
 
 import {CrViewManagerElement} from 'chrome://resources/cr_elements/cr_view_manager/cr_view_manager.js';
@@ -83,7 +83,7 @@ export class ProfilePickerAppElement extends ProfilePickerAppElementBase {
         this.$.viewManager.switchView('mainView', 'fade-in', 'no-animation');
       }
       // TODO(https://crbug.com/1237418): Add support for ForceSignin on Lacros.
-      this.manageProfilesBrowserProxy_.loadSignInProfileCreationFlow(null, '');
+      this.manageProfilesBrowserProxy_.selectAccountLacros(null, '');
       return;
     }
 

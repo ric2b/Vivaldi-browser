@@ -21,7 +21,6 @@
 #include "base/process/process.h"
 #include "base/run_loop.h"
 #include "base/synchronization/lock.h"
-#include "base/test/scoped_feature_list.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/version.h"
@@ -58,8 +57,6 @@ using ::testing::Eq;
 using ::testing::InvokeWithoutArgs;
 using ::testing::Return;
 using ::testing::SaveArg;
-
-constexpr char kSRTPromptGroup[] = "SRTGroup";
 
 class Waiter {
  public:
@@ -207,10 +204,6 @@ class ReporterRunnerTest
     policy::BrowserPolicyConnector::SetPolicyProviderForTesting(
         &policy_provider_);
 
-    scoped_feature_list_.InitAndEnableFeatureWithParameters(
-        kChromeCleanupInBrowserPromptFeature,
-        {{"Seed", incoming_seed_}, {"Group", kSRTPromptGroup}});
-
     switch (policy_state_) {
       case PolicyState::kNoLogs:
         break;
@@ -229,6 +222,9 @@ class ReporterRunnerTest
         break;
       }
     }
+
+    EXPECT_CALL(mock_chrome_cleaner_controller_, GetIncomingPromptSeed())
+        .WillRepeatedly(Return(incoming_seed_));
   }
 
   void SetUpOnMainThread() override {
@@ -609,8 +605,6 @@ class ReporterRunnerTest
   // can be used to perform actions in the middle of a queue of reporters which
   // all launch on the same mock clock tick.
   base::OnceClosure first_launch_callback_;
-
-  base::test::ScopedFeatureList scoped_feature_list_;
 };
 
 }  // namespace

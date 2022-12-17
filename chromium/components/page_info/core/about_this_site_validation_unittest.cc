@@ -4,11 +4,12 @@
 
 #include "components/page_info/core/about_this_site_validation.h"
 
+#include "base/test/scoped_feature_list.h"
+#include "components/page_info/core/features.h"
 #include "components/page_info/core/proto/about_this_site_metadata.pb.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-namespace page_info {
-namespace about_this_site_validation {
+namespace page_info::about_this_site_validation {
 
 proto::Hyperlink GetSampleSource() {
   proto::Hyperlink link;
@@ -34,6 +35,12 @@ proto::SiteFirstSeen GetSampleFirstSeen() {
   return first_seen;
 }
 
+proto::MoreAbout GetSampleMoreAbout() {
+  proto::MoreAbout more_about;
+  more_about.set_url("https://example.com");
+  return more_about;
+}
+
 proto::BannerInfo GetBannerInfo() {
   proto::BannerInfo banner_info;
   banner_info.set_title("Title");
@@ -47,6 +54,7 @@ proto::AboutThisSiteMetadata GetSampleMetaData() {
   auto* site_info = metadata.mutable_site_info();
   *site_info->mutable_description() = GetSampleDescription();
   *site_info->mutable_first_seen() = GetSampleFirstSeen();
+  *site_info->mutable_more_about() = GetSampleMoreAbout();
   return metadata;
 }
 
@@ -55,7 +63,7 @@ TEST(AboutThisSiteValidation, ValidateProtos) {
   auto metadata = GetSampleMetaData();
   EXPECT_EQ(ValidateMetadata(metadata), AboutThisSiteStatus::kValid);
 
-  // The proto should still be valid without a timestamp or without description.
+  // The proto should still be valid without a timestamp.
   metadata.mutable_site_info()->clear_first_seen();
   EXPECT_EQ(ValidateMetadata(metadata), AboutThisSiteStatus::kValid);
 }
@@ -132,6 +140,36 @@ TEST(AboutThisSiteValidation, InvalidFirstSeenDuration) {
             AboutThisSiteStatus::kInvalidTimeStamp);
 }
 
-}  // namespace about_this_site_validation
+TEST(AboutThisSiteValidation, InvalidMoreAbout) {
+  proto::MoreAbout more_about = GetSampleMoreAbout();
+  more_about.clear_url();
+  EXPECT_EQ(ValidateMoreAbout(more_about),
+            AboutThisSiteStatus::kInvalidMoreAbout);
 
-}  // namespace page_info
+  more_about = GetSampleMoreAbout();
+  more_about.set_url("not a url");
+  EXPECT_EQ(ValidateMoreAbout(more_about),
+            AboutThisSiteStatus::kInvalidMoreAbout);
+}
+
+TEST(AboutThisSiteValidation, MissingMoreAbout_FeatureEDisabled) {
+  proto::AboutThisSiteMetadata meta_data = GetSampleMetaData();
+  EXPECT_EQ(ValidateMetadata(meta_data), AboutThisSiteStatus::kValid);
+
+  meta_data.mutable_site_info()->clear_more_about();
+  EXPECT_EQ(ValidateMetadata(meta_data), AboutThisSiteStatus::kValid);
+}
+
+TEST(AboutThisSiteValidation, MissingMoreAbout_FeatureEnabled) {
+  base::test::ScopedFeatureList features;
+  features.InitAndEnableFeature(kPageInfoAboutThisSiteMoreInfo);
+
+  proto::AboutThisSiteMetadata meta_data = GetSampleMetaData();
+  EXPECT_EQ(ValidateMetadata(meta_data), AboutThisSiteStatus::kValid);
+
+  meta_data.mutable_site_info()->clear_more_about();
+  EXPECT_EQ(ValidateMetadata(meta_data),
+            AboutThisSiteStatus::kMissingMoreAbout);
+}
+
+}  // namespace page_info::about_this_site_validation

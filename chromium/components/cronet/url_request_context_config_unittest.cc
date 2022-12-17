@@ -59,22 +59,20 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
       base::test::TaskEnvironment::MainThreadType::IO);
 
   // Create JSON for experimental options.
-  base::DictionaryValue options;
-  options.SetPath({"QUIC", "max_server_configs_stored_in_properties"},
-                  base::Value(2));
-  options.SetPath({"QUIC", "user_agent_id"}, base::Value("Custom QUIC UAID"));
-  options.SetPath({"QUIC", "idle_connection_timeout_seconds"},
-                  base::Value(300));
-  options.SetPath({"QUIC", "close_sessions_on_ip_change"}, base::Value(true));
-  options.SetPath({"QUIC", "connection_options"}, base::Value("TIME,TBBR,REJ"));
-  options.SetPath(
-      {"QUIC", "set_quic_flags"},
-      base::Value("FLAGS_quic_reloadable_flag_quic_testonly_default_false=true,"
-                  "FLAGS_quic_restart_flag_quic_testonly_default_true=false"));
-  options.SetPath({"AsyncDNS", "enable"}, base::Value(true));
-  options.SetPath({"NetworkErrorLogging", "enable"}, base::Value(true));
-  options.SetPath({"NetworkErrorLogging", "preloaded_report_to_headers"},
-                  base::test::ParseJson(R"json(
+  base::Value::Dict options;
+  options.SetByDottedPath("QUIC.max_server_configs_stored_in_properties", 2);
+  options.SetByDottedPath("QUIC.user_agent_id", "Custom QUIC UAID");
+  options.SetByDottedPath("QUIC.idle_connection_timeout_seconds", 300);
+  options.SetByDottedPath("QUIC.close_sessions_on_ip_change", true);
+  options.SetByDottedPath("QUIC.connection_options", "TIME,TBBR,REJ");
+  options.SetByDottedPath(
+      "QUIC.set_quic_flags",
+      "FLAGS_quic_reloadable_flag_quic_testonly_default_false=true,"
+      "FLAGS_quic_restart_flag_quic_testonly_default_true=false");
+  options.SetByDottedPath("AsyncDNS.enable", true);
+  options.SetByDottedPath("NetworkErrorLogging.enable", true);
+  options.SetByDottedPath("NetworkErrorLogging.preloaded_report_to_headers",
+                          base::test::ParseJson(R"json(
                   [
                     {
                       "origin": "https://test-origin/",
@@ -121,8 +119,8 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
                     },
                   ]
                   )json"));
-  options.SetPath({"NetworkErrorLogging", "preloaded_nel_headers"},
-                  base::test::ParseJson(R"json(
+  options.SetByDottedPath("NetworkErrorLogging.preloaded_nel_headers",
+                          base::test::ParseJson(R"json(
                   [
                     {
                       "origin": "https://test-origin/",
@@ -133,13 +131,13 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
                     },
                   ]
                   )json"));
-  options.SetPath({"UnknownOption", "foo"}, base::Value(true));
-  options.SetPath({"HostResolverRules", "host_resolver_rules"},
-                  base::Value("MAP * 127.0.0.1"));
+  options.SetByDottedPath("UnknownOption.foo", true);
+  options.SetByDottedPath("HostResolverRules.host_resolver_rules",
+                          "MAP * 127.0.0.1");
   // See http://crbug.com/696569.
-  options.SetKey("disable_ipv6_on_wifi", base::Value(true));
-  options.SetKey("spdy_go_away_on_ip_change", base::Value(true));
-  options.SetPath({"QUIC", "ios_network_service_type"}, base::Value(2));
+  options.Set("disable_ipv6_on_wifi", true);
+  options.Set("spdy_go_away_on_ip_change", true);
+  options.SetByDottedPath({"QUIC.ios_network_service_type"}, 2);
   std::string options_json;
   EXPECT_TRUE(base::JSONWriter::Write(options, &options_json));
 
@@ -219,12 +217,13 @@ TEST(URLRequestContextConfigTest, TestExperimentalOptionParsing) {
   EXPECT_FALSE(quic_params->migrate_idle_sessions);
   EXPECT_FALSE(quic_params->retry_on_alternate_network_before_handshake);
   EXPECT_FALSE(quic_params->race_stale_dns_on_connection);
-  EXPECT_FALSE(quic_params->allow_port_migration);
+  EXPECT_TRUE(quic_params->allow_port_migration);
   EXPECT_FALSE(quic_params->disable_tls_zero_rtt);
   EXPECT_TRUE(quic_params->retry_without_alt_svc_on_quic_errors);
   EXPECT_FALSE(
       quic_params->initial_delay_for_broken_alternative_service.has_value());
   EXPECT_FALSE(quic_params->exponential_backoff_on_initial_delay.has_value());
+  EXPECT_TRUE(quic_params->delay_main_job_with_available_spdy_session);
 
   // Check network_service_type for iOS.
   EXPECT_EQ(2, quic_params->ios_network_service_type);
@@ -321,7 +320,8 @@ TEST(URLRequestContextConfigTest, SetSupportedQuicVersion) {
       quic::AllSupportedVersionsWithQuicCrypto().front();
   std::string experimental_options =
       "{\"QUIC\":{\"quic_version\":\"" +
-      quic::QuicVersionToString(version.transport_version) + "\"}}";
+      quic::QuicVersionToString(version.transport_version) +
+      "\",\"obsolete_versions_allowed\":true}}";
 
   std::unique_ptr<URLRequestContextConfig> config =
       URLRequestContextConfig::CreateURLRequestContextConfig(
@@ -970,7 +970,7 @@ TEST(URLRequestContextConfigTest, SetQuicAllowPortMigration) {
           // User-Agent request header field.
           "fake agent",
           // JSON encoded experimental options.
-          "{\"QUIC\":{\"allow_port_migration\":true}}",
+          "{\"QUIC\":{\"allow_port_migration\":false}}",
           // MockCertVerifier to use for testing purposes.
           std::unique_ptr<net::CertVerifier>(),
           // Enable network quality estimator.
@@ -989,7 +989,7 @@ TEST(URLRequestContextConfigTest, SetQuicAllowPortMigration) {
   std::unique_ptr<net::URLRequestContext> context(builder.Build());
   const net::QuicParams* quic_params = context->quic_context()->params();
 
-  EXPECT_TRUE(quic_params->allow_port_migration);
+  EXPECT_FALSE(quic_params->allow_port_migration);
 }
 
 TEST(URLRequestContextConfigTest, DisableQuicRetryWithoutAltSvcOnQuicErrors) {
@@ -1151,6 +1151,55 @@ TEST(URLRequestContextConfigTest, BrokenAlternativeServiceDelayParams2) {
             quic_params->initial_delay_for_broken_alternative_service.value());
   ASSERT_TRUE(quic_params->exponential_backoff_on_initial_delay.has_value());
   EXPECT_FALSE(quic_params->exponential_backoff_on_initial_delay.value());
+}
+
+TEST(URLRequestContextConfigTest, NotDelayMainJobWithAvailableSpdySession) {
+  base::test::TaskEnvironment task_environment_(
+      base::test::TaskEnvironment::MainThreadType::IO);
+  std::unique_ptr<URLRequestContextConfig> config =
+      URLRequestContextConfig::CreateURLRequestContextConfig(
+          // Enable QUIC.
+          true,
+          // QUIC User Agent ID.
+          "Default QUIC User Agent ID",
+          // Enable SPDY.
+          true,
+          // Enable Brotli.
+          false,
+          // Type of http cache.
+          URLRequestContextConfig::HttpCacheType::DISK,
+          // Max size of http cache in bytes.
+          1024000,
+          // Disable caching for HTTP responses. Other information may be stored
+          // in the cache.
+          false,
+          // Storage path for http cache and cookie storage.
+          "/data/data/org.chromium.net/app_cronet_test/test_storage",
+          // Accept-Language request header field.
+          "foreign-language",
+          // User-Agent request header field.
+          "fake agent",
+          // JSON encoded experimental options.
+          "{\"QUIC\":{\"delay_main_job_with_available_spdy_session\":false}}",
+          // MockCertVerifier to use for testing purposes.
+          std::unique_ptr<net::CertVerifier>(),
+          // Enable network quality estimator.
+          false,
+          // Enable Public Key Pinning bypass for local trust anchors.
+          true,
+          // Optional network thread priority.
+          absl::optional<double>());
+
+  net::URLRequestContextBuilder builder;
+  config->ConfigureURLRequestContextBuilder(&builder);
+  // Set a ProxyConfigService to avoid DCHECK failure when building.
+  builder.set_proxy_config_service(
+      std::make_unique<net::ProxyConfigServiceFixed>(
+          net::ProxyConfigWithAnnotation::CreateDirect()));
+  std::unique_ptr<net::URLRequestContext> context(builder.Build());
+  const net::QuicParams* quic_params = context->quic_context()->params();
+
+  EXPECT_FALSE(quic_params->delay_main_job_with_available_spdy_session);
 }
 
 TEST(URLRequestContextConfigTest, SetDisableTlsZeroRtt) {

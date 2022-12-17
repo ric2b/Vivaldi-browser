@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import {AppType, InstallReason, InstallSource, OptionalBool, WindowMode} from '//resources/cr_components/app_management/constants.js';
-import {PermissionType, PermissionValue, TriState} from '//resources/cr_components/app_management/permission_constants.js';
-import {createBoolPermission, createTriStatePermission, getTriStatePermissionValue} from '//resources/cr_components/app_management/permission_util.js';
+import {AppType, InstallReason, InstallSource, OptionalBool, WindowMode} from 'chrome://resources/cr_components/app_management/constants.js';
+import {PermissionType, PermissionValue, TriState} from 'chrome://resources/cr_components/app_management/permission_constants.js';
+import {createBoolPermission, createTriStatePermission, getTriStatePermissionValue} from 'chrome://resources/cr_components/app_management/permission_util.js';
 import {assert, assertNotReached} from 'chrome://resources/js/assert.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 
@@ -105,12 +105,16 @@ export class FakePageHandler {
       hidePinToShelf: false,
       isPreferredApp: false,
       windowMode: WindowMode.kWindow,
+      hideWindowMode: false,
       resizeLocked: false,
       hideResizeLocked: true,
       supportedLinks: [],
       runOnOsLogin: null,
       fileHandlingState: null,
       installSource: InstallSource.kUnknown,
+      appSize: '',
+      dataSize: '',
+      publisherId: '',
     };
 
     if (optConfig) {

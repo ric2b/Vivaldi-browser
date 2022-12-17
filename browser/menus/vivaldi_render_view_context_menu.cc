@@ -295,8 +295,8 @@ void VivaldiRenderViewContextMenu::InitMenu() {
           ContextMenuContentType::ITEM_GROUP_ALL_EXTENSION) ||
       content_type->SupportsGroup(
           ContextMenuContentType::ITEM_GROUP_CURRENT_EXTENSION);
-  request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
-      browser->tab_strip_model()->GetActiveWebContents());
+  //request.support.sendpagetodevices = send_tab_to_self::ShouldOfferFeature(
+  //    browser->tab_strip_model()->GetActiveWebContents());
   // Link support was fully removed with ch 102. Keeping the code around to see
   // if we can reintroduce it.
   //request.support.sendlinktodevices = send_tab_to_self::ShouldOfferToShareUrl(
@@ -320,6 +320,7 @@ void VivaldiRenderViewContextMenu::InitMenu() {
       ContextMenuContentType::ITEM_GROUP_MEDIA_PLUGIN);
   request.support.canvas = content_type->SupportsGroup(
       ContextMenuContentType::ITEM_GROUP_MEDIA_CANVAS);
+  request.support.highlight = params_.opened_from_highlight;
   request.support.paste =
       request.iseditable &&
       (params_.edit_flags & blink::ContextMenuDataEditFlags::kCanPaste);
@@ -447,7 +448,11 @@ void VivaldiRenderViewContextMenu::UpdateMenuItem(int command_id,
     menu_model->SetEnabledAt(index, enabled);
     menu_model->SetVisibleAt(index, !hidden);
     if (toolkit_delegate()) {
+#if BUILDFLAG(IS_MAC)
+      toolkit_delegate()->UpdateMenuItem(command_id, enabled, hidden, title);
+#else
       toolkit_delegate()->RebuildMenu();
+#endif
     }
   } else {
     RenderViewContextMenu::UpdateMenuItem(command_id, enabled, hidden, title);
@@ -923,6 +928,7 @@ bool VivaldiRenderViewContextMenu::HasContainerContent(
 #endif
     case context_menu::CONTAINER_CONTENT_NOTES:
     case context_menu::CONTAINER_CONTENT_EXTENSIONS:
+    case context_menu::CONTAINER_CONTENT_LINKTOHIGHLIGHT:
     case context_menu::CONTAINER_CONTENT_SENDPAGETODEVICES:
     case context_menu::CONTAINER_CONTENT_SENDLINKTODEVICES:
     case context_menu::CONTAINER_CONTENT_SPELLCHECK:
@@ -962,6 +968,9 @@ void VivaldiRenderViewContextMenu::PopulateContainer(
           menu_model, id,
           container.mode ==
               extensions::vivaldi::context_menu::CONTAINER_MODE_FOLDER);
+      break;
+    case context_menu::CONTAINER_CONTENT_LINKTOHIGHLIGHT:
+      VivaldiAppendLinkToTextItems();
       break;
     case context_menu::CONTAINER_CONTENT_EXTENSIONS: {
       std::u16string text = PrintableSelectionText();

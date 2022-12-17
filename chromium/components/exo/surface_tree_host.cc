@@ -108,13 +108,14 @@ SurfaceTreeHost::SurfaceTreeHost(const std::string& window_name)
   host_window_->SetEventTargetingPolicy(
       aura::EventTargetingPolicy::kDescendantsOnly);
   host_window_->SetEventTargeter(std::make_unique<CustomWindowTargeter>(this));
-  layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
-      this, host_window_->CreateLayerTreeFrameSink());
+
   context_provider_ = aura::Env::GetInstance()
                           ->context_factory()
                           ->SharedMainThreadContextProvider();
   DCHECK(context_provider_);
   context_provider_->AddObserver(this);
+  layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
+      this, host_window_->CreateLayerTreeFrameSink(), context_provider_);
 }
 
 SurfaceTreeHost::~SurfaceTreeHost() {
@@ -197,6 +198,11 @@ void SurfaceTreeHost::DidPresentCompositorFrame(
   active_presentation_callbacks_.erase(it);
 }
 
+void SurfaceTreeHost::SetCapabilities(Capabilities* capabilities) {
+  DCHECK(capabilities_ == nullptr);
+  capabilities_ = capabilities;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 // SurfaceDelegate overrides:
 
@@ -218,6 +224,11 @@ bool SurfaceTreeHost::IsInputEnabled(Surface*) const {
 
 void SurfaceTreeHost::OnNewOutputAdded() {
   UpdateDisplayOnTree();
+}
+
+Capabilities* SurfaceTreeHost::GetCapabilities() {
+  DCHECK(capabilities_);
+  return capabilities_;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -368,7 +379,7 @@ viz::CompositorFrame SurfaceTreeHost::PrepareToSubmitCompositorFrame() {
     // We can immediately delete the old LayerTreeFrameSinkHolder because all of
     // it's resources are lost anyways.
     layer_tree_frame_sink_holder_ = std::make_unique<LayerTreeFrameSinkHolder>(
-        this, host_window_->CreateLayerTreeFrameSink());
+        this, host_window_->CreateLayerTreeFrameSink(), context_provider_);
   }
 
   viz::CompositorFrame frame;

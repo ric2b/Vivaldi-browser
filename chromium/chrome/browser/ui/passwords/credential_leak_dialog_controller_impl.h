@@ -8,6 +8,7 @@
 #include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/passwords/credential_leak_dialog_controller.h"
 #include "components/password_manager/core/browser/leak_detection_dialog_utils.h"
+#include "components/password_manager/core/browser/password_manager_metrics_util.h"
 #include "url/gurl.h"
 
 class CredentialLeakPrompt;
@@ -19,7 +20,11 @@ class CredentialLeakDialogControllerImpl
  public:
   CredentialLeakDialogControllerImpl(
       PasswordsLeakDialogDelegate* delegate,
-      password_manager::CredentialLeakType leak_type);
+      password_manager::CredentialLeakType leak_type,
+      const GURL& url,
+      const std::u16string& username,
+      std::unique_ptr<
+          password_manager::metrics_util::LeakDialogMetricsRecorder>);
 
   CredentialLeakDialogControllerImpl(
       const CredentialLeakDialogControllerImpl&) = delete;
@@ -42,12 +47,20 @@ class CredentialLeakDialogControllerImpl
   std::u16string GetDescription() const override;
   std::u16string GetTitle() const override;
   bool ShouldCheckPasswords() const override;
+  bool ShouldOfferAutomatedPasswordChange() const override;
   bool ShouldShowCancelButton() const override;
 
  private:
   raw_ptr<CredentialLeakPrompt> credential_leak_dialog_ = nullptr;
   raw_ptr<PasswordsLeakDialogDelegate> delegate_;
   const password_manager::CredentialLeakType leak_type_;
+  std::unique_ptr<password_manager::LeakDialogTraits> leak_dialog_traits_;
+  GURL url_;
+  std::u16string username_;
+
+  // Metrics recorder for leak dialog related UMA and UKM logging.
+  std::unique_ptr<password_manager::metrics_util::LeakDialogMetricsRecorder>
+      metrics_recorder_;
 };
 
 #endif  // CHROME_BROWSER_UI_PASSWORDS_CREDENTIAL_LEAK_DIALOG_CONTROLLER_IMPL_H_

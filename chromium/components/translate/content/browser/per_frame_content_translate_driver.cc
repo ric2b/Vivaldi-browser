@@ -29,7 +29,6 @@
 #include "components/translate/core/common/translate_metrics.h"
 #include "components/translate/core/common/translate_util.h"
 #include "components/translate/core/language_detection/language_detection_util.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/navigation_details.h"
 #include "content/public/browser/navigation_entry.h"
@@ -106,8 +105,8 @@ PerFrameContentTranslateDriver::PendingRequestStats::~PendingRequestStats() =
 
 void PerFrameContentTranslateDriver::PendingRequestStats::Clear() {
   pending_request_count = 0;
-  main_frame_success = false;
-  main_frame_error = TranslateErrors::NONE;
+  outermost_main_frame_success = false;
+  outermost_main_frame_error = TranslateErrors::NONE;
   frame_request_count = 0;
   frame_success_count = 0;
   frame_errors.clear();
@@ -115,7 +114,7 @@ void PerFrameContentTranslateDriver::PendingRequestStats::Clear() {
 
 void PerFrameContentTranslateDriver::PendingRequestStats::Report() {
   UMA_HISTOGRAM_COUNTS_100(kTranslateFrameCount, frame_request_count);
-  if (main_frame_success) {
+  if (outermost_main_frame_success) {
     if (frame_request_count > 1) {
       int success_percentage_as_int =
           (frame_success_count * 100) / frame_request_count;
@@ -152,9 +151,10 @@ void PerFrameContentTranslateDriver::TranslatePage(
   stats_.Clear();
   translate_seq_no_ = IncrementSeqNo(translate_seq_no_);
 
-  web_contents()->GetMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
-      &PerFrameContentTranslateDriver::TranslateFrame, base::Unretained(this),
-      translate_script, source_lang, target_lang, translate_seq_no_));
+  web_contents()->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      base::BindRepeating(&PerFrameContentTranslateDriver::TranslateFrame,
+                          base::Unretained(this), translate_script, source_lang,
+                          target_lang, translate_seq_no_));
 }
 
 void PerFrameContentTranslateDriver::TranslateFrame(
@@ -168,7 +168,8 @@ void PerFrameContentTranslateDriver::TranslateFrame(
     return;
   }
 
-  bool is_main_frame = (!render_frame_host->GetParent());
+  bool is_outermost_main_frame =
+      (!render_frame_host->GetParentOrOuterDocument());
   mojo::AssociatedRemote<mojom::TranslateAgent> frame_agent;
   render_frame_host->GetRemoteAssociatedInterfaces()->GetInterface(
       &frame_agent);
@@ -177,7 +178,7 @@ void PerFrameContentTranslateDriver::TranslateFrame(
       translate_script, source_lang, target_lang,
       base::BindOnce(&PerFrameContentTranslateDriver::OnFrameTranslated,
                      weak_pointer_factory_.GetWeakPtr(), translate_seq_no,
-                     is_main_frame, std::move(frame_agent)));
+                     is_outermost_main_frame, std::move(frame_agent)));
   stats_.frame_request_count++;
   stats_.pending_request_count++;
 }
@@ -189,8 +190,9 @@ void PerFrameContentTranslateDriver::RevertTranslation(int page_seq_no) {
   stats_.Clear();
   translate_seq_no_ = IncrementSeqNo(translate_seq_no_);
 
-  web_contents()->GetMainFrame()->ForEachRenderFrameHost(base::BindRepeating(
-      &PerFrameContentTranslateDriver::RevertFrame, base::Unretained(this)));
+  web_contents()->GetPrimaryMainFrame()->ForEachRenderFrameHost(
+      base::BindRepeating(&PerFrameContentTranslateDriver::RevertFrame,
+                          base::Unretained(this)));
 }
 
 void PerFrameContentTranslateDriver::RevertFrame(
@@ -221,7 +223,7 @@ void PerFrameContentTranslateDriver::InitiateTranslationIfReload(
   if (response_code == 0 || response_code == net::HTTP_INTERNAL_SERVER_ERROR)
     return;
 
-  if (!navigation_handle->IsInMainFrame() &&
+  if (!navigation_handle->IsInPrimaryMainFrame() &&
       translate_manager()->GetLanguageState()->translation_declined()) {
     // Some sites (such as Google map) may trigger sub-frame navigations
     // when the user interacts with the page.  We don't want to show a new
@@ -311,7 +313,7 @@ void PerFrameContentTranslateDriver::DidFinishNavigation(
 
 void PerFrameContentTranslateDriver::DOMContentLoaded(
     content::RenderFrameHost* render_frame_host) {
-  if (render_frame_host->GetParent()) {
+  if (render_frame_host->GetParentOrOuterDocument()) {
     // Nothing to do for sub frames here.
     return;
   }
@@ -355,8 +357,10 @@ void PerFrameContentTranslateDriver::StartLanguageDetection() {
   // Kick off language detection by first requesting web language details.
   details_ = LanguageDetectionDetails();
   mojo::AssociatedRemote<mojom::TranslateAgent> frame_agent;
-  web_contents()->GetMainFrame()->GetRemoteAssociatedInterfaces()->GetInterface(
-      &frame_agent);
+  web_contents()
+      ->GetPrimaryMainFrame()
+      ->GetRemoteAssociatedInterfaces()
+      ->GetInterface(&frame_agent);
   mojom::TranslateAgent* frame_agent_ptr = frame_agent.get();
   frame_agent_ptr->GetWebLanguageDetectionDetails(base::BindOnce(
       &PerFrameContentTranslateDriver::OnWebLanguageDetectionDetails,
@@ -450,7 +454,7 @@ void PerFrameContentTranslateDriver::ComputeActualPageLanguage() {
 
 void PerFrameContentTranslateDriver::OnFrameTranslated(
     int translate_seq_no,
-    bool is_main_frame,
+    bool is_outermost_main_frame,
     mojo::AssociatedRemote<mojom::TranslateAgent> translate_agent,
     bool cancelled,
     const std::string& source_lang,
@@ -464,13 +468,13 @@ void PerFrameContentTranslateDriver::OnFrameTranslated(
 
   if (error_type == TranslateErrors::NONE) {
     stats_.frame_success_count++;
-    if (is_main_frame) {
-      stats_.main_frame_success = true;
+    if (is_outermost_main_frame) {
+      stats_.outermost_main_frame_success = true;
     }
   } else {
     stats_.frame_errors.push_back(error_type);
-    if (is_main_frame) {
-      stats_.main_frame_error = error_type;
+    if (is_outermost_main_frame) {
+      stats_.outermost_main_frame_error = error_type;
     }
   }
 
@@ -478,10 +482,10 @@ void PerFrameContentTranslateDriver::OnFrameTranslated(
     // Post the callback on the thread's task runner in case the
     // info bar is in the process of going away.
     base::ThreadTaskRunnerHandle::Get()->PostTask(
-        FROM_HERE,
-        base::BindOnce(&ContentTranslateDriver::OnPageTranslated,
-                       weak_pointer_factory_.GetWeakPtr(), cancelled,
-                       source_lang, translated_lang, stats_.main_frame_error));
+        FROM_HERE, base::BindOnce(&ContentTranslateDriver::OnPageTranslated,
+                                  weak_pointer_factory_.GetWeakPtr(), cancelled,
+                                  source_lang, translated_lang,
+                                  stats_.outermost_main_frame_error));
     stats_.Report();
     stats_.Clear();
   }

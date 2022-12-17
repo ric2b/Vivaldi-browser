@@ -71,6 +71,24 @@ export class OnboardingLandingPage extends OnboardingLandingPageBase {
         value: false,
       },
 
+      /**
+       * After the Get Started button is clicked, true until the next state is
+       * processed. It is set back to false by shimless_rma.js.
+       */
+      getStartedButtonClicked: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
+       * After the exit button is clicked, true until the next state is
+       * processed. It is set back to false by shimless_rma.js.
+       */
+      confirmExitButtonClicked: {
+        type: Boolean,
+        value: false,
+      },
+
       /** @protected */
       verificationFailedMessage_: {
         type: String,
@@ -100,7 +118,7 @@ export class OnboardingLandingPage extends OnboardingLandingPageBase {
     super.ready();
   }
 
-  /** @return {!Promise<StateResult>} */
+  /** @return {!Promise<{stateResult: !StateResult}>} */
   onNextButtonClick() {
     if (!this.verificationInProgress_) {
       return this.shimlessRmaService_.beginFinalization();
@@ -112,6 +130,8 @@ export class OnboardingLandingPage extends OnboardingLandingPageBase {
   /** @protected */
   onGetStartedButtonClicked_(e) {
     e.preventDefault();
+
+    this.getStartedButtonClicked = true;
 
     executeThenTransitionState(this, () => {
       if (!this.verificationInProgress_) {
@@ -126,11 +146,11 @@ export class OnboardingLandingPage extends OnboardingLandingPageBase {
   /**
    * @protected
    */
-  onLandingCancelButtonClicked_(e) {
+  onLandingExitButtonClicked_(e) {
     e.preventDefault();
 
     this.dispatchEvent(new CustomEvent(
-        'click-cancel-button',
+        'click-exit-button',
         {
           bubbles: true,
           composed: true,
@@ -139,8 +159,8 @@ export class OnboardingLandingPage extends OnboardingLandingPageBase {
   }
 
   /**
-   * @protected
    * @return {string}
+   * @protected
    */
   getVerificationIcon_() {
     return this.isCompliant_ ? 'shimless-icon:check' : 'shimless-icon:warning';

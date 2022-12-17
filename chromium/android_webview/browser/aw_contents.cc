@@ -328,16 +328,25 @@ void AwContents::InitAutofillIfNecessary(bool autocomplete_enabled) {
   if (!autofill_provider && !autocomplete_enabled)
     return;
 
+  autofill::AutofillManager::EnableDownloadManager enable_download_manager(
+      !autofill::AutofillProvider::is_download_manager_disabled_for_testing());
+
   AwAutofillClient::CreateForWebContents(web_contents);
+
+  // WebView browser tests may shall use BrowserAutofillManager if
+  // `!autofill_provider`.
+  ContentAutofillDriverFactory::DriverInitCallback driver_init_hook =
+      autofill_provider
+          ? base::BindRepeating(&autofill::AndroidDriverInitHook,
+                                AwAutofillClient::FromWebContents(web_contents),
+                                enable_download_manager)
+          : base::BindRepeating(&autofill::BrowserDriverInitHook,
+                                AwAutofillClient::FromWebContents(web_contents),
+                                base::android::GetDefaultLocaleString());
+
   ContentAutofillDriverFactory::CreateForWebContentsAndDelegate(
       web_contents, AwAutofillClient::FromWebContents(web_contents),
-      base::android::GetDefaultLocaleString(),
-      autofill::AutofillProvider::is_download_manager_disabled_for_testing()
-          ? autofill::AutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER
-          : autofill::AutofillManager::ENABLE_AUTOFILL_DOWNLOAD_MANAGER,
-      autofill_provider
-          ? base::BindRepeating(&autofill::AndroidAutofillManager::Create)
-          : autofill::AutofillManager::AutofillManagerFactoryCallback());
+      std::move(driver_init_hook));
 }
 
 void AwContents::SetAwAutofillClient(const JavaRef<jobject>& client) {
@@ -408,7 +417,7 @@ ScopedJavaLocalRef<jobject> AwContents::GetRenderProcess(
     const JavaParamRef<jobject>& obj) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   content::RenderProcessHost* host =
-      web_contents_->GetMainFrame()->GetProcess();
+      web_contents_->GetPrimaryMainFrame()->GetProcess();
   if (host->run_renderer_in_process()) {
     return ScopedJavaLocalRef<jobject>();
   }
@@ -785,7 +794,7 @@ void AwContents::ClearCache(JNIEnv* env,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   AwRenderProcess* aw_render_process =
       AwRenderProcess::GetInstanceForRenderProcessHost(
-          web_contents_->GetMainFrame()->GetProcess());
+          web_contents_->GetPrimaryMainFrame()->GetProcess());
 
   aw_render_process->ClearCache();
 
@@ -1349,7 +1358,7 @@ void AwContents::InsertVisualStateCallback(
     jlong request_id,
     const JavaParamRef<jobject>& callback) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
-  web_contents_->GetMainFrame()->InsertVisualStateCallback(
+  web_contents_->GetPrimaryMainFrame()->InsertVisualStateCallback(
       base::BindOnce(&InvokeVisualStateCallback, java_ref_, request_id,
                      ScopedJavaGlobalRef<jobject>(env, callback)));
 }
@@ -1357,8 +1366,9 @@ void AwContents::InsertVisualStateCallback(
 jint AwContents::GetEffectivePriority(
     JNIEnv* env,
     const base::android::JavaParamRef<jobject>& obj) {
-  switch (
-      web_contents_->GetMainFrame()->GetProcess()->GetEffectiveImportance()) {
+  switch (web_contents_->GetPrimaryMainFrame()
+              ->GetProcess()
+              ->GetEffectiveImportance()) {
     case content::ChildProcessImportance::NORMAL:
       return static_cast<jint>(RendererPriority::WAIVED);
     case content::ChildProcessImportance::MODERATE:
@@ -1471,7 +1481,7 @@ void AwContents::SetJsOnlineProperty(JNIEnv* env,
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
   AwRenderProcess* aw_render_process =
       AwRenderProcess::GetInstanceForRenderProcessHost(
-          web_contents_->GetMainFrame()->GetProcess());
+          web_contents_->GetPrimaryMainFrame()->GetProcess());
 
   aw_render_process->SetJsOnlineProperty(network_up);
 }
@@ -1506,7 +1516,8 @@ void AwContents::GrantFileSchemeAccesstoChildProcess(
     JNIEnv* env,
     const JavaParamRef<jobject>& obj) {
   content::ChildProcessSecurityPolicy::GetInstance()->GrantRequestScheme(
-      web_contents_->GetMainFrame()->GetProcess()->GetID(), url::kFileScheme);
+      web_contents_->GetPrimaryMainFrame()->GetProcess()->GetID(),
+      url::kFileScheme);
 }
 
 void AwContents::ResumeLoadingCreatedPopupWebContents(
@@ -1573,7 +1584,7 @@ void AwContents::DidFinishNavigation(
 
   AwWebResourceRequest request(navigation_handle->GetURL().spec(),
                                navigation_handle->IsPost() ? "POST" : "GET",
-                               navigation_handle->IsInMainFrame(),
+                               navigation_handle->IsInPrimaryMainFrame(),
                                navigation_handle->HasUserGesture(),
                                net::HttpRequestHeaders());
   request.is_renderer_initiated = navigation_handle->IsRendererInitiated();

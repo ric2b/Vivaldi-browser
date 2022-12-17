@@ -56,7 +56,8 @@ class PageInfoViewFactory {
     VIEW_ID_PAGE_INFO_RESET_PERMISSIONS_BUTTON,
     VIEW_ID_PAGE_INFO_ABOUT_THIS_SITE_BUTTON,
     VIEW_ID_PAGE_INFO_HISTORY_BUTTON,
-    VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_BUTTON
+    VIEW_ID_PAGE_INFO_AD_PERSONALIZATION_BUTTON,
+    VIEW_ID_PAGE_INFO_MORE_ABOUT_THIS_PAGE_BUTTON,
   };
 
   // Creates a separator view with padding on top and bottom. Use with flex
@@ -111,6 +112,9 @@ class PageInfoViewFactory {
   // Returns the icon for 'About this site' button.
   static const ui::ImageModel GetAboutThisSiteIcon();
 
+  // Returns the icon for 'About this page' button.
+  static const ui::ImageModel GetAboutThisPageIcon();
+
   // Returns the icon for the history button.
   static const ui::ImageModel GetHistoryIcon();
 
@@ -128,15 +132,17 @@ class PageInfoViewFactory {
 
  private:
   // Creates a subpage header with back button that opens the main page, a
-  // title label with text |title|, a subtitle label with the site origin text,
-  // and close button that closes the bubble.
+  // title label with text |title|, an optional subtitle label with text
+  // |subtitle| if |subtitle| is not empty and close button that closes the
+  // bubble.
   // *------------------------------------------------*
   // | Back | |title|                           Close |
   // |------------------------------------------------|
-  // |      | Site origin (example.com)               |
+  // |      | |subtitle|
   // *-------------------------------------------------*
   [[nodiscard]] std::unique_ptr<views::View> CreateSubpageHeader(
-      std::u16string title);
+      std::u16string title,
+      std::u16string subtitle);
 
   raw_ptr<PageInfo> presenter_;
   raw_ptr<ChromePageInfoUiDelegate> ui_delegate_;

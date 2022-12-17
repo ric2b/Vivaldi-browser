@@ -23,6 +23,7 @@
 #include "components/password_manager/core/browser/insecure_credentials_table.h"
 #include "components/password_manager/core/browser/password_form.h"
 #include "components/password_manager/core/browser/password_list_sorter.h"
+#include "components/password_manager/core/browser/ui/credential_ui_entry.h"
 #include "components/password_manager/core/browser/ui/credential_utils.h"
 #include "components/password_manager/core/browser/ui/saved_passwords_presenter.h"
 #include "components/password_manager/core/common/password_manager_features.h"
@@ -91,6 +92,11 @@ bool IsPasswordFormPhished(const PasswordForm& form) {
          form.password_issues.end();
 }
 
+bool SupportsMuteOperation(InsecureType insecure_type) {
+  return (insecure_type == InsecureType::kLeaked ||
+          insecure_type == InsecureType::kPhished);
+}
+
 // This function takes two lists: weak passwords and saved passwords and joins
 // them, producing a map that contains CredentialWithPassword as keys and
 // vector<PasswordForm> as values.
@@ -124,7 +130,8 @@ CredentialPasswordsMap GetInsecureCredentialsFromPasswords(
         credential_to_form.type |= ConvertInsecureType(pair.first);
         credential_to_form.latest_time =
             std::max(credential_to_form.latest_time, pair.second.create_time);
-        credential_to_form.is_muted = pair.second.is_muted;
+        if (SupportsMuteOperation(pair.first))
+          credential_to_form.is_muted = pair.second.is_muted;
       }
       // Populate the map. The values are vectors, because it is
       // possible that multiple saved passwords match to the same
@@ -273,66 +280,27 @@ void InsecureCredentialsManager::SaveInsecureCredential(
 }
 
 bool InsecureCredentialsManager::MuteCredential(
-    const CredentialView& credential) {
-  auto it = credentials_to_forms_.find(credential);
-  if (it == credentials_to_forms_.end())
-    return false;
-
-  // Mute all matching compromised credentials from the store.
-  // For a match, all insecureity types saved in the store are muted.
-  // Return whether any credentials were muted.
-  const auto& saved_passwords = it->second.forms;
-  bool muted = false;
-  for (const PasswordForm& saved_password : saved_passwords) {
-    PasswordForm form_to_update = saved_password;
-    bool form_changed = false;
-    for (const auto& password_issue : saved_password.password_issues) {
-      if (!password_issue.second.is_muted.value()) {
-        form_to_update.password_issues.insert_or_assign(
-            password_issue.first,
-            InsecurityMetadata(password_issue.second.create_time,
-                               IsMuted(true)));
-        form_changed = true;
-      }
-    }
-    if (form_changed) {
-      GetStoreFor(saved_password).UpdateLogin(form_to_update);
-      muted = true;
+    const CredentialUIEntry& credential) {
+  CredentialUIEntry updated_credential = credential;
+  for (auto& password_issue : updated_credential.password_issues) {
+    if (!password_issue.second.is_muted.value() &&
+        SupportsMuteOperation(password_issue.first)) {
+      password_issue.second.is_muted = IsMuted(true);
     }
   }
-  return muted;
+  return presenter_->EditSavedCredentials(updated_credential);
 }
 
 bool InsecureCredentialsManager::UnmuteCredential(
-    const CredentialView& credential) {
-  auto it = credentials_to_forms_.find(credential);
-  if (it == credentials_to_forms_.end())
-    return false;
-
-  // Unmute all matching compromised credentials from the store.
-  // For a match, all insecureity types saved in the store are unmuted.
-  // Return whether any credentials were unmuted.
-  const auto& saved_passwords = it->second.forms;
-  bool unmuted = false;
-
-  for (const PasswordForm& saved_password : saved_passwords) {
-    PasswordForm form_to_update = saved_password;
-    bool form_changed = false;
-    for (const auto& password_issue : saved_password.password_issues) {
-      if (password_issue.second.is_muted.value()) {
-        form_to_update.password_issues.insert_or_assign(
-            password_issue.first,
-            InsecurityMetadata(password_issue.second.create_time,
-                               IsMuted(false)));
-        form_changed = true;
-      }
-    }
-    if (form_changed) {
-      GetStoreFor(saved_password).UpdateLogin(form_to_update);
-      unmuted = true;
+    const CredentialUIEntry& credential) {
+  CredentialUIEntry updated_credential = credential;
+  for (auto& password_issue : updated_credential.password_issues) {
+    if (password_issue.second.is_muted.value() &&
+        SupportsMuteOperation(password_issue.first)) {
+      password_issue.second.is_muted = IsMuted(false);
     }
   }
-  return unmuted;
+  return presenter_->EditSavedCredentials(updated_credential);
 }
 
 bool InsecureCredentialsManager::UpdateCredential(
@@ -376,6 +344,20 @@ InsecureCredentialsManager::GetInsecureCredentials() const {
   return ExtractInsecureCredentials(credentials_to_forms_, &IsInsecure);
 }
 
+std::vector<CredentialUIEntry>
+InsecureCredentialsManager::GetInsecureCredentialEntries() const {
+  DCHECK(presenter_);
+  std::vector<CredentialUIEntry> credentials =
+      presenter_->GetSavedCredentials();
+  // Erase entries which aren't leaked and finished.
+  base::EraseIf(credentials, [](const auto& credential) {
+    return !credential.password_issues.contains(InsecureType::kLeaked) &&
+           !credential.password_issues.contains(InsecureType::kPhished);
+  });
+
+  return credentials;
+}
+
 std::vector<CredentialWithPassword>
 InsecureCredentialsManager::GetWeakCredentials() const {
   std::vector<CredentialWithPassword> weak_credentials =
@@ -387,6 +369,17 @@ InsecureCredentialsManager::GetWeakCredentials() const {
   };
   base::ranges::sort(weak_credentials, {}, get_sort_key);
   return weak_credentials;
+}
+
+std::vector<CredentialUIEntry>
+InsecureCredentialsManager::GetWeakCredentialEntries() const {
+  DCHECK(presenter_);
+  std::vector<CredentialUIEntry> credentials =
+      presenter_->GetSavedCredentials();
+  base::EraseIf(credentials, [this](const auto& credential) {
+    return !weak_passwords_.contains(credential.password);
+  });
+  return credentials;
 }
 
 SavedPasswordsPresenter::SavedPasswordsView

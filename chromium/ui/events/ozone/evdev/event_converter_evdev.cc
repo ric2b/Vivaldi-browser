@@ -83,6 +83,14 @@ bool EventConverterEvdev::IsEnabled() const {
   return input_device_.enabled;
 }
 
+void EventConverterEvdev::SetSuspectedImposter(bool is_suspected) {
+  input_device_.suspected_imposter = is_suspected;
+}
+
+bool EventConverterEvdev::IsSuspectedImposter() const {
+  return input_device_.suspected_imposter;
+}
+
 void EventConverterEvdev::OnStopped() {}
 
 void EventConverterEvdev::OnEnabled() {}
@@ -93,6 +101,10 @@ void EventConverterEvdev::DumpTouchEventLog(const char* filename) {}
 
 void EventConverterEvdev::OnFileCanWriteWithoutBlocking(int fd) {
   NOTREACHED();
+}
+
+KeyboardType EventConverterEvdev::GetKeyboardType() const {
+  return KeyboardType::NOT_KEYBOARD;
 }
 
 bool EventConverterEvdev::HasKeyboard() const {
@@ -154,6 +166,11 @@ std::vector<ui::GamepadDevice::Axis> EventConverterEvdev::GetGamepadAxes()
 bool EventConverterEvdev::GetGamepadRumbleCapability() const {
   NOTREACHED();
   return false;
+}
+
+std::vector<uint64_t> EventConverterEvdev::GetGamepadKeyBits() const {
+  NOTREACHED();
+  return std::vector<uint64_t>();
 }
 
 void EventConverterEvdev::PlayVibrationEffect(uint8_t amplitude,
@@ -224,6 +241,13 @@ void EventConverterEvdev::SetReportStylusStateCallback(
 
 void EventConverterEvdev::SetGetLatestStylusStateCallback(
     const GetLatestStylusStateCallback& callback) {}
+
+void EventConverterEvdev::SetReceivedValidInputCallback(
+    ReceivedValidInputCallback callback) {}
+
+std::vector<uint64_t> EventConverterEvdev::GetKeyboardKeyBits() const {
+  return std::vector<uint64_t>();
+}
 
 base::TimeTicks EventConverterEvdev::TimeTicksFromInputEvent(
     const input_event& event) {

@@ -8,6 +8,7 @@
 
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/scoped_feature_list.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/app/chrome_command_ids.h"
@@ -45,6 +46,7 @@
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/content_features.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/test_frame_navigation_observer.h"
@@ -756,6 +758,9 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, SaveAfterFocusTabSwitchTest) {
 #if BUILDFLAG(IS_LINUX)
 // Flaky on Linux Ozone. See https://crbug.com/1230723.
 #define MAYBE_SwitchToTabCorrectWindow DISABLED_SwitchToTabCorrectWindow
+#elif BUILDFLAG(IS_CHROMEOS_LACROS) || BUILDFLAG(IS_WIN)
+// Flaky on Lacros and Win. See https://crbug.com/674497.
+#define MAYBE_SwitchToTabCorrectWindow DISABLED_SwitchToTabCorrectWindow
 #else
 #define MAYBE_SwitchToTabCorrectWindow SwitchToTabCorrectWindow
 #endif
@@ -1082,12 +1087,13 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   // There is no navigation (to about:blank or something like that).
   EXPECT_FALSE(params.contents_to_insert->IsLoading());
 
-  ASSERT_TRUE(params.contents_to_insert->GetMainFrame());
-  EXPECT_TRUE(params.contents_to_insert->GetMainFrame()->IsRenderFrameLive());
+  ASSERT_TRUE(params.contents_to_insert->GetPrimaryMainFrame());
+  EXPECT_TRUE(
+      params.contents_to_insert->GetPrimaryMainFrame()->IsRenderFrameLive());
   EXPECT_TRUE(
       params.contents_to_insert->GetController().IsInitialBlankNavigation());
   int renderer_id =
-      params.contents_to_insert->GetMainFrame()->GetProcess()->GetID();
+      params.contents_to_insert->GetPrimaryMainFrame()->GetProcess()->GetID();
 
   // We should have one window, with one tab of WebContents differ from
   // params.target_contents.
@@ -1103,9 +1109,10 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   EXPECT_EQ(browser(), params.browser);
   EXPECT_EQ(browser()->tab_strip_model()->GetActiveWebContents(),
             params.navigated_or_inserted_contents);
-  EXPECT_EQ(renderer_id, params.navigated_or_inserted_contents->GetMainFrame()
-                             ->GetProcess()
-                             ->GetID());
+  EXPECT_EQ(renderer_id,
+            params.navigated_or_inserted_contents->GetPrimaryMainFrame()
+                ->GetProcess()
+                ->GetID());
 
   // We should have one window, with two tabs.
   EXPECT_EQ(1u, chrome::GetTotalBrowserCount());
@@ -1382,8 +1389,8 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, NavigateToCrashedSingletonTab) {
     content::ScopedAllowRendererCrashes scoped_allow_renderer_crashes;
 
     content::RenderFrameDeletedObserver crash_observer(
-        web_contents->GetMainFrame());
-    web_contents->GetMainFrame()->GetProcess()->Shutdown(1);
+        web_contents->GetPrimaryMainFrame());
+    web_contents->GetPrimaryMainFrame()->GetProcess()->Shutdown(1);
     crash_observer.WaitUntilDeleted();
   }
   EXPECT_TRUE(web_contents->IsCrashed());
@@ -1800,56 +1807,6 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
   EXPECT_EQ(base::UTF8ToUTF16(expected_url), omnibox_view->GetText());
 }
 
-// Test that there's no crash when a navigation to a WebUI page reuses an
-// inactive RenderViewHost. Previously, this led to a browser process crash in
-// WebUI pages that use MojoWebUIController, which tried to use the
-// RenderViewHost's GetMainFrame() when it was invalid in RenderViewCreated().
-// See https://crbug.com/627027.
-// Flaky on Mac. See https://crbug.com/1044335.
-#if BUILDFLAG(IS_MAC)
-#define MAYBE_ReuseRVHWithWebUI DISABLED_ReuseRVHWithWebUI
-#else
-#define MAYBE_ReuseRVHWithWebUI ReuseRVHWithWebUI
-#endif
-IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MAYBE_ReuseRVHWithWebUI) {
-  ASSERT_TRUE(embedded_test_server()->Start());
-
-  // Visit a WebUI page with bindings.
-  GURL webui_url(chrome::kChromeUIOmniboxURL);
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), webui_url));
-
-  // window.open a new tab.  This will keep the chrome://omnibox process alive
-  // once we navigate away from it.
-  content::TestNavigationObserver nav_observer(webui_url);
-  nav_observer.StartWatchingNewWebContents();
-  ASSERT_TRUE(content::ExecuteScript(
-      browser()->tab_strip_model()->GetActiveWebContents(),
-      content::JsReplace("window.open($1);", webui_url)));
-  nav_observer.Wait();
-  ASSERT_EQ(2, browser()->tab_strip_model()->count());
-  WebContents* new_contents = browser()->tab_strip_model()->GetWebContentsAt(1);
-  content::RenderFrameHost* webui_rfh = new_contents->GetMainFrame();
-  EXPECT_EQ(webui_rfh->GetLastCommittedURL(), webui_url);
-  EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
-              webui_rfh->GetEnabledBindings());
-  content::RenderViewHost* webui_rvh = webui_rfh->GetRenderViewHost();
-
-  // Navigate to another page in the opened tab.
-  GURL nonwebui_url(embedded_test_server()->GetURL("a.com", "/title1.html"));
-  ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), nonwebui_url));
-  EXPECT_NE(webui_rvh, new_contents->GetMainFrame()->GetRenderViewHost());
-
-  // Go back in the opened tab.  This should finish without crashing and should
-  // reuse the old RenderViewHost.
-  content::TestNavigationObserver back_load_observer(new_contents);
-  new_contents->GetController().GoBack();
-  back_load_observer.Wait();
-  EXPECT_EQ(webui_rvh, new_contents->GetMainFrame()->GetRenderViewHost());
-  EXPECT_TRUE(webui_rvh->IsRenderViewLiveForTesting());
-  EXPECT_TRUE(content::BINDINGS_POLICY_MOJO_WEB_UI &
-              new_contents->GetMainFrame()->GetEnabledBindings());
-}
-
 // Test that main frame navigations generate a NavigationUIData with the
 // correct disposition.
 IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, MainFrameNavigationUIData) {
@@ -1898,7 +1855,7 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, SubFrameNavigationUIData) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url1));
 
   // Retrieve the iframe.
-  content::RenderFrameHost* main_frame = tab->GetMainFrame();
+  content::RenderFrameHost* main_frame = tab->GetPrimaryMainFrame();
   content::RenderFrameHost* iframe = ChildFrameAt(main_frame, 0);
   ASSERT_TRUE(iframe);
 
@@ -1920,5 +1877,53 @@ IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest, SubFrameNavigationUIData) {
             observer.last_navigation_ui_data()->window_open_disposition());
 }
 #endif
+
+#if !BUILDFLAG(IS_CHROMEOS_LACROS)
+// Helper class to enable picture in picture V2 for those tests that need it.
+// Once the feature is enabled permanently, these can be merged back to
+// BrowserNavigatorTest instead.
+// See crbug.com/1320453 for why this is off for lacros.
+class BrowserNavigatorWithPictureInPictureTest : public BrowserNavigatorTest {
+ public:
+  base::test::ScopedFeatureList scoped_feature_list_{
+      features::kPictureInPictureV2};
+};
+
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorWithPictureInPictureTest,
+                       Disposition_PictureInPicture_Open) {
+  // Opening a picture in picture window should create a new browser.
+  NavigateParams params(MakeNavigateParams(browser()));
+  params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  Navigate(&params);
+
+  // Should not re-use the browser.
+  EXPECT_NE(browser(), params.browser);
+  EXPECT_TRUE(params.browser->is_type_picture_in_picture());
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorWithPictureInPictureTest,
+                       Disposition_PictureInPicture_CantFromAnotherPip) {
+  // Make sure that attempting to open a picture in picture window from a
+  // picture in picture window fails.
+  Browser* pip = CreateEmptyBrowserForType(Browser::TYPE_PICTURE_IN_PICTURE,
+                                           browser()->profile());
+  NavigateParams params(MakeNavigateParams(pip));
+  params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  Navigate(&params);
+
+  EXPECT_EQ(params.browser, nullptr);
+}
+
+IN_PROC_BROWSER_TEST_F(BrowserNavigatorTest,
+                       Disposition_PictureInPicture_FeatureMustBeEnabled) {
+  // Creating a picture in picture window should not work if the feature is off.
+  ASSERT_FALSE(base::FeatureList::IsEnabled(features::kPictureInPictureV2));
+  NavigateParams params(MakeNavigateParams(browser()));
+  params.disposition = WindowOpenDisposition::NEW_PICTURE_IN_PICTURE;
+  Navigate(&params);
+
+  EXPECT_EQ(params.browser, nullptr);
+}
+#endif  // !IS_CHROMEOS_LACROS
 
 }  // namespace

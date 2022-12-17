@@ -20,6 +20,7 @@
 #include "content/public/browser/web_contents.h"
 
 #include "components/capture/capture_page.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/vivaldi_skia_utils.h"
 
 using content::WebContents;
@@ -205,7 +206,7 @@ void ThumbnailCaptureContents::RequestMediaAccessPermission(
     const content::MediaStreamRequest& request,
     content::MediaResponseCallback callback) {
   DCHECK_EQ(offscreen_tab_web_contents_.get(), contents);
-  blink::MediaStreamDevices devices;
+  blink::mojom::StreamDevicesSet devices;
 
   std::move(callback).Run(
       devices, blink::mojom::MediaStreamRequestResult::INVALID_STATE, nullptr);

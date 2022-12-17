@@ -254,9 +254,9 @@ class AssistantValueProp extends AssistantValuePropBase {
     this.loadingError_ = false;
     this.headerReceived_ = false;
     this.webViewLoaded_ = false;
-    let locale = loadTimeData.getString('assistantLocale')
-                     .replace('-', '_')
-                     .toLowerCase();
+    const locale = loadTimeData.getString('assistantLocale')
+                       .replace('-', '_')
+                       .toLowerCase();
     this.valuePropView_.src = this.urlTemplate_.replace('$', locale);
   }
 
@@ -264,6 +264,12 @@ class AssistantValueProp extends AssistantValuePropBase {
    * Handles event when value prop webview cannot be loaded.
    */
   onWebViewErrorOccurred(details) {
+    if (details && details.error == 'net::ERR_ABORTED') {
+      // Retry triggers net::ERR_ABORTED, so ignore it.
+      // TODO(b/232592745): Replace with a state machine to handle aborts
+      // gracefully and avoid duplicate reloads.
+      return;
+    }
     this.dispatchEvent(
         new CustomEvent('error', {bubbles: true, composed: true}));
     this.loadingError_ = true;
@@ -356,38 +362,45 @@ class AssistantValueProp extends AssistantValuePropBase {
     // `isMinorMode` is the same for all data in `zippy_data`. We could use the
     // first one and set `isMinorMode_` flag.
     this.isMinorMode_ = zippy_data[0][0]['isMinorMode'];
-    for (let i in zippy_data) {
+    for (const i in zippy_data) {
       this.addSubtitle_(zippy_data[i][0], i);
-      for (let j in zippy_data[i]) {
+      for (const j in zippy_data[i]) {
         const data = zippy_data[i][j];
-        let zippy = document.createElement('setting-zippy');
-        // TODO(crbug.com/1313994) - Remove hard coded colors in OOBE
-        let background = this.isMinorMode_ ? '#e8f0fe' /* gblue50 */ : 'white';
-        zippy.setAttribute(
-            'icon-src',
-            'data:text/html;charset=utf-8,' +
-                encodeURIComponent(zippy.getWrappedIcon(
-                    data['iconUri'], data['title'], background)));
-        zippy.setAttribute('step', i);
-        if (this.isMinorMode_) {
-          zippy.setAttribute('hide-line', true);
-          zippy.setAttribute('card-style', true);
+        const zippy = document.createElement('setting-zippy');
+        if (data['useNativeIcons']) {
+          zippy.nativeIconType = data['nativeIconType'];
+          zippy.setAttribute('nativeIconLabel', data['title']);
+        } else {
+          // TODO(crbug.com/1313994) - Remove hard coded colors in OOBE
+          const background = this.isMinorMode_ ?
+              getComputedStyle(document.body)
+                  .getPropertyValue('--cros-highlight-color' /* gblue50 */) :
+              getComputedStyle(document.body)
+                  .getPropertyValue('--cros-bg-color');
+          zippy.setAttribute(
+              'icon-src',
+              'data:text/html;charset=utf-8,' +
+                  encodeURIComponent(zippy.getWrappedIcon(
+                      data['iconUri'], data['title'], background)));
         }
+        zippy.setAttribute('step', i);
+        zippy.hideLine = this.isMinorMode_;
+        zippy.cardStyle = this.isMinorMode_;
 
-        let title = document.createElement('div');
+        const title = document.createElement('div');
         title.slot = 'title';
         title.innerHTML = this.sanitizer_.sanitizeHtml(data['name']);
         zippy.appendChild(title);
 
-        let content = document.createElement('div');
+        const content = document.createElement('div');
         content.slot = 'content';
 
-        let description = document.createElement('div');
+        const description = document.createElement('div');
         description.innerHTML =
             this.sanitizer_.sanitizeHtml(data['description']);
         description.innerHTML += '&ensp;';
 
-        let learnMoreLink = document.createElement('a');
+        const learnMoreLink = document.createElement('a');
         learnMoreLink.textContent = data['popupLink'];
         learnMoreLink.setAttribute('href', 'javascript:void(0)');
         learnMoreLink.onclick =
@@ -401,7 +414,7 @@ class AssistantValueProp extends AssistantValuePropBase {
         content.appendChild(description);
 
         if (this.isMinorMode_) {
-          let additionalInfo = document.createElement('div');
+          const additionalInfo = document.createElement('div');
           additionalInfo.innerHTML =
               this.sanitizer_.sanitizeHtml(data['additionalInfo']);
           content.appendChild(document.createElement('br'));
@@ -424,20 +437,20 @@ class AssistantValueProp extends AssistantValuePropBase {
    * Add a subtitle for step with given data.
    */
   addSubtitle_(data, step) {
-    let subtitle = document.createElement('div');
+    const subtitle = document.createElement('div');
     subtitle.setAttribute('step', step);
     if (this.isMinorMode_) {
-      let title = document.createElement('div');
+      const title = document.createElement('div');
       title.innerHTML = this.sanitizer_.sanitizeHtml(data['title']);
       title.classList.add('subtitle-text');
       subtitle.appendChild(title);
 
-      let username = document.createElement('div');
+      const username = document.createElement('div');
       username.innerHTML = this.sanitizer_.sanitizeHtml(data['identity']);
       username.classList.add('username-text');
       subtitle.appendChild(username);
     }
-    let message = document.createElement('div');
+    const message = document.createElement('div');
     message.innerHTML = this.sanitizer_.sanitizeHtml(data['intro']);
     message.classList.add(
         this.isMinorMode_ ? 'subtitle-message-text-minor' :
@@ -502,10 +515,10 @@ class AssistantValueProp extends AssistantValuePropBase {
    * @param {number} step
    */
   showContentForStep_(step) {
-    for (let subtitle of this.$['subtitle-container'].children) {
+    for (const subtitle of this.$['subtitle-container'].children) {
       subtitle.hidden = subtitle.getAttribute('step') != step;
     }
-    for (let zippy of this.$['consents-container'].children) {
+    for (const zippy of this.$['consents-container'].children) {
       zippy.hidden = zippy.getAttribute('step') != step;
     }
   }

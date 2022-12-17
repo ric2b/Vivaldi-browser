@@ -7,6 +7,7 @@
 #include "ash/assistant/assistant_interaction_controller_impl.h"
 #include "ash/assistant/test/assistant_ash_test_base.h"
 #include "ash/assistant/ui/assistant_view_ids.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/assistant/controller/assistant_interaction_controller.h"
 #include "ash/session/session_controller_impl.h"
@@ -34,10 +35,12 @@ using UiElementContainerViewTest = AssistantAshTestBase;
 TEST_F(UiElementContainerViewTest, DarkAndLightTheme) {
   base::test::ScopedFeatureList scoped_feature_list(
       chromeos::features::kDarkLightMode);
-  AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
-      Shell::Get()->session_controller()->GetActivePrefService());
   ASSERT_TRUE(chromeos::features::IsDarkLightModeEnabled());
-  ASSERT_FALSE(AshColorProvider::Get()->IsDarkModeEnabled());
+
+  auto* color_provider = AshColorProvider::Get();
+  color_provider->OnActiveUserPrefServiceChanged(
+      Shell::Get()->session_controller()->GetActivePrefService());
+  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
 
   ShowAssistantUi();
 
@@ -49,9 +52,10 @@ TEST_F(UiElementContainerViewTest, DarkAndLightTheme) {
             AshColorProvider::Get()->GetContentLayerColor(
                 ColorProvider::ContentLayerType::kSeparatorColor));
 
-  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
-      prefs::kDarkModeEnabled, true);
-  ASSERT_TRUE(AshColorProvider::Get()->IsDarkModeEnabled());
+  // Switch the color mode.
+  color_provider->ToggleColorMode();
+  const bool dark_mode_status = color_provider->IsDarkModeEnabled();
+  ASSERT_NE(initial_dark_mode_status, dark_mode_status);
 
   EXPECT_EQ(indicator->GetBackground()->get_color(),
             AshColorProvider::Get()->GetContentLayerColor(
@@ -59,11 +63,12 @@ TEST_F(UiElementContainerViewTest, DarkAndLightTheme) {
 }
 
 TEST_F(UiElementContainerViewTest, DarkAndLightModeFlagOff) {
-  ASSERT_FALSE(chromeos::features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   ShowAssistantUi();
 

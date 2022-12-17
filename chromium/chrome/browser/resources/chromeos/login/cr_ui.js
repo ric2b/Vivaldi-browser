@@ -9,7 +9,6 @@
  */
 
 // #import {assert} from 'chrome://resources/js/assert.m.js';
-// #import {i18nTemplate} from 'chrome://resources/js/i18n_template_no_process.m.js';
 // #import {$} from 'chrome://resources/js/util.m.js';
 // #import {addSingletonGetter, sendWithPromise} from 'chrome://resources/js/cr.m.js';
 
@@ -48,24 +47,10 @@ cr.define('cr.ui', function() {
     }
 
     /**
-     * Called when focus is returned from ash::SystemTray.
-     * @param {boolean} reverse Is focus returned in reverse order?
+     * Handle the cancel accelerator.
      */
-    static focusReturned(reverse) {
-      const screen = Oobe.getInstance().currentScreen;
-      if (screen && screen.onFocusReturned) {
-        screen.onFocusReturned(reverse);
-      }
-    }
-
-    /**
-     * Handle accelerators. These are passed from native code instead of a JS
-     * event handler in order to make sure that embedded iframes cannot swallow
-     * them.
-     * @param {string} name Accelerator name.
-     */
-    static handleAccelerator(name) {
-      Oobe.getInstance().handleAccelerator(name);
+    static handleCancel() {
+      Oobe.getInstance().handleCancel();
     }
 
     /**
@@ -78,19 +63,10 @@ cr.define('cr.ui', function() {
     }
 
     /**
-     * Updates missing API keys message visibility.
-     * @param {boolean} show True if the message should be visible.
+     * Toggles system info visibility.
      */
-    static showAPIKeysNotice(show) {
-      $('api-keys-notice-container').hidden = !show;
-    }
-
-    /**
-     * Updates version label visibility.
-     * @param {boolean} show True if version label should be visible.
-     */
-    static showVersion(show) {
-      Oobe.getInstance().showVersion(show);
+    static toggleSystemInfo() {
+      Oobe.getInstance().toggleSystemInfo();
     }
 
     /**
@@ -103,7 +79,6 @@ cr.define('cr.ui', function() {
         document.body.classList.add('oobe-display');
       } else {
         document.body.classList.remove('oobe-display');
-        Oobe.getInstance().prepareForLoginDisplay_();
       }
     }
 
@@ -144,18 +119,10 @@ cr.define('cr.ui', function() {
     }
 
     /**
-     * Sets the number of users on the views login screen.
-     * @param {number} userCount The number of users.
-     */
-    static setLoginUserCount(userCount) {
-      Oobe.getInstance().setLoginUserCount(userCount);
-    }
-
-    /**
      * Skip to login screen for telemetry.
      */
     static skipToLoginForTesting() {
-      chrome.send('skipToLoginForTesting');
+      chrome.send('OobeTestApi.skipToLoginForTesting');
     }
 
     /**
@@ -182,7 +149,7 @@ cr.define('cr.ui', function() {
         }
       }
 
-      chrome.send('skipToLoginForTesting');
+      chrome.send('OobeTestApi.skipToLoginForTesting');
 
       if (!enterpriseEnroll) {
         chrome.send('completeLogin', [gaia_id, username, password, false]);
@@ -307,10 +274,37 @@ cr.define('cr.ui', function() {
     static reloadContent(data) {
       // Reload global local strings, process DOM tree again.
       loadTimeData.overrideValues(data);
-      i18nTemplate.process(document, loadTimeData);
+      Oobe.updateDocumentLocalizedStrings();
 
       // Update localized content of the screens.
       Oobe.getInstance().updateLocalizedContent_();
+    }
+
+    /**
+     * Update localized strings in tags that are used at the `document` level.
+     * These strings are used outside of a Polymer Element and cannot leverage
+     * I18nBehavior for it.
+     */
+    static updateDocumentLocalizedStrings() {
+      // Update attributes used in the <html> tag.
+      const attrToStrMap = {
+        lang: 'language',
+        dir: 'textdirection',
+        highlight: 'highlightStrength',
+      };
+      for (const [attribute, stringName] of Object.entries(attrToStrMap)) {
+        const localizedString = loadTimeData.getValue(stringName);
+        document.documentElement.setAttribute(attribute, localizedString);
+      }
+
+      const missingApiId = 'missingAPIKeysNotice';
+      if (!loadTimeData.valueExists(missingApiId)) {
+        return;
+      }
+      // Update this standalone div in the main document.
+      const apiKeysNoticeDiv = $('api-keys-notice');
+      apiKeysNoticeDiv.textContent = loadTimeData.getValue(missingApiId);
+      $('api-keys-notice-container').hidden = false;
     }
 
     /**

@@ -90,6 +90,8 @@ class WaylandWindowDragController : public WaylandDataDevice::DragDelegate,
 
   WaylandWindow* origin_window_for_testing() { return origin_window_; }
 
+  absl::optional<DragSource> drag_source() { return drag_source_; }
+
  private:
   class ExtendedDragSource;
 
@@ -106,6 +108,7 @@ class WaylandWindowDragController : public WaylandDataDevice::DragDelegate,
   void OnDragMotion(const gfx::PointF& location) override;
   void OnDragLeave() override;
   void OnDragDrop() override;
+  const WaylandWindow* GetDragTarget() const override;
 
   // WaylandDataSource::Delegate
   void OnDataSourceFinish(bool completed) override;
@@ -169,6 +172,8 @@ class WaylandWindowDragController : public WaylandDataDevice::DragDelegate,
   // The window where the DND session originated from. i.e: which had the
   // pointer focus when the session was initiated.
   WaylandWindow* origin_window_ = nullptr;
+
+  WaylandWindow* drag_target_window_ = nullptr;
 
   // The |origin_window_| can be destroyed during the DND session. If this
   // happens, |origin_surface_| takes ownership of its surface and ensure it

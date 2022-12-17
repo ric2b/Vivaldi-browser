@@ -28,6 +28,7 @@ class TracingSamplerProfiler;
 }
 
 class ChromeContentBrowserClient;
+class ChromeContentUtilityClient;
 class HeapProfilerController;
 
 // Chrome implementation of ContentMainDelegate.
@@ -62,9 +63,8 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   void ZygoteForked() override;
 #endif
   void PreBrowserMain() override;
-  void PostEarlyInitialization(bool is_running_tests) override;
-  bool ShouldCreateFeatureList() override;
-  void PostFieldTrialInitialization() override;
+  void PostEarlyInitialization(InvokedIn invoked_in) override;
+  bool ShouldCreateFeatureList(InvokedIn invoked_in) override;
 #if BUILDFLAG(IS_WIN)
   bool ShouldHandleConsoleControlEvents() override;
 #endif
@@ -75,6 +75,9 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   content::ContentRendererClient* CreateContentRendererClient() override;
   content::ContentUtilityClient* CreateContentUtilityClient() override;
 
+  // Initialization that happens in all process types.
+  void CommonEarlyInitialization();
+
 #if BUILDFLAG(IS_MAC)
   void InitMacCrashReporter(const base::CommandLine& command_line,
                             const std::string& process_type);
@@ -84,6 +87,7 @@ class ChromeMainDelegate : public content::ContentMainDelegate {
   ChromeContentClient chrome_content_client_;
 
   std::unique_ptr<ChromeContentBrowserClient> chrome_content_browser_client_;
+  std::unique_ptr<ChromeContentUtilityClient> chrome_content_utility_client_;
 
   std::unique_ptr<tracing::TracingSamplerProfiler> tracing_sampler_profiler_;
 

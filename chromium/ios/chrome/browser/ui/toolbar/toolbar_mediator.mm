@@ -13,13 +13,14 @@
 #include "ios/chrome/browser/chrome_url_constants.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter_observer_bridge.h"
-#include "ios/chrome/browser/policy/policy_features.h"
 #import "ios/chrome/browser/policy/policy_util.h"
 #include "ios/chrome/browser/search_engines/search_engines_util.h"
 #import "ios/chrome/browser/ui/commands/application_commands.h"
 #import "ios/chrome/browser/ui/commands/browser_commands.h"
 #import "ios/chrome/browser/ui/commands/load_query_commands.h"
 #import "ios/chrome/browser/ui/commands/open_new_tab_command.h"
+#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
+#import "ios/chrome/browser/ui/icons/infobar_icon.h"
 #import "ios/chrome/browser/ui/menu/browser_action_factory.h"
 #import "ios/chrome/browser/ui/ntp/ntp_util.h"
 #import "ios/chrome/browser/ui/toolbar/toolbar_consumer.h"
@@ -339,7 +340,10 @@
     if ([self shouldUseIncognitoNTPResourcesForURL:navigationItem
                                                        ->GetVirtualURL()]) {
       title = l10n_util::GetNSStringWithFixup(IDS_IOS_NEW_INCOGNITO_TAB);
-      image = [UIImage imageNamed:@"incognito_badge"];
+      image = UseSymbols()
+                  ? CustomSymbolWithPointSize(kIncognitoCircleFillSymbol,
+                                              kSymbolImagePointSize)
+                  : [UIImage imageNamed:@"incognito_badge"];
     } else {
       title = base::SysUTF16ToNSString(navigationItem->GetTitleForDisplay());
       const gfx::Image& gfxImage = navigationItem->GetFaviconStatus().image;

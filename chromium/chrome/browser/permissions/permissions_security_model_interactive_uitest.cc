@@ -22,6 +22,7 @@
 #include "components/embedder_support/switches.h"
 #include "components/permissions/permissions_client.h"
 #include "components/permissions/test/mock_permission_prompt_factory.h"
+#include "components/permissions/test/permission_request_observer.h"
 #include "content/public/browser/disallow_activation_reason.h"
 #include "content/public/browser/notification_types.h"
 #include "content/public/browser/permission_controller.h"
@@ -46,6 +47,7 @@
 #include "services/device/public/cpp/test/scoped_geolocation_overrider.h"
 #include "testing/gmock/include/gmock/gmock-matchers.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
 #include "url/gurl.h"
 
@@ -163,7 +165,7 @@ content::WebContents* OpenPopup(Browser* browser, const GURL& url) {
   EXPECT_NE(popup, browser);
   content::WebContents* popup_contents =
       popup->tab_strip_model()->GetActiveWebContents();
-  EXPECT_TRUE(WaitForRenderFrameReady(popup_contents->GetMainFrame()));
+  EXPECT_TRUE(WaitForRenderFrameReady(popup_contents->GetPrimaryMainFrame()));
   WaitForLoadStop(popup_contents);
   return popup_contents;
 }
@@ -275,346 +277,344 @@ void VerifyPermissionsAllowed(content::RenderFrameHost* main_rfh,
       content::EvalJs(main_rfh, check_permission_script).value.GetBool());
 }
 
-  // `test_rfh` is either an embedded iframe or an external popup window.
-  void VerifyPermission(content::WebContents* opener_or_embedder_contents,
-                        content::RenderFrameHost* test_rfh,
-                        const std::string& request_permission_script,
-                        const std::string& check_permission_script) {
-    content::RenderFrameHost* opener_rfh =
-        opener_or_embedder_contents->GetMainFrame();
-    ASSERT_FALSE(
-        content::EvalJs(opener_rfh, check_permission_script).value.GetBool());
-    ASSERT_FALSE(
-        content::EvalJs(test_rfh, check_permission_script).value.GetBool());
+// `test_rfh` is either an embedded iframe or an external popup window.
+void VerifyPermission(content::WebContents* opener_or_embedder_contents,
+                      content::RenderFrameHost* test_rfh,
+                      const std::string& request_permission_script,
+                      const std::string& check_permission_script) {
+  content::RenderFrameHost* opener_rfh =
+      opener_or_embedder_contents->GetPrimaryMainFrame();
+  ASSERT_FALSE(
+      content::EvalJs(opener_rfh, check_permission_script).value.GetBool());
+  ASSERT_FALSE(
+      content::EvalJs(test_rfh, check_permission_script).value.GetBool());
 
-    permissions::PermissionRequestManager* manager =
-        permissions::PermissionRequestManager::FromWebContents(
-            opener_or_embedder_contents);
-    std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
-        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(
+          opener_or_embedder_contents);
+  std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
+      std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
-    // Enable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
+  // Enable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-    // Move the web contents to the foreground.
-    opener_rfh->GetView()->Focus();
-    ASSERT_TRUE(opener_rfh->GetView()->HasFocus());
-    // Request permission on the opener or embedder contents.
-    EXPECT_EQ("granted",
-              content::EvalJs(opener_rfh, request_permission_script));
-    EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+  // Move the web contents to the foreground.
+  opener_rfh->GetView()->Focus();
+  ASSERT_TRUE(opener_rfh->GetView()->HasFocus());
+  // Request permission on the opener or embedder contents.
+  EXPECT_EQ("granted", content::EvalJs(opener_rfh, request_permission_script));
+  EXPECT_EQ(1, bubble_factory->TotalRequestCount());
 
-    // Disable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::NONE);
+  // Disable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::NONE);
 
+  EXPECT_TRUE(
+      content::EvalJs(opener_rfh, check_permission_script).value.GetBool());
+
+  // Verify permissions on the test RFH.
+  {
     EXPECT_TRUE(
-        content::EvalJs(opener_rfh, check_permission_script).value.GetBool());
-
-    // Verify permissions on the test RFH.
-    {
-      EXPECT_TRUE(
-          content::EvalJs(test_rfh, check_permission_script).value.GetBool());
-    }
-
-    // Request permission on the test RFH.
-    test_rfh->GetView()->Focus();
-    ASSERT_TRUE(test_rfh->GetView()->HasFocus());
-    EXPECT_EQ("granted", content::EvalJs(test_rfh, request_permission_script));
-
-    // There should not be the 2nd prompt.
-    EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+        content::EvalJs(test_rfh, check_permission_script).value.GetBool());
   }
 
-  void VerifyPermissionsDeniedForFencedFrame(
-      content::WebContents* embedder_contents,
-      content::RenderFrameHost* fenced_rfh,
-      const std::string& request_permission_script,
-      const std::string& check_permission_script) {
-    content::RenderFrameHost* embedder_main_rfh =
-        embedder_contents->GetMainFrame();
-    ASSERT_FALSE(content::EvalJs(embedder_main_rfh, check_permission_script)
-                     .value.GetBool());
-    ASSERT_FALSE(
-        content::EvalJs(fenced_rfh, check_permission_script).value.GetBool());
+  // Request permission on the test RFH.
+  test_rfh->GetView()->Focus();
+  ASSERT_TRUE(test_rfh->GetView()->HasFocus());
+  EXPECT_EQ("granted", content::EvalJs(test_rfh, request_permission_script));
 
-    permissions::PermissionRequestManager* manager =
-        permissions::PermissionRequestManager::FromWebContents(
-            embedder_contents);
-    std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
-        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
+  // There should not be the 2nd prompt.
+  EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+}
 
-    // Enable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
+void VerifyPermissionsDeniedForFencedFrame(
+    content::WebContents* embedder_contents,
+    content::RenderFrameHost* fenced_rfh,
+    const std::string& request_permission_script,
+    const std::string& check_permission_script) {
+  content::RenderFrameHost* embedder_main_rfh =
+      embedder_contents->GetPrimaryMainFrame();
+  ASSERT_FALSE(content::EvalJs(embedder_main_rfh, check_permission_script)
+                   .value.GetBool());
+  ASSERT_FALSE(
+      content::EvalJs(fenced_rfh, check_permission_script).value.GetBool());
 
-    // Move the web contents to the foreground.
-    embedder_main_rfh->GetView()->Focus();
-    ASSERT_TRUE(embedder_main_rfh->GetView()->HasFocus());
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(embedder_contents);
+  std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
+      std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
-    // Request permission on the embedder contents.
-    EXPECT_EQ("granted",
-              content::EvalJs(embedder_main_rfh, request_permission_script));
-    EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+  // Enable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-    // Disable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::NONE);
+  // Move the web contents to the foreground.
+  embedder_main_rfh->GetView()->Focus();
+  ASSERT_TRUE(embedder_main_rfh->GetView()->HasFocus());
 
-    EXPECT_TRUE(content::EvalJs(embedder_main_rfh, check_permission_script)
-                    .value.GetBool());
+  // Request permission on the embedder contents.
+  EXPECT_EQ("granted",
+            content::EvalJs(embedder_main_rfh, request_permission_script));
+  EXPECT_EQ(1, bubble_factory->TotalRequestCount());
 
-    // MPArch RFH is not allowed to verify permissions.
-    EXPECT_FALSE(
-        content::EvalJs(fenced_rfh, check_permission_script).value.GetBool());
+  // Disable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::NONE);
 
-    // Enable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
+  EXPECT_TRUE(content::EvalJs(embedder_main_rfh, check_permission_script)
+                  .value.GetBool());
 
-    // Request permission on the test RFH.
-    fenced_rfh->GetView()->Focus();
-    ASSERT_TRUE(fenced_rfh->GetView()->HasFocus());
-    EXPECT_EQ("denied", content::EvalJs(fenced_rfh, request_permission_script));
+  // MPArch RFH is not allowed to verify permissions.
+  EXPECT_FALSE(
+      content::EvalJs(fenced_rfh, check_permission_script).value.GetBool());
 
-    // There should not be the 2nd prompt.
-    EXPECT_EQ(1, bubble_factory->TotalRequestCount());
-  }
+  // Enable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-  // getUserMedia requires focus. It should be verified only on a popup window.
-  void VerifyPopupWindowGetUserMedia(content::WebContents* opener_contents,
-                                     content::WebContents* popup_contents) {
-    content::RenderFrameHost* opener_rfh = opener_contents->GetMainFrame();
-    content::RenderFrameHost* popup_rfh = popup_contents->GetMainFrame();
+  // Request permission on the test RFH.
+  fenced_rfh->GetView()->Focus();
+  ASSERT_TRUE(fenced_rfh->GetView()->HasFocus());
+  EXPECT_EQ("denied", content::EvalJs(fenced_rfh, request_permission_script));
 
-    ASSERT_FALSE(content::EvalJs(opener_rfh, kCheckCamera).value.GetBool());
-    ASSERT_FALSE(content::EvalJs(popup_rfh, kCheckCamera).value.GetBool());
+  // There should not be the 2nd prompt.
+  EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+}
 
-    permissions::PermissionRequestManager* manager =
-        permissions::PermissionRequestManager::FromWebContents(popup_contents);
-    std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
-        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
+// getUserMedia requires focus. It should be verified only on a popup window.
+void VerifyPopupWindowGetUserMedia(content::WebContents* opener_contents,
+                                   content::WebContents* popup_contents) {
+  content::RenderFrameHost* opener_rfh = opener_contents->GetPrimaryMainFrame();
+  content::RenderFrameHost* popup_rfh = popup_contents->GetPrimaryMainFrame();
 
-    // Enable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
+  ASSERT_FALSE(content::EvalJs(opener_rfh, kCheckCamera).value.GetBool());
+  ASSERT_FALSE(content::EvalJs(popup_rfh, kCheckCamera).value.GetBool());
 
-    // Move the web contents to the foreground.
-    popup_rfh->GetView()->Focus();
-    ASSERT_TRUE(popup_rfh->GetView()->HasFocus());
-    // Request permission on the popup RenderFrameHost.
-    EXPECT_EQ("granted", content::EvalJs(popup_rfh, kRequestCamera));
-    EXPECT_EQ(1, bubble_factory->TotalRequestCount());
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(popup_contents);
+  std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
+      std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
-    // Disable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::NONE);
+  // Enable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-    EXPECT_TRUE(content::EvalJs(popup_rfh, kCheckCamera).value.GetBool());
-    EXPECT_TRUE(content::EvalJs(opener_rfh, kCheckCamera).value.GetBool());
-  }
+  // Move the web contents to the foreground.
+  popup_rfh->GetView()->Focus();
+  ASSERT_TRUE(popup_rfh->GetView()->HasFocus());
+  // Request permission on the popup RenderFrameHost.
+  EXPECT_EQ("granted", content::EvalJs(popup_rfh, kRequestCamera));
+  EXPECT_EQ(1, bubble_factory->TotalRequestCount());
 
-  void VerifyPermissionsDeniedForPortal(
-      content::WebContents* portal_contents,
-      const std::string& request_permission_script,
-      const std::string& check_permission_script) {
-    content::RenderFrameHost* portal_main_rfh = portal_contents->GetMainFrame();
-    ASSERT_FALSE(content::EvalJs(portal_main_rfh, check_permission_script)
-                     .value.GetBool());
+  // Disable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::NONE);
 
-    permissions::PermissionRequestManager* manager =
-        permissions::PermissionRequestManager::FromWebContents(portal_contents);
-    std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
-        std::make_unique<permissions::MockPermissionPromptFactory>(manager);
+  EXPECT_TRUE(content::EvalJs(popup_rfh, kCheckCamera).value.GetBool());
+  EXPECT_TRUE(content::EvalJs(opener_rfh, kCheckCamera).value.GetBool());
+}
 
-    // Enable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
+void VerifyPermissionsDeniedForPortal(
+    content::WebContents* portal_contents,
+    const std::string& request_permission_script,
+    const std::string& check_permission_script) {
+  content::RenderFrameHost* portal_main_rfh =
+      portal_contents->GetPrimaryMainFrame();
+  ASSERT_FALSE(content::EvalJs(portal_main_rfh, check_permission_script)
+                   .value.GetBool());
 
-    // Move the web contents to the foreground.
-    portal_main_rfh->GetView()->Focus();
-    ASSERT_TRUE(portal_main_rfh->GetView()->HasFocus());
+  permissions::PermissionRequestManager* manager =
+      permissions::PermissionRequestManager::FromWebContents(portal_contents);
+  std::unique_ptr<permissions::MockPermissionPromptFactory> bubble_factory =
+      std::make_unique<permissions::MockPermissionPromptFactory>(manager);
 
-    // Request permission on the portal contents.
-    EXPECT_EQ("denied",
-              content::EvalJs(portal_main_rfh, request_permission_script));
-    EXPECT_EQ(0, bubble_factory->TotalRequestCount());
+  // Enable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-    // Disable auto-accept of a permission request.
-    bubble_factory->set_response_type(
-        permissions::PermissionRequestManager::AutoResponseType::NONE);
+  // Move the web contents to the foreground.
+  portal_main_rfh->GetView()->Focus();
+  ASSERT_TRUE(portal_main_rfh->GetView()->HasFocus());
 
-    EXPECT_FALSE(content::EvalJs(portal_main_rfh, check_permission_script)
-                     .value.GetBool());
-  }
+  // Request permission on the portal contents.
+  EXPECT_EQ("denied",
+            content::EvalJs(portal_main_rfh, request_permission_script));
+  EXPECT_EQ(0, bubble_factory->TotalRequestCount());
 
-  void VerifyPermissionsDeniedForPortal(content::WebContents* portal_contents) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckGeolocation, kRequestGeolocation},
-        {kCheckCamera, kRequestCamera},
-    };
+  // Disable auto-accept of a permission request.
+  bubble_factory->set_response_type(
+      permissions::PermissionRequestManager::AutoResponseType::NONE);
 
-    for (const auto& test : kTests) {
-      VerifyPermissionsDeniedForPortal(portal_contents, test.request_permission,
-                                       test.check_permission);
-    }
-  }
+  EXPECT_FALSE(content::EvalJs(portal_main_rfh, check_permission_script)
+                   .value.GetBool());
+}
 
-  void VerifyPermissionsAllowed(content::RenderFrameHost* rfh) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckGeolocation, kRequestGeolocation},
-        {kCheckCamera, kRequestCamera},
-    };
-
-    for (const auto& test : kTests) {
-      VerifyPermissionsAllowed(rfh, test.request_permission,
-                               test.check_permission);
-    }
-  }
-
-  void VerifyPermissionsAlreadyGranted(content::WebContents* web_contents) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckGeolocation, kRequestGeolocation},
-        {kCheckCamera, kRequestCamera},
-    };
-
-    for (const auto& test : kTests) {
-      ASSERT_TRUE(
-          content::EvalJs(web_contents, test.check_permission).value.GetBool());
-    }
-  }
-
-  void VerifyPermissionsDeniedForFencedFrame(
-      content::WebContents* embedder_contents,
-      content::RenderFrameHost* fenced_rfh) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckGeolocation, kRequestGeolocation},
-        {kCheckCamera, kRequestCamera},
-    };
-
-    for (const auto& test : kTests) {
-      VerifyPermissionsDeniedForFencedFrame(embedder_contents, fenced_rfh,
-                                            test.request_permission,
-                                            test.check_permission);
-    }
-  }
-
-  void VerifyPermissionsExceptGetUserMedia(
-      content::WebContents* opener_or_embedder_contents,
-      content::RenderFrameHost* test_rfh) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckGeolocation, kRequestGeolocation},
-    };
-
-    for (const auto& test : kTests) {
-      VerifyPermission(opener_or_embedder_contents, test_rfh,
-                       test.request_permission, test.check_permission);
-    }
-  }
-
-  void VerifyPermissionsAllPermissions(
-      content::WebContents* opener_or_embedder_contents,
-      content::RenderFrameHost* test_rfh) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckCamera, kRequestCamera},
-        {kCheckGeolocation, kRequestGeolocation},
-    };
-
-    for (const auto& test : kTests) {
-      VerifyPermission(opener_or_embedder_contents, test_rfh,
-                       test.request_permission, test.check_permission);
-    }
-  }
-
-  void VerifyPermissionsForFile(content::RenderFrameHost* rfh,
-                                bool expect_granted) {
-    const struct {
-      std::string check_permission;
-      std::string request_permission;
-    } kTests[] = {
-        {kCheckNotifications, kRequestNotifications},
-        {kCheckCamera, kRequestCamera},
-        {kCheckGeolocation, kRequestGeolocation},
-    };
-
-    for (const auto& test : kTests) {
-      ASSERT_FALSE(content::EvalJs(rfh, test.check_permission).value.GetBool());
-      EXPECT_EQ(expect_granted ? "granted" : "denied",
-                content::EvalJs(rfh, test.request_permission));
-
-      ASSERT_FALSE(content::EvalJs(rfh, test.check_permission).value.GetBool());
-    }
-  }
-
-  // Tests of permissions behavior for an inheritance and embedding of an
-  // origin.
-  class PermissionsSecurityModelInteractiveUITest
-      : public InProcessBrowserTest {
-   public:
-    PermissionsSecurityModelInteractiveUITest() {
-      geolocation_overrider_ =
-          std::make_unique<device::ScopedGeolocationOverrider>(0, 0);
-    }
-    PermissionsSecurityModelInteractiveUITest(
-        const PermissionsSecurityModelInteractiveUITest&) = delete;
-    PermissionsSecurityModelInteractiveUITest& operator=(
-        const PermissionsSecurityModelInteractiveUITest&) = delete;
-    ~PermissionsSecurityModelInteractiveUITest() override = default;
-
-    void SetUpCommandLine(base::CommandLine* command_line) override {
-      base::CommandLine::ForCurrentProcess()->AppendSwitch(
-          embedder_support::kDisablePopupBlocking);
-    }
-
-   private:
-    std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
+void VerifyPermissionsDeniedForPortal(content::WebContents* portal_contents) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckGeolocation, kRequestGeolocation},
+      {kCheckCamera, kRequestCamera},
   };
 
-  IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
-                         EmbedIframeAboutBlank) {
-    ASSERT_TRUE(embedded_test_server()->Start());
-    const GURL url(embedded_test_server()->GetURL("/iframe_about_blank.html"));
-    content::RenderFrameHost* main_rfh =
-        ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(),
-                                                                  url, 1);
-    ASSERT_TRUE(main_rfh);
-
-    content::WebContents* embedder_contents =
-        browser()->tab_strip_model()->GetActiveWebContents();
-
-    content::RenderFrameHost* about_blank_iframe =
-        content::FrameMatchingPredicate(
-            main_rfh->GetPage(), base::BindRepeating(&content::FrameMatchesName,
-                                                     "about_blank_iframe"));
-    ASSERT_TRUE(about_blank_iframe);
-
-    VerifyPermissionsAllPermissions(embedder_contents, about_blank_iframe);
+  for (const auto& test : kTests) {
+    VerifyPermissionsDeniedForPortal(portal_contents, test.request_permission,
+                                     test.check_permission);
   }
+}
+
+void VerifyPermissionsAllowed(content::RenderFrameHost* rfh) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckGeolocation, kRequestGeolocation},
+      {kCheckCamera, kRequestCamera},
+  };
+
+  for (const auto& test : kTests) {
+    VerifyPermissionsAllowed(rfh, test.request_permission,
+                             test.check_permission);
+  }
+}
+
+void VerifyPermissionsAlreadyGranted(content::WebContents* web_contents) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckGeolocation, kRequestGeolocation},
+      {kCheckCamera, kRequestCamera},
+  };
+
+  for (const auto& test : kTests) {
+    ASSERT_TRUE(
+        content::EvalJs(web_contents, test.check_permission).value.GetBool());
+  }
+}
+
+void VerifyPermissionsDeniedForFencedFrame(
+    content::WebContents* embedder_contents,
+    content::RenderFrameHost* fenced_rfh) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckGeolocation, kRequestGeolocation},
+      {kCheckCamera, kRequestCamera},
+  };
+
+  for (const auto& test : kTests) {
+    VerifyPermissionsDeniedForFencedFrame(embedder_contents, fenced_rfh,
+                                          test.request_permission,
+                                          test.check_permission);
+  }
+}
+
+void VerifyPermissionsExceptGetUserMedia(
+    content::WebContents* opener_or_embedder_contents,
+    content::RenderFrameHost* test_rfh) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckGeolocation, kRequestGeolocation},
+  };
+
+  for (const auto& test : kTests) {
+    VerifyPermission(opener_or_embedder_contents, test_rfh,
+                     test.request_permission, test.check_permission);
+  }
+}
+
+void VerifyPermissionsAllPermissions(
+    content::WebContents* opener_or_embedder_contents,
+    content::RenderFrameHost* test_rfh) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckCamera, kRequestCamera},
+      {kCheckGeolocation, kRequestGeolocation},
+  };
+
+  for (const auto& test : kTests) {
+    VerifyPermission(opener_or_embedder_contents, test_rfh,
+                     test.request_permission, test.check_permission);
+  }
+}
+
+void VerifyPermissionsForFile(content::RenderFrameHost* rfh,
+                              bool expect_granted) {
+  const struct {
+    std::string check_permission;
+    std::string request_permission;
+  } kTests[] = {
+      {kCheckNotifications, kRequestNotifications},
+      {kCheckCamera, kRequestCamera},
+      {kCheckGeolocation, kRequestGeolocation},
+  };
+
+  for (const auto& test : kTests) {
+    ASSERT_FALSE(content::EvalJs(rfh, test.check_permission).value.GetBool());
+    EXPECT_EQ(expect_granted ? "granted" : "denied",
+              content::EvalJs(rfh, test.request_permission));
+
+    ASSERT_FALSE(content::EvalJs(rfh, test.check_permission).value.GetBool());
+  }
+}
+
+// Tests of permissions behavior for an inheritance and embedding of an
+// origin.
+class PermissionsSecurityModelInteractiveUITest : public InProcessBrowserTest {
+ public:
+  PermissionsSecurityModelInteractiveUITest() {
+    geolocation_overrider_ =
+        std::make_unique<device::ScopedGeolocationOverrider>(0, 0);
+  }
+  PermissionsSecurityModelInteractiveUITest(
+      const PermissionsSecurityModelInteractiveUITest&) = delete;
+  PermissionsSecurityModelInteractiveUITest& operator=(
+      const PermissionsSecurityModelInteractiveUITest&) = delete;
+  ~PermissionsSecurityModelInteractiveUITest() override = default;
+
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(
+        embedder_support::kDisablePopupBlocking);
+  }
+
+ private:
+  std::unique_ptr<device::ScopedGeolocationOverrider> geolocation_overrider_;
+};
+
+IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
+                       EmbedIframeAboutBlank) {
+  ASSERT_TRUE(embedded_test_server()->Start());
+  const GURL url(embedded_test_server()->GetURL("/iframe_about_blank.html"));
+  content::RenderFrameHost* main_rfh =
+      ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(browser(), url,
+                                                                1);
+  ASSERT_TRUE(main_rfh);
+
+  content::WebContents* embedder_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+
+  content::RenderFrameHost* about_blank_iframe =
+      content::FrameMatchingPredicate(
+          main_rfh->GetPage(), base::BindRepeating(&content::FrameMatchesName,
+                                                   "about_blank_iframe"));
+  ASSERT_TRUE(about_blank_iframe);
+
+  VerifyPermissionsAllPermissions(embedder_contents, about_blank_iframe);
+}
 
 IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
                        WindowOpenAboutBlank) {
@@ -630,7 +630,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   ASSERT_TRUE(popup_contents);
 
   VerifyPermissionsExceptGetUserMedia(opener_contents,
-                                      popup_contents->GetMainFrame());
+                                      popup_contents->GetPrimaryMainFrame());
   VerifyPopupWindowGetUserMedia(opener_contents, popup_contents);
 }
 
@@ -693,13 +693,18 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   ASSERT_TRUE(blob_popup_contents);
   EXPECT_TRUE(blob_popup_contents->GetLastCommittedURL().SchemeIsBlob());
 
-  VerifyPermissionsExceptGetUserMedia(opener_contents,
-                                      blob_popup_contents->GetMainFrame());
+  VerifyPermissionsExceptGetUserMedia(
+      opener_contents, blob_popup_contents->GetPrimaryMainFrame());
   VerifyPopupWindowGetUserMedia(opener_contents, blob_popup_contents);
 }
 
 IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
                        EmbedIframeFileSystem) {
+  // TODO(https://crbug.com/1332598): Remove this test when removing filesystem:
+  // navigation for good.
+  if (!base::FeatureList::IsEnabled(blink::features::kFileSystemUrlNavigation))
+    GTEST_SKIP();
+
   ASSERT_TRUE(embedded_test_server()->Start());
   const GURL url(embedded_test_server()->GetURL("/empty.html"));
   content::RenderFrameHost* main_rfh =
@@ -903,25 +908,8 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   EXPECT_EQ("https://chromium.org/", main_rfh->GetLastCommittedURL().spec());
   EXPECT_TRUE(main_rfh->GetLastCommittedOrigin().GetURL().SchemeIsFile());
 
-  const struct {
-    std::string check_permission;
-    std::string request_permission;
-  } kTests[] = {
-      {kCheckCamera, kRequestCamera},
-      {kCheckGeolocation, kRequestGeolocation},
-  };
-
-  for (const auto& test : kTests) {
-    ASSERT_FALSE(
-        content::EvalJs(main_rfh, test.check_permission).value.GetBool());
-    EXPECT_EQ("granted", content::EvalJs(main_rfh, test.request_permission));
-    ASSERT_TRUE(
-        content::EvalJs(main_rfh, test.check_permission).value.GetBool());
-  }
-
-  // Notifications is not supported for file:/// with changed URL.
-  ASSERT_FALSE(content::EvalJs(main_rfh, kCheckNotifications).value.GetBool());
-  EXPECT_EQ("denied", content::EvalJs(main_rfh, kRequestNotifications));
+  // `https://chromium.org` is used for permissions verification.
+  VerifyPermissionsAllowed(main_rfh);
 }
 
 // Verifies that permissions are not supported for file:/// with changed URL to
@@ -976,9 +964,8 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   content::WebContents::FromRenderFrameHost(main_rfh)->Focus();
 
   ASSERT_TRUE(main_rfh);
-  EXPECT_EQ(
-      GURL(chrome::kChromeUINewTabURL),
-      embedder_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL());
+  EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
+            embedder_contents->GetLastCommittedURL());
   EXPECT_EQ(GURL(chrome::kChromeUINewTabPageURL),
             main_rfh->GetLastCommittedOrigin().GetURL());
 
@@ -1018,9 +1005,8 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   content::WebContents::FromRenderFrameHost(main_rfh)->Focus();
 
   ASSERT_TRUE(main_rfh);
-  EXPECT_EQ(
-      GURL(chrome::kChromeUINewTabURL),
-      embedder_contents->GetLastCommittedURL().DeprecatedGetOriginAsURL());
+  EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
+            embedder_contents->GetLastCommittedURL());
   EXPECT_EQ(GURL(chrome::kChromeUINewTabPageURL),
             main_rfh->GetLastCommittedOrigin().GetURL());
 
@@ -1058,6 +1044,52 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
   // Media stream origin on NTP should equal to DSE.
   EXPECT_EQ(page_content_settings->media_stream_access_origin(),
             GURL("https://www.google.com"));
+}
+
+// Test that a permission prompt bubble will be shown on NTP despite the empty
+// address bar.
+IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelInteractiveUITest,
+                       PermissionRequestOnNtpIsNotAutoIgnored) {
+  content::WebContents* embedder_contents =
+      browser()->tab_strip_model()->GetActiveWebContents();
+  ASSERT_TRUE(embedder_contents);
+
+  content::RenderFrameHost* main_rfh =
+      ui_test_utils::NavigateToURLBlockUntilNavigationsComplete(
+          browser(), GURL(chrome::kChromeUINewTabURL), 1);
+  content::WebContents::FromRenderFrameHost(main_rfh)->Focus();
+
+  ASSERT_TRUE(main_rfh);
+  EXPECT_EQ(GURL(chrome::kChromeUINewTabURL),
+            embedder_contents->GetLastCommittedURL());
+  EXPECT_EQ(GURL(chrome::kChromeUINewTabPageURL),
+            main_rfh->GetLastCommittedOrigin().GetURL());
+
+  EXPECT_FALSE(content::EvalJs(main_rfh, kCheckMicrophone,
+                               content::EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1)
+                   .value.GetBool());
+
+  auto* manager =
+      permissions::PermissionRequestManager::FromWebContents(embedder_contents);
+  permissions::PermissionRequestObserver observer(embedder_contents);
+
+  EXPECT_FALSE(manager->IsRequestInProgress());
+
+  EXPECT_TRUE(content::ExecJs(
+      main_rfh, kRequestMicrophone,
+      content::EvalJsOptions::EXECUTE_SCRIPT_NO_RESOLVE_PROMISES));
+
+  // Wait until a permission request is shown.
+  observer.Wait();
+
+  EXPECT_TRUE(manager->IsRequestInProgress());
+  EXPECT_TRUE(observer.request_shown());
+
+  manager->Accept();
+
+  EXPECT_TRUE(content::EvalJs(main_rfh, kCheckMicrophone,
+                              content::EXECUTE_SCRIPT_DEFAULT_OPTIONS, 1)
+                  .value.GetBool());
 }
 
 class PermissionsSecurityModelHTTPS
@@ -1118,7 +1150,8 @@ class PermissionsSecurityModelHTTPS
     content::WebContents* embedder_contents = GetWebContents();
 
     EXPECT_TRUE(content::NavigateToURL(embedder_contents, url));
-    content::RenderFrameHost* main_rfh = embedder_contents->GetMainFrame();
+    content::RenderFrameHost* main_rfh =
+        embedder_contents->GetPrimaryMainFrame();
     EXPECT_EQ(origin, main_rfh->GetLastCommittedOrigin());
 
     // By default permissions are not allowed.
@@ -1190,21 +1223,21 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
   url::Origin origin = url::Origin::Create(GetMainFrameURL());
 
   SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin, content::PermissionType::GEOLOCATION,
+      permission_controller, origin, blink::PermissionType::GEOLOCATION,
       blink::mojom::PermissionStatus::GRANTED);
 
   CheckPermissionState(main_rfh, /*notifications_allowed=*/false,
                        /*geolocation_allowed=*/true, /*camera_allowed=*/false);
 
   SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin, content::PermissionType::VIDEO_CAPTURE,
+      permission_controller, origin, blink::PermissionType::VIDEO_CAPTURE,
       blink::mojom::PermissionStatus::GRANTED);
 
   CheckPermissionState(main_rfh, /*notifications_allowed=*/false,
                        /*geolocation_allowed=*/true, /*camera_allowed=*/true);
 
   SetPermissionControllerOverrideForDevTools(
-      permission_controller, origin, content::PermissionType::NOTIFICATIONS,
+      permission_controller, origin, blink::PermissionType::NOTIFICATIONS,
       blink::mojom::PermissionStatus::GRANTED);
 
   CheckPermissionState(main_rfh, /*notifications_allowed=*/true,
@@ -1401,8 +1434,8 @@ IN_PROC_BROWSER_TEST_F(PermissionsRequestedFromFencedFrameTest,
   GURL fenced_frame_url =
       embedded_test_server()->GetURL("/fenced_frames/title1.html");
   content::RenderFrameHost* fenced_frame_host =
-      fenced_frame_test_helper().CreateFencedFrame(web_contents->GetMainFrame(),
-                                                   fenced_frame_url);
+      fenced_frame_test_helper().CreateFencedFrame(
+          web_contents->GetPrimaryMainFrame(), fenced_frame_url);
   ASSERT_TRUE(fenced_frame_host);
 
   VerifyPermissionsDeniedForFencedFrame(web_contents, fenced_frame_host);
@@ -1442,7 +1475,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestWithPortalTest,
 
   // `contents` is in a default state.
   EXPECT_FALSE(contents->IsPortal());
-  VerifyPermissionsAllowed(contents->GetMainFrame());
+  VerifyPermissionsAllowed(contents->GetPrimaryMainFrame());
 
   EXPECT_EQ(true, content::EvalJs(contents, "loadPromise"));
   std::vector<content::WebContents*> inner_web_contents =
@@ -1517,8 +1550,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestWithPrerendererTest,
   ASSERT_TRUE(content::NavigateToURL(GetActiveWebContents(), url));
 
   EXPECT_FALSE(
-      GetActiveWebContents()->GetMainFrame()->IsInactiveAndDisallowActivation(
-          content::DisallowActivationReasonId::kRequestPermission));
+      GetActiveWebContents()
+          ->GetPrimaryMainFrame()
+          ->IsInactiveAndDisallowActivation(
+              content::DisallowActivationReasonId::kRequestPermission));
 
   // Start a prerender.
   GURL prerender_url =
@@ -1533,8 +1568,10 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestWithPrerendererTest,
 
   // The main frame of an outer document is not a prerenderer.
   EXPECT_FALSE(
-      GetActiveWebContents()->GetMainFrame()->IsInactiveAndDisallowActivation(
-          content::DisallowActivationReasonId::kRequestPermission));
+      GetActiveWebContents()
+          ->GetPrimaryMainFrame()
+          ->IsInactiveAndDisallowActivation(
+              content::DisallowActivationReasonId::kRequestPermission));
 
   // The main frame of a newly created frame tree is a prerenderer. It is
   // inactive, all permission requests should be automatically denied.
@@ -1609,7 +1646,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
 
   // 1) Navigate to A.
   EXPECT_TRUE(content::NavigateToURL(embedder_contents, url_a));
-  content::RenderFrameHost* rfh_a = embedder_contents->GetMainFrame();
+  content::RenderFrameHost* rfh_a = embedder_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(rfh_a);
   EXPECT_EQ(origin_a, rfh_a->GetLastCommittedOrigin());
   // Currently active RFH is not `kInBackForwardCache`.
@@ -1619,7 +1656,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
 
   // 2) Navigate to B.
   EXPECT_TRUE(content::NavigateToURL(embedder_contents, url_b));
-  content::RenderFrameHost* rfh_b = embedder_contents->GetMainFrame();
+  content::RenderFrameHost* rfh_b = embedder_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(rfh_b);
   EXPECT_EQ(origin_b, rfh_b->GetLastCommittedOrigin());
   // Currently active RFH is not `kInBackForwardCache`.
@@ -1635,10 +1672,10 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
 
   // 3) Verify that `HistoryGoBack` restores previously cached `rfh_a` and does
   // not create a new one.
-  EXPECT_NE(rfh_a, embedder_contents->GetMainFrame());
+  EXPECT_NE(rfh_a, embedder_contents->GetPrimaryMainFrame());
   // After `HistoryGoBack` `rfh_a` should be moved back from the BFCache.
   ASSERT_TRUE(HistoryGoBack(embedder_contents));
-  EXPECT_EQ(rfh_a, embedder_contents->GetMainFrame());
+  EXPECT_EQ(rfh_a, embedder_contents->GetPrimaryMainFrame());
   EXPECT_EQ(rfh_a->GetLifecycleState(),
             content::RenderFrameHost::LifecycleState::kActive);
 
@@ -1662,11 +1699,11 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
   bubble_factory->set_response_type(
       permissions::PermissionRequestManager::AutoResponseType::ACCEPT_ALL);
 
-  EXPECT_FALSE(
-      content::EvalJs(embedder_contents->GetMainFrame(), kCheckGeolocation)
-          .value.GetBool());
+  EXPECT_FALSE(content::EvalJs(embedder_contents->GetPrimaryMainFrame(),
+                               kCheckGeolocation)
+                   .value.GetBool());
 
-  EXPECT_EQ("granted", content::EvalJs(embedder_contents->GetMainFrame(),
+  EXPECT_EQ("granted", content::EvalJs(embedder_contents->GetPrimaryMainFrame(),
                                        kRequestGeolocation));
   EXPECT_EQ(1, bubble_factory->TotalRequestCount());
 
@@ -1686,7 +1723,7 @@ IN_PROC_BROWSER_TEST_F(PermissionsSecurityModelHTTPS,
 
   // 5) Go back to a.test and verify that it has no permissions.
   ASSERT_TRUE(HistoryGoBack(embedder_contents));
-  content::RenderFrameHost* rfh_a_2 = embedder_contents->GetMainFrame();
+  content::RenderFrameHost* rfh_a_2 = embedder_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(rfh_a_2);
   EXPECT_EQ(origin_a, rfh_a_2->GetLastCommittedOrigin());
   // Verify that `a.test` has no granted Geolocation permission despite it being
@@ -1863,7 +1900,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestFromExtension,
   GURL url = GetTestServerInsecureUrl("/extensions/test_file.html?succeed");
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  content::RenderFrameHost* main_rfh = web_contents->GetMainFrame();
+  content::RenderFrameHost* main_rfh = web_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(main_rfh);
 
   content::RenderFrameHost* iframe_with_embedded_extension =
@@ -1957,7 +1994,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestFromExtension,
   GURL url = GetTestServerInsecureUrl("/extensions/test_file.html?succeed");
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  content::RenderFrameHost* main_rfh = web_contents->GetMainFrame();
+  content::RenderFrameHost* main_rfh = web_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(main_rfh);
 
   content::RenderFrameHost* iframe_with_embedded_extension =
@@ -2031,7 +2068,7 @@ IN_PROC_BROWSER_TEST_F(PermissionRequestFromExtension,
   GURL url = embedded_test_server()->GetURL("/extensions/test_file.html");
 
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), url));
-  content::RenderFrameHost* main_rfh = web_contents->GetMainFrame();
+  content::RenderFrameHost* main_rfh = web_contents->GetPrimaryMainFrame();
   ASSERT_TRUE(main_rfh);
 
   // Allow permissions on the main frame, so they became available for an

@@ -30,6 +30,7 @@
 #include "net/http/transport_security_state.h"
 #include "net/log/net_log_with_source.h"
 #include "net/proxy_resolution/configured_proxy_resolution_service.h"
+#include "net/quic/crypto_test_utils_chromium.h"
 #include "net/quic/quic_context.h"
 #include "net/socket/client_socket_factory.h"
 #include "net/ssl/ssl_config_service_defaults.h"
@@ -92,8 +93,7 @@ class QuicEndToEndTest : public ::testing::Test, public WithTaskEnvironment {
         ssl_config_service_(new SSLConfigServiceDefaults),
         proxy_resolution_service_(
             ConfiguredProxyResolutionService::CreateDirect()),
-        auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()),
-        strike_register_no_startup_period_(false) {
+        auth_handler_factory_(HttpAuthHandlerFactory::CreateDefault()) {
     request_.method = "GET";
     request_.url = GURL("https://test.example.com/");
     request_.load_flags = 0;
@@ -159,7 +159,7 @@ class QuicEndToEndTest : public ::testing::Test, public WithTaskEnvironment {
     server_config_.SetInitialSessionFlowControlWindowToSend(
         quic::test::kInitialSessionFlowControlWindowForTest);
     server_ = std::make_unique<QuicSimpleServer>(
-        quic::test::crypto_test_utils::ProofSourceForTesting(), server_config_,
+        net::test::ProofSourceForTestingChromium(), server_config_,
         server_config_options_, quic::AllSupportedVersions(),
         &memory_cache_backend_);
     server_->Listen(server_address_);
@@ -236,7 +236,7 @@ class QuicEndToEndTest : public ::testing::Test, public WithTaskEnvironment {
   quic::QuicConfig server_config_;
   quic::QuicCryptoServerConfig::ConfigOptions server_config_options_;
   bool server_started_;
-  bool strike_register_no_startup_period_;
+  bool strike_register_no_startup_period_ = false;
 };
 
 TEST_F(QuicEndToEndTest, LargeGetWithNoPacketLoss) {

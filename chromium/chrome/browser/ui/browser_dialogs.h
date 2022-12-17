@@ -20,6 +20,7 @@
 #include "content/public/browser/bluetooth_delegate.h"
 #include "content/public/browser/login_delegate.h"
 #include "extensions/buildflags/buildflags.h"
+#include "extensions/common/extension_id.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -137,6 +138,15 @@ void ShowBluetoothDeviceCredentialsDialog(
     content::WebContents* web_contents,
     const std::u16string& device_identifier,
     content::BluetoothDelegate::CredentialsCallback close_callback);
+
+// Shows the dialog to let user confirm to pair with the device
+// identified by |device_identifier|. |device_identifier| is the most
+// appropriate string to display to the user for device identification
+// (e.g. name, MAC address).
+void ShowBluetoothDevicePairConfirmDialog(
+    content::WebContents* web_contents,
+    const std::u16string& device_identifier,
+    content::BluetoothDelegate::PairConfirmCallback close_callback);
 #endif  // PAIR_BLUETOOTH_ON_DEMAND()
 
 // Callback used to indicate whether a user has accepted the installation of a
@@ -185,8 +195,9 @@ void SetAutoAcceptAppIdentityUpdateForTesting(bool auto_accept);
 using WebAppLaunchAcceptanceCallback =
     base::OnceCallback<void(bool allowed, bool remember_user_choice)>;
 
-// Shows the Web App Protocol Handler Intent Picker view.
-void ShowWebAppProtocolHandlerIntentPicker(
+// Shows the pre-launch dialog for protocol handling PWA launch. The user can
+// allow or block the launch.
+void ShowWebAppProtocolLaunchDialog(
     const GURL& url,
     Profile* profile,
     const web_app::AppId& app_id,
@@ -227,26 +238,18 @@ void ShowPWAInstallBubble(
     AppInstallationAcceptanceCallback callback,
     PwaInProductHelpState iph_state = PwaInProductHelpState::kNotShown);
 
+// Shows the Web App detailed install dialog.
+// The dialog shows app's detailed information including screenshots. Users then
+// confirm or cancel install in this dialog.
+void ShowWebAppDetailedInstallDialog(
+    content::WebContents* web_contents,
+    std::unique_ptr<WebAppInstallInfo> web_app_info,
+    AppInstallationAcceptanceCallback callback,
+    PwaInProductHelpState iph_state = PwaInProductHelpState::kNotShown);
+
 // Sets whether |ShowPWAInstallBubble| should accept immediately without any
 // user interaction.
 void SetAutoAcceptPWAInstallConfirmationForTesting(bool auto_accept);
-
-#if BUILDFLAG(IS_CHROMEOS)
-
-// Shows the print job confirmation dialog bubble anchored to the toolbar icon
-// for the extension.
-// If there's no toolbar icon, shows a modal dialog using
-// CreateBrowserModalDialogViews(). Note that this dialog is shown up even if we
-// have no |parent| window.
-void ShowPrintJobConfirmationDialog(gfx::NativeWindow parent,
-                                    const std::string& extension_id,
-                                    const std::u16string& extension_name,
-                                    const gfx::ImageSkia& extension_icon,
-                                    const std::u16string& print_job_title,
-                                    const std::u16string& printer_name,
-                                    base::OnceCallback<void(bool)> callback);
-
-#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_MAC)
 
@@ -265,133 +268,6 @@ std::unique_ptr<LoginHandler> CreateLoginHandlerViews(
     content::LoginDelegate::LoginAuthRequiredCallback auth_required_callback);
 
 #endif  // TOOLKIT_VIEWS
-
-// Values used in the Dialog.Creation UMA metric. Each value represents a
-// different type of dialog box.
-// These values are written to logs. New enum values can be added, but existing
-// enums must never be renumbered or deleted and reused.
-enum class DialogIdentifier {
-  UNKNOWN = 0,
-  TRANSLATE = 1,
-  BOOKMARK = 2,
-  BOOKMARK_EDITOR = 3,
-  DESKTOP_MEDIA_PICKER = 4,
-  OUTDATED_UPGRADE = 5,
-  ONE_CLICK_SIGNIN = 6,
-  PROFILE_SIGNIN_CONFIRMATION = 7,
-  HUNG_RENDERER = 8,
-  SESSION_CRASHED = 9,
-  CONFIRM_BUBBLE = 10,
-  UPDATE_RECOMMENDED = 11,
-  CRYPTO_PASSWORD = 12,
-  SAFE_BROWSING_DOWNLOAD_FEEDBACK = 13,
-  FIRST_RUN = 14,
-  NETWORK_SHARE_PROFILE_WARNING = 15,
-  // CONFLICTING_MODULE = 16,  Deprecated
-  CRITICAL_NOTIFICATION = 17,
-  IME_WARNING = 18,
-  TOOLBAR_ACTIONS_BAR = 19,
-  GLOBAL_ERROR = 20,
-  EXTENSION_INSTALL = 21,
-  EXTENSION_UNINSTALL = 22,
-  EXTENSION_INSTALLED = 23,
-  PAYMENT_REQUEST = 24,
-  SAVE_CARD = 25,
-  CARD_UNMASK = 26,
-  SIGN_IN = 27,
-  SIGN_IN_SYNC_CONFIRMATION = 28,
-  SIGN_IN_ERROR = 29,
-  SIGN_IN_EMAIL_CONFIRMATION = 30,
-  PROFILE_CHOOSER = 31,
-  ACCOUNT_CHOOSER = 32,
-  ARC_APP = 33,
-  AUTO_SIGNIN_FIRST_RUN = 34,
-  WEB_APP_CONFIRMATION = 35,
-  CHOOSER_UI = 36,
-  CHOOSER = 37,
-  COLLECTED_COOKIES = 38,
-  CONSTRAINED_WEB = 39,
-  CONTENT_SETTING_CONTENTS = 40,
-  CREATE_CHROME_APPLICATION_SHORTCUT = 41,
-  DOWNLOAD_DANGER_PROMPT = 42,
-  DOWNLOAD_IN_PROGRESS = 43,
-  ECHO = 44,
-  ENROLLMENT = 45,
-  EXTENSION = 46,
-  EXTENSION_POPUP_AURA = 47,
-  EXTERNAL_PROTOCOL = 48,
-  EXTERNAL_PROTOCOL_CHROMEOS = 49,
-  FIRST_RUN_DIALOG = 50,
-  HOME_PAGE_UNDO = 51,
-  IDLE_ACTION_WARNING = 52,
-  IMPORT_LOCK = 53,
-  INTENT_PICKER = 54,
-  INVERT = 55,
-  JAVA_SCRIPT = 56,
-  JAVA_SCRIPT_APP_MODAL_X11 = 57,
-  LOGIN_HANDLER = 58,
-  MANAGE_PASSWORDS = 59,
-  MEDIA_GALLERIES = 60,
-  MULTIPROFILES_INTRO = 61,
-  MULTIPROFILES_SESSION_ABORTED = 62,
-  NATIVE_CONTAINER = 63,
-  NETWORK_CONFIG = 64,
-  PERMISSIONS = 65,
-  PLATFORM_KEYS_CERTIFICATE_SELECTOR = 66,
-  PLATFORM_VERIFICATION = 67,
-  PROXIMITY_AUTH_ERROR = 68,
-  REQUEST_PIN = 69,
-  SSL_CLIENT_CERTIFICATE_SELECTOR = 70,
-  SIMPLE_MESSAGE_BOX = 71,
-  TAB_MODAL_CONFIRM = 72,
-  TASK_MANAGER = 73,
-  TELEPORT_WARNING = 74,
-  // USER_MANAGER = 75,  Deprecated
-  // USER_MANAGER_PROFILE = 76,  Deprecated
-  VALIDATION_MESSAGE = 77,
-  WEB_SHARE_TARGET_PICKER = 78,
-  ZOOM = 79,
-  LOCK_SCREEN_NOTE_APP_TOAST = 80,
-  PWA_CONFIRMATION = 81,
-  RELAUNCH_RECOMMENDED = 82,
-  CROSTINI_INSTALLER = 83,
-  RELAUNCH_REQUIRED = 84,
-  UNITY_SYNC_CONSENT_BUMP = 85,
-  CROSTINI_UNINSTALLER = 86,
-  DOWNLOAD_OPEN_CONFIRMATION = 87,
-  ARC_DATA_REMOVAL_CONFIRMATION = 88,
-  CROSTINI_UPGRADE = 89,
-  HATS_BUBBLE = 90,
-  CROSTINI_APP_RESTART = 91,
-  INCOGNITO_WINDOW_COUNT = 92,
-  CROSTINI_APP_UNINSTALLER = 93,
-  CROSTINI_CONTAINER_UPGRADE = 94,
-  COOKIE_CONTROLS = 95,
-  CROSTINI_ANSIBLE_SOFTWARE_CONFIG = 96,
-  INCOGNITO_MENU = 97,
-  PHONE_CHOOSER = 98,
-  QR_CODE_GENERATOR = 99,
-  CROSTINI_FORCE_CLOSE = 100,
-  APP_UNINSTALL = 101,
-  PRINT_JOB_CONFIRMATION = 102,
-  CROSTINI_RECOVERY = 103,
-  PARENT_PERMISSION = 104,  // ChromeOS only.
-  SIGNIN_REAUTH = 105,
-  CURRENT_BROWSING_CONTEXT_CONFIRMATION_BOX = 106,
-  PROFILE_PICKER_FORCE_SIGNIN = 107,
-  EXTENSION_INSTALL_FRICTION = 108,
-  FILE_HANDLING_PERMISSION_REQUEST = 109,
-  SIGNIN_ENTERPRISE_INTERCEPTION = 110,
-  APP_IDENTITY_UPDATE_CONFIRMATION = 111,
-  BLUETOOTH_DEVICE_CREDENTIALS = 112,
-  SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE = 113,
-  // Add values above this line with a corresponding label to the "DialogName"
-  // enum in tools/metrics/histograms/enums.xml
-  MAX_VALUE
-};
-
-// Record an UMA metric counting the creation of a dialog box of this type.
-void RecordDialogCreation(DialogIdentifier identifier);
 
 #if BUILDFLAG(IS_WIN)
 
@@ -422,7 +298,7 @@ void ShowChromeCleanerRebootPrompt(
 // blocked due to policy. It also show additional information from administrator
 // if it exists.
 void ShowExtensionInstallBlockedDialog(
-    const std::string& extension_id,
+    const extensions::ExtensionId& extension_id,
     const std::string& extension_name,
     const std::u16string& custom_error_message,
     const gfx::ImageSkia& icon,
@@ -446,6 +322,8 @@ void ShowExtensionInstallBlockedByParentDialog(
     base::OnceClosure done_callback);
 #endif  // BUILDFLAG(ENABLE_SUPERVISED_USERS) && BUILDFLAG(ENABLE_EXTENSIONS)
 
+// TODO(crbug.com/1324288): Move extensions dialogs to
+// c/b/ui/extensions/extensions_dialogs.h
 // TODO(devlin): Put more extension-y bits in this block - currently they're
 // unguarded.
 #if BUILDFLAG(ENABLE_EXTENSIONS)
@@ -463,6 +341,7 @@ void ShowExtensionSettingsOverriddenDialog(
 void ShowExtensionInstallFrictionDialog(
     content::WebContents* contents,
     base::OnceCallback<void(bool)> callback);
+
 #endif
 
 // Returns a OnceClosure that client code can call to close the device chooser.

@@ -111,7 +111,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, TestRendererAccessibilityEnabled) {
 
   base::FilePath extension_path =
       test_data_dir_.AppendASCII("automation/tests/basic");
-  ExtensionTestMessageListener got_tree(kGotTree, false /* no reply */);
+  ExtensionTestMessageListener got_tree(kGotTree);
   LoadExtension(extension_path);
   ASSERT_TRUE(got_tree.WaitUntilSatisfied());
 
@@ -144,7 +144,7 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, ImageLabels) {
   // Enable automation.
   base::FilePath extension_path =
       test_data_dir_.AppendASCII("automation/tests/basic");
-  ExtensionTestMessageListener got_tree(kGotTree, false /* no reply */);
+  ExtensionTestMessageListener got_tree(kGotTree);
   LoadExtension(extension_path);
   ASSERT_TRUE(got_tree.WaitUntilSatisfied());
 
@@ -648,9 +648,22 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, IframeNav) {
                                {.page_url = "iframenav.html"}))
       << message_;
 }
+
+// TODO(crbug.com/1325383): test is flaky on Chromium OS MSAN builder.
+#if BUILDFLAG(IS_CHROMEOS) && defined(MEMORY_SANITIZER)
+#define MAYBE_AddRemoveEventListeners DISABLED_AddRemoveEventListeners
+#else
+#define MAYBE_AddRemoveEventListeners AddRemoveEventListeners
+#endif
+IN_PROC_BROWSER_TEST_F(AutomationApiTest, MAYBE_AddRemoveEventListeners) {
+  StartEmbeddedTestServer();
+  ASSERT_TRUE(RunExtensionTest("automation/tests/desktop",
+                               {.page_url = "add_remove_event_listeners.html"}))
+      << message_;
+}
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 // TODO(crbug.com/1209766) Flaky on lacros
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #define MAYBE_HitTestMultipleWindows DISABLED_HitTestMultipleWindows
@@ -664,6 +677,6 @@ IN_PROC_BROWSER_TEST_F(AutomationApiTest, MAYBE_HitTestMultipleWindows) {
                                {.page_url = "hit_test_multiple_windows.html"}))
       << message_;
 }
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 }  // namespace extensions

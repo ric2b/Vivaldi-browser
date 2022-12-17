@@ -256,7 +256,7 @@ class SiteIsolationFlagHandlingTest
     // Start user sign-in. We can't use |LoginPolicyTestBase::LogIn|, because
     // it waits for a user session start unconditionally, which will not happen
     // if chrome requests a restart to set user-session flags.
-    ash::WizardController::SkipPostLoginScreensForTesting();
+    login_manager_.SkipPostLoginScreens();
     OobeBaseTest::WaitForSigninScreen();
     login_manager_.LoginWithDefaultContext(user_);
 
@@ -291,7 +291,7 @@ IN_PROC_BROWSER_TEST_P(SiteIsolationFlagHandlingTest, PRE_FlagHandlingTest) {
   LogIn();
 
   if (!GetParam().user_flag_internal_names.empty()) {
-    Profile* profile = ash::ProfileHelper::Get()->GetProfileByUserUnsafe(
+    Profile* profile = ash::ProfileHelper::Get()->GetProfileByUser(
         user_manager::UserManager::Get()->GetActiveUser());
     ASSERT_TRUE(profile);
     flags_ui::PrefServiceFlagsStorage flags_storage(profile->GetPrefs());

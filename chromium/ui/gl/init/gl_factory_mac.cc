@@ -141,12 +141,14 @@ scoped_refptr<GLSurface> CreateOffscreenGLSurfaceWithFormat(
 #if defined(USE_EGL)
     case kGLImplementationEGLGLES2:
     case kGLImplementationEGLANGLE:
-      if (GLSurfaceEGL::IsEGLSurfacelessContextSupported() &&
+      if (GLSurfaceEGL::GetGLDisplayEGL()->IsEGLSurfacelessContextSupported() &&
           size.width() == 0 && size.height() == 0) {
-        return InitializeGLSurfaceWithFormat(new SurfacelessEGL(size), format);
+        return InitializeGLSurfaceWithFormat(
+            new SurfacelessEGL(GLSurfaceEGL::GetGLDisplayEGL(), size), format);
       } else {
-        return InitializeGLSurfaceWithFormat(new PbufferGLSurfaceEGL(size),
-                                             format);
+        return InitializeGLSurfaceWithFormat(
+            new PbufferGLSurfaceEGL(GLSurfaceEGL::GetGLDisplayEGL(), size),
+            format);
       }
 #endif  // defined(USE_EGL)
     case kGLImplementationMockGL:
@@ -164,7 +166,7 @@ void SetDisabledExtensionsPlatform(const std::string& disabled_extensions) {
   // TODO(zmo): Implement this if needs arise.
 }
 
-bool InitializeExtensionSettingsOneOffPlatform() {
+bool InitializeExtensionSettingsOneOffPlatform(GLDisplay* display) {
   GLImplementation implementation = GetGLImplementation();
   DCHECK_NE(kGLImplementationNone, implementation);
   // TODO(zmo): Implement this if needs arise.

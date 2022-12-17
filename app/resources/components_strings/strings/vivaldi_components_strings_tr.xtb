@@ -37,7 +37,6 @@
 <translation id="2501278716633472235">Geri dön</translation>
 <translation id="2539524384386349900">Algıla</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> geçersiz bir yanıt gönderdi.</translation>
-<translation id="2609632851001447353">Varyasyonlar</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> ana makinesinin sunucu IP adresi bulunamadı.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Dosyaya erişim reddedildi</translation>
@@ -212,6 +211,7 @@
 <translation id="9008201768610948239">Yoksay</translation>
 <translation id="9025348182339809926">(Geçersiz)</translation>
 <translation id="9039213469156557790">Ayrıca, bu sayfa güvenli olmayan başka kaynaklar içeriyor. Bu kaynaklar, aktarım sırasında başkaları tarafından görülebilir ve bir saldırgan tarafından sayfanın davranışını değiştirmek üzere kullanılabilir.</translation>
+<translation id="9048224371732578627">Otomatik video oynatmaya izin verildi</translation>
 <translation id="9062620674789239642">Taşınmış, dizenlenmiş veya silinmiş olabilir.</translation>
 <translation id="9069693763241529744">Bir eklenti tarafından engellendi</translation>
 <translation id="9073799351042754113">Bu site için güvenlik uyarılarını kapatmayı seçtiniz.</translation>

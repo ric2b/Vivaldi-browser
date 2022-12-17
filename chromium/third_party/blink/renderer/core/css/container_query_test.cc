@@ -205,7 +205,7 @@ TEST_F(ContainerQueryTest, FeatureFlags) {
   EXPECT_EQ(MediaQueryExpNode::kFeatureWidth,
             FeatureFlagsFrom("((width: 100px))"));
   EXPECT_EQ(MediaQueryExpNode::kFeatureWidth,
-            FeatureFlagsFrom("not (width: 100px)"));
+            FeatureFlagsFrom("(not (width: 100px))"));
 }
 
 TEST_F(ContainerQueryTest, ImplicitContainerSelector) {
@@ -306,8 +306,8 @@ TEST_F(ContainerQueryTest, RuleCopy) {
   // The ContainerQuery should be copied.
   EXPECT_NE(&container->GetContainerQuery(), &copy->GetContainerQuery());
 
-  // The inner MediaQueryExpNode should be copied.
-  EXPECT_NE(&GetInnerQuery(container->GetContainerQuery()),
+  // The inner MediaQueryExpNode is immutable, and does not need to be copied.
+  EXPECT_EQ(&GetInnerQuery(container->GetContainerQuery()),
             &GetInnerQuery(copy->GetContainerQuery()));
 }
 
@@ -533,8 +533,6 @@ TEST_F(ContainerQueryTest, ContainerUnitsViewportFallback) {
 }
 
 TEST_F(ContainerQueryTest, OldStyleForTransitions) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   Element* target = nullptr;
 
   SetBodyInnerHTML(R"HTML(
@@ -606,8 +604,6 @@ TEST_F(ContainerQueryTest, OldStyleForTransitions) {
 }
 
 TEST_F(ContainerQueryTest, TransitionAppearingInFinalPass) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       #container {
@@ -679,8 +675,6 @@ TEST_F(ContainerQueryTest, TransitionAppearingInFinalPass) {
 }
 
 TEST_F(ContainerQueryTest, TransitionTemporarilyAppearing) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       #container {
@@ -749,8 +743,6 @@ TEST_F(ContainerQueryTest, TransitionTemporarilyAppearing) {
 }
 
 TEST_F(ContainerQueryTest, RedefiningAnimations) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes anim {
@@ -825,8 +817,6 @@ TEST_F(ContainerQueryTest, RedefiningAnimations) {
 }
 
 TEST_F(ContainerQueryTest, UnsetAnimation) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   SetBodyInnerHTML(R"HTML(
     <style>
       @keyframes anim {
@@ -904,8 +894,6 @@ TEST_F(ContainerQueryTest, UnsetAnimation) {
 }
 
 TEST_F(ContainerQueryTest, OldStylesCount) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   // No container, no animation properties.
   EXPECT_EQ(0u, GetOldStylesCount(R"HTML(
     <div></div>
@@ -1029,8 +1017,6 @@ TEST_F(ContainerQueryTest, OldStylesCount) {
 }
 
 TEST_F(ContainerQueryTest, AllAnimationAffectingPropertiesInConditional) {
-  ScopedCSSDelayedAnimationUpdatesForTest scoped(true);
-
   CSSPropertyID animation_affecting[] = {
       CSSPropertyID::kAll,
       CSSPropertyID::kAnimation,

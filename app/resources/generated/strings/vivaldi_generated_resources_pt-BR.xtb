@@ -138,6 +138,7 @@
 <translation id="3360297538363969800">Ocorreu uma falha na impressão. Verifique sua impressora e tente novamente.</translation>
 <translation id="3378572629723696641">Esta extensão pode ter sido corrompida.</translation>
 <translation id="3387614642886316601">Usar a verificação ortográfica aprimorada</translation>
+<translation id="3393582007140394275">Não foi possível transmitir a tela.</translation>
 <translation id="3432227430032737297">Excluir Cookies Pesquisados</translation>
 <translation id="345693547134384690">Abrir &amp;imagem em uma nova aba</translation>
 <translation id="3494769164076977169">Perguntar quando um site tentar fazer download de arquivos automaticamente após o primeiro arquivo (recomendado)</translation>
@@ -210,8 +211,10 @@
 <translation id="488785315393301722">Exibir Detalhes</translation>
 <translation id="4907306957610201395">Categoria de Permissão</translation>
 <translation id="4912643508233590958">Ativações do Estado Ocioso</translation>
+<translation id="49265687513387605">Não foi possível transmitir a tela. Verifique se a solicitação para compartilhar sua tela foi confirmada.</translation>
 <translation id="4927753642311223124">Não há nada para se ver aqui.</translation>
 <translation id="4930714375720679147">Ativar</translation>
+<translation id="4961318399572185831">Transmitir tela</translation>
 <translation id="4988526792673242964">Páginas</translation>
 <translation id="49896407730300355">Girar no s&amp;entido anti-horário</translation>
 <translation id="4989966318180235467">Inspecionar página de &amp;fundo</translation>

@@ -4,13 +4,15 @@
 
 #include "third_party/blink/renderer/core/dom/focusgroup_flags.h"
 
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/web_string.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/element.h"
-#include "third_party/blink/renderer/core/dom/element_traversal.h"
+#include "third_party/blink/renderer/core/dom/flat_tree_traversal.h"
 #include "third_party/blink/renderer/core/dom/space_split_string.h"
-#include "third_party/blink/renderer/core/html/html_table_element.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
+#include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/runtime_enabled_features.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
@@ -18,23 +20,25 @@
 namespace blink::focusgroup {
 
 FocusgroupFlags FindNearestFocusgroupAncestorFlags(const Element* element) {
-  // TODO(bebeaudr): We should be using FlatTreeTraversal here.
-  Element* ancestor = Traversal<Element>::FirstAncestor(*element);
+  Element* ancestor = FlatTreeTraversal::ParentElement(*element);
   while (ancestor) {
     FocusgroupFlags ancestor_flags = ancestor->GetFocusgroupFlags();
     // When this is true, we found the focusgroup to extend.
     if (ancestor_flags != FocusgroupFlags::kNone) {
       return ancestor_flags;
     }
-    ancestor = Traversal<Element>::FirstAncestor(*ancestor);
+    ancestor = FlatTreeTraversal::ParentElement(*ancestor);
   }
   return FocusgroupFlags::kNone;
 }
 
 FocusgroupFlags ParseFocusgroup(const Element* element,
                                 const AtomicString& input) {
-  DCHECK(RuntimeEnabledFeatures::FocusgroupEnabled());
   DCHECK(element);
+  ExecutionContext* context = element->GetExecutionContext();
+  DCHECK(RuntimeEnabledFeatures::FocusgroupEnabled(context));
+
+  UseCounter::Count(context, WebFeature::kFocusgroup);
 
   // 1. Parse the input.
   bool has_extend = false;
@@ -137,18 +141,6 @@ FocusgroupFlags ParseFocusgroup(const Element* element,
               WebString::FromUTF8(
                   "Focusgroup attribute values 'extend' and 'grid' present, "
                   "but grid focusgroup cannot extend. Ignoring focusgroup.")));
-      return FocusgroupFlags::kNone;
-    }
-
-    auto* html_table_element = DynamicTo<HTMLTableElement>(element);
-    if (!html_table_element) {
-      element->GetDocument().AddConsoleMessage(
-          MakeGarbageCollected<ConsoleMessage>(
-              mojom::blink::ConsoleMessageSource::kOther,
-              mojom::blink::ConsoleMessageLevel::kError,
-              WebString::FromUTF8(
-                  "Focusgroup attribute value 'grid' used on an element other "
-                  "than an HTML table. Ignoring focusgroup.")));
       return FocusgroupFlags::kNone;
     }
 

@@ -9,7 +9,7 @@ import './collapse_radio_button.js';
 import './secure_dns.js';
 import '../controls/settings_radio_group.js';
 import '../controls/settings_toggle_button.js';
-import '../icons.js';
+import '../icons.html.js';
 import '../prefs/prefs.js';
 import '../settings_shared_css.js';
 import './disable_safebrowsing_dialog.js';
@@ -145,8 +145,7 @@ export class SettingsSecurityPageElement extends
           // The phones subpage is linked from the security keys subpage, if
           // it exists. Thus the phones subpage is only linked from this page
           // if the security keys subpage is disabled.
-          return !loadTimeData.getBoolean('enableSecurityKeysSubpage') &&
-              loadTimeData.getBoolean('enableSecurityKeysPhonesSubpage');
+          return !loadTimeData.getBoolean('enableSecurityKeysSubpage');
         }
       },
       // </if>

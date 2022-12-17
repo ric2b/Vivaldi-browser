@@ -21,7 +21,6 @@ class Notification;
 
 namespace views {
 class BoxLayout;
-class FlexLayoutView;
 class LabelButton;
 class View;
 }  // namespace views
@@ -31,6 +30,7 @@ namespace ash {
 class RoundedImageView;
 class AshNotificationExpandButton;
 class IconButton;
+class NotificationGroupingController;
 
 // Customized NotificationView for notification on ChromeOS. This view is used
 // to displays all current types of notification on ChromeOS (web, basic, image,
@@ -55,15 +55,21 @@ class ASH_EXPORT AshNotificationView
   // collapse state.
   void AnimateGroupedChildExpandedCollapse(bool expanded);
 
-  // Toggle the expand state of the notification.
+  // Animations when converting from single to group notification.
+  void AnimateSingleToGroup(NotificationGroupingController* grouping_controller,
+                            const std::string& notification_id,
+                            std::string parent_id);
+
+  // Toggle the expand state of the notification. This function should only be
+  // used to handle user manually expand/collapse a notification.
   void ToggleExpand();
 
   // Called when a child notificaiton's preferred size changes.
   void GroupedNotificationsPreferredSizeChanged();
 
   // message_center::MessageView:
-  void AddGroupNotification(const message_center::Notification& notification,
-                            bool newest_first) override;
+  void AddGroupNotification(
+      const message_center::Notification& notification) override;
   void PopulateGroupNotifications(
       const std::vector<const message_center::Notification*>& notifications)
       override;
@@ -75,6 +81,7 @@ class ASH_EXPORT AshNotificationView
       const message_center::Notification& notification) const override;
 
   // message_center::NotificationViewBase:
+  void Layout() override;
   void UpdateViewForExpandedState(bool expanded) override;
   void UpdateWithNotification(
       const message_center::Notification& notification) override;
@@ -106,6 +113,9 @@ class ASH_EXPORT AshNotificationView
   int GetLargeImageViewMaxWidth() const override;
   void ToggleInlineSettings(const ui::Event& event) override;
   void ActionButtonPressed(size_t index, const ui::Event& event) override;
+
+  void set_is_animating(bool is_animating) { is_animating_ = is_animating; }
+  bool is_animating() { return is_animating_; }
 
   // View containing all grouped notifications, propagates size changes
   // to the parent notification view.
@@ -158,6 +168,7 @@ class ASH_EXPORT AshNotificationView
     // views::View:
     void OnThemeChanged() override;
 
+    views::Label* title_view() { return title_view_; }
    private:
     friend class AshNotificationViewTest;
 
@@ -186,12 +197,20 @@ class ASH_EXPORT AshNotificationView
   void CreateOrUpdateSnoozeButton(
       const message_center::Notification& notification);
 
+  // Update visibility for grouped notifications to ensure only
+  // `kMaxGroupedNotificationsInCollapsedState` are visible in the collapsed
+  // state.
+  void UpdateGroupedNotificationsVisibility();
+
   // Update `message_in_expanded_view_` according to the given notification.
   void UpdateMessageLabelInExpandedState(
       const message_center::Notification& notification);
 
   // Update the background color with rounded corner.
   void UpdateBackground(int top_radius, int bottom_radius);
+
+  // Get the available space for the notification's title label.
+  int GetExpandedTitleLabelWidth();
 
   // Get the available space for `message_label_in_expanded_state_` width.
   int GetExpandedMessageLabelWidth();
@@ -211,6 +230,10 @@ class ASH_EXPORT AshNotificationView
   void UpdateIconAndButtonsColor(
       const message_center::Notification* notification);
 
+  // Animate resizing a parent notification view after a child notification view
+  // has been removed from itself.
+  void AnimateResizeAfterRemoval(views::View* to_be_removed);
+
   // AshNotificationView will animate its expand/collapse in the parent's
   // ChildPreferredSizeChange(). Child views are animated here.
   void PerformExpandCollapseAnimation();
@@ -220,6 +243,9 @@ class ASH_EXPORT AshNotificationView
 
   // Animations when toggle inline settings.
   void PerformToggleInlineSettingsAnimation(bool should_show_inline_settings);
+
+  // Fade in animation when converting from single to group notification.
+  void AnimateSingleToGroupFadeIn();
 
   // Calculate vertical space available on screen for the
   // grouped_notifications_scroll_view_
@@ -235,8 +261,6 @@ class ASH_EXPORT AshNotificationView
   views::View* main_right_view_ = nullptr;
   RoundedImageView* app_icon_view_ = nullptr;
   AshNotificationExpandButton* expand_button_ = nullptr;
-  views::FlexLayoutView* expand_button_container_ = nullptr;
-  views::View* control_buttons_container_ = nullptr;
   views::View* left_content_ = nullptr;
   views::Label* message_label_in_expanded_state_ = nullptr;
   views::ScrollView* grouped_notifications_scroll_view_ = nullptr;
@@ -267,11 +291,17 @@ class ASH_EXPORT AshNotificationView
 
   // Cached background color to avoid unnecessary update.
   SkColor background_color_ = SK_ColorTRANSPARENT;
+
+  // Used to prevent setting bounds in `AshNotificationView` while running
+  // animations to resize this view.
+  bool is_animating_ = false;
+
   // Whether the notification associated with this view is a parent or child
   // in a grouped notification. Used to update visibility of UI elements
   // specific to each type of notification.
   bool is_grouped_parent_view_ = false;
   bool is_grouped_child_view_ = false;
+
   // Whether this view is shown in a notification popup.
   bool shown_in_popup_ = false;
 

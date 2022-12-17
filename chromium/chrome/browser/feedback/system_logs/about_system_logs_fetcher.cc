@@ -13,6 +13,7 @@
 #include "components/feedback/system_logs/system_logs_fetcher.h"
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+#include "chrome/browser/ash/system_logs/bluetooth_log_source.h"
 #include "chrome/browser/ash/system_logs/command_line_log_source.h"
 #include "chrome/browser/ash/system_logs/connected_input_devices_log_source.h"
 #include "chrome/browser/ash/system_logs/dbus_log_source.h"
@@ -22,6 +23,7 @@
 #include "chrome/browser/ash/system_logs/reven_log_source.h"
 #include "chrome/browser/ash/system_logs/shill_log_source.h"
 #include "chrome/browser/ash/system_logs/touch_log_source.h"
+#include "chrome/browser/ash/system_logs/traffic_counters_log_source.h"
 #include "chrome/browser/ash/system_logs/ui_hierarchy_log_source.h"
 #endif
 
@@ -37,6 +39,7 @@ SystemLogsFetcher* BuildAboutSystemLogsFetcher() {
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // These sources rely on scrubbing in SystemLogsFetcher.
+  fetcher->AddSource(std::make_unique<BluetoothLogSource>());
   fetcher->AddSource(std::make_unique<CommandLineLogSource>());
   fetcher->AddSource(std::make_unique<DBusLogSource>());
   fetcher->AddSource(std::make_unique<DeviceEventLogSource>());
@@ -46,6 +49,7 @@ SystemLogsFetcher* BuildAboutSystemLogsFetcher() {
 
   fetcher->AddSource(std::make_unique<TouchLogSource>());
   fetcher->AddSource(std::make_unique<ConnectedInputDevicesLogSource>());
+  fetcher->AddSource(std::make_unique<TrafficCountersLogSource>());
 
   // Data sources that directly scrub itentifiable information.
   fetcher->AddSource(std::make_unique<DebugDaemonLogSource>(scrub_data));

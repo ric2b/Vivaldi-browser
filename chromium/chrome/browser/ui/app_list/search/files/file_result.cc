@@ -15,16 +15,11 @@
 #include "base/bind.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
-#include "base/files/file_util.h"
-#include "base/logging.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/task_traits.h"
-#include "base/task/thread_pool.h"
-#include "base/threading/scoped_blocking_call.h"
 #include "chrome/browser/platform_util.h"
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ui/app_list/search/files/justifications.h"
@@ -43,6 +38,9 @@ namespace {
 using chromeos::string_matching::TokenizedString;
 using chromeos::string_matching::TokenizedStringMatch;
 
+// The default relevance returned by CalculateRelevance.
+constexpr double kDefaultRelevance = 0.5;
+
 // The maximum penalty applied to a relevance by PenalizeRelevanceByAccessTime,
 // which will multiply the relevance by a number in [`kMaxPenalty`, 1].
 constexpr double kMaxPenalty = 0.6;
@@ -51,6 +49,9 @@ constexpr double kMaxPenalty = 0.6;
 // values make the penalty increase faster as the last access time of the file
 // increases. A value of 0.0029 results in a penalty multiplier of ~0.63 for a 1
 // month old file.
+// Note that files which have all been modified recently may end up with the
+// same penalty, since this coefficient is not large enough to differentiate
+// between them.
 constexpr double kPenaltyCoeff = 0.0029;
 
 constexpr int64_t kMillisPerDay = 1000 * 60 * 60 * 24;
@@ -95,15 +96,6 @@ void LogRelevance(ChromeSearchResult::ResultType result_type,
     default:
       NOTREACHED();
   }
-}
-
-absl::optional<base::File::Info> GetFileInfo(const base::FilePath& path) {
-  base::ScopedBlockingCall scoped_blocking_call(FROM_HERE,
-                                                base::BlockingType::MAY_BLOCK);
-  base::File::Info info;
-  if (!base::GetFileInfo(path, &info))
-    return absl::nullopt;
-  return info;
 }
 
 }  // namespace
@@ -157,43 +149,16 @@ FileResult::FileResult(const std::string& schema,
   if (details)
     SetDetails(details.value());
 
-  // Launcher search results UI is light by default, so use icons for light
-  // background if dark/light mode feature is not enabled. Productivity launcher
-  // has dark background by default, so use icons for dark background in that
-  // case.
-  const bool dark_background =
-      ash::features::IsDarkLightModeEnabled()
-          ? ash::ColorProvider::Get()->IsDarkModeEnabled()
-          : ash::features::IsProductivityLauncherEnabled();
-  if (display_type == DisplayType::kChip) {
-    SetChipIcon(chromeos::GetChipIconForPath(filepath, dark_background));
-  } else if (display_type == DisplayType::kContinue) {
-    // For Continue Section, if dark/light mode is disabled, we should use the
-    // icon and not the chip icon with a dark background as default.
-    const gfx::ImageSkia chip_icon =
-        ash::features::IsDarkLightModeEnabled()
-            ? chromeos::GetChipIconForPath(filepath, dark_background)
-            : chromeos::GetIconForPath(filepath, /*dark_background=*/true);
-    SetChipIcon(chip_icon);
-  } else {
-    switch (type) {
-      case Type::kFile:
-        SetIcon(IconInfo(chromeos::GetIconForPath(filepath, dark_background),
-                         kSystemIconDimension));
-        break;
-      case Type::kDirectory:
-        SetIcon(IconInfo(chromeos::GetIconFromType("folder", dark_background),
-                         kSystemIconDimension));
-        break;
-      case Type::kSharedDirectory:
-        SetIcon(IconInfo(chromeos::GetIconFromType("shared", dark_background),
-                         kSystemIconDimension));
-        break;
-    }
-  }
+  UpdateIcon();
+
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->AddObserver(this);
 }
 
-FileResult::~FileResult() = default;
+FileResult::~FileResult() {
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->RemoveObserver(this);
+}
 
 void FileResult::Open(int event_flags) {
   switch (type_) {
@@ -218,7 +183,8 @@ absl::optional<std::string> FileResult::DriveId() const {
 // static
 double FileResult::CalculateRelevance(
     const absl::optional<TokenizedString>& query,
-    const base::FilePath& filepath) {
+    const base::FilePath& filepath,
+    const absl::optional<base::Time>& last_accessed) {
   const std::u16string raw_title =
       base::UTF8ToUTF16(StripHostedFileExtensions(filepath.BaseName().value()));
   const TokenizedString title(raw_title, TokenizedString::Mode::kWords);
@@ -227,14 +193,25 @@ double FileResult::CalculateRelevance(
       !query || query.value().text().empty() || title.text().empty();
   UMA_HISTOGRAM_BOOLEAN("Apps.AppList.FileResult.DefaultRelevanceUsed",
                         use_default_relevance);
-  if (use_default_relevance) {
-    static constexpr double kDefaultRelevance = 0.5;
+  if (use_default_relevance)
     return kDefaultRelevance;
-  }
 
   TokenizedStringMatch match;
   match.Calculate(query.value(), title);
-  return match.relevance();
+  if (!last_accessed)
+    return match.relevance();
+
+  // Apply a gaussian penalty based on the time delta. `time_delta` is converted
+  // into millisecond fractions of a day for numerical stability.
+  const double time_delta =
+      static_cast<double>(
+          (base::Time::Now() - last_accessed.value()).InMilliseconds()) /
+      kMillisPerDay;
+  const double penalty =
+      kMaxPenalty +
+      (1.0 - kMaxPenalty) * std::exp(-kPenaltyCoeff * time_delta * time_delta);
+  DCHECK(penalty > 0.0 && penalty <= 1.0);
+  return match.relevance() * penalty;
 }
 
 void FileResult::RequestThumbnail(ash::ThumbnailLoader* thumbnail_loader) {
@@ -247,6 +224,10 @@ void FileResult::RequestThumbnail(ash::ThumbnailLoader* thumbnail_loader) {
   thumbnail_loader->Load({filepath_, size},
                          base::BindOnce(&FileResult::OnThumbnailLoaded,
                                         weak_factory_.GetWeakPtr()));
+}
+
+void FileResult::OnColorModeChanged(bool dark_mode_enabled) {
+  UpdateIcon();
 }
 
 void FileResult::OnThumbnailLoaded(const SkBitmap* bitmap,
@@ -268,38 +249,50 @@ void FileResult::OnThumbnailLoaded(const SkBitmap* bitmap,
                                        ash::SearchResultIconShape::kCircle));
 }
 
-void FileResult::PenalizeRelevanceByAccessTime() {
-  base::ThreadPool::PostTaskAndReplyWithResult(
-      FROM_HERE, {base::MayBlock(), base::TaskPriority::USER_BLOCKING},
-      base::BindOnce(&GetFileInfo, filepath_),
-      base::BindOnce(&FileResult::OnFileInfoReturned,
-                     weak_factory_.GetWeakPtr()));
-}
-
-void FileResult::OnFileInfoReturned(
-    const absl::optional<base::File::Info>& info) {
-  // Do not penalize relevance if we can't stat the file.
-  if (!info) {
-    return;
-  }
-
-  // Apply a gaussian penalty based on the time delta. `time_delta` is converted
-  // into millisecond fractions of a day for numerical stability.
-  double time_delta =
-      static_cast<double>(
-          (base::Time::Now() - info->last_accessed).InMilliseconds()) /
-      kMillisPerDay;
-  double penalty =
-      kMaxPenalty +
-      (1.0 - kMaxPenalty) * std::exp(-kPenaltyCoeff * time_delta * time_delta);
-  DCHECK((penalty > 0.0) && (penalty <= 1.0));
-  set_relevance(relevance() * penalty);
-}
-
 void FileResult::SetDetailsToJustificationString() {
   GetJustificationStringAsync(
       filepath_, base::BindOnce(&FileResult::OnJustificationStringReturned,
                                 weak_factory_.GetWeakPtr()));
+}
+
+void FileResult::UpdateIcon() {
+  // Launcher search results UI is light by default, so use icons for light
+  // background if dark/light mode feature is not enabled. Productivity launcher
+  // has dark background by default, so use icons for dark background in that
+  // case.
+  const bool is_dark_light_enabled = ash::features::IsDarkLightModeEnabled();
+  // ColorProvider might be nullptr in tests.
+  auto* color_provider = ash::ColorProvider::Get();
+  const bool dark_background =
+      is_dark_light_enabled
+          ? color_provider && color_provider->IsDarkModeEnabled()
+          : ash::features::IsProductivityLauncherEnabled();
+  if (display_type() == DisplayType::kChip) {
+    SetChipIcon(chromeos::GetChipIconForPath(filepath_, dark_background));
+  } else if (display_type() == DisplayType::kContinue) {
+    // For Continue Section, if dark/light mode is disabled, we should use the
+    // icon and not the chip icon with a dark background as default.
+    const gfx::ImageSkia chip_icon =
+        is_dark_light_enabled
+            ? chromeos::GetChipIconForPath(filepath_, dark_background)
+            : chromeos::GetIconForPath(filepath_, /*dark_background=*/true);
+    SetChipIcon(chip_icon);
+  } else {
+    switch (type_) {
+      case Type::kFile:
+        SetIcon(IconInfo(chromeos::GetIconForPath(filepath_, dark_background),
+                         kSystemIconDimension));
+        break;
+      case Type::kDirectory:
+        SetIcon(IconInfo(chromeos::GetIconFromType("folder", dark_background),
+                         kSystemIconDimension));
+        break;
+      case Type::kSharedDirectory:
+        SetIcon(IconInfo(chromeos::GetIconFromType("shared", dark_background),
+                         kSystemIconDimension));
+        break;
+    }
+  }
 }
 
 void FileResult::OnJustificationStringReturned(

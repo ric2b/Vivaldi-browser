@@ -53,6 +53,7 @@
 #include "content/public/test/test_navigation_observer.h"
 #include "content/public/test/test_utils.h"
 #include "net/dns/mock_host_resolver.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "url/gurl.h"
 
 using content::OpenURLParams;
@@ -474,16 +475,17 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, ProtectVideoTabs) {
   auto* tab = GetWebContentsAt(1);
 
   // Simulate that a video stream is now being captured.
-  blink::MediaStreamDevices video_devices(1);
-  video_devices[0] = blink::MediaStreamDevice(
+  blink::mojom::StreamDevices devices;
+  blink::MediaStreamDevice video_device = blink::MediaStreamDevice(
       blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE, "fake_media_device",
       "fake_media_device");
+  devices.video_device = video_device;
   MediaCaptureDevicesDispatcher* dispatcher =
       MediaCaptureDevicesDispatcher::GetInstance();
-  dispatcher->SetTestVideoCaptureDevices(video_devices);
+  dispatcher->SetTestVideoCaptureDevices({video_device});
   std::unique_ptr<content::MediaStreamUI> video_stream_ui =
       dispatcher->GetMediaStreamCaptureIndicator()->RegisterMediaStream(
-          tab, video_devices);
+          tab, devices);
   video_stream_ui->OnStarted(base::RepeatingClosure(),
                              content::MediaStreamUI::SourceCallback(),
                              /*label=*/std::string(), /*screen_capture_ids=*/{},
@@ -593,8 +595,8 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, UrgentFastShutdownSharedTabProcess) {
   content::RenderProcessHost::SetMaxRendererProcessCount(1);
   OpenTwoTabs(embedded_test_server()->GetURL("a.com", "/title1.html"),
               embedded_test_server()->GetURL("a.com", "/title2.html"));
-  EXPECT_EQ(tsm()->GetWebContentsAt(0)->GetMainFrame()->GetProcess(),
-            tsm()->GetWebContentsAt(1)->GetMainFrame()->GetProcess());
+  EXPECT_EQ(tsm()->GetWebContentsAt(0)->GetPrimaryMainFrame()->GetProcess(),
+            tsm()->GetWebContentsAt(1)->GetPrimaryMainFrame()->GetProcess());
 
   // Advance time so everything is urgent discardable.
   test_clock_.Advance(kBackgroundUrgentProtectionTime);
@@ -722,7 +724,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, DiscardedTabHasNoProcess) {
 
   // The renderer process should be alive at this point.
   content::RenderProcessHost* process =
-      web_contents->GetMainFrame()->GetProcess();
+      web_contents->GetPrimaryMainFrame()->GetProcess();
   ASSERT_TRUE(process);
   EXPECT_TRUE(process->IsInitializedAndNotDead());
   EXPECT_NE(base::kNullProcessHandle, process->GetProcess().Handle());
@@ -735,13 +737,13 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, DiscardedTabHasNoProcess) {
   EXPECT_NE(new_web_contents, web_contents);
   web_contents = new_web_contents;
   content::RenderProcessHost* new_process =
-      web_contents->GetMainFrame()->GetProcess();
+      web_contents->GetPrimaryMainFrame()->GetProcess();
   EXPECT_NE(new_process, process);
   EXPECT_NE(new_process->GetID(), renderer_id);
   process = new_process;
 
   // The renderer process should be dead after a discard.
-  EXPECT_EQ(process, web_contents->GetMainFrame()->GetProcess());
+  EXPECT_EQ(process, web_contents->GetPrimaryMainFrame()->GetProcess());
   EXPECT_FALSE(process->IsInitializedAndNotDead());
   EXPECT_EQ(base::kNullProcessHandle, process->GetProcess().Handle());
 
@@ -750,7 +752,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest, DiscardedTabHasNoProcess) {
   ASSERT_TRUE(ui_test_utils::NavigateToURL(browser(), test_page));
 
   // Reload should mean that the renderer process is alive now.
-  EXPECT_EQ(process, web_contents->GetMainFrame()->GetProcess());
+  EXPECT_EQ(process, web_contents->GetPrimaryMainFrame()->GetProcess());
   EXPECT_TRUE(process->IsInitializedAndNotDead());
   EXPECT_NE(base::kNullProcessHandle, process->GetProcess().Handle());
 }
@@ -769,7 +771,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
 
   // Grab the original frames.
   content::WebContents* contents = tsm()->GetActiveWebContents();
-  content::RenderFrameHost* main_frame = contents->GetMainFrame();
+  content::RenderFrameHost* main_frame = contents->GetPrimaryMainFrame();
   content::RenderFrameHost* child_frame = ChildFrameAt(main_frame, 0);
   ASSERT_TRUE(child_frame);
 
@@ -806,7 +808,7 @@ IN_PROC_BROWSER_TEST_F(TabManagerTest,
 
   // Re-assign pointers after discarding, as they've changed.
   contents = tsm()->GetActiveWebContents();
-  main_frame = contents->GetMainFrame();
+  main_frame = contents->GetPrimaryMainFrame();
   child_frame = ChildFrameAt(main_frame, 0);
   ASSERT_TRUE(child_frame);
 

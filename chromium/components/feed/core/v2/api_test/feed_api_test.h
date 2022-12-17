@@ -317,6 +317,9 @@ class TestFeedNetwork : public FeedNetwork {
   int GetListFollowedWebFeedsRequestCount() const {
     return GetApiRequestCount<ListWebFeedsDiscoverApi>();
   }
+  int GetWebFeedListContentsCount() const {
+    return GetApiRequestCount<WebFeedListContentsDiscoverApi>();
+  }
 
   std::vector<NetworkRequestType> sent_request_types() const {
     return sent_request_types_;
@@ -473,6 +476,9 @@ class FeedApiTest : public testing::Test, public FeedStream::Delegate {
   std::unique_ptr<StreamModel> CreateStreamModel();
   bool IsTaskQueueIdle() const;
   void WaitForIdleTaskQueue();
+  // Fast forwards the task environment enough for the in-memory model to
+  // auto-unload, which will only take place if there are no attached surfaces.
+  void WaitForModelToAutoUnload();
   void UnloadModel(const StreamType& stream_type);
   void FollowWebFeed(const WebFeedPageInformation page_info);
 

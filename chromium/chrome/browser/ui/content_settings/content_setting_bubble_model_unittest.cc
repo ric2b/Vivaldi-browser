@@ -50,6 +50,7 @@
 #include "content/public/test/web_contents_tester.h"
 #include "services/device/public/cpp/device_features.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -94,7 +95,8 @@ TEST_F(ContentSettingBubbleModelTest, ImageRadios) {
   WebContentsTester::For(web_contents())->
       NavigateAndCommit(GURL("https://www.example.com"));
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::IMAGES);
 
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
@@ -113,7 +115,8 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
   WebContentsTester::For(web_contents())->
       NavigateAndCommit(GURL("https://www.example.com"));
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::COOKIES);
 
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
@@ -130,8 +133,8 @@ TEST_F(ContentSettingBubbleModelTest, Cookies) {
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentAllowed(ContentSettingsType::COOKIES);
   content_setting_bubble_model =
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
@@ -160,7 +163,8 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMicAndCamera) {
       DisableDeviceEnumerationForTesting();
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   std::string request_host = "google.com";
   GURL security_origin("http://" + request_host);
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
@@ -214,7 +218,8 @@ TEST_F(ContentSettingBubbleModelTest, BlockedMediastreamMicAndCamera) {
       url, GURL(), ContentSettingsType::MEDIASTREAM_CAMERA, setting);
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
       PageSpecificContentSettings::MICROPHONE_ACCESSED |
       PageSpecificContentSettings::MICROPHONE_BLOCKED |
@@ -276,7 +281,8 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubble) {
       url, GURL(), ContentSettingsType::MEDIASTREAM_MIC, setting);
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
       PageSpecificContentSettings::MICROPHONE_ACCESSED |
       PageSpecificContentSettings::MICROPHONE_BLOCKED;
@@ -355,20 +361,22 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
   blink::MediaStreamDevice fake_audio_device1(
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "fake_dev1",
       "Fake Audio Device 1");
+  audio_devices.push_back(fake_audio_device1);
   blink::MediaStreamDevice fake_audio_device2(
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "fake_dev2",
       "Fake Audio Device 2");
+  audio_devices.push_back(fake_audio_device2);
   blink::MediaStreamDevice fake_audio_device3(
       blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "fake_dev3",
       "Fake Audio Device 3");
-  audio_devices.push_back(fake_audio_device1);
-  audio_devices.push_back(fake_audio_device2);
   audio_devices.push_back(fake_audio_device3);
+
   MediaCaptureDevicesDispatcher::GetInstance()->SetTestAudioCaptureDevices(
       audio_devices);
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
       PageSpecificContentSettings::MICROPHONE_ACCESSED |
       PageSpecificContentSettings::MICROPHONE_BLOCKED;
@@ -394,12 +402,6 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
     // The first audio device should be selected by default.
     EXPECT_TRUE(fake_audio_device1.IsSameDevice(
         bubble_content.media_menus.begin()->second.selected_device));
-
-    // Select a different (the second) device.
-    content_setting_bubble_model->OnMediaMenuClicked(
-        blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
-        fake_audio_device2.id);
-    content_setting_bubble_model->CommitChanges();
   }
   {
     std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
@@ -412,14 +414,6 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
     EXPECT_EQ(blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
               bubble_content.media_menus.begin()->first);
     EXPECT_FALSE(bubble_content.media_menus.begin()->second.disabled);
-    // The second audio device should be selected.
-    EXPECT_TRUE(fake_audio_device2.IsSameDevice(
-        bubble_content.media_menus.begin()->second.selected_device));
-    // The "settings changed" message should not be displayed when there is no
-    // active capture.
-    EXPECT_FALSE(bubble_content.custom_link_enabled);
-    EXPECT_TRUE(bubble_content.custom_link.empty());
-    content_setting_bubble_model->CommitChanges();
   }
 
   // Simulate that an audio stream is being captured.
@@ -427,7 +421,10 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
       MediaCaptureDevicesDispatcher::GetInstance()->
         GetMediaStreamCaptureIndicator();
   std::unique_ptr<content::MediaStreamUI> media_stream_ui =
-      indicator->RegisterMediaStream(web_contents(), audio_devices);
+      indicator->RegisterMediaStream(
+          web_contents(),
+          blink::mojom::StreamDevices(fake_audio_device1,
+                                      /*video_device=*/absl::nullopt));
   media_stream_ui->OnStarted(base::RepeatingClosure(),
                              content::MediaStreamUI::SourceCallback(),
                              /*label=*/std::string(), /*screen_capture_ids=*/{},
@@ -455,13 +452,10 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
     EXPECT_EQ(blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
               bubble_content.media_menus.begin()->first);
     EXPECT_FALSE(bubble_content.media_menus.begin()->second.disabled);
-    EXPECT_TRUE(fake_audio_device2.IsSameDevice(
-        bubble_content.media_menus.begin()->second.selected_device));
-
     // Select a different different device.
     content_setting_bubble_model->OnMediaMenuClicked(
         blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
-        fake_audio_device3.id);
+        fake_audio_device2.id);
     content_setting_bubble_model->CommitChanges();
   }
 
@@ -505,8 +499,6 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamContentBubbleMediaMenus) {
     EXPECT_EQ(blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE,
               bubble_content.media_menus.begin()->first);
     EXPECT_FALSE(bubble_content.media_menus.begin()->second.disabled);
-    EXPECT_TRUE(fake_audio_device3.IsSameDevice(
-        bubble_content.media_menus.begin()->second.selected_device));
   }
 }
 
@@ -516,7 +508,8 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamMic) {
       DisableDeviceEnumerationForTesting();
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   std::string request_host = "google.com";
   GURL security_origin("http://" + request_host);
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
@@ -590,7 +583,8 @@ TEST_F(ContentSettingBubbleModelTest, MediastreamCamera) {
       DisableDeviceEnumerationForTesting();
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   std::string request_host = "google.com";
   GURL security_origin("http://" + request_host);
   PageSpecificContentSettings::MicrophoneCameraState microphone_camera_state =
@@ -665,7 +659,8 @@ TEST_F(ContentSettingBubbleModelTest, AccumulateMediastreamMicAndCamera) {
       DisableDeviceEnumerationForTesting();
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   std::string request_host = "google.com";
   GURL security_origin("http://" + request_host);
 
@@ -743,7 +738,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
 
@@ -863,8 +859,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
 
   // Go from block by default to allow by default to block by default.
   {
@@ -940,8 +936,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
   // Clear site-specific exceptions.
   settings_map->ClearSettingsForOneType(ContentSettingsType::GEOLOCATION);
 
@@ -1013,7 +1009,8 @@ TEST_F(ContentSettingBubbleModelTest, Geolocation) {
 TEST_F(ContentSettingBubbleModelTest, FileURL) {
   std::string file_url("file:///tmp/test.html");
   NavigateAndCommit(GURL(file_url));
-  PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame())
+  PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame())
       ->OnContentBlocked(ContentSettingsType::IMAGES);
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
       ContentSettingBubbleModel::CreateContentSettingBubbleModel(
@@ -1186,7 +1183,8 @@ TEST_F(GenericSensorContentSettingBubbleModelTest,
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   HostContentSettingsMap* settings_map =
       HostContentSettingsMapFactory::GetForProfile(profile());
 
@@ -1263,8 +1261,8 @@ TEST_F(GenericSensorContentSettingBubbleModelTest,
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
 
   // Go from block by default to allow by default to block by default.
   {
@@ -1339,8 +1337,8 @@ TEST_F(GenericSensorContentSettingBubbleModelTest,
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
 
   // Block by default but allow a specific site.
   {
@@ -1373,8 +1371,8 @@ TEST_F(GenericSensorContentSettingBubbleModelTest,
 
   WebContentsTester::For(web_contents())
       ->NavigateAndCommit(GURL("https://www.example.com"));
-  content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+  content_settings = PageSpecificContentSettings::GetForFrame(
+      web_contents()->GetPrimaryMainFrame());
   // Clear site-specific exceptions.
   settings_map->ClearSettingsForOneType(ContentSettingsType::SENSORS);
 
@@ -1412,7 +1410,8 @@ TEST_F(ContentSettingBubbleModelTest, PopupBubbleModelListItems) {
   const GURL url("https://www.example.test/");
   WebContentsTester::For(web_contents())->NavigateAndCommit(url);
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::POPUPS);
 
   blocked_content::PopupBlockerTabHelper::CreateForWebContents(web_contents());
@@ -1446,7 +1445,8 @@ TEST_F(ContentSettingBubbleModelTest, ValidUrl) {
       NavigateAndCommit(GURL("https://www.example.com"));
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::COOKIES);
 
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(
@@ -1463,7 +1463,8 @@ TEST_F(ContentSettingBubbleModelTest, InvalidUrl) {
       NavigateAndCommit(GURL("about:blank"));
 
   PageSpecificContentSettings* content_settings =
-      PageSpecificContentSettings::GetForFrame(web_contents()->GetMainFrame());
+      PageSpecificContentSettings::GetForFrame(
+          web_contents()->GetPrimaryMainFrame());
   content_settings->OnContentBlocked(ContentSettingsType::COOKIES);
 
   std::unique_ptr<ContentSettingBubbleModel> content_setting_bubble_model(

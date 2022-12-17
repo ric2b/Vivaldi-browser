@@ -8,6 +8,7 @@
 #include <string>
 
 #include "base/callback_forward.h"
+#include "base/memory/ref_counted.h"
 #include "base/time/time.h"
 #include "base/values.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
@@ -89,6 +90,8 @@ class DataDecoder {
   using GzipperCallback =
       base::OnceCallback<void(ResultOrError<mojo_base::BigBuffer>)>;
 
+  using CancellationFlag = base::RefCountedData<bool>;
+
   // Returns a raw interface to the service instance. This launches an instance
   // of the service process if possible on the current platform, or returns a
   // connection to the in-process instance of in a test environment using
@@ -129,6 +132,23 @@ class DataDecoder {
       mojom::XmlParser::WhitespaceBehavior whitespace_behavior,
       ValueParseCallback callback);
 
+  // Deflates potentially unsafe |data| using this DataDecoder's service
+  // instance. This will use raw DEFLATE, i.e. no headers are outputted.
+  //
+  // Note that |callback| will only be called if the parsing operation succeeds
+  // or fails before this DataDecoder is destroyed.
+  void Deflate(base::span<const uint8_t> data, GzipperCallback callback);
+
+  // Inflates potentially unsafe |data| using this DataDecoder's service
+  // instance. |data| must have been deflated raw, i.e. with no headers. If the
+  // uncompressed data exceeds |max_uncompressed_size|, returns empty.
+  //
+  // Note that |callback| will only be called if the parsing operation succeeds
+  // or fails before this DataDecoder is destroyed.
+  void Inflate(base::span<const uint8_t> data,
+               uint64_t max_uncompressed_size,
+               GzipperCallback callback);
+
   // Compresses potentially unsafe |data| using this DataDecoder's service
   // instance.
   //
@@ -154,6 +174,13 @@ class DataDecoder {
   // This instance's connection to the service. This connection is lazily
   // established and may be reset after long periods of idle time.
   mojo::Remote<mojom::DataDecoderService> service_;
+
+  // Cancellation flag for any outstanding requests. When a request is
+  // started, it takes a reference to this flag. Upon the destruction of this
+  // instance, the flag is set to `true`. Any outstanding requests should check
+  // this flag, and if it is `true`, they should not run the callback, per
+  // the API guarantees above.
+  scoped_refptr<CancellationFlag> cancel_requests_;
 };
 
 }  // namespace data_decoder

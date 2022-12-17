@@ -56,17 +56,17 @@ class CORE_EXPORT History final : public ScriptWrappable,
   unsigned length(ExceptionState&) const;
   ScriptValue state(ScriptState*, ExceptionState&);
 
-  void back(ScriptState*, ExceptionState&);
-  void forward(ScriptState*, ExceptionState&);
-  void go(ScriptState*, int delta, ExceptionState&);
+  void back(ExceptionState&);
+  void forward(ExceptionState&);
+  void go(int delta, ExceptionState&);
 
-  void pushState(v8::Isolate* isolate,
+  void pushState(ScriptState*,
                  const ScriptValue& data,
                  const String& title,
                  const String& url,
                  ExceptionState&);
 
-  void replaceState(v8::Isolate* isolate,
+  void replaceState(ScriptState*,
                     const ScriptValue& data,
                     const String& title,
                     const String& url,

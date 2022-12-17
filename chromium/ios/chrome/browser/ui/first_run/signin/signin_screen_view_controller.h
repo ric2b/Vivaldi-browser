@@ -18,8 +18,10 @@
 // Called when the user taps to see the account picker.
 - (void)showAccountPickerFromPoint:(CGPoint)point;
 
-// Called when the user taps on "Manage" related to metric reporting.
-- (void)showUMADialog;
+// Logs scrollability metric on view appears.
+- (void)logScrollButtonVisible:(BOOL)scrollButtonVisible
+            withIdentityPicker:(BOOL)identityPickerVisible
+                     andFooter:(BOOL)footerVisible;
 
 @end
 

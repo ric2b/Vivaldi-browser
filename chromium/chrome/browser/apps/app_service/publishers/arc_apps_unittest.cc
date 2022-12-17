@@ -11,6 +11,7 @@
 #include "ash/components/arc/test/fake_app_instance.h"
 #include "ash/components/arc/test/fake_file_system_instance.h"
 #include "base/strings/string_util.h"
+#include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
@@ -36,6 +37,7 @@
 #include "storage/common/file_system/file_system_mount_option.h"
 #include "storage/common/file_system/file_system_types.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/utility/utility.h"
 
 namespace {
 
@@ -143,12 +145,6 @@ class ArcAppsPublisherTest : public testing::Test {
     arc_bridge_service->intent_helper()->SetInstance(intent_helper_instance());
     arc::WaitForInstanceReady(arc_bridge_service->intent_helper());
 
-    file_system_instance_ = std::make_unique<arc::FakeFileSystemInstance>();
-    arc_bridge_service->file_system()->SetInstance(file_system_instance());
-    arc::WaitForInstanceReady(arc_bridge_service->file_system());
-
-    auto* const provider = web_app::FakeWebAppProvider::Get(&profile_);
-    provider->SkipAwaitingExtensionSystem();
     web_app::test::AwaitStartWebAppProviderAndSubsystems(profile());
 
     app_service_test_.SetUp(&profile_);
@@ -181,6 +177,14 @@ class ArcAppsPublisherTest : public testing::Test {
   }
 
   void FlushMojoCalls() { app_service_test_.FlushMojoCalls(); }
+
+  void SetUpFileSystemInstance() {
+    auto* arc_bridge_service =
+        arc_test()->arc_service_manager()->arc_bridge_service();
+    file_system_instance_ = std::make_unique<arc::FakeFileSystemInstance>();
+    arc_bridge_service->file_system()->SetInstance(file_system_instance());
+    arc::WaitForInstanceReady(arc_bridge_service->file_system());
+  }
 
   TestingProfile* profile() { return &profile_; }
 
@@ -233,7 +237,7 @@ TEST_F(ArcAppsPublisherTest, SetSupportedLinksFromArc) {
       package_name, CreateFilterList(package_name, {kTestAuthority}));
   VerifyIntentFilters(app_id, {kTestAuthority});
   std::vector<arc::mojom::SupportedLinksPtr> added_links;
-  added_links.emplace_back(base::in_place, package_name,
+  added_links.emplace_back(absl::in_place, package_name,
                            CreateFilterList(package_name, {kTestAuthority}));
   intent_helper()->OnSupportedLinksChanged(
       std::move(added_links), {},
@@ -286,7 +290,7 @@ TEST_F(ArcAppsPublisherTest, SetSupportedLinksDefaultBrowserBehavior) {
       package_name, CreateFilterList(package_name, {kTestAuthority}));
   VerifyIntentFilters(app_id, {kTestAuthority});
   std::vector<arc::mojom::SupportedLinksPtr> added_links;
-  added_links.emplace_back(base::in_place, package_name,
+  added_links.emplace_back(absl::in_place, package_name,
                            CreateFilterList(package_name, {kTestAuthority}));
   intent_helper()->OnSupportedLinksChanged(
       std::move(added_links), {},
@@ -316,7 +320,7 @@ TEST_F(ArcAppsPublisherTest,
       package_name, CreateFilterList(package_name, {kTestAuthority}));
   VerifyIntentFilters(app_id, {kTestAuthority});
   std::vector<arc::mojom::SupportedLinksPtr> added_links;
-  added_links.emplace_back(base::in_place, package_name,
+  added_links.emplace_back(absl::in_place, package_name,
                            CreateFilterList(package_name, {kTestAuthority}));
   intent_helper()->OnSupportedLinksChanged(
       std::move(added_links), {},
@@ -333,7 +337,7 @@ TEST_F(ArcAppsPublisherTest,
   VerifyIntentFilters(app_id, {kTestAuthority, kTestAuthority2});
   std::vector<arc::mojom::SupportedLinksPtr> added_links2;
   added_links2.emplace_back(
-      base::in_place, package_name,
+      absl::in_place, package_name,
       CreateFilterList(package_name, {kTestAuthority, kTestAuthority2}));
   intent_helper()->OnSupportedLinksChanged(
       std::move(added_links2), {},
@@ -363,7 +367,7 @@ TEST_F(ArcAppsPublisherTest,
   intent_helper()->OnIntentFiltersUpdatedForPackage(
       package_name, CreateFilterList(package_name, {kTestAuthority}));
   std::vector<arc::mojom::SupportedLinksPtr> added_links;
-  added_links.emplace_back(base::in_place, package_name,
+  added_links.emplace_back(absl::in_place, package_name,
                            CreateFilterList(package_name, {kTestAuthority}));
   intent_helper()->OnSupportedLinksChanged(
       std::move(added_links), {},
@@ -377,6 +381,7 @@ TEST_F(ArcAppsPublisherTest,
 
 TEST_F(ArcAppsPublisherTest,
        LaunchAppWithIntent_EditIntent_SendsOpenUrlRequest) {
+  SetUpFileSystemInstance();
   auto intent = apps_util::CreateEditIntentFromFile(
       FileInDownloads(profile(), base::FilePath("test.txt")), "text/plain");
 
@@ -386,11 +391,16 @@ TEST_F(ArcAppsPublisherTest,
                                                  fake_apps[0]->activity);
   arc_test()->app_instance()->SendRefreshAppList(fake_apps);
 
+  absl::optional<bool> result;
   app_service_proxy()->LaunchAppWithIntent(
-      app_id, 0, std::move(intent),
-      apps::mojom::LaunchSource::kFromFileManager);
+      app_id, 0, std::move(intent), apps::mojom::LaunchSource::kFromFileManager,
+      /*window_info=*/nullptr,
+      base::BindLambdaForTesting(
+          [&result](bool callback_result) { result = callback_result; }));
 
   FlushMojoCalls();
+
+  ASSERT_TRUE(result.has_value() && result.value());
 
   ASSERT_EQ(file_system_instance()->handledUrlRequests().size(), 1);
   auto& url_request = file_system_instance()->handledUrlRequests()[0];
@@ -399,4 +409,30 @@ TEST_F(ArcAppsPublisherTest,
   ASSERT_EQ(url_request->urls[0]->mime_type, "text/plain");
   ASSERT_TRUE(
       base::EndsWith(url_request->urls[0]->content_url.spec(), "test.txt"));
+}
+
+TEST_F(ArcAppsPublisherTest,
+       LaunchAppWithIntent_EditIntent_NoArcFileSystem_ReturnsFalse) {
+  // Do not start up ArcFileSystem, to simulate the intent being sent before ARC
+  // starts.
+  auto intent = apps_util::CreateEditIntentFromFile(
+      FileInDownloads(profile(), base::FilePath("test.txt")), "text/plain");
+
+  const auto& fake_apps = arc_test()->fake_apps();
+  std::string package_name = fake_apps[0]->package_name;
+  std::string app_id = ArcAppListPrefs::GetAppId(fake_apps[0]->package_name,
+                                                 fake_apps[0]->activity);
+  arc_test()->app_instance()->SendRefreshAppList(fake_apps);
+
+  absl::optional<bool> result;
+  app_service_proxy()->LaunchAppWithIntent(
+      app_id, 0, std::move(intent), apps::mojom::LaunchSource::kFromFileManager,
+      /*window_info=*/nullptr,
+      base::BindLambdaForTesting(
+          [&result](bool callback_result) { result = callback_result; }));
+
+  FlushMojoCalls();
+
+  ASSERT_TRUE(result.has_value());
+  ASSERT_FALSE(result.value());
 }

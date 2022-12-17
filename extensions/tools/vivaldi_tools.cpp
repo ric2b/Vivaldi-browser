@@ -15,12 +15,12 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser_list.h"
-#include "chrome/common/extensions/command.h"
 #include "components/zoom/zoom_controller.h"
 #include "extensions/api/bookmarks/bookmarks_private_api.h"
 #include "extensions/browser/event_router.h"
 #include "extensions/browser/extension_function.h"
 #include "extensions/browser/extension_function_dispatcher.h"
+#include "extensions/common/command.h"
 #include "extensions/common/manifest_constants.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
@@ -369,15 +369,17 @@ std::string ShortcutText(int windows_key_code, int modifiers, int dom_code) {
   ui::Accelerator accelerator =
       ui::Accelerator(key_code, 0, ui::Accelerator::KeyState::PRESSED);
 
+  // This order should match the order in
+  // normalizeShortcut(...) in KeyShortcut.js
   std::string shortcutText = "";
   if (modifiers & ui::EF_CONTROL_DOWN) {
     shortcutText += "Ctrl+";
   }
-  if (modifiers & ui::EF_SHIFT_DOWN) {
-    shortcutText += "Shift+";
-  }
   if (modifiers & ui::EF_ALT_DOWN) {
     shortcutText += "Alt+";
+  }
+  if (modifiers & ui::EF_SHIFT_DOWN) {
+    shortcutText += "Shift+";
   }
   if (modifiers & ui::EF_COMMAND_DOWN) {
     shortcutText += "Meta+";

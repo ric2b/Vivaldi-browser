@@ -24,9 +24,9 @@
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/translate/translate_service.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/translate/partial_translate_bubble_model.h"
+#include "chrome/browser/ui/translate/partial_translate_bubble_ui_action_logger.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/md_text_button_with_down_arrow.h"
 #include "chrome/browser/ui/views/translate/translate_icon_view.h"
@@ -218,13 +218,27 @@ void PartialTranslateBubbleView::ResetLanguage() {
         previous_source_language_index_);
     model_->UpdateSourceLanguageIndex(
         source_language_combobox_->GetSelectedIndex());
+    translate::ReportPartialTranslateBubbleUiAction(
+        translate::PartialTranslateBubbleUiEvent::
+            SOURCE_LANGUAGE_RESET_BUTTON_CLICKED);
   } else {
     target_language_combobox_->SetSelectedIndex(
         previous_target_language_index_);
     model_->UpdateTargetLanguageIndex(
         target_language_combobox_->GetSelectedIndex());
+    translate::ReportPartialTranslateBubbleUiAction(
+        translate::PartialTranslateBubbleUiEvent::
+            TARGET_LANGUAGE_RESET_BUTTON_CLICKED);
   }
   UpdateAdvancedView();
+}
+
+void PartialTranslateBubbleView::WindowClosing() {
+  // We have to reset the controller reference to the view here, not in our
+  // destructor, because we'll be destroyed asynchronously and the shown state
+  // will be checked before then.
+  if (on_closing_)
+    std::move(on_closing_).Run();
 }
 
 bool PartialTranslateBubbleView::AcceleratorPressed(
@@ -295,10 +309,16 @@ void PartialTranslateBubbleView::ExecuteCommand(int command_id,
                                                 int event_flags) {
   switch (command_id) {
     case OptionsMenuItem::CHANGE_TARGET_LANGUAGE:
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              CHANGE_TARGET_LANGUAGE_OPTION_CLICKED);
       SwitchView(PartialTranslateBubbleModel::VIEW_STATE_TARGET_LANGUAGE);
       break;
 
     case OptionsMenuItem::CHANGE_SOURCE_LANGUAGE:
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              CHANGE_SOURCE_LANGUAGE_OPTION_CLICKED);
       SwitchView(PartialTranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE);
       break;
 
@@ -307,7 +327,7 @@ void PartialTranslateBubbleView::ExecuteCommand(int command_id,
   }
 }
 
-void PartialTranslateBubbleView::OnWidgetClosing(views::Widget* widget) {
+void PartialTranslateBubbleView::OnWidgetDestroying(views::Widget* widget) {
   // Nothing to do. When partial translate metrics get added we may want to log
   // when and how the bubble is closed similar to TranslateBubbleView.
   return;
@@ -318,14 +338,26 @@ PartialTranslateBubbleView::GetViewState() const {
   return model_->GetViewState();
 }
 
+void PartialTranslateBubbleView::SetViewState(
+    PartialTranslateBubbleModel::ViewState view_state,
+    translate::TranslateErrors::Type error_type) {
+  if (view_state == PartialTranslateBubbleModel::VIEW_STATE_ERROR) {
+    SwitchToErrorView(error_type);
+  } else {
+    SwitchView(view_state);
+  }
+}
+
 PartialTranslateBubbleView::PartialTranslateBubbleView(
     views::View* anchor_view,
     std::unique_ptr<PartialTranslateBubbleModel> model,
     translate::TranslateErrors::Type error_type,
-    content::WebContents* web_contents)
+    content::WebContents* web_contents,
+    base::OnceClosure on_closing)
     : LocationBarBubbleDelegateView(anchor_view, web_contents),
       model_(std::move(model)),
-      error_type_(error_type) {
+      error_type_(error_type),
+      on_closing_(std::move(on_closing)) {
   UpdateInsets(PartialTranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE);
 
   if (web_contents)  // web_contents can be null in unit_tests.
@@ -334,7 +366,6 @@ PartialTranslateBubbleView::PartialTranslateBubbleView(
   SetButtons(ui::DIALOG_BUTTON_NONE);
   SetFootnoteView(CreateWordmarkView());
   SetProperty(views::kElementIdentifierKey, kIdentifier);
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::TRANSLATE);
 }
 
 views::View* PartialTranslateBubbleView::GetCurrentView() const {
@@ -360,18 +391,36 @@ void PartialTranslateBubbleView::Translate() {
   // TODO(crbug/1314825): Update implementation when PartialTranslateManager is
   // complete.
   SwitchView(PartialTranslateBubbleModel::VIEW_STATE_TRANSLATING);
+  translate::ReportPartialTranslateBubbleUiAction(
+      translate::PartialTranslateBubbleUiEvent::TARGET_LANGUAGE_TAB_SELECTED);
 }
 
 void PartialTranslateBubbleView::ShowOriginal() {
   // TODO(crbug/1314825): Update implementation when PartialTranslateManager is
   // complete.
   SwitchView(PartialTranslateBubbleModel::VIEW_STATE_BEFORE_TRANSLATE);
+  translate::ReportPartialTranslateBubbleUiAction(
+      translate::PartialTranslateBubbleUiEvent::SOURCE_LANGUAGE_TAB_SELECTED);
 }
 
 void PartialTranslateBubbleView::ConfirmAdvancedOptions() {
+  // This call is either made from the source or target language selection view.
+  // Save the view state we're coming from so that the correct ui action can be
+  // logged.
+  bool from_source_language_view =
+      GetViewState() == PartialTranslateBubbleModel::VIEW_STATE_SOURCE_LANGUAGE;
   if (model_->IsCurrentSelectionTranslated()) {
     SwitchView(PartialTranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE);
     SizeToContents();
+    if (from_source_language_view) {
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              SOURCE_LANGUAGE_SELECTION_DONE_BUTTON_CLICKED);
+    } else {
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              TARGET_LANGUAGE_SELECTION_DONE_BUTTON_CLICKED);
+    }
   } else {
     std::u16string source_language_name;
     std::u16string target_language_name;
@@ -382,6 +431,15 @@ void PartialTranslateBubbleView::ConfirmAdvancedOptions() {
     model_->Translate();
     tabbed_pane_->SelectTabAt(1);
     SwitchView(PartialTranslateBubbleModel::VIEW_STATE_AFTER_TRANSLATE);
+    if (from_source_language_view) {
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              SOURCE_LANGUAGE_SELECTION_TRANSLATE_BUTTON_CLICKED);
+    } else {
+      translate::ReportPartialTranslateBubbleUiAction(
+          translate::PartialTranslateBubbleUiEvent::
+              TARGET_LANGUAGE_SELECTION_TRANSLATE_BUTTON_CLICKED);
+    }
   }
 }
 
@@ -389,12 +447,18 @@ void PartialTranslateBubbleView::SourceLanguageChanged() {
   model_->UpdateSourceLanguageIndex(
       source_language_combobox_->GetSelectedIndex());
   UpdateAdvancedView();
+  translate::ReportPartialTranslateBubbleUiAction(
+      translate::PartialTranslateBubbleUiEvent::
+          SOURCE_LANGUAGE_MENU_ITEM_CLICKED);
 }
 
 void PartialTranslateBubbleView::TargetLanguageChanged() {
   model_->UpdateTargetLanguageIndex(
       target_language_combobox_->GetSelectedIndex());
   UpdateAdvancedView();
+  translate::ReportPartialTranslateBubbleUiAction(
+      translate::PartialTranslateBubbleUiEvent::
+          TARGET_LANGUAGE_MENU_ITEM_CLICKED);
 }
 
 void PartialTranslateBubbleView::UpdateChildVisibilities() {
@@ -437,6 +501,9 @@ std::unique_ptr<views::View> PartialTranslateBubbleView::CreateView() {
   auto full_page_button = std::make_unique<views::MdTextButton>(
       base::BindRepeating(
           [](PartialTranslateBubbleModel* model) {
+            translate::ReportPartialTranslateBubbleUiAction(
+                translate::PartialTranslateBubbleUiEvent::
+                    TRANSLATE_FULL_PAGE_BUTTON_CLICKED);
             // TODO(crbug/1314825): Update implementation when
             // PartialTranslateManager is
             // complete.
@@ -566,7 +633,12 @@ std::unique_ptr<views::View> PartialTranslateBubbleView::CreateViewErrorNoTitle(
       provider->GetDistanceMetric(views::DISTANCE_RELATED_BUTTON_HORIZONTAL));
   auto try_again_button = std::make_unique<views::MdTextButton>(
       base::BindRepeating(
-          [](PartialTranslateBubbleModel* model) { model->Translate(); },
+          [](PartialTranslateBubbleModel* model) {
+            translate::ReportPartialTranslateBubbleUiAction(
+                translate::PartialTranslateBubbleUiEvent::
+                    TRY_AGAIN_BUTTON_CLICKED);
+            model->Translate();
+          },
           base::Unretained(model_.get())),
       l10n_util::GetStringUTF16(IDS_TRANSLATE_BUBBLE_TRY_AGAIN));
   button_row->AddChildView(std::move(try_again_button));
@@ -595,11 +667,11 @@ PartialTranslateBubbleView::CreateViewAdvancedSource() {
 
   // Language icon
   int source_default_index = model_->GetSourceLanguageIndex();
-  source_language_combobox_model_ =
+  auto source_language_combobox_model =
       std::make_unique<SourceLanguageComboboxModel>(source_default_index,
                                                     model_.get());
   auto source_language_combobox = std::make_unique<views::Combobox>(
-      std::move(source_language_combobox_model_));
+      std::move(source_language_combobox_model));
   source_language_combobox->SetProperty(views::kElementIdentifierKey,
                                         kSourceLanguageCombobox);
 
@@ -640,12 +712,12 @@ PartialTranslateBubbleView::CreateViewAdvancedTarget() {
           views::style::CONTEXT_DIALOG_TITLE);
 
   int target_default_index = model_->GetTargetLanguageIndex();
-  target_language_combobox_model_ =
+  auto target_language_combobox_model =
       std::make_unique<TargetLanguageComboboxModel>(target_default_index,
                                                     model_.get());
 
   auto target_language_combobox = std::make_unique<views::Combobox>(
-      std::move(target_language_combobox_model_));
+      std::move(target_language_combobox_model));
   target_language_combobox->SetProperty(views::kElementIdentifierKey,
                                         kTargetLanguageCombobox);
 
@@ -786,6 +858,8 @@ std::unique_ptr<views::Button> PartialTranslateBubbleView::CreateCloseButton() {
   auto close_button =
       views::BubbleFrameView::CreateCloseButton(base::BindRepeating(
           [](View* view) {
+            translate::ReportPartialTranslateBubbleUiAction(
+                translate::PartialTranslateBubbleUiEvent::CLOSE_BUTTON_CLICKED);
             view->GetWidget()->CloseWithReason(
                 views::Widget::ClosedReason::kCloseButtonClicked);
           },

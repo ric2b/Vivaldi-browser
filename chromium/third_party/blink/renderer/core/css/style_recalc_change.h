@@ -12,6 +12,7 @@
 
 namespace blink {
 
+class ComputedStyle;
 class Element;
 class Node;
 class PseudoElement;
@@ -101,10 +102,6 @@ class CORE_EXPORT StyleRecalcChange {
   StyleRecalcChange SuppressRecalc() const {
     return {propagate_, static_cast<Flags>(flags_ | kSuppressRecalc)};
   }
-  StyleRecalcChange WithRecalcContainerFlags(StyleRecalcChange& from) const {
-    return {propagate_,
-            static_cast<Flags>(flags_ | (from.flags_ & kRecalcContainerFlags))};
-  }
   StyleRecalcChange Combine(const StyleRecalcChange& other) const {
     return {std::max(propagate_, other.propagate_),
             static_cast<Flags>(flags_ | other.flags_)};
@@ -112,13 +109,18 @@ class CORE_EXPORT StyleRecalcChange {
 
   bool ReattachLayoutTree() const { return flags_ & kReattach; }
   bool MarkReattachLayoutTree() const {
-    return (flags_ & (kMarkReattach | kReattach)) ==
+    // Never mark the query container (kSuppressRecalc) for reattachment.
+    return (flags_ & (kMarkReattach | kReattach | kSuppressRecalc)) ==
            (kMarkReattach | kReattach);
   }
   bool RecalcChildren() const { return propagate_ > kUpdatePseudoElements; }
   bool RecalcDescendants() const { return propagate_ == kRecalcDescendants; }
   bool UpdatePseudoElements() const { return propagate_ != kNo; }
-  bool IndependentInherit() const { return propagate_ == kIndependentInherit; }
+  // Returns true if we should and can do independent inheritance. The passed in
+  // computed style is the existing style for the element we are considering.
+  // It is used to check if we need to do a normal recalc for container query
+  // dependent elements.
+  bool IndependentInherit(const ComputedStyle& old_style) const;
   bool TraverseChildren(const Element&) const;
   bool TraverseChild(const Node&) const;
   bool TraversePseudoElements(const Element&) const;

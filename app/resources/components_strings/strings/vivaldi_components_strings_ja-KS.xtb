@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Windowsのネットワーク診断試してみて<ph name="END_LINK" />。</translation>
 <translation id="1834321415901700177">このサイト、有害なプログラム入ってるで</translation>
 <translation id="1916770123977586577">さらの設定をこのサイトに適用するんやったら、ページリロードして</translation>
+<translation id="1973351931613083086">自動再生</translation>
 <translation id="1974060860693918893">詳細</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />プロキシーとファイアウォール確認する<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">発行先: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">戻る</translation>
 <translation id="2539524384386349900">検出</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" />から無効な応答送られてきよったわ。</translation>
-<translation id="2609632851001447353">バリエーション</translation>
 <translation id="2634124572758952069"><ph name="HOST_NAME" /> のサーバーのIPアドレス見つからへんかったわ。</translation>
 <translation id="2649204054376361687"><ph name="COUNTRY" /> <ph name="CITY" /></translation>
 <translation id="2650446666397867134">ファイルへのアクセス、断られたわ</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011"><ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" />に行ったら、悪さしよるユーザーにパスワード、メッセージ、クレジットカードとかの情報が盗られる可能性あるで。<ph name="BEGIN_LEARN_MORE_LINK" />詳しい情報<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">ネットワークの変更が検出されたわ。</translation>
 <translation id="2948083400971632585">接続用に構成したプロキシー、、設定ページから無効にできるで。</translation>
+<translation id="2953943267837858202">動画の自動再生、許可されてへん</translation>
 <translation id="2991571918955627853"><ph name="SITE" />はHSTSが使われてるから、今アクセスできへんわ。ネットワークエラーとかネットワーク攻撃って大抵一時的なもんやから、時間置いたらアクセスできるようになるんちゃう。</translation>
 <translation id="3005723025932146533">保存したコピー出す</translation>
 <translation id="301521992641321250">自動ブロックされたわ</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">ページ読み込むんやったらデータ再送信せなあかんから、再読み込みボタンを押したって。</translation>
 <translation id="3234666976984236645">このサイトの重要なコンテンツを常に検出</translation>
+<translation id="3291915639428159043">自動再生、ブロックされてるで</translation>
 <translation id="3308738399950580893">広告</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" />、今アクセスできへんわ。</translation>
 <translation id="3427092606871434483">ええよ（デフォルト）</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">この接続、プライバシー守られてへんで</translation>
 <translation id="3574305903863751447"><ph name="COUNTRY" /> <ph name="STATE" /> <ph name="CITY" /></translation>
 <translation id="3586931643579894722">詳細を非表示</translation>
+<translation id="3620979700683094848">サイトは自動で動画再生できるで</translation>
 <translation id="3630155396527302611">ネットワークアクセスが許可されたプログラムのリストにもう登録されてるんやったら、
       リストから外して、もっかい追加し直してみて。</translation>
 <translation id="3658742229777143148">変更履歴</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" />、ブロックされとるわ</translation>
 <translation id="3987940399970879459">1 MB未満</translation>
 <translation id="4075732493274867456">クライアントとサーバーがどっちもサポートするSSLプロトコルのバージョンも暗号化方式も見つからへんわ。</translation>
+<translation id="410351446219883937">自動再生</translation>
 <translation id="4116663294526079822">このサイトではいつも許可</translation>
 <translation id="4130226655945681476">ネットワークケーブル、モデム、ルーターを確認する</translation>
 <translation id="4151403195736952345">グローバルのデフォルト値（つまり検出）にしとく</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">DNS設定確認してもうてもええかな</translation>
 <translation id="6328639280570009161">ネットワーク予測、無効にしてみて</translation>
 <translation id="6328786501058569169">これ詐欺サイトやで</translation>
+<translation id="6348220984832452017">アクティブなバリエーション</translation>
 <translation id="6358450015545214790">一人で悩まんと、ヘルプページ来てな</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" />で接続拒否されたわ。</translation>
 <translation id="6447842834002726250">Cookie</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676"><ph name="DOMAIN" />からの<ph name="BLOCKED_TYPE" />はOKする</translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" />、セキュリティ規格遵守しとらへんわ。</translation>
 <translation id="7219179957768738017">この接続には <ph name="SSL_VERSION" /> を使うてんで。</translation>
+<translation id="7221855153210829124">通知出す</translation>
 <translation id="7260504762447901703">アクセス権取り消す</translation>
 <translation id="7353601530677266744">コマンドライン</translation>
 <translation id="7364115444476960850">Vivaldiの<ph name="BLOCKER_NAME" />が、アクセスしようとしてるページブロックしたわ</translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">ファイアウォールかウイルス対策ソフトウェアが接続ブロックしたかも知れへん。</translation>
 <translation id="7800304661137206267"><ph name="CIPHER" /> で接続が暗号化されてて、メッセージ認証に <ph name="MAC" />、鍵交換メカニズムに <ph name="KX" /> が使われてるわ。</translation>
 <translation id="7834399512844817676"><ph name="SITE" />は普段な、暗号化して情報を保護してるねん。今回Vivaldiから<ph name="SITE" />に接続しよう思った時に、いつものとちゃう誤った認証情報が返ってきてん。悪さしよるユーザーが<ph name="SITE" />になりすまそうとしているか、Wi-Fiログイン画面で接続が中断された可能性があるわ。データのやり取りが行われる前にVivaldiが接続止めたから、情報は保護されたままやで。</translation>
+<translation id="7834693436815575883">自動再生、許可されてるで</translation>
 <translation id="7878562273885520351">パスワード、不正利用されるかも知れへんで</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">このサイト使ったらな、悪さしよるユーザーに危ない操作 - ソフトウェアのインストールとか個人情報（例: パスワード、電話番号、クレジットカード番号）の入力とか - するよう誘導される可能性あるで。</translation>
 <translation id="8037357227543935929">確認して（デフォルト）</translation>
 <translation id="8041940743680923270">グローバルのデフォルト値（つまり確認）にしとく</translation>
+<translation id="8044382196220116469">サイトに自動で動画再生できへんようにする</translation>
 <translation id="808894953321890993">パスワード変更</translation>
 <translation id="8119307142152921512">トラッカーと広告</translation>
 <translation id="8149426793427495338">さっきまでパソコン寝とったで。</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">ユーザーの芸名</translation>
 <translation id="8703575177326907206"><ph name="DOMAIN" /> への接続、暗号化されてへんで。</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />の&lt;abbr id="dnsDefinition"&gt;DNSアドレス&lt;/abbr&gt;見つからへんかったわ。もうちょっと見てみるな。</translation>
+<translation id="8774017153185436870">サイトが自動で動画再生してくる可能性あるで</translation>
 <translation id="8820817407110198400">ブックマーク</translation>
 <translation id="8940028675168378100"><ph name="BLOCKER_NAME" />にブロックされたわ</translation>
 <translation id="8963117664422609631">サイト設定に行く</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">無視する</translation>
 <translation id="9025348182339809926">（無効）</translation>
 <translation id="9039213469156557790">ほんで、このページには安全ちゃう他のリソースがあんねん。このリソースは受信中に他のユーザーから見られる可能性あるし、悪意のあるユーザーに改変されたらページの動作も変わるかも知れへん。</translation>
+<translation id="9048224371732578627">動画の自動再生、許可してるで</translation>
 <translation id="9062620674789239642">他のとこ行ったか、編集されたか、消された可能性あるわ。</translation>
 <translation id="9069693763241529744">拡張機能にブロックされたわ</translation>
 <translation id="9073799351042754113">このサイトに対するセキュリティ警告無効にしたで。</translation>

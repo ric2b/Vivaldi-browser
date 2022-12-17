@@ -7,7 +7,9 @@
 
 #include <memory>
 
+#include "chrome/browser/profiles/profile.h"
 #include "chromeos/crosapi/mojom/kiosk_session_service.mojom.h"
+#include "components/prefs/pref_registry_simple.h"
 #include "mojo/public/cpp/bindings/remote.h"
 #include "url/gurl.h"
 
@@ -24,11 +26,17 @@ class KioskSessionServiceLacros {
   // first before using it.
   static KioskSessionServiceLacros* Get();
 
+  // Registers all prefs associated with the service.
+  static void RegisterLocalStatePrefs(PrefRegistrySimple* registry);
+
   KioskSessionServiceLacros();
   KioskSessionServiceLacros(const KioskSessionServiceLacros&) = delete;
   KioskSessionServiceLacros& operator=(const KioskSessionServiceLacros&) =
       delete;
   virtual ~KioskSessionServiceLacros();
+
+  // Initialize the current Chrome Kiosk session with the |app_id|.
+  void InitChromeKioskSession(Profile* profile, const std::string& app_id);
 
   // Initialize the current Web Kiosk session with the |install_url| and the
   // browser that is running the app.

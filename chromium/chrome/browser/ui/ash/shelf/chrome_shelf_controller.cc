@@ -37,6 +37,7 @@
 #include "base/threading/thread_task_runner_handle.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/apps/app_service/extension_apps_utils.h"
 #include "chrome/browser/apps/icon_standardizer.h"
 #include "chrome/browser/ash/arc/arc_util.h"
 #include "chrome/browser/ash/crosapi/browser_util.h"
@@ -103,7 +104,6 @@
 #include "extensions/browser/extension_system.h"
 #include "extensions/browser/management_policy.h"
 #include "extensions/common/extension.h"
-#include "net/base/escape.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/window.h"
 #include "ui/base/l10n/l10n_util.h"
@@ -218,7 +218,7 @@ ChromeShelfController::ChromeShelfController(Profile* profile,
   DCHECK(!instance_);
   instance_ = this;
 
-  DCHECK(model_);
+  CHECK(model_);
 
   if (!profile) {
     // If no profile was passed, we take the currently active profile and use it
@@ -256,9 +256,14 @@ ChromeShelfController::ChromeShelfController(Profile* profile,
       std::make_unique<AppServiceAppWindowShelfController>(this);
   app_service_app_window_controller_ = app_service_controller.get();
   app_window_controllers_.emplace_back(std::move(app_service_controller));
-  if (web_app::IsWebAppsCrosapiEnabled()) {
+  if (web_app::IsWebAppsCrosapiEnabled() &&
+      apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(profile)) {
+    apps::AppServiceProxy* proxy =
+        apps::AppServiceProxyFactory::GetForProfile(profile);
+    DCHECK(proxy);
     browser_app_shelf_controller_ = std::make_unique<BrowserAppShelfController>(
-        profile, *model_, *shelf_item_factory_, *shelf_spinner_controller_);
+        profile, *proxy->BrowserAppInstanceRegistry(), *model_,
+        *shelf_item_factory_, *shelf_spinner_controller_);
   } else {
     // Create the browser monitor which will inform the shelf of status changes.
     browser_status_monitor_ = std::make_unique<BrowserStatusMonitor>(this);
@@ -851,13 +856,8 @@ void ChromeShelfController::DoShowAppInfoFlow(Profile* profile,
         profile, app_id,
         ash::settings::AppManagementEntryPoint::kShelfContextMenuAppInfoWebApp);
   } else {
-    // Normally app ids would only contain alphanumerics, but standalone
-    // browser extension app uses '#' as a delimiter.
-    std::string escaped_id =
-        app_type == apps::AppType::kStandaloneBrowserChromeApp
-            ? net::EscapeAllExceptUnreserved(app_id)
-            : app_id;
-    chrome::ShowAppManagementPage(profile, escaped_id,
+    chrome::ShowAppManagementPage(profile,
+                                  apps::GetEscapedAppId(app_id, app_type),
                                   ash::settings::AppManagementEntryPoint::
                                       kShelfContextMenuAppInfoChromeApp);
   }

@@ -284,10 +284,16 @@ std::string MenubarMenuShowFunction::PopulateModel(
       switch (item.type) {
         case menubar_menu::ITEM_TYPE_COMMAND:
           menu_model->AddItem(id, label);
+          if (item.enabled && !*item.enabled) {
+            id_to_disabled_map_[id] = true;
+          }
           break;
         case menubar_menu::ITEM_TYPE_CHECKBOX:
           menu_model->AddCheckItem(id, label);
           id_to_checked_map_[id] = item.checked && *item.checked;
+          if (item.enabled && !*item.enabled) {
+            id_to_disabled_map_[id] = true;
+          }
           break;
         case menubar_menu::ITEM_TYPE_RADIO:
           if (!item.radiogroup.get()) {
@@ -295,6 +301,9 @@ std::string MenubarMenuShowFunction::PopulateModel(
           }
           menu_model->AddRadioItem(id, label, *item.radiogroup.get());
           id_to_checked_map_[id] = item.checked && *item.checked;
+          if (item.enabled && !*item.enabled) {
+            id_to_disabled_map_[id] = true;
+          }
           break;
         case menubar_menu::ITEM_TYPE_FOLDER: {
           // We create the SimpleMenuModel sub menu but do not populate it. That
@@ -550,6 +559,12 @@ int MenubarMenuShowFunction::GetSelectedMenuId() {
 bool MenubarMenuShowFunction::IsItemChecked(int id) {
   std::map<int, bool>::iterator it = id_to_checked_map_.find(id);
   return it != id_to_checked_map_.end() ? it->second : false;
+}
+
+bool MenubarMenuShowFunction::IsItemEnabled(int id) {
+  // Note, we record the disabled entries as we normally have few disabled.
+  std::map<int, bool>::iterator it = id_to_disabled_map_.find(id);
+  return it != id_to_disabled_map_.end() ? !it->second : true;
 }
 
 bool MenubarMenuShowFunction::IsItemPersistent(int id) {

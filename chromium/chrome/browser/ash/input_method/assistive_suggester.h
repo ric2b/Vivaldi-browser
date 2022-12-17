@@ -11,8 +11,10 @@
 
 #include "ash/services/ime/public/cpp/suggestions.h"
 #include "base/memory/weak_ptr.h"
+#include "base/timer/timer.h"
 #include "chrome/browser/ash/input_method/assistive_suggester_switch.h"
 #include "chrome/browser/ash/input_method/emoji_suggester.h"
+#include "chrome/browser/ash/input_method/longpress_diacritics_suggester.h"
 #include "chrome/browser/ash/input_method/multi_word_suggester.h"
 #include "chrome/browser/ash/input_method/personal_info_suggester.h"
 #include "chrome/browser/ash/input_method/suggester.h"
@@ -20,6 +22,7 @@
 #include "chrome/browser/ash/input_method/suggestion_handler_interface.h"
 #include "chrome/browser/ash/input_method/suggestions_source.h"
 #include "components/autofill/core/browser/personal_data_manager.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 namespace ash {
 namespace input_method {
@@ -73,7 +76,7 @@ class AssistiveSuggester : public SuggestionsSource {
                                 int anchor_pos);
 
   // Called when the user pressed a key.
-  // Returns true if suggester handles the event and it should stop propagate.
+  // Returns true if it should stop further processing of event.
   bool OnKeyEvent(const ui::KeyEvent& event);
 
   // Called when suggestions are generated outside of the assistive framework.
@@ -162,17 +165,29 @@ class AssistiveSuggester : public SuggestionsSource {
   void RecordTextInputStateMetrics(
       const AssistiveSuggesterSwitch::EnabledSuggestions& enabled_suggestions);
 
+  void HandleLongpressEnabledKeyEvent(const ui::KeyEvent& key_character);
+
+  void OnLongpressDetected();
+
   Profile* profile_;
   PersonalInfoSuggester personal_info_suggester_;
   EmojiSuggester emoji_suggester_;
   MultiWordSuggester multi_word_suggester_;
+  LongpressDiacriticsSuggester longpress_diacritics_suggester_;
   std::unique_ptr<AssistiveSuggesterSwitch> suggester_switch_;
 
   // The id of the currently active input engine.
   std::string active_engine_id_;
 
-  // ID of the focused text field, 0 if none is focused.
-  int context_id_ = -1;
+  // ID of the focused text field, nullopt if none focused.
+  absl::optional<int> focused_context_id_;
+
+  // Char of the currently held down key. nullopt if no longpress in progress.
+  absl::optional<char> current_longpress_char_;
+
+  // Timer for longpress. Starts when key is held down. Fires when successfully
+  // held down for a specified longpress duration.
+  base::OneShotTimer longpress_timer_;
 
   // The current suggester in use, nullptr means no suggestion is shown.
   Suggester* current_suggester_ = nullptr;

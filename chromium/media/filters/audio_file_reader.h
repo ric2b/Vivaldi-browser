@@ -26,9 +26,6 @@ namespace media {
 
 class AudioBus;
 class FFmpegURLProtocol;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-class IPCAudioDecoder;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 
 class MEDIA_EXPORT AudioFileReader {
  public:
@@ -117,10 +114,6 @@ class MEDIA_EXPORT AudioFileReader {
 
   // AVSampleFormat initially requested; not Chrome's SampleFormat.
   int av_sample_format_;
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  std::unique_ptr<IPCAudioDecoder> ipc_audio_decoder_;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 };
 
 }  // namespace media

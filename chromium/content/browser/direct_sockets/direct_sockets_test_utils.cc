@@ -6,15 +6,11 @@
 
 #include "base/bind.h"
 #include "base/json/json_reader.h"
-#include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
 #include "base/stl_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/test/test_future.h"
 #include "base/threading/sequenced_task_runner_handle.h"
-#include "content/public/browser/notification_details.h"
-#include "content/public/browser/notification_source.h"
-#include "content/public/browser/notification_types.h"
 #include "content/public/test/browser_test_utils.h"
 #include "content/public/test/web_contents_tester.h"
 
@@ -149,10 +145,7 @@ std::unique_ptr<MockUDPSocket> MockNetworkContext::CreateMockUDPSocket(
 // AsyncJsRunner implementation
 
 AsyncJsRunner::AsyncJsRunner(content::WebContents* web_contents)
-    : web_contents_(web_contents->GetWeakPtr()) {
-  registrar_.Add(this, NOTIFICATION_DOM_OPERATION_RESPONSE,
-                 Source<WebContents>(web_contents));
-}
+    : WebContentsObserver(web_contents) {}
 
 AsyncJsRunner::~AsyncJsRunner() = default;
 
@@ -162,26 +155,22 @@ std::unique_ptr<base::test::TestFuture<std::string>> AsyncJsRunner::RunScript(
   DCHECK(!future_callback_);
   auto future = std::make_unique<base::test::TestFuture<std::string>>();
 
-  if (web_contents_) {
-    token_ = base::Token::CreateRandom();
-    future_callback_ = future->GetCallback();
-    const std::string wrapped_script =
-        MakeScriptSendResultToDomQueue(async_script);
-    ExecuteScriptAsync(web_contents_.get(), wrapped_script);
-  }
+  token_ = base::Token::CreateRandom();
+  future_callback_ = future->GetCallback();
+  const std::string wrapped_script =
+      MakeScriptSendResultToDomQueue(async_script);
+  ExecuteScriptAsync(web_contents(), wrapped_script);
 
   return future;
 }
 
-void AsyncJsRunner::Observe(int type,
-                            const NotificationSource& source,
-                            const NotificationDetails& details) {
-  Details<std::string> dom_op_result(details);
+void AsyncJsRunner::DomOperationResponse(RenderFrameHost* render_frame_host,
+                                         const std::string& json_string) {
   // Check that future is valid and not yet fulfilled.
   DCHECK(future_callback_);
 
   auto parsed = base::JSONReader::ReadAndReturnValueWithError(
-      *dom_op_result.ptr(), base::JSON_ALLOW_TRAILING_COMMAS);
+      json_string, base::JSON_ALLOW_TRAILING_COMMAS);
   DCHECK(parsed.value);
   DCHECK_EQ(parsed.value->type(), base::Value::Type::LIST);
 
@@ -204,6 +193,25 @@ std::string AsyncJsRunner::MakeScriptSendResultToDomQueue(
         window.domAutomationController.send([result, '%s']);
       )",
       script.c_str(), token_.ToString().c_str()));
+}
+
+bool IsolatedAppContentBrowserClient::ShouldUrlUseApplicationIsolationLevel(
+    BrowserContext* browser_context,
+    const GURL& url) {
+  return true;
+}
+
+blink::ParsedPermissionsPolicy
+IsolatedAppContentBrowserClient::GetPermissionsPolicyForIsolatedApp(
+    content::BrowserContext* browser_context,
+    const url::Origin& app_origin) {
+  blink::ParsedPermissionsPolicy out;
+  blink::ParsedPermissionsPolicyDeclaration decl(
+      blink::mojom::PermissionsPolicyFeature::kDirectSockets,
+      /*values=*/{app_origin},
+      /*matches_all_origins=*/false, /*matches_opaque_src=*/false);
+  out.push_back(decl);
+  return out;
 }
 
 // misc

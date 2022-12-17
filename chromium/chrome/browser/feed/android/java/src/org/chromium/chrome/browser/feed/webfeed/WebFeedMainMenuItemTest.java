@@ -16,6 +16,7 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.view.LayoutInflater;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
@@ -40,6 +41,7 @@ import org.chromium.base.test.UiThreadTest;
 import org.chromium.base.test.util.JniMocker;
 import org.chromium.chrome.browser.feed.test.R;
 import org.chromium.chrome.browser.feed.webfeed.WebFeedSnackbarController.FeedLauncher;
+import org.chromium.chrome.browser.share.crow.CrowButtonDelegate;
 import org.chromium.chrome.browser.tab.Tab;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuHandler;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
@@ -84,6 +86,8 @@ public final class WebFeedMainMenuItemTest {
     @Mock
     public UrlFormatter.Natives mUrlFormatterJniMock;
     private TestWebFeedFaviconFetcher mFaviconFetcher = new TestWebFeedFaviconFetcher();
+    @Mock
+    private CrowButtonDelegate mCrowButtonDelegate;
 
     private WebFeedMainMenuItem mWebFeedMainMenuItem;
     private ArrayList<Callback<WebFeedBridge.WebFeedMetadata>> mWaitingMetadataCallbacks =
@@ -150,7 +154,7 @@ public final class WebFeedMainMenuItemTest {
     public void initialize_emptyUrl_removesIcon() {
         doReturn(GURL.emptyGURL()).when(mTab).getOriginalUrl();
         mWebFeedMainMenuItem.initialize(mTab, mAppMenuHandler, mFaviconFetcher, mFeedLauncher,
-                mDialogManager, mSnackBarManager);
+                mDialogManager, mSnackBarManager, mCrowButtonDelegate);
         respondWithFeedMetadata(null);
         mFaviconFetcher.answerWithNull();
 
@@ -231,6 +235,34 @@ public final class WebFeedMainMenuItemTest {
         assertEquals("invisible", getChipState());
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals("disabled following", getChipState());
+    }
+
+    @Test
+    @UiThreadTest
+    public void initialize_notFollowed_displaysFollowChip_crowPresent_displaysChipsOnSingleRow() {
+        doReturn(false).when(mCrowButtonDelegate).isEnabledForSite(any(GURL.class));
+        initializeWebFeedMainMenuItem();
+        respondWithFeedMetadata(
+                createWebFeedMetadata(WebFeedSubscriptionStatus.NOT_SUBSCRIBED, GURL.emptyGURL()));
+
+        // Chip group with Follow chip should have same parent as the icon view.
+        ViewGroup chipsGroup = mWebFeedMainMenuItem.findViewById(R.id.chip_container);
+        View iconView = mWebFeedMainMenuItem.findViewById(R.id.icon);
+        assertEquals(iconView.getParent(), chipsGroup.getParent());
+    }
+
+    @Test
+    @UiThreadTest
+    public void initialize_notFollowed_displaysFollowChip_crowPresent_displaysChipsOnSecondRow() {
+        doReturn(true).when(mCrowButtonDelegate).isEnabledForSite(any(GURL.class));
+        initializeWebFeedMainMenuItem();
+        respondWithFeedMetadata(
+                createWebFeedMetadata(WebFeedSubscriptionStatus.NOT_SUBSCRIBED, GURL.emptyGURL()));
+
+        // Chip group with Follow and Crow chips should be moved to a second row.
+        ViewGroup chipsGroup = mWebFeedMainMenuItem.findViewById(R.id.chip_container);
+        ViewGroup secondRowGroup = mWebFeedMainMenuItem.findViewById(R.id.footer_second_chip_row);
+        assertEquals(secondRowGroup, chipsGroup.getParent());
     }
 
     @Test
@@ -331,7 +363,7 @@ public final class WebFeedMainMenuItemTest {
     private void initializeWebFeedMainMenuItem() {
         doReturn(TEST_URL).when(mTab).getOriginalUrl();
         mWebFeedMainMenuItem.initialize(mTab, mAppMenuHandler, mFaviconFetcher, mFeedLauncher,
-                mDialogManager, mSnackBarManager);
+                mDialogManager, mSnackBarManager, mCrowButtonDelegate);
     }
 
     /**

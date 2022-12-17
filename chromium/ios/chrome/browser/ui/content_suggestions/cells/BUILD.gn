@@ -7,6 +7,8 @@ source_set("cells") {
     "content_suggestions_gesture_commands.h",
     "content_suggestions_header_item.h",
     "content_suggestions_header_item.mm",
+    "content_suggestions_module_container.h",
+    "content_suggestions_module_container.mm",
     "content_suggestions_most_visited_action_cell.h",
     "content_suggestions_most_visited_action_cell.mm",
     "content_suggestions_most_visited_action_item.h",
@@ -56,11 +58,15 @@ source_set("cells") {
     "//ios/chrome/browser/ui/content_suggestions:constants",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_constant",
     "//ios/chrome/browser/ui/content_suggestions:content_suggestions_ui_util",
+    "//ios/chrome/browser/ui/content_suggestions:feature_flags",
     "//ios/chrome/browser/ui/content_suggestions:public",
     "//ios/chrome/browser/ui/content_suggestions/identifier",
+    "//ios/chrome/browser/ui/icons:symbols",
+    "//ios/chrome/browser/ui/image_util",
     "//ios/chrome/browser/ui/material_components",
     "//ios/chrome/browser/ui/util",
-    "//ios/chrome/common",
+    "//ios/chrome/common:string_util",
+    "//ios/chrome/common:timing",
     "//ios/chrome/common/ui/colors",
     "//ios/chrome/common/ui/favicon",
     "//ios/chrome/common/ui/table_view:cells_constants",
@@ -85,6 +91,7 @@ source_set("constants") {
 
   deps = [
     "//ios/chrome/app/strings:ios_strings_grit",
+    "//ios/chrome/browser/ui/icons:symbols",
     "//ios/third_party/material_components_ios",
     "//ui/base:base",
   ]
@@ -94,7 +101,6 @@ source_set("unit_tests") {
   testonly = true
   sources = [
     "content_suggestions_header_item_unittest.mm",
-    "content_suggestions_most_visited_item_unittest.mm",
     "content_suggestions_tile_layout_util_unittest.mm",
     "content_suggestions_whats_new_item_unittest.mm",
   ]

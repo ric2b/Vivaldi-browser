@@ -108,7 +108,7 @@ std::string BuildCpuInfo() {
 
 // Return the CPU architecture in Windows/Mac/POSIX/Fuchsia and the empty string
 // on Android or if unknown.
-std::string GetLowEntropyCpuArchitecture() {
+std::string GetCpuArchitecture() {
 #if BUILDFLAG(IS_WIN)
   base::win::OSInfo::WindowsArchitecture windows_architecture =
       base::win::OSInfo::GetInstance()->GetArchitecture();
@@ -159,7 +159,7 @@ std::string GetLowEntropyCpuArchitecture() {
 
 // Return the CPU bitness in Windows/Mac/POSIX/Fuchsia and the empty string
 // on Android.
-std::string GetLowEntropyCpuBitness() {
+std::string GetCpuBitness() {
 #if BUILDFLAG(IS_WIN)
   return (base::win::OSInfo::GetInstance()->GetArchitecture() ==
           base::win::OSInfo::X86_ARCHITECTURE)

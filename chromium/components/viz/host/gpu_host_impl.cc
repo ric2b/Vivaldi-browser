@@ -139,7 +139,7 @@ GpuHostImpl::GpuHostImpl(Delegate* delegate,
   viz_main_->CreateGpuService(
       gpu_service_remote_.BindNewPipeAndPassReceiver(task_runner),
       gpu_host_receiver_.BindNewPipeAndPassRemote(task_runner),
-      std::move(discardable_manager_remote), activity_flags_.CloneHandle(),
+      std::move(discardable_manager_remote), activity_flags_.CloneRegion(),
       GetFontRenderParams().Get()->subpixel_rendering);
 
 #if defined(USE_OZONE)
@@ -197,9 +197,8 @@ void GpuHostImpl::AddConnectionErrorHandler(base::OnceClosure handler) {
 void GpuHostImpl::BlockLiveOffscreenContexts() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
-  for (auto iter = urls_with_live_offscreen_contexts_.begin();
-       iter != urls_with_live_offscreen_contexts_.end(); ++iter) {
-    delegate_->BlockDomainFrom3DAPIs(*iter, gpu::DomainGuilt::kUnknown);
+  for (auto& url : urls_with_live_offscreen_contexts_) {
+    delegate_->BlockDomainFrom3DAPIs(url, gpu::DomainGuilt::kUnknown);
   }
 }
 
@@ -571,8 +570,8 @@ void GpuHostImpl::DidUpdateOverlayInfo(const gpu::OverlayInfo& overlay_info) {
   delegate_->DidUpdateOverlayInfo(overlay_info);
 }
 
-void GpuHostImpl::DidUpdateHDRStatus(bool hdr_enabled) {
-  delegate_->DidUpdateHDRStatus(hdr_enabled);
+void GpuHostImpl::DidUpdateDXGIInfo(gfx::mojom::DXGIInfoPtr dxgi_info) {
+  delegate_->DidUpdateDXGIInfo(std::move(dxgi_info));
 }
 
 void GpuHostImpl::SetChildSurface(gpu::SurfaceHandle parent,

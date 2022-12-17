@@ -325,10 +325,8 @@ gfx::Rect TranslateWindowBoundsToParentDIP(ui::WaylandWindow* window,
   DCHECK(parent_window);
   DCHECK_EQ(window->window_scale(), parent_window->window_scale());
   DCHECK_EQ(window->ui_scale(), parent_window->ui_scale());
-  return gfx::ScaleToRoundedRect(
-      wl::TranslateBoundsToParentCoordinates(window->GetBounds(),
-                                             parent_window->GetBounds()),
-      1.0f / window->window_scale());
+  return wl::TranslateBoundsToParentCoordinates(
+      window->GetBoundsInDIP(), parent_window->GetBoundsInDIP());
 }
 
 std::vector<gfx::Rect> CreateRectsFromSkPath(const SkPath& path) {
@@ -351,6 +349,15 @@ SkPath ConvertPathToDIP(const SkPath& path_in_pixels, float scale) {
   SkPath path_in_dips;
   path_in_pixels.transform(transform.matrix().asM33(), &path_in_dips);
   return path_in_dips;
+}
+
+void SkColorToWlArray(const SkColor& color, wl_array& array) {
+  SkColor4f precise_color = SkColor4f::FromColor(color);
+  for (float component : precise_color.array()) {
+    float* ptr = static_cast<float*>(wl_array_add(&array, sizeof(float)));
+    DCHECK(ptr);
+    *ptr = component;
+  }
 }
 
 }  // namespace wl

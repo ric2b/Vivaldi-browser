@@ -23,6 +23,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/serialization/v8_script_value_deserializer_for_modules.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_data_copy_to_options.h"
+#include "third_party/blink/renderer/bindings/modules/v8/v8_crop_target.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_crypto_key.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_dom_file_system.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_media_stream_track.h"
@@ -33,6 +34,7 @@
 #include "third_party/blink/renderer/modules/crypto/crypto_key.h"
 #include "third_party/blink/renderer/modules/crypto/crypto_result_impl.h"
 #include "third_party/blink/renderer/modules/filesystem/dom_file_system.h"
+#include "third_party/blink/renderer/modules/mediastream/crop_target.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track.h"
 #include "third_party/blink/renderer/modules/mediastream/media_stream_track_impl.h"
 #include "third_party/blink/renderer/modules/mediastream/mock_media_stream_video_source.h"
@@ -1194,9 +1196,14 @@ TEST(V8ScriptValueSerializerForModulesTest, TransferMediaStreamTrack) {
       "test_id", MediaStreamSource::StreamType::kTypeVideo, "test_name",
       false /* remote */, std::move(mock_source));
   MediaStreamComponent* component =
-      MakeGarbageCollected<MediaStreamComponent>(source);
+      MakeGarbageCollected<MediaStreamComponent>("component_id", source);
+  component->SetMuted(true);
+  component->SetContentHint(WebMediaStreamTrack::ContentHintType::kVideoMotion);
   MediaStreamTrack* blink_track = MakeGarbageCollected<MediaStreamTrackImpl>(
-      scope.GetExecutionContext(), component);
+      scope.GetExecutionContext(), component,
+      MediaStreamSource::ReadyState::kReadyStateMuted,
+      /*callback=*/base::DoNothing());
+  blink_track->setEnabled(false);
 
   // Transfer the MediaStreamTrack and check if the label is correct.
   Transferables transferables;
@@ -1209,7 +1216,47 @@ TEST(V8ScriptValueSerializerForModulesTest, TransferMediaStreamTrack) {
 
   MediaStreamTrack* new_track =
       V8MediaStreamTrack::ToImpl(result.As<v8::Object>());
-  EXPECT_EQ(new_track->label(), "dummy");
+  EXPECT_EQ(new_track->id(), "component_id");
+  EXPECT_EQ(new_track->label(), "test_name");
+  EXPECT_EQ(new_track->kind(), "video");
+  EXPECT_EQ(new_track->enabled(), false);
+  EXPECT_EQ(new_track->muted(), true);
+  EXPECT_EQ(new_track->ContentHint(), "motion");
+  EXPECT_EQ(new_track->readyState(), "live");
+}
+
+TEST(V8ScriptValueSerializerForModulesTest,
+     TransferMediaStreamTrackInvalidContentHintFails) {
+  V8TestingScope scope;
+  ExceptionState exception_state(scope.GetIsolate(),
+                                 ExceptionState::kExecutionContext, "Window",
+                                 "postMessage");
+
+  std::unique_ptr<MockMediaStreamVideoSource> mock_source(
+      base::WrapUnique(new MockMediaStreamVideoSource()));
+  MediaStreamDevice device;
+  base::UnguessableToken token = base::UnguessableToken::Create();
+  device.set_session_id(token);
+  mock_source->SetDevice(device);
+  MediaStreamSource* source = MakeGarbageCollected<MediaStreamSource>(
+      "test_id", MediaStreamSource::StreamType::kTypeVideo, "test_name",
+      false /* remote */, std::move(mock_source));
+  MediaStreamComponent* component =
+      MakeGarbageCollected<MediaStreamComponent>("component_id", source);
+  component->SetContentHint(
+      static_cast<WebMediaStreamTrack::ContentHintType>(666));
+  MediaStreamTrack* blink_track = MakeGarbageCollected<MediaStreamTrackImpl>(
+      scope.GetExecutionContext(), component);
+
+  // Transfer a MediaStreamTrack with an invalid contentHint which should throw
+  // an error.
+  Transferables transferables;
+  transferables.media_stream_tracks.push_back(blink_track);
+  v8::Local<v8::Value> wrapper = ToV8(blink_track, scope.GetScriptState());
+  EXPECT_FALSE(V8ScriptValueSerializer(scope.GetScriptState())
+                   .Serialize(wrapper, exception_state));
+  EXPECT_TRUE(HadDOMExceptionInModulesTest(
+      "DataCloneError", scope.GetScriptState(), exception_state));
 }
 
 TEST(V8ScriptValueSerializerForModulesTest,
@@ -1236,6 +1283,25 @@ TEST(V8ScriptValueSerializerForModulesTest,
   EXPECT_TRUE(HadDOMExceptionInModulesTest(
       "DataCloneError", scope.GetScriptState(), exception_state));
 }
+
+#if !BUILDFLAG(IS_ANDROID)  // CropTarget is not exposed on Android.
+TEST(V8ScriptValueSerializerForModulesTest, RoundTripCropTarget) {
+  V8TestingScope scope;
+
+  const String crop_id("8e7e0c22-67a0-4c39-b4dc-a20433262f8e");
+
+  CropTarget* const crop_target = MakeGarbageCollected<CropTarget>(crop_id);
+
+  v8::Local<v8::Value> wrapper = ToV8(crop_target, scope.GetScriptState());
+  v8::Local<v8::Value> result = RoundTripForModules(wrapper, scope);
+
+  ASSERT_TRUE(V8CropTarget::HasInstance(result, scope.GetIsolate()));
+
+  CropTarget* const new_crop_target =
+      V8CropTarget::ToImpl(result.As<v8::Object>());
+  EXPECT_EQ(new_crop_target->GetCropId(), crop_id);
+}
+#endif
 
 }  // namespace
 }  // namespace blink

@@ -6,8 +6,10 @@
 
 #include "base/feature_list.h"
 #include "base/metrics/histogram_macros.h"
+#include "chrome/browser/android/customtabs/custom_tab_session_state_tracker.h"
 #include "chrome/browser/android/locale/locale_manager.h"
 #include "chrome/browser/android/metrics/uma_session_stats.h"
+#include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/flags/android/chrome_session_state.h"
 #include "chrome/browser/notifications/jni_headers/NotificationSystemStatusUtil_jni.h"
 #include "components/prefs/pref_registry_simple.h"
@@ -17,20 +19,6 @@
 #include "third_party/metrics_proto/chrome_user_metrics_extension.pb.h"
 
 namespace {
-
-// Name of local state pref to persist the last |chrome::android::ActivityType|.
-const char kLastActivityTypePref[] =
-    "user_experience_metrics.last_activity_type";
-
-absl::optional<chrome::android::ActivityType> GetActivityTypeFromLocalState(
-    PrefService* local_state_) {
-  auto value = local_state_->GetInteger(kLastActivityTypePref);
-  if (value >= static_cast<int>(chrome::android::ActivityType::kTabbed) &&
-      value <= static_cast<int>(chrome::android::ActivityType::kMaxValue)) {
-    return static_cast<chrome::android::ActivityType>(value);
-  }
-  return absl::nullopt;
-}
 
 // Corresponds to APP_NOTIFICATIONS_STATUS_BOUNDARY in
 // NotificationSystemStatusUtil.java
@@ -69,34 +57,29 @@ ChromeAndroidMetricsProvider::~ChromeAndroidMetricsProvider() {}
 
 // static
 void ChromeAndroidMetricsProvider::RegisterPrefs(PrefRegistrySimple* registry) {
-  // Register with a default value of -1 which is not a valid enum.
-  registry->RegisterIntegerPref(kLastActivityTypePref, -1);
+  chrome::android::RegisterActivityTypePrefs(registry);
 }
 
 void ChromeAndroidMetricsProvider::OnDidCreateMetricsLog() {
-  auto type = chrome::android::GetActivityType();
+  const auto type = chrome::android::GetActivityType();
 
-  // TODO(b/182286787): With old session resume order, no deferral of initial
-  // EmitActivityTypeHistograms. Clean up once fully launched.
-  if (type == chrome::android::ActivityType::kUnknown &&
-      !base::FeatureList::IsEnabled(
-          chrome::android::kFixedUmaSessionResumeOrder)) {
-    type = chrome::android::ActivityType::kTabbed;
-  }
+  // All records should be created with an activity type, even if no activity
+  // type has yet been declared. If an activity type is declared before the UMA
+  // record is closed, a second set of ActivityType histograms can be emitted.
+  // The processing pipeline can handle multiple samples which mix undeclared
+  // and a concrete activity type.
+  chrome::android::EmitActivityTypeHistograms(type);
 
-  // During startup the activity type might not yet be known. If it's kUnknown
-  // defer emiting activity type histograms until it become known, or until
-  // the record is closed.
-  if (type != chrome::android::ActivityType::kUnknown)
-    chrome::android::EmitActivityTypeHistograms(type);
-
-  // Save the value off for reporting stability metrics.
-  local_state_->SetInteger(kLastActivityTypePref, static_cast<int>(type));
+  // Save the current activity type to local state. If the browser is terminated
+  // before the new metrics log record can be uploaded, Chrome may be able to
+  // recover it for upload on restart.
+  chrome::android::SaveActivityTypeToLocalState(local_state_, type);
 }
 
 void ChromeAndroidMetricsProvider::ProvidePreviousSessionData(
     metrics::ChromeUserMetricsExtension* uma_proto) {
-  auto activity_type = GetActivityTypeFromLocalState(local_state_);
+  auto activity_type =
+      chrome::android::GetActivityTypeFromLocalState(local_state_);
   if (activity_type.has_value())
     chrome::android::EmitActivityTypeHistograms(activity_type.value());
 }
@@ -112,18 +95,16 @@ void ChromeAndroidMetricsProvider::ProvideCurrentSessionData(
   os_proto->set_dark_mode_state(
       ToProtoDarkModeState(chrome::android::GetDarkModeState()));
 
+  if (base::FeatureList::IsEnabled(chrome::android::kCCTPackageNameRecording) &&
+      chrome::android::CustomTabSessionStateTracker::GetInstance()
+          .HasCustomTabSessionState()) {
+    uma_proto->mutable_custom_tab_session()->Swap(
+        chrome::android::CustomTabSessionStateTracker::GetInstance()
+            .GetSession()
+            .get());
+  }
+
   UmaSessionStats::GetInstance()->ProvideCurrentSessionData();
   EmitAppNotificationStatusHistogram();
   LocaleManager::RecordUserTypeMetrics();
-
-  // TODO(b/182286787): With fixed session resume order, if no tab has yet
-  // become visible, then the activity type remains unknown and no activity
-  // type has been emitted for the current record. Explicitly emit kUnknown
-  // here so that all records are tagged. Clean up feature flag once launched.
-  const auto activity_type = chrome::android::GetActivityType();
-  if (activity_type == chrome::android::ActivityType::kUnknown &&
-      base::FeatureList::IsEnabled(
-          chrome::android::kFixedUmaSessionResumeOrder)) {
-    chrome::android::EmitActivityTypeHistograms(activity_type);
-  }
 }

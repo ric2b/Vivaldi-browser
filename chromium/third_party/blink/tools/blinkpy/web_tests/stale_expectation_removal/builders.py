@@ -10,11 +10,11 @@ from unexpected_passes_common import data_types
 
 class WebTestBuilders(builders.Builders):
     def __init__(self, include_internal_builders):
-        super(WebTestBuilders, self).__init__(include_internal_builders)
+        super(WebTestBuilders, self).__init__(None, include_internal_builders)
         self._fake_ci_builders = None
         self._non_chromium_builders = None
 
-    def _BuilderRunsTestOfInterest(self, test_map, _):
+    def _BuilderRunsTestOfInterest(self, test_map):
         tests = test_map.get('isolated_scripts', [])
         for t in tests:
             if t.get('isolate_name') in self.GetIsolateNames():
@@ -45,9 +45,6 @@ class WebTestBuilders(builders.Builders):
                     'linux-blink-rel',
                     'v8_linux_blink_rel',
                 },
-                'mac10.12-blink-rel-dummy': {
-                    'mac10.12-blink-rel',
-                },
                 'mac10.13-blink-rel-dummy': {
                     'mac10.13-blink-rel',
                 },
@@ -72,11 +69,10 @@ class WebTestBuilders(builders.Builders):
                 'win10.20h2-blink-rel-dummy': {
                     'win10.20h2-blink-rel',
                 },
-                # tryserver.chromium.linux
-                # Explicit trybot.
-                'linux-blink-web-tests-force-accessibility-rel': {
-                    'linux-blink-web-tests-force-accessibility-rel',
+                'win11-blink-rel-dummy': {
+                    'win11-blink-rel',
                 },
+                # tryserver.chromium.linux
                 # Explicit trybot.
                 'linux-layout-tests-edit-ng': {
                     'linux-layout-tests-edit-ng',

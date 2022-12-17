@@ -6,6 +6,11 @@
 
 namespace sessions {
 
+const std::string &LiveTab::GetVivExtData() const {
+  static std::string dummy;
+  return dummy;
+}
+
 std::string LiveTabContext::GetVivExtData() const {
   return std::string();
 }

@@ -532,6 +532,10 @@ void PrefsResetAllToDefaultFunction::HandlePrefValue(
 
 
 ExtensionFunction::ResponseAction PrefsResetAllToDefaultFunction::Run() {
+  using vivaldi::prefs::ResetAllToDefault::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
   Profile* profile = Profile::FromBrowserContext(browser_context());
   PrefService* prefs = profile->GetPrefs();
   DCHECK(prefs);
@@ -542,6 +546,12 @@ ExtensionFunction::ResponseAction PrefsResetAllToDefaultFunction::Run() {
 
   // Don't mutate while we're iterating.
   for (std::string& reset_key : keys_to_reset_) {
+    if (params->paths &&
+        std::find(std::begin(*params->paths), std::end(*params->paths),
+                  reset_key) != std::end(*params->paths)) {
+      // Skip it if it's in the blacklist.
+      continue;
+    }
     prefs->ClearPref(reset_key);
   }
   return RespondNow(NoArguments());

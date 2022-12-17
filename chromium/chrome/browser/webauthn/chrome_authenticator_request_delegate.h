@@ -59,6 +59,9 @@ class ChromeWebAuthenticationDelegate
       content::BrowserContext* browser_context,
       const url::Origin& caller_origin,
       const std::string& relying_party_id) override;
+  bool OriginMayUseRemoteDesktopClientOverride(
+      content::BrowserContext* browser_context,
+      const url::Origin& caller_origin) override;
   absl::optional<std::string> MaybeGetRelyingPartyIdOverride(
       const std::string& claimed_relying_party_id,
       const url::Origin& caller_origin) override;
@@ -107,6 +110,12 @@ class ChromeAuthenticatorRequestDelegate
         device::FidoRequestHandlerBase::TransportAvailabilityInfo* tai) = 0;
 
     virtual void UIShown(ChromeAuthenticatorRequestDelegate* delegate) = 0;
+
+    virtual void CableV2ExtensionSeen(
+        base::span<const uint8_t> server_link_data,
+        base::span<const uint8_t> experiments,
+        AuthenticatorRequestDialogModel::ExperimentServerLinkSheet,
+        AuthenticatorRequestDialogModel::ExperimentServerLinkTitle) = 0;
   };
 
   static void RegisterProfilePrefs(user_prefs::PrefRegistrySyncable* registry);
@@ -139,6 +148,7 @@ class ChromeAuthenticatorRequestDelegate
   void RegisterActionCallbacks(
       base::OnceClosure cancel_callback,
       base::RepeatingClosure start_over_callback,
+      AccountPreselectedCallback account_preselected_callback,
       device::FidoRequestHandlerBase::RequestCallback request_callback,
       base::RepeatingClosure bluetooth_adapter_power_on_callback) override;
   void ShouldReturnAttestation(
@@ -225,6 +235,7 @@ class ChromeAuthenticatorRequestDelegate
   raw_ptr<AuthenticatorRequestDialogModel> weak_dialog_model_ = nullptr;
   base::OnceClosure cancel_callback_;
   base::RepeatingClosure start_over_callback_;
+  AccountPreselectedCallback account_preselected_callback_;
   device::FidoRequestHandlerBase::RequestCallback request_callback_;
 
   // The next two fields are the same length and contain the names and public

@@ -12,6 +12,7 @@
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
+#include "chrome/browser/ui/views/location_bar/permission_chip.h"
 #include "chrome/browser/ui/views/location_bar/permission_request_chip.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -71,9 +72,11 @@ class PermissionBubbleInteractiveUITest : public InProcessBrowserTest {
         std::make_unique<test::PermissionRequestManagerTestApi>(browser());
     EXPECT_TRUE(test_api_->manager());
 
-    test_api_->AddSimpleRequest(
-        browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame(),
-        permissions::RequestType::kGeolocation);
+    test_api_->AddSimpleRequest(browser()
+                                    ->tab_strip_model()
+                                    ->GetActiveWebContents()
+                                    ->GetPrimaryMainFrame(),
+                                permissions::RequestType::kGeolocation);
 
     EXPECT_TRUE(browser()->window()->IsActive());
 
@@ -159,10 +162,18 @@ IN_PROC_BROWSER_TEST_F(PermissionBubbleInteractiveUITest,
   EXPECT_EQ(0u, views::test::WidgetTest::GetAllWidgets().size());
 }
 
+#if BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1324444): For Mac builders, the test fails after activating
+// the browser and cannot spot the widget. Needs investigation and fix.
+#define MAYBE_SwitchTabs DISABLED_SwitchTabs
+#else
+#define MAYBE_SwitchTabs SwitchTabs
+#endif
+
 // Add a tab, ensure we can switch away and back using Ctrl+Tab and
 // Ctrl+Shift+Tab at aura and using Cmd+Alt+Left/Right and curly braces at
 // MacOS.
-IN_PROC_BROWSER_TEST_F(PermissionBubbleInteractiveUITest, SwitchTabs) {
+IN_PROC_BROWSER_TEST_F(PermissionBubbleInteractiveUITest, MAYBE_SwitchTabs) {
   EXPECT_EQ(0, browser()->tab_strip_model()->active_index());
   EXPECT_TRUE(test_api_->GetPromptWindow());
 

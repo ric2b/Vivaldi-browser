@@ -15,6 +15,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/notreached.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "build/build_config.h"
@@ -24,13 +25,13 @@
 #include "components/password_manager/core/browser/password_store_sync.h"
 #include "components/password_manager/core/browser/sync/password_proto_utils.h"
 #include "components/password_manager/core/common/password_manager_features.h"
+#include "components/sync/base/features.h"
 #include "components/sync/model/in_memory_metadata_change_list.h"
 #include "components/sync/model/metadata_batch.h"
 #include "components/sync/model/metadata_change_list.h"
 #include "components/sync/model/model_type_change_processor.h"
 #include "components/sync/model/mutable_data_batch.h"
 #include "components/sync/model/sync_metadata_store_change_list.h"
-#include "net/base/escape.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
@@ -58,11 +59,11 @@ enum class SyncMetadataReadError {
 
 std::string ComputeClientTag(
     const sync_pb::PasswordSpecificsData& password_data) {
-  return net::EscapePath(GURL(password_data.origin()).spec()) + "|" +
-         net::EscapePath(password_data.username_element()) + "|" +
-         net::EscapePath(password_data.username_value()) + "|" +
-         net::EscapePath(password_data.password_element()) + "|" +
-         net::EscapePath(password_data.signon_realm());
+  return base::EscapePath(GURL(password_data.origin()).spec()) + "|" +
+         base::EscapePath(password_data.username_element()) + "|" +
+         base::EscapePath(password_data.username_value()) + "|" +
+         base::EscapePath(password_data.password_element()) + "|" +
+         base::EscapePath(password_data.signon_realm());
 }
 
 base::Time ConvertToBaseTime(uint64_t time) {
@@ -72,17 +73,20 @@ base::Time ConvertToBaseTime(uint64_t time) {
       base::Microseconds(time));
 }
 
-PasswordForm PasswordFromEntityChange(const syncer::EntityChange& entity_change,
-                                      base::Time sync_time) {
+PasswordForm PasswordFromEntityChange(
+    const syncer::EntityChange& entity_change) {
   DCHECK(entity_change.data().specifics.has_password());
   const sync_pb::PasswordSpecificsData& password_data =
       entity_change.data().specifics.password().client_only_encrypted_data();
   return PasswordFromSpecifics(password_data);
 }
 
-std::unique_ptr<syncer::EntityData> CreateEntityData(const PasswordForm& form) {
+std::unique_ptr<syncer::EntityData> CreateEntityData(
+    const PasswordForm& form,
+    const sync_pb::PasswordSpecificsData& base_password_data) {
   auto entity_data = std::make_unique<syncer::EntityData>();
-  *entity_data->specifics.mutable_password() = SpecificsFromPassword(form);
+  *entity_data->specifics.mutable_password() =
+      SpecificsFromPassword(form, base_password_data);
   entity_data->name = form.signon_realm;
   return entity_data;
 }
@@ -129,7 +133,10 @@ bool AreLocalAndRemotePasswordsEqualExcludingIssues(
               password_specifics.display_name() &&
           password_form.icon_url.spec() == password_specifics.avatar_url() &&
           url::Origin::Create(GURL(password_specifics.federation_url()))
-                  .Serialize() == password_form.federation_origin.Serialize());
+                  .Serialize() ==
+              password_form.federation_origin.Serialize()) &&
+         password_form.notes ==
+             PasswordNotesFromProto(password_specifics.notes());
 }
 
 // Returns true iff |password_specifics| and |password_form| are equal
@@ -247,6 +254,17 @@ PasswordSyncBridge::PasswordSyncBridge(
       password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
       batch = std::make_unique<syncer::MetadataBatch>();
       sync_metadata_read_error = SyncMetadataReadError::kReadSuccessButCleared;
+    } else if (base::FeatureList::IsEnabled(
+                   syncer::kCacheBaseEntitySpecificsInMetadata) &&
+               SyncMetadataCacheContainsSupportedFields(
+                   batch->GetAllMetadata())) {
+      // Caching entity specifics is meant to preserve fields not supported in a
+      // given browser version during commits to the server. If the cache
+      // contains supported fields, this means that the browser was updated and
+      // we should force the initial sync flow to propagate the cached data into
+      // the local model.
+      password_store_sync_->GetMetadataStore()->DeleteAllSyncMetadata();
+      batch = std::make_unique<syncer::MetadataBatch>();
     }
   }
   base::UmaHistogramEnumeration("PasswordManager.SyncMetadataReadError",
@@ -288,8 +306,13 @@ void PasswordSyncBridge::ActOnPasswordStoreChanges(
     switch (change.type()) {
       case PasswordStoreChange::ADD:
       case PasswordStoreChange::UPDATE: {
-        change_processor()->Put(storage_key, CreateEntityData(change.form()),
-                                &metadata_change_list);
+        change_processor()->Put(
+            storage_key,
+            CreateEntityData(
+                change.form(),
+                GetPossiblyTrimmedPasswordSpecificsData(storage_key)),
+            &metadata_change_list);
+
         break;
       }
       case PasswordStoreChange::REMOVE: {
@@ -373,7 +396,6 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
   PasswordStoreChangeList password_store_changes;
   {
     ScopedStoreTransaction transaction(password_store_sync_);
-    const base::Time time_now = base::Time::Now();
     // For any local password that doesn't exist in the remote passwords, issue
     // a change_processor()->Put(). For any local password that exists in the
     // remote passwords, both should be merged by picking the most recently
@@ -382,8 +404,12 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
     std::unordered_set<std::string> client_tags_of_local_passwords;
     for (const auto& [primary_key, local_password_form] :
          key_to_local_form_map) {
+      const std::string storage_key = base::NumberToString(primary_key.value());
       std::unique_ptr<syncer::EntityData> local_form_entity_data =
-          CreateEntityData(*local_password_form);
+          CreateEntityData(
+              *local_password_form,
+              GetPossiblyTrimmedPasswordSpecificsData(storage_key));
+
       const std::string client_tag_of_local_password =
           GetClientTag(*local_form_entity_data);
       client_tags_of_local_passwords.insert(client_tag_of_local_password);
@@ -392,9 +418,8 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
               client_tag_of_local_password) == 0) {
         // Local password doesn't exist in the remote model, Put() it in the
         // processor.
-        change_processor()->Put(
-            /*storage_key=*/base::NumberToString(primary_key.value()),
-            std::move(local_form_entity_data), metadata_change_list.get());
+        change_processor()->Put(storage_key, std::move(local_form_entity_data),
+                                metadata_change_list.get());
         continue;
       }
 
@@ -408,10 +433,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
 
       // First, we need to inform the processor about the storage key anyway.
       change_processor()->UpdateStorageKey(
-          remote_entity_change.data(),
-          /*storage_key=*/
-          base::NumberToString(primary_key.value()),
-          metadata_change_list.get());
+          remote_entity_change.data(), storage_key, metadata_change_list.get());
 
       if (AreLocalAndRemotePasswordsEqual(remote_password_specifics,
                                           *local_password_form)) {
@@ -429,15 +451,13 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
         // local password has been marked as phished. While all other types of
         // issues are easy to recompute (e.g. via Password Check) phished
         // entries are only found locally, so persisting them is important.
-        change_processor()->Put(
-            /*storage_key=*/base::NumberToString(primary_key.value()),
-            std::move(local_form_entity_data), metadata_change_list.get());
+        change_processor()->Put(storage_key, std::move(local_form_entity_data),
+                                metadata_change_list.get());
       } else {
         // The remote password is more recent, update the local model.
         UpdateLoginError update_login_error;
         const PasswordForm form =
-            PasswordFromEntityChange(remote_entity_change,
-                                     /*sync_time=*/time_now);
+            PasswordFromEntityChange(remote_entity_change);
         PasswordStoreChangeList changes =
             password_store_sync_->UpdateLoginSync(form, &update_login_error);
         DCHECK_LE(changes.size(), 1U);
@@ -477,8 +497,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::MergeSyncData(
 
       AddLoginError add_login_error;
       PasswordStoreChangeList changes = password_store_sync_->AddLoginSync(
-          PasswordFromEntityChange(*entity_change, /*sync_time=*/time_now),
-          &add_login_error);
+          PasswordFromEntityChange(*entity_change), &add_login_error);
       base::UmaHistogramEnumeration(
           "PasswordManager.MergeSyncData.AddLoginSyncError", add_login_error);
 
@@ -578,8 +597,6 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::ApplySyncChanges(
   base::AutoReset<bool> processing_changes(&is_processing_remote_sync_changes_,
                                            true);
 
-  const base::Time time_now = base::Time::Now();
-
   // This is used to keep track of all the changes applied to the password store
   // to notify other observers of the password store.
   PasswordStoreChangeList password_store_changes;
@@ -594,8 +611,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::ApplySyncChanges(
         case syncer::EntityChange::ACTION_ADD:
           AddLoginError add_login_error;
           changes = password_store_sync_->AddLoginSync(
-              PasswordFromEntityChange(*entity_change, /*sync_time=*/time_now),
-              &add_login_error);
+              PasswordFromEntityChange(*entity_change), &add_login_error);
           base::UmaHistogramEnumeration(
               "PasswordManager.ApplySyncChanges.AddLoginSyncError",
               add_login_error);
@@ -647,8 +663,7 @@ absl::optional<syncer::ModelError> PasswordSyncBridge::ApplySyncChanges(
             continue;
           }
           UpdateLoginError update_login_error;
-          PasswordForm form =
-              PasswordFromEntityChange(*entity_change, /*sync_time=*/time_now);
+          PasswordForm form = PasswordFromEntityChange(*entity_change);
           changes =
               password_store_sync_->UpdateLoginSync(form, &update_login_error);
           FormPrimaryKey primary_key =
@@ -746,7 +761,10 @@ void PasswordSyncBridge::GetData(StorageKeyList storage_keys,
   for (const std::string& storage_key : storage_keys) {
     FormPrimaryKey primary_key = ParsePrimaryKey(storage_key);
     if (key_to_form_map.count(primary_key) != 0) {
-      batch->Put(storage_key, CreateEntityData(*key_to_form_map[primary_key]));
+      batch->Put(storage_key,
+                 CreateEntityData(
+                     *key_to_form_map[primary_key],
+                     GetPossiblyTrimmedPasswordSpecificsData(storage_key)));
     }
   }
   std::move(callback).Run(std::move(batch));
@@ -766,8 +784,10 @@ void PasswordSyncBridge::GetAllDataForDebugging(DataCallback callback) {
   auto batch = std::make_unique<syncer::MutableDataBatch>();
   for (const auto& [primary_key, form] : key_to_form_map) {
     form->password_value = u"<redacted>";
-    batch->Put(base::NumberToString(primary_key.value()),
-               CreateEntityData(*form));
+    const std::string storage_key = base::NumberToString(primary_key.value());
+    batch->Put(storage_key,
+               CreateEntityData(*form, GetPossiblyTrimmedPasswordSpecificsData(
+                                           storage_key)));
   }
   std::move(callback).Run(std::move(batch));
 }
@@ -845,7 +865,7 @@ void PasswordSyncBridge::ApplyStopSyncChanges(
 }
 
 sync_pb::EntitySpecifics PasswordSyncBridge::TrimRemoteSpecificsForCaching(
-    const sync_pb::EntitySpecifics& entity_specifics) {
+    const sync_pb::EntitySpecifics& entity_specifics) const {
   DCHECK(entity_specifics.has_password());
   sync_pb::EntitySpecifics trimmed_entity_specifics;
   *trimmed_entity_specifics.mutable_password()
@@ -853,6 +873,40 @@ sync_pb::EntitySpecifics PasswordSyncBridge::TrimRemoteSpecificsForCaching(
       TrimPasswordSpecificsDataForCaching(
           entity_specifics.password().client_only_encrypted_data());
   return trimmed_entity_specifics;
+}
+
+const sync_pb::PasswordSpecificsData&
+PasswordSyncBridge::GetPossiblyTrimmedPasswordSpecificsData(
+    const std::string& storage_key) {
+  return change_processor()
+      ->GetPossiblyTrimmedRemoteSpecifics(storage_key)
+      .password()
+      .client_only_encrypted_data();
+}
+
+// TODO(crbug.com/1296159): Consider moving this logic to processor. If not
+// moved, add a metric for read errors where this function is being called.
+bool PasswordSyncBridge::SyncMetadataCacheContainsSupportedFields(
+    const syncer::EntityMetadataMap& metadata_map) const {
+  for (const auto& metadata_entry : metadata_map) {
+    // Serialize the cached specifics and parse them back to a proto. Any fields
+    // that were cached as unknown and are known in the current browser version
+    // should be parsed correctly.
+    std::string serialized_specifics;
+    metadata_entry.second->possibly_trimmed_base_specifics().SerializeToString(
+        &serialized_specifics);
+    sync_pb::EntitySpecifics parsed_specifics;
+    parsed_specifics.ParseFromString(serialized_specifics);
+
+    // If `parsed_specifics` contain any supported fields, they would be cleared
+    // by the trimming function.
+    if (parsed_specifics.ByteSizeLong() !=
+        TrimRemoteSpecificsForCaching(parsed_specifics).ByteSizeLong()) {
+      return true;
+    }
+  }
+
+  return false;
 }
 
 std::set<FormPrimaryKey> PasswordSyncBridge::GetUnsyncedPasswordsStorageKeys() {

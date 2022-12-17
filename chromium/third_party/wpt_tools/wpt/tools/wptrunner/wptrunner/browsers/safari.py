@@ -1,3 +1,5 @@
+# mypy: allow-untyped-defs
+
 import os
 import plistlib
 from distutils.spawn import find_executable
@@ -199,5 +201,6 @@ class SafariBrowser(WebDriverBrowser):
                             proc.wait(10)
                         except psutil.TimeoutExpired:
                             proc.kill()
+                            proc.wait(10)
                     except psutil.NoSuchProcess:
                         pass

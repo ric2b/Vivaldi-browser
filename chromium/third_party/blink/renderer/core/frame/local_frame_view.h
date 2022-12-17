@@ -59,8 +59,12 @@
 #include "third_party/blink/renderer/platform/wtf/casting.h"
 #include "ui/gfx/geometry/rect.h"
 
+template <typename T>
+class sk_sp;
+
 namespace cc {
 class AnimationHost;
+class AnimationTimeline;
 class Layer;
 class PaintOpBuffer;
 enum class PaintHoldingCommitTrigger;
@@ -79,7 +83,6 @@ class Cursor;
 namespace blink {
 class AXObjectCache;
 class ChromeClient;
-class CompositorAnimationTimeline;
 class DeferredShapingDisallowScope;
 class DeferredShapingMinimumTopScope;
 class DeferredShapingViewportScope;
@@ -442,7 +445,7 @@ class CORE_EXPORT LocalFrameView final
                           bool should_scroll = true);
   FragmentAnchor* GetFragmentAnchor() { return fragment_anchor_; }
   void InvokeFragmentAnchor();
-  void DismissFragmentAnchor();
+  void ClearFragmentAnchor();
 
   bool ShouldSetCursor() const;
 
@@ -505,6 +508,12 @@ class CORE_EXPORT LocalFrameView final
   void SetAllowDeferredShaping(base::PassKey<DeferredShapingDisallowScope>,
                                bool value) {
     allow_deferred_shaping_ = value;
+  }
+  // Disable deferred shaping on this frame persistently.
+  // This function should not be called during laying out.
+  void DisallowDeferredShaping();
+  bool DefaultAllowDeferredShaping() const {
+    return default_allow_deferred_shaping_;
   }
   void RequestToLockDeferred(Element& element);
   bool LockDeferredRequested(Element& element) const;
@@ -721,11 +730,6 @@ class CORE_EXPORT LocalFrameView final
   void ScrollRectToVisibleInRemoteParent(const PhysicalRect&,
                                          mojom::blink::ScrollIntoViewParamsPtr);
 
-  // Returns true if a scroll into view can continue to cause scrolling in the
-  // parent frame.
-  bool AllowedToPropagateScrollIntoView(
-      const mojom::blink::ScrollIntoViewParamsPtr&);
-
   PaintArtifactCompositor* GetPaintArtifactCompositor() const;
 
   cc::Layer* RootCcLayer();
@@ -733,7 +737,7 @@ class CORE_EXPORT LocalFrameView final
 
   ScrollingCoordinatorContext* GetScrollingContext() const;
   cc::AnimationHost* GetCompositorAnimationHost() const;
-  CompositorAnimationTimeline* GetCompositorAnimationTimeline() const;
+  cc::AnimationTimeline* GetCompositorAnimationTimeline() const;
 
   LayoutShiftTracker& GetLayoutShiftTracker() { return *layout_shift_tracker_; }
   PaintTimingDetector& GetPaintTimingDetector() const {
@@ -783,8 +787,8 @@ class CORE_EXPORT LocalFrameView final
 
   bool HasDominantVideoElement() const;
 
-  // Gets the fullscreen overlay layer if present, or nullptr if there is none.
-  PaintLayer* GetFullScreenOverlayLayer() const;
+  // Gets the xr overlay layer if present, or nullptr if there is none.
+  PaintLayer* GetXROverlayLayer() const;
 
   void RunPaintBenchmark(int repeat_count, cc::PaintBenchmarkResult& result);
 
@@ -1059,6 +1063,7 @@ class CORE_EXPORT LocalFrameView final
   LayoutUnit current_viewport_bottom_ = kIndefiniteSize;
   LayoutUnit current_minimum_top_;
   bool allow_deferred_shaping_ = false;
+  bool default_allow_deferred_shaping_ = true;
 
   bool can_have_scrollbars_;
 

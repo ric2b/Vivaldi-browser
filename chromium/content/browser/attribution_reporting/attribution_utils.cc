@@ -114,7 +114,7 @@ base::Time ReportTimeAtWindow(const CommonSourceInfo& source,
   return ReportTimeFromDeadline(source.impression_time(), deadline);
 }
 
-std::string SerializeAttributionJson(const base::Value& body,
+std::string SerializeAttributionJson(const base::Value::Dict& body,
                                      bool pretty_print) {
   int options = pretty_print ? base::JSONWriter::OPTIONS_PRETTY_PRINT : 0;
 
@@ -150,27 +150,24 @@ bool AttributionFilterDataMatch(const AttributionFilterData& source,
           return negated != source_filter->second.empty();
         }
 
-        auto predicate = [&](const std::string& value) {
-          return negated != base::Contains(source_filter->second, value);
-        };
-
-        // Negating filters must ensure no value matches any source-side value,
-        // whereas only one value must match normally.
-        return negated ? base::ranges::all_of(trigger_filter.second, predicate)
-                       : base::ranges::any_of(trigger_filter.second, predicate);
+        bool has_intersection = base::ranges::any_of(
+            trigger_filter.second, [&](const std::string& value) {
+              return base::Contains(source_filter->second, value);
+            });
+        // Negating filters are considered matched if the intersection of the
+        // filter values is empty.
+        return negated != has_intersection;
       });
 }
 
 bool AttributionFiltersMatch(const AttributionFilterData& source_filter_data,
                              const AttributionFilterData& trigger_filters,
                              const AttributionFilterData& trigger_not_filters) {
-  if (!trigger_filters.filter_values().empty() &&
-      !AttributionFilterDataMatch(source_filter_data, trigger_filters)) {
+  if (!AttributionFilterDataMatch(source_filter_data, trigger_filters)) {
     return false;
   }
 
-  if (!trigger_not_filters.filter_values().empty() &&
-      !AttributionFilterDataMatch(source_filter_data, trigger_not_filters,
+  if (!AttributionFilterDataMatch(source_filter_data, trigger_not_filters,
                                   /*negated=*/true)) {
     return false;
   }

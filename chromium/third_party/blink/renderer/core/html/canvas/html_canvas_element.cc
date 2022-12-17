@@ -384,7 +384,7 @@ CanvasRenderingContext* HTMLCanvasElement::GetCanvasRenderingContextInternal(
   // If this context is cross-origin, it should prefer to use the low-power GPU
   LocalFrame* frame = GetDocument().GetFrame();
   CanvasContextCreationAttributesCore recomputed_attributes = attributes;
-  if (frame && frame->IsCrossOriginToMainFrame())
+  if (frame && frame->IsCrossOriginToOutermostMainFrame())
     recomputed_attributes.power_preference = "low-power";
 
   context_ = factory->Create(this, recomputed_attributes);
@@ -677,7 +677,7 @@ void HTMLCanvasElement::Reset() {
 
   SetSurfaceSize(new_size);
 
-  if (IsWebGL() && old_size != Size())
+  if ((IsWebGL() || IsWebGPU()) && old_size != Size())
     context_->Reshape(width(), height());
 
   if (LayoutObject* layout_object = GetLayoutObject()) {
@@ -730,7 +730,10 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
     if (!listener->NeedsNewFrame())
       continue;
 
-    auto callback = listener->GetNewFrameCallback();
+    // Split the listener's callback so that it can be used with both the one
+    // copy path and fallback two copy path below.
+    auto split_callback =
+        base::SplitOnceCallback(listener->GetNewFrameCallback());
     const bool can_discard_alpha = listener->CanDiscardAlpha();
 
     // First attempt to copy directly from the rendering context to a video
@@ -738,12 +741,13 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
     // where GetSourceImageForCanvasInternal is zero-copy, this is superfluous).
     if (context_ && can_discard_alpha &&
         base::FeatureList::IsEnabled(kOneCopyCanvasCapture)) {
-      context_->CopyRenderingResultsToVideoFrame(
-          copier_->GetAcceleratedVideoFramePool(
-              SharedGpuContext::ContextProviderWrapper()),
-          kBackBuffer, gfx::ColorSpace::CreateREC709(), callback);
-      if (!callback)
+      if (context_->CopyRenderingResultsToVideoFrame(
+              copier_->GetAcceleratedVideoFramePool(
+                  SharedGpuContext::ContextProviderWrapper()),
+              kBackBuffer, gfx::ColorSpace::CreateREC709(),
+              std::move(split_callback.first))) {
         continue;
+      }
     }
 
     // If that fails, then create a StaticBitmapImage for the contents of
@@ -760,7 +764,7 @@ void HTMLCanvasElement::NotifyListenersCanvasChanged() {
     // need a context_provider that has a RasterInterface available.
     copier_->Convert(source_image, can_discard_alpha,
                      SharedGpuContext::ContextProviderWrapper(),
-                     std::move(callback));
+                     std::move(split_callback.second));
   }
 }
 

@@ -29,6 +29,7 @@
 #include "net/url_request/url_request.h"
 #include "services/network/keepalive_statistics_recorder.h"
 #include "services/network/network_service.h"
+#include "services/network/private_network_access_checker.h"
 #include "services/network/public/cpp/corb/corb_api.h"
 #include "services/network/public/cpp/cors/cors_error_status.h"
 #include "services/network/public/cpp/initiator_lock_compatibility.h"
@@ -77,6 +78,19 @@ class KeepaliveStatisticsRecorder;
 class ScopedThrottlingToken;
 struct OriginPolicy;
 class URLLoaderFactory;
+
+// When a request matches a pervasive payload url and checksum a value from this
+// enum will be logged to the "Network.CacheTransparency.CacheNotUsed"
+// histogram. These values are persisted to logs. Entries should not be
+// renumbered and numeric values should never be reused. This is exposed in the
+// header file for use in tests.
+enum class CacheTransparencyCacheNotUsedReason {
+  kTryingSingleKeyedCache = 0,
+  kIncompatibleRequestType = 1,
+  kIncompatibleRequestLoadFlags = 2,
+  kIncompatibleRequestHeaders = 3,
+  kMaxValue = kIncompatibleRequestHeaders,
+};
 
 class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
     : public mojom::URLLoader,
@@ -147,6 +161,10 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // Pointers from the |url_loader_context| will be used if
   // |dev_tools_observer|, |cookie_access_observer| or
   // |url_loader_network_observer| are not provided.
+  //
+  // |third_party_cookies_enabled| is also false if all cookies are disabled.
+  // The mojom::kURLLoadOptionBlockThirdPartyCookies can be set or unset
+  // independently of this option.
   URLLoader(
       URLLoaderContext& context,
       DeleteCallback delete_callback,
@@ -166,7 +184,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
           url_loader_network_observer,
       mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
       mojo::PendingRemote<mojom::AcceptCHFrameObserver>
-          accept_ch_frame_observer);
+          accept_ch_frame_observer,
+      bool third_party_cookies_enabled);
 
   URLLoader(const URLLoader&) = delete;
   URLLoader& operator=(const URLLoader&) = delete;
@@ -274,6 +293,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
       bool added_during_redirect);
 
   static bool HasFetchStreamingUploadBody(const ResourceRequest*);
+
+  static void ResetPervasivePayloadsListForTesting();
 
  private:
   // This class is used to set the URLLoader as user data on a URLRequest. This
@@ -415,13 +436,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // net::URLRequest.
   bool ShouldForceIgnoreTopFramePartyForCookies() const;
 
-  // Returns the client security state that applies to the current request.
-  // May return nullptr.
-  const mojom::ClientSecurityState* GetClientSecurityState() const;
-
   // Applies Private Network Access checks to the current request.
-  //
-  // Sets `response_ip_address_space_` to a value derived from `transport_info`.
   //
   // Helper for `OnConnected()`.
   PrivateNetworkAccessCheckResult PrivateNetworkAccessCheck(
@@ -444,6 +459,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // When Cross-Origin-Embedder-Policy: credentialless is set, do not
   // send or store credentials for no-cors cross-origin request.
   bool CoepAllowCredentials(const GURL& url);
+
+  bool ThirdPartyCookiesEnabled() const;
 
   raw_ptr<net::URLRequestContext> url_request_context_;
 
@@ -487,6 +504,9 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   // Stores any CORS error encountered while processing |url_request_|.
   absl::optional<CorsErrorStatus> cors_error_status_;
+
+  // True if a pervasive payload is found, for logging purposes.
+  bool pervasive_payload_requested_ = false;
 
   // Used when deferring sending the data to the client until mime sniffing is
   // finished.
@@ -562,22 +582,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // network::ResourceRequest::fetch_window_id for details.
   absl::optional<base::UnguessableToken> fetch_window_id_;
 
-  // See |ResourceRequest::target_ip_address_space_|.
-  mojom::IPAddressSpace target_ip_address_space_ =
-      mojom::IPAddressSpace::kUnknown;
-
-  // The response's address space, as computed using the |net::TransportInfo|
-  // argument to the |OnConnected()| callback. This info is only available then,
-  // so the computation result is stored for later use in this member.
-  //
-  // Set in |OnConnected()|, reset in |FollowRedirect()|.
-  //
-  // https://wicg.github.io/private-network-access/#response-ip-address-space
-  absl::optional<mojom::IPAddressSpace> response_ip_address_space_;
-
-  // True iff |OnConnected()| was called multiple times and the IP address space
-  // of the transport was not the same each time.
-  bool has_connected_to_mismatched_ip_address_spaces_ = false;
+  PrivateNetworkAccessChecker private_network_access_checker_;
 
   mojo::Remote<mojom::TrustedHeaderClient> header_client_;
 
@@ -616,20 +621,13 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
   // CookieAccessObserver implementation from the URLLoaderContext aka
   // URLLoaderFactory).
   const mojo::Remote<mojom::CookieAccessObserver> cookie_observer_remote_;
-  mojom::CookieAccessObserver* const cookie_observer_ = nullptr;
+  const raw_ptr<mojom::CookieAccessObserver> cookie_observer_ = nullptr;
   const mojo::Remote<mojom::URLLoaderNetworkServiceObserver>
       url_loader_network_observer_remote_;
-  mojom::URLLoaderNetworkServiceObserver* const url_loader_network_observer_ =
-      nullptr;
+  const raw_ptr<mojom::URLLoaderNetworkServiceObserver>
+      url_loader_network_observer_ = nullptr;
   const mojo::Remote<mojom::DevToolsObserver> devtools_observer_remote_;
-  mojom::DevToolsObserver* const devtools_observer_ = nullptr;
-
-  // Client security state copied from the input ResourceRequest.
-  //
-  // If |factory_params_->client_security_state| is non-null, this is null.
-  // We indeed prefer the factory params over the request params as we trust the
-  // former more, given that they always come from the browser process.
-  mojom::ClientSecurityStatePtr request_client_security_state_;
+  const raw_ptr<mojom::DevToolsObserver> devtools_observer_ = nullptr;
 
   // Indicates |url_request_| is fetch upload request and that has streaming
   // body.
@@ -641,6 +639,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) URLLoader
 
   bool emitted_devtools_raw_request_ = false;
   bool emitted_devtools_raw_response_ = false;
+
+  const bool third_party_cookies_enabled_;
 
   mojo::Remote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer_;
 

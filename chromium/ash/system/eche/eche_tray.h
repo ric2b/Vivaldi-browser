@@ -8,6 +8,8 @@
 #include <string>
 
 #include "ash/ash_export.h"
+#include "ash/keyboard/ui/keyboard_ui_controller.h"
+#include "ash/public/cpp/keyboard/keyboard_controller_observer.h"
 #include "ash/public/cpp/session/session_observer.h"
 #include "ash/public/cpp/tablet_mode_observer.h"
 #include "ash/session/session_controller_impl.h"
@@ -23,6 +25,8 @@
 #include "base/gtest_prod_util.h"
 #include "base/timer/timer.h"
 #include "components/session_manager/session_manager_types.h"
+#include "ui/events/event_handler.h"
+#include "ui/events/event_target.h"
 #include "ui/gfx/geometry/rect.h"
 #include "ui/views/controls/button/button.h"
 #include "url/gurl.h"
@@ -60,11 +64,13 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
                             public ScreenLayoutObserver,
                             public ShelfObserver,
                             public TabletModeObserver,
+                            public KeyboardControllerObserver,
                             ShellObserver {
  public:
   METADATA_HEADER(EcheTray);
 
   using GracefulCloseCallback = base::OnceCallback<void()>;
+  using GracefulGoBackCallback = base::RepeatingCallback<void()>;
 
   explicit EcheTray(Shelf* shelf);
   EcheTray(const EcheTray&) = delete;
@@ -85,6 +91,7 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   bool PerformAction(const ui::Event& event) override;
   TrayBubbleView* GetBubbleView() override;
   views::Widget* GetBubbleWidget() const override;
+  void OnVirtualKeyboardVisibilityChanged() override;
 
   // TrayBubbleView::Delegate:
   std::u16string GetAccessibleNameForBubble() override;
@@ -93,6 +100,10 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
 
   // SessionObserver:
   void OnLockStateChanged(bool locked) override;
+
+  // KeyboardControllerObserver:
+  void OnKeyboardUIDestroyed() override;
+  void OnKeyboardVisibilityChanged(bool visible) override;
 
   // Sets the url that will be passed to the webview.
   // Setting a new value will cause the current bubble be destroyed.
@@ -105,15 +116,27 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   // `offset` will bring the icon back to its original size.
   void ResizeIcon(int offset_dip);
 
-  // Sets graceful close callback functiion. When close Eche Bubble, it will
+  // Sets graceful close callback function. When close Eche Bubble, it will
   // notify to Eche Web to release connection resource.  Be aware that once this
   // is set, close button will not call PurgeAndClose() but rely on Eche Web to
   // close window when connection resource is released; if it is not set, then
-  // it will immediaely call PurgeAndClose() to close window.
+  // it will immediately call PurgeAndClose() to close window.
   void SetGracefulCloseCallback(GracefulCloseCallback graceful_close_callback);
+
+  // Sets graceful go back callback function. When users click the ArrowBack
+  // button in the Eche Bubble, `graceful_go_back_callback` will notify Eche
+  // web content to send the GoBack key event. Be aware that once this is set,
+  // the ArrowBack button will call `web_view.GoBack()` and run
+  // `graceful_go_back_callback` together and rely on Eche web content to send
+  // the GoBack key event to the server when the ArrowBack button is clicked; if
+  // this is not set, then the ArrowBack button will immediately call
+  // `web_view.GoBack()` to go back the previous page.
+  void SetGracefulGoBackCallback(
+      GracefulGoBackCallback graceful_go_back_callback);
 
   views::Button* GetMinimizeButtonForTesting() const;
   views::Button* GetCloseButtonForTesting() const;
+  views::Button* GetArrowBackButtonForTesting() const;
 
   // Initializes the bubble with given parameters. If there is any previous
   // bubble already shown with a different URL it is going to be closed. The
@@ -148,6 +171,24 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
 
  private:
   FRIEND_TEST_ALL_PREFIXES(EcheTrayTest, EcheTrayCreatesBubbleButHideFirst);
+
+  // Intercepts all the events targeted to the internal webview in order to
+  // process the accelerator keys.
+  class EventInterceptor : public ui::EventHandler {
+   public:
+    EventInterceptor(EcheTray* eche_tray);
+
+    EventInterceptor(const EventInterceptor&) = delete;
+    EventInterceptor& operator=(const EventInterceptor&) = delete;
+
+    ~EventInterceptor() override;
+
+    // ui::EventHandler:
+    void OnKeyEvent(ui::KeyEvent* event) override;
+
+   private:
+    EcheTray* const eche_tray_;
+  };
 
   // Calculates and returns the size of the Exo bubble based on the screen size
   // and orientation.
@@ -210,12 +251,19 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
   AshWebView* web_view_ = nullptr;
 
   GracefulCloseCallback graceful_close_callback_;
+  GracefulGoBackCallback graceful_go_back_callback_;
 
   // The unload timer to force close EcheTray in case unload error.
   std::unique_ptr<base::DelayTimer> unload_timer_;
 
   views::Button* close_button_ = nullptr;
   views::Button* minimize_button_ = nullptr;
+  views::Button* arrow_back_button_ = nullptr;
+  std::unique_ptr<EventInterceptor> event_interceptor_;
+
+  // The time a stream is initializing. Used to record the elapsed time from
+  // when the stream is initializing to when the stream is closed by user.
+  absl::optional<base::TimeTicks> init_stream_timestamp_;
 
   // Observers
   base::ScopedObservation<SessionControllerImpl, SessionObserver>
@@ -228,6 +276,9 @@ class ASH_EXPORT EcheTray : public TrayBackgroundView,
                           &Shell::AddShellObserver,
                           &Shell::RemoveShellObserver>
       shell_observer_{this};
+  base::ScopedObservation<keyboard::KeyboardUIController,
+                          ash::KeyboardControllerObserver>
+      keyboard_observation_{this};
 
   base::WeakPtrFactory<EcheTray> weak_factory_{this};
 };

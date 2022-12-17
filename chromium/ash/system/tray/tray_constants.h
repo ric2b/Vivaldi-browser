@@ -159,7 +159,7 @@ constexpr gfx::Insets kUnifiedSystemInfoDateViewPadding(3);
 // Constants used in StackedNotificationBar located on top of the message
 // center.
 constexpr auto kStackedNotificationIconsContainerPadding =
-    gfx::Insets::TLBR(1, 16, 0, 8);
+    gfx::Insets::TLBR(1, 14, 0, 8);
 constexpr int kStackedNotificationBarMaxIcons = 3;
 constexpr int kStackedNotificationBarIconSpacing = 6;
 constexpr int kStackedNotificationIconSize = 18;
@@ -219,7 +219,6 @@ constexpr int kUnifiedTopShortcutButtonDefaultSpacing = 16;
 constexpr int kUnifiedTopShortcutButtonMinSpacing = 4;
 
 // Constants used in the detailed view in UnifiedSystemTray.
-constexpr auto kUnifiedDetailedViewPadding = gfx::Insets::TLBR(0, 0, 8, 0);
 constexpr auto kUnifiedDetailedViewTitlePadding =
     gfx::Insets::TLBR(0, 0, 0, 16);
 constexpr int kUnifiedDetailedViewTitleRowHeight = 64;

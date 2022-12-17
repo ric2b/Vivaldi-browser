@@ -13,6 +13,8 @@
 #include "ui/base/dragdrop/os_exchange_data.h"
 #include "url/url_constants.h"
 
+#include "app/vivaldi_apptools.h"
+
 namespace bookmarks {
 
 // static
@@ -34,6 +36,11 @@ void BookmarkNodeData::Write(const base::FilePath& profile_path,
     if (elements[0].url.SchemeIs(url::kJavaScriptScheme)) {
       data->SetString(base::UTF8ToUTF16(elements[0].url.spec()));
     } else {
+      if (vivaldi::IsVivaldiRunning()) {
+        // SetString added by Vivaldi. Order is important to allow the string
+        // (as text/plain)to reach JS when dragging from a folder to the JS UI.
+        data->SetString(elements[0].title);
+      }
       data->SetURL(elements[0].url, elements[0].title);
     }
   }

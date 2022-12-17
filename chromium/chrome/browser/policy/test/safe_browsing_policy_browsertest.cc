@@ -45,10 +45,13 @@ int IsEnhancedProtectionMessageVisibleOnInterstitial(
 
   content::WebContents* tab =
       chrome_test_utils::GetActiveWebContents(browser_test);
-  browser_test->WaitForInterstitial(tab);
+  if (!browser_test->IsShowingInterstitial(tab)) {
+    ADD_FAILURE() << "Expected interstitial when checking for enhanced "
+                     "protection message.";
+  }
   int result = 0;
-  EXPECT_TRUE(content::ExecuteScriptAndExtractInt(tab->GetMainFrame(), command,
-                                                  &result));
+  EXPECT_TRUE(content::ExecuteScriptAndExtractInt(tab->GetPrimaryMainFrame(),
+                                                  command, &result));
   return result;
 }
 

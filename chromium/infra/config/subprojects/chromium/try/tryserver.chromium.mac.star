@@ -37,6 +37,9 @@ consoles.list_view(
 
 try_.builder(
     name = "mac-arm64-on-arm64-rel",
+    mirrors = [
+        "ci/mac-arm64-on-arm64-rel",
+    ],
     builderless = False,
     cpu = cpu.ARM64,
     os = os.MAC_DEFAULT,
@@ -73,6 +76,7 @@ try_.builder(
 try_.builder(
     name = "mac-builder-next-rel",
     os = os.MAC_12,
+    builderless = False,
 )
 
 try_.builder(
@@ -114,6 +118,7 @@ try_.compilator_builder(
 
 try_.orchestrator_builder(
     name = "mac11-arm64-rel",
+    check_for_flakiness = True,
     compilator = "mac11-arm64-rel-compilator",
     mirrors = [
         "ci/mac-arm64-rel",
@@ -127,6 +132,7 @@ try_.orchestrator_builder(
 
 try_.compilator_builder(
     name = "mac11-arm64-rel-compilator",
+    check_for_flakiness = True,
     main_list_view = "try",
     os = os.MAC_DEFAULT,
     # TODO (crbug.com/1245171): Revert when root issue is fixed
@@ -136,22 +142,6 @@ try_.compilator_builder(
 # NOTE: the following trybots aren't sensitive to Mac version on which
 # they are built, hence no additional dimension is specified.
 # The 10.xx version translates to which bots will run isolated tests.
-try_.builder(
-    name = "mac_chromium_10.11_rel_ng",
-    mirrors = [
-        "ci/Mac Builder",
-        "ci/Mac10.11 Tests",
-    ],
-)
-
-try_.builder(
-    name = "mac_chromium_10.12_rel_ng",
-    mirrors = [
-        "ci/Mac Builder",
-        "ci/Mac10.12 Tests",
-    ],
-)
-
 try_.builder(
     name = "mac_chromium_10.13_rel_ng",
     mirrors = [
@@ -187,10 +177,17 @@ try_.builder(
 
 try_.builder(
     name = "mac_chromium_archive_rel_ng",
+    mirrors = [
+        "ci/mac-archive-rel",
+    ],
 )
 
 try_.builder(
     name = "mac_chromium_asan_rel_ng",
+    mirrors = [
+        "ci/Mac ASan 64 Builder",
+        "ci/Mac ASan 64 Tests (1)",
+    ],
     goma_jobs = goma.jobs.J150,
 )
 
@@ -247,14 +244,23 @@ try_.builder(
 
 ios_builder(
     name = "ios-asan",
+    mirrors = [
+        "ci/ios-asan",
+    ],
 )
 
 ios_builder(
     name = "ios-catalyst",
+    mirrors = [
+        "ci/ios-catalyst",
+    ],
 )
 
 ios_builder(
     name = "ios-device",
+    mirrors = [
+        "ci/ios-device",
+    ],
 )
 
 ios_builder(
@@ -346,22 +352,15 @@ ios_builder(
 
 ios_builder(
     name = "ios-simulator-noncq",
+    mirrors = [
+        "ci/ios-simulator-noncq",
+    ],
     xcode = xcode.x13main,
     tryjob = try_.job(
         location_regexp = [
             ".+/[+]/third_party/crashpad/crashpad/.+",
         ],
     ),
-)
-
-ios_builder(
-    name = "ios14-beta-simulator",
-    os = os.MAC_11,
-)
-
-ios_builder(
-    name = "ios14-sdk-simulator",
-    os = os.MAC_11,
 )
 
 ios_builder(
@@ -372,6 +371,23 @@ ios_builder(
     name = "ios15-sdk-simulator",
     xcode = xcode.x13betabots,
     os = os.MAC_12,
+)
+
+ios_builder(
+    name = "ios16-beta-simulator",
+    os = os.MAC_DEFAULT,
+    mirrors = [
+        "ci/ios16-beta-simulator",
+    ],
+)
+
+ios_builder(
+    name = "ios16-sdk-simulator",
+    os = os.MAC_DEFAULT,
+    mirrors = [
+        "ci/ios16-sdk-simulator",
+    ],
+    xcode = xcode.x14betabots,
 )
 
 try_.gpu.optional_tests_builder(
@@ -411,13 +427,14 @@ try_.gpu.optional_tests_builder(
             ".+/[+]/media/renderers/.+",
             ".+/[+]/media/video/.+",
             ".+/[+]/services/shape_detection/.+",
-            ".+/[+]/testing/buildbot/chromium.gpu.fyi.json",
+            ".+/[+]/testing/buildbot/tryserver.chromium.mac.json",
             ".+/[+]/testing/trigger_scripts/.+",
             ".+/[+]/third_party/blink/renderer/modules/mediastream/.+",
             ".+/[+]/third_party/blink/renderer/modules/webcodecs/.+",
             ".+/[+]/third_party/blink/renderer/modules/webgl/.+",
             ".+/[+]/third_party/blink/renderer/platform/graphics/gpu/.+",
             ".+/[+]/tools/clang/scripts/update.py",
+            ".+/[+]/tools/mb/mb_config_expectations/tryserver.chromium.mac.json",
             ".+/[+]/ui/gl/.+",
         ],
     ),

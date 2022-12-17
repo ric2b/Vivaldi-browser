@@ -57,6 +57,9 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromDictionary(
   result->SetShortName(base::UTF8ToUTF16(*short_name));
   result->prepopulate_id = dict.FindIntKey(DefaultSearchManager::kPrepopulateID)
                                .value_or(result->prepopulate_id);
+  result->starter_pack_id =
+      dict.FindIntKey(DefaultSearchManager::kStarterPackId)
+          .value_or(result->starter_pack_id);
   string_value = dict.FindStringKey(DefaultSearchManager::kSyncGUID);
   if (string_value) {
     result->sync_guid = *string_value;
@@ -182,18 +185,22 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromDictionary(
   result->preconnect_to_search_url =
       dict.FindBoolKey(DefaultSearchManager::kPreconnectToSearchUrl)
           .value_or(result->preconnect_to_search_url);
+  result->prefetch_likely_navigations =
+      dict.FindBoolKey(DefaultSearchManager::kPrefetchLikelyNavigations)
+          .value_or(result->prefetch_likely_navigations);
   result->is_active = static_cast<TemplateURLData::ActiveStatus>(
       dict.FindIntKey(DefaultSearchManager::kIsActive)
           .value_or(static_cast<int>(result->is_active)));
 
   string_value = dict.FindStringKey(DefaultSearchManager::kPosition);
-  if (string_value) {
-    std::string position_decoded;
-    base::Base64Decode(*string_value, &position_decoded);
-    sync_pb::UniquePosition position;
-    position.MergeFromString(position_decoded);
-    result->vivaldi_position = syncer::UniquePosition::FromProto(position);
-  }
+  // Old value, generated before Vivaldi used chromium search engines. Ignore.
+  if (!string_value)
+    return nullptr;
+  std::string position_decoded;
+  base::Base64Decode(*string_value, &position_decoded);
+  sync_pb::UniquePosition position;
+  position.MergeFromString(position_decoded);
+  result->vivaldi_position = syncer::UniquePosition::FromProto(position);
 
   return result;
 }
@@ -207,6 +214,8 @@ std::unique_ptr<base::DictionaryValue> TemplateURLDataToDictionary(
   url_dict->SetStringKey(DefaultSearchManager::kKeyword, data.keyword());
   url_dict->SetIntKey(DefaultSearchManager::kPrepopulateID,
                       data.prepopulate_id);
+  url_dict->SetIntKey(DefaultSearchManager::kStarterPackId,
+                      data.starter_pack_id);
   url_dict->SetStringKey(DefaultSearchManager::kSyncGUID, data.sync_guid);
 
   url_dict->SetStringKey(DefaultSearchManager::kURL, data.url());
@@ -265,6 +274,8 @@ std::unique_ptr<base::DictionaryValue> TemplateURLDataToDictionary(
                        data.created_from_play_api);
   url_dict->SetBoolKey(DefaultSearchManager::kPreconnectToSearchUrl,
                        data.preconnect_to_search_url);
+  url_dict->SetBoolKey(DefaultSearchManager::kPrefetchLikelyNavigations,
+                       data.prefetch_likely_navigations);
   url_dict->SetIntKey(DefaultSearchManager::kIsActive,
                       static_cast<int>(data.is_active));
   std::string position;
@@ -295,7 +306,9 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromPrepopulatedEngine(
       ToStringPiece(engine.side_search_param),
       ToStringPiece(engine.favicon_url), ToStringPiece(engine.encoding),
       alternate_urls,
-      ToStringPiece(engine.preconnect_to_search_url) == "ALLOWED", engine.id);
+      ToStringPiece(engine.preconnect_to_search_url) == "ALLOWED",
+      ToStringPiece(engine.prefetch_likely_navigations) == "ALLOWED",
+      engine.id);
 }
 
 std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
@@ -350,6 +363,7 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
     std::string image_url_post_params;
     std::string side_search_param;
     std::string preconnect_to_search_url;
+    std::string prefetch_likely_navigations;
 
     string_value = engine.FindStringKey("suggest_url");
     if (string_value) {
@@ -395,13 +409,18 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromOverrideDictionary(
     if (string_value) {
       preconnect_to_search_url = *string_value;
     }
+    string_value = engine.FindStringKey("prefetch_likely_navigations");
+    if (string_value) {
+      prefetch_likely_navigations = *string_value;
+    }
 
     return std::make_unique<TemplateURLData>(
         name, keyword, search_url, suggest_url, image_url, new_tab_url,
         contextual_search_url, logo_url, doodle_url, search_url_post_params,
         suggest_url_post_params, image_url_post_params, side_search_param,
         favicon_url, encoding, *alternate_urls,
-        preconnect_to_search_url.compare("ALLOWED") == 0, *id);
+        preconnect_to_search_url.compare("ALLOWED") == 0,
+        prefetch_likely_navigations.compare("ALLOWED") == 0, *id);
   }
   return nullptr;
 }
@@ -414,6 +433,7 @@ std::unique_ptr<TemplateURLData> TemplateURLDataFromStarterPackEngine(
   turl->SetURL(engine.search_url);
   turl->favicon_url = GURL(ToStringPiece(engine.favicon_url));
   turl->starter_pack_id = engine.id;
+  turl->GenerateSyncGUID();
   turl->is_active = TemplateURLData::ActiveStatus::kTrue;
 
   return turl;

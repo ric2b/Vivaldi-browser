@@ -19,6 +19,9 @@ namespace internal {
 // directly. Instead use `IsJourneysEnabled()` for the system language filter.
 extern const base::Feature kJourneys;
 
+// Enables labelling of Journeys in UI.
+extern const base::Feature kJourneysLabels;
+
 // Enables the Journeys Omnibox Action chip. `kJourneys` must also be enabled
 // for this to take effect.
 extern const base::Feature kOmniboxAction;
@@ -36,7 +39,7 @@ extern const base::Feature kUserVisibleDebug;
 // enabled for all users shortly. This just provides a killswitch.
 
 // This flag is to enable us to turn on persisting context annotations WITHOUT
-// exposing the Memories UI in general. If EITHER this flag or `kJourneys` is
+// exposing the Journeys UI in general. If EITHER this flag or `kJourneys` is
 // enabled, users will have context annotations persisted into their History DB.
 extern const base::Feature kPersistContextAnnotationsInHistoryDb;
 

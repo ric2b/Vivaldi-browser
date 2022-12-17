@@ -17,6 +17,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "ui/compositor/layer.h"
 #include "ui/compositor/layer_animator.h"
 #include "ui/message_center/message_center.h"
@@ -261,8 +262,17 @@ class ParameterizedUnifiedMessageListViewTest
   // AshTestBase:
   void SetUp() override {
     scoped_feature_list_ = std::make_unique<base::test::ScopedFeatureList>();
-    scoped_feature_list_->InitWithFeatureState(features::kNotificationsRefresh,
-                                               IsNotificationsRefreshEnabled());
+    if (IsNotificationsRefreshEnabled()) {
+      scoped_feature_list_->InitWithFeatures(
+          /*enabled_features=*/{features::kNotificationsRefresh,
+                                chromeos::features::kDarkLightMode},
+          /*disabled_features=*/{});
+    } else {
+      scoped_feature_list_->InitWithFeatures(
+          /*enabled_features=*/{},
+          /*disabled_features=*/{features::kNotificationsRefresh,
+                                 chromeos::features::kDarkLightMode});
+    }
 
     UnifiedMessageListViewTest::SetUp();
   }
@@ -290,14 +300,24 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, Open) {
   CreateMessageListView();
 
   EXPECT_EQ(3u, message_list_view()->children().size());
-  EXPECT_EQ(id0, GetMessageViewAt(0)->notification_id());
-  EXPECT_EQ(id1, GetMessageViewAt(1)->notification_id());
-  EXPECT_EQ(id2, GetMessageViewAt(2)->notification_id());
 
-  EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_EQ(id0, GetMessageViewAt(0)->notification_id());
+    EXPECT_EQ(id1, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(2)->notification_id());
 
+    EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+  } else {
+    EXPECT_EQ(id0, GetMessageViewAt(2)->notification_id());
+    EXPECT_EQ(id1, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(0)->notification_id());
+
+    EXPECT_FALSE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+  }
   // Check the position of notifications within the list. When the new feature
   // is enabled, we have extra spacing between notifications.
   if (IsNotificationsRefreshEnabled()) {
@@ -351,7 +371,9 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, AddNotifications) {
   auto id1 = AddNotification();
   EXPECT_EQ(2, size_changed_count());
   EXPECT_EQ(2u, message_list_view()->children().size());
-  EXPECT_EQ(id1, GetMessageViewAt(1)->notification_id());
+  EXPECT_EQ(id1,
+            GetMessageViewAt(features::IsNotificationsRefreshEnabled() ? 0 : 1)
+                ->notification_id());
 
   EXPECT_LT(previous_message_list_view_height,
             message_list_view()->GetPreferredSize().height());
@@ -423,22 +445,43 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, CollapseOlderNotifications) {
   EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
 
   AddNotification();
-  EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+  } else {
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+  }
 
   AddNotification();
-  EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+  } else {
+    EXPECT_FALSE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+  }
 
   GetMessageViewAt(1)->SetExpanded(true);
   GetMessageViewAt(1)->SetManuallyExpandedOrCollapsed(true);
 
   AddNotification();
-  EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
-  EXPECT_FALSE(GetMessageViewAt(2)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(3)->IsExpanded());
+
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(3)->IsExpanded());
+  } else {
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(3)->IsExpanded());
+  }
 }
 
 TEST_P(ParameterizedUnifiedMessageListViewTest, RemovingNotificationAnimation) {
@@ -507,8 +550,13 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, KeepManuallyExpanded) {
   AddNotification();
   CreateMessageListView();
 
-  EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_FALSE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+  } else {
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+  }
   EXPECT_FALSE(GetMessageViewAt(0)->IsManuallyExpandedOrCollapsed());
   EXPECT_FALSE(GetMessageViewAt(1)->IsManuallyExpandedOrCollapsed());
 
@@ -530,16 +578,25 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, KeepManuallyExpanded) {
   DestroyMessageListView();
 
   // Add a new notification.
-  AddNotification();
+  auto id = AddNotification();
   CreateMessageListView();
 
   // Confirm the new notification isn't affected & others are still kept.
-  EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
-  EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
-  EXPECT_TRUE(GetMessageViewAt(0)->IsManuallyExpandedOrCollapsed());
-  EXPECT_TRUE(GetMessageViewAt(1)->IsManuallyExpandedOrCollapsed());
-  EXPECT_FALSE(GetMessageViewAt(2)->IsManuallyExpandedOrCollapsed());
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_FALSE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsManuallyExpandedOrCollapsed());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsManuallyExpandedOrCollapsed());
+    EXPECT_FALSE(GetMessageViewAt(2)->IsManuallyExpandedOrCollapsed());
+  } else {
+    EXPECT_FALSE(GetMessageViewAt(2)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(0)->IsExpanded());
+    EXPECT_TRUE(GetMessageViewAt(2)->IsManuallyExpandedOrCollapsed());
+    EXPECT_TRUE(GetMessageViewAt(1)->IsManuallyExpandedOrCollapsed());
+    EXPECT_FALSE(GetMessageViewAt(0)->IsManuallyExpandedOrCollapsed());
+  }
 }
 
 TEST_P(ParameterizedUnifiedMessageListViewTest,
@@ -550,11 +607,12 @@ TEST_P(ParameterizedUnifiedMessageListViewTest,
 
   EXPECT_EQ(2u, message_list_view()->children().size());
   int previous_height = message_list_view()->GetPreferredSize().height();
-  gfx::Rect previous_bounds = GetMessageViewBounds(0);
+  int removed_view_index = features::IsNotificationsRefreshEnabled() ? 1 : 0;
+  gfx::Rect previous_bounds = GetMessageViewBounds(removed_view_index);
 
   message_list_view()->ClearAllWithAnimation();
   AnimateToMiddle();
-  EXPECT_LT(previous_bounds.x(), GetMessageViewBounds(0).x());
+  EXPECT_LT(previous_bounds.x(), GetMessageViewBounds(removed_view_index).x());
   EXPECT_EQ(previous_height, message_list_view()->GetPreferredSize().height());
 
   AnimateToEnd();
@@ -709,9 +767,16 @@ TEST_P(ParameterizedUnifiedMessageListViewTest, InitInSortedOrder) {
   CreateMessageListView();
 
   EXPECT_EQ(3u, message_list_view()->children().size());
-  EXPECT_EQ(id1, GetMessageViewAt(0)->notification_id());
-  EXPECT_EQ(id2, GetMessageViewAt(1)->notification_id());
-  EXPECT_EQ(id0, GetMessageViewAt(2)->notification_id());
+
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_EQ(id1, GetMessageViewAt(0)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id0, GetMessageViewAt(2)->notification_id());
+  } else {
+    EXPECT_EQ(id1, GetMessageViewAt(2)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id0, GetMessageViewAt(0)->notification_id());
+  }
 }
 
 TEST_P(ParameterizedUnifiedMessageListViewTest,
@@ -724,20 +789,33 @@ TEST_P(ParameterizedUnifiedMessageListViewTest,
   OffsetNotificationTimestamp(id2, 1000 /* milliseconds */);
   CreateMessageListView();
 
-  // New pinned notification should be added to the end.
   auto id3 = AddNotification(/*pinned=*/true);
   EXPECT_EQ(4u, message_list_view()->children().size());
-  EXPECT_EQ(id3, GetMessageViewAt(3)->notification_id());
+  if (!features::IsNotificationsRefreshEnabled()) {
+    // New pinned notification should be added to the end.
+    EXPECT_EQ(id3, GetMessageViewAt(3)->notification_id());
+  } else {
+    // New pinned notification should be added to the start.
+    EXPECT_EQ(id3, GetMessageViewAt(0)->notification_id());
+  }
 
   // New non-pinned notification should be added before pinned notifications.
   auto id4 = AddNotification();
   EXPECT_EQ(5u, message_list_view()->children().size());
 
-  EXPECT_EQ(id1, GetMessageViewAt(0)->notification_id());
-  EXPECT_EQ(id2, GetMessageViewAt(1)->notification_id());
-  EXPECT_EQ(id4, GetMessageViewAt(2)->notification_id());
-  EXPECT_EQ(id0, GetMessageViewAt(3)->notification_id());
-  EXPECT_EQ(id3, GetMessageViewAt(4)->notification_id());
+  if (!features::IsNotificationsRefreshEnabled()) {
+    EXPECT_EQ(id1, GetMessageViewAt(0)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id4, GetMessageViewAt(2)->notification_id());
+    EXPECT_EQ(id0, GetMessageViewAt(3)->notification_id());
+    EXPECT_EQ(id3, GetMessageViewAt(4)->notification_id());
+  } else {
+    EXPECT_EQ(id1, GetMessageViewAt(4)->notification_id());
+    EXPECT_EQ(id2, GetMessageViewAt(3)->notification_id());
+    EXPECT_EQ(id4, GetMessageViewAt(2)->notification_id());
+    EXPECT_EQ(id0, GetMessageViewAt(1)->notification_id());
+    EXPECT_EQ(id3, GetMessageViewAt(0)->notification_id());
+  }
 }
 
 // Tests only with NotificationsRefresh enabled.
@@ -772,10 +850,10 @@ TEST_F(RefreshedUnifiedMessageListView, PreferredSizeChangesOnToggle) {
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   CreateMessageListView();
-  auto* message_view = GetMessageViewAt(1);
+  auto* message_view = GetMessageViewAt(0);
   ASSERT_TRUE(message_view->IsExpanded());
   gfx::Size old_preferred_size =
-      message_list_view()->children()[1]->GetPreferredSize();
+      message_list_view()->children()[0]->GetPreferredSize();
 
   EXPECT_FALSE(IsAnimating());
 
@@ -783,21 +861,21 @@ TEST_F(RefreshedUnifiedMessageListView, PreferredSizeChangesOnToggle) {
 
   EXPECT_TRUE(IsAnimating());
   EXPECT_TRUE(message_list_view()->IsAnimatingExpandOrCollapseContainer(
-      message_list_view()->children()[1]));
+      message_list_view()->children()[0]));
   EXPECT_EQ(old_preferred_size.height(),
-            message_list_view()->children()[1]->GetPreferredSize().height());
+            message_list_view()->children()[0]->GetPreferredSize().height());
 
-  old_preferred_size = message_list_view()->children()[1]->GetPreferredSize();
+  old_preferred_size = message_list_view()->children()[0]->GetPreferredSize();
   AnimateToMiddle();
 
   EXPECT_GT(old_preferred_size.height(),
-            message_list_view()->children()[1]->GetPreferredSize().height());
+            message_list_view()->children()[0]->GetPreferredSize().height());
 
   AnimateToEnd();
   FinishSlideOutAnimation();
   EXPECT_FALSE(IsAnimating());
   EXPECT_FALSE(message_list_view()->IsAnimatingExpandOrCollapseContainer(
-      message_list_view()->children()[1]));
+      message_list_view()->children()[0]));
 }
 
 // Tests that expanding a notification while a different notification is
@@ -808,8 +886,8 @@ TEST_F(RefreshedUnifiedMessageListView, TwoExpandsInARow) {
   CreateMessageListView();
 
   // First expand the notification in `first_notification_container`.
-  auto* first_notification_container = message_list_view()->children()[0];
-  auto* message_view = GetMessageViewAt(0);
+  auto* first_notification_container = message_list_view()->children()[1];
+  auto* message_view = GetMessageViewAt(1);
   ASSERT_FALSE(message_view->IsExpanded());
   message_view->SetExpanded(/*expanded=*/true);
   AnimateToMiddle();
@@ -817,10 +895,10 @@ TEST_F(RefreshedUnifiedMessageListView, TwoExpandsInARow) {
       first_notification_container->GetPreferredSize();
 
   // Collapse the second notification as `message_view` is still animating.
-  auto* second_notification_container = message_list_view()->children()[1];
+  auto* second_notification_container = message_list_view()->children()[0];
   const gfx::Size second_notification_initial_size =
       second_notification_container->GetPreferredSize();
-  message_view = GetMessageViewAt(1);
+  message_view = GetMessageViewAt(0);
   message_view->SetExpanded(/*expanded=*/false);
 
   EXPECT_TRUE(IsAnimating());
@@ -846,9 +924,9 @@ TEST_F(RefreshedUnifiedMessageListView, ReverseExpand) {
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   CreateMessageListView();
-  auto* message_view = GetMessageViewAt(1);
+  auto* message_view = GetMessageViewAt(0);
 
-  auto* second_notification_container = message_list_view()->children()[1];
+  auto* second_notification_container = message_list_view()->children()[0];
   message_view->SetExpanded(/*expanded=*/false);
   AnimateToMiddle();
   const gfx::Size middle_of_collapsed_size =
@@ -873,7 +951,7 @@ TEST_F(RefreshedUnifiedMessageListView, DestroyMessageListViewDuringCollapse) {
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   AddNotification(/*pinned=*/false, /*expandable=*/true);
   CreateMessageListView();
-  auto* message_view = GetMessageViewAt(1);
+  auto* message_view = GetMessageViewAt(0);
   message_view->SetExpanded(/*expanded=*/false);
   AnimateToMiddle();
 
@@ -990,8 +1068,8 @@ TEST_F(RefreshedUnifiedMessageListView, MoveDuringCollapseNoAnimation) {
       AddNotification(/*pinned=*/false, /*expandable=*/true);
   CreateMessageListView();
   auto* to_be_collapsed_message_view_container =
-      message_list_view()->children()[1];
-  auto* to_be_collapsed_message_view = GetMessageViewAt(1);
+      message_list_view()->children()[0];
+  auto* to_be_collapsed_message_view = GetMessageViewAt(0);
   const gfx::Size pre_collapse_size =
       to_be_collapsed_message_view_container->GetPreferredSize();
   ASSERT_TRUE(to_be_collapsed_message_view->IsExpanded());

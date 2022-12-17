@@ -19,7 +19,6 @@
 #include "base/feature_list.h"
 #include "base/guid.h"
 #include "base/memory/raw_ptr.h"
-#include "base/ranges/ranges.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/test/metrics/histogram_tester.h"
@@ -38,6 +37,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/test_autofill_client.h"
+#include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/webdata/autofill_table.h"
 #include "components/autofill/core/browser/webdata/autofill_webdata_service.h"
 #include "components/autofill/core/common/autofill_constants.h"
@@ -50,6 +50,7 @@
 #include "components/autofill/core/common/form_field_data.h"
 #include "components/os_crypt/os_crypt_mocker.h"
 #include "components/prefs/pref_service.h"
+#include "components/sync/driver/test_sync_service.h"
 #include "components/webdata/common/web_data_service_base.h"
 #include "components/webdata/common/web_database_service.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -215,6 +216,28 @@ GetDefaultProfileTypeValuePairs() {
   };
 }
 
+// Same as |GetDefaultProfileTypeValuePairs()|, but split into two parts to test
+// multi-step imports. No part by itself satisfies the import requirements.
+// |part| specifies the requested half and can be either 1 or 2.
+std::vector<std::pair<ServerFieldType, std::string>>
+GetSplitDefaultProfileTypeValuePairs(int part) {
+  DCHECK(part == 1 || part == 2);
+  if (part == 1) {
+    return {
+        {NAME_FIRST, kDefaultFirstName},     {NAME_LAST, kDefaultLastName},
+        {EMAIL_ADDRESS, kDefaultMail},       {ADDRESS_HOME_CITY, kDefaultCity},
+        {ADDRESS_HOME_STATE, kDefaultState},
+    };
+  } else {
+    return {
+        {PHONE_HOME_WHOLE_NUMBER, kDefaultPhone},
+        {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
+        {ADDRESS_HOME_DEPENDENT_LOCALITY, kDefaultDependentLocality},
+        {ADDRESS_HOME_ZIP, kDefaultZip},
+    };
+  }
+}
+
 // Same as |GetDefaultProfileTypeValuePairs()| but with ADDRESS_HOME_COUNTRY
 // set to |country|.
 std::vector<std::pair<ServerFieldType, std::string>>
@@ -281,10 +304,18 @@ AutofillProfile ConstructThirdProfile() {
 
 // Returns a form with the default profile. The AutofillProfile that is imported
 // from this form should be similar to the profile create by calling
-// |ConstructDefaultProfile()|
+// |ConstructDefaultProfile()|.
 std::unique_ptr<FormStructure> ConstructDefaultProfileFormStructure() {
   return ConstructFormStructureFromTypeValuePairs(
       GetDefaultProfileTypeValuePairs());
+}
+
+// Same as |ConstructDefaultFormStructure()| but split into two parts to test
+// multi-step imports (see |GetSplitDefaultProfileTypeValuePairs()|).
+std::unique_ptr<FormStructure> ConstructSplitDefaultProfileFormStructure(
+    int part) {
+  return ConstructFormStructureFromTypeValuePairs(
+      GetSplitDefaultProfileTypeValuePairs(part));
 }
 
 // Same as |ConstructDefaultFormStructure()| but with |country|.
@@ -310,6 +341,13 @@ std::unique_ptr<FormStructure> ConstructThirdProfileFormStructure() {
 // profile.
 FormData ConstructDefaultFormData() {
   return ConstructFormDateFromTypeValuePairs(GetDefaultProfileTypeValuePairs());
+}
+
+// Same as |ConstructDefaultFormData()| but split into two parts to test multi-
+// step imports (see |GetSplitDefaultProfileTypeValuePairs()|).
+FormData ConstructSplitDefaultFormData(int part) {
+  return ConstructFormDateFromTypeValuePairs(
+      GetSplitDefaultProfileTypeValuePairs(part));
 }
 
 ACTION_P(QuitMessageLoop, loop) {
@@ -361,6 +399,11 @@ class FormDataImporterTestBase {
   FormDataImporterTestBase() : autofill_table_(nullptr) {}
 
   void ResetPersonalDataManager(UserMode user_mode) {
+    // Before invalidating the `personal_data_manager_`, the
+    // `form_data_importer` needs to be reset, because it stores a weak
+    // reference to `personal_data_manager_` that otherwise points to garbage.
+    form_data_importer_.reset();
+
     personal_data_manager_ = std::make_unique<PersonalDataManager>("en", "US");
     personal_data_manager_->set_auto_accept_address_imports_for_testing(true);
     personal_data_manager_->Init(
@@ -377,6 +420,40 @@ class FormDataImporterTestBase {
     personal_data_manager_->OnSyncServiceInitialized(nullptr);
 
     WaitForOnPersonalDataChanged();
+
+    // Reconstruct the `form_data_importer_` with the new
+    // `personal_data_manager_`.
+    form_data_importer_ =
+        std::make_unique<FormDataImporter>(autofill_client_.get(),
+                                           /*payments::PaymentsClient=*/nullptr,
+                                           personal_data_manager_.get(), "en");
+  }
+
+  void SetUpHelper() {
+    prefs_ = test::PrefServiceForTesting();
+    base::FilePath path(WebDatabase::kInMemoryPath);
+    web_database_ =
+        new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
+                               base::ThreadTaskRunnerHandle::Get());
+
+    // Hacky: hold onto a pointer but pass ownership.
+    autofill_table_ = new AutofillTable;
+    web_database_->AddTable(std::unique_ptr<WebDatabaseTable>(autofill_table_));
+    web_database_->LoadDatabase();
+    autofill_database_service_ = new AutofillWebDataService(
+        web_database_, base::ThreadTaskRunnerHandle::Get(),
+        base::ThreadTaskRunnerHandle::Get());
+    autofill_database_service_->Init(base::NullCallback());
+
+    autofill_client_ = std::make_unique<TestAutofillClient>();
+
+    test::DisableSystemServices(prefs_.get());
+    // This will also initialize the `form_data_importer_`.
+    ResetPersonalDataManager(USER_MODE_NORMAL);
+
+    // Reset the deduping pref to its default value.
+    personal_data_manager_->pref_service_->SetInteger(
+        prefs::kAutofillLastVersionDeduped, 0);
   }
 
   // Helper method that will add credit card fields in |form|, according to the
@@ -573,42 +650,7 @@ class FormDataImporterTest
  private:
   void SetUp() override {
     InitializeFeatures();
-    OSCryptMocker::SetUp();
-    prefs_ = test::PrefServiceForTesting();
-    base::FilePath path(WebDatabase::kInMemoryPath);
-    web_database_ =
-        new WebDatabaseService(path, base::ThreadTaskRunnerHandle::Get(),
-                               base::ThreadTaskRunnerHandle::Get());
-
-    // Hacky: hold onto a pointer but pass ownership.
-    autofill_table_ = new AutofillTable;
-    web_database_->AddTable(std::unique_ptr<WebDatabaseTable>(autofill_table_));
-    web_database_->LoadDatabase();
-    autofill_database_service_ = new AutofillWebDataService(
-        web_database_, base::ThreadTaskRunnerHandle::Get(),
-        base::ThreadTaskRunnerHandle::Get());
-    autofill_database_service_->Init(base::NullCallback());
-
-    autofill_client_ = std::make_unique<TestAutofillClient>();
-
-    test::DisableSystemServices(prefs_.get());
-    ResetPersonalDataManager(USER_MODE_NORMAL);
-
-    form_data_importer_ =
-        std::make_unique<FormDataImporter>(autofill_client_.get(),
-                                           /*payments::PaymentsClient=*/nullptr,
-                                           personal_data_manager_.get(), "en");
-
-    // Reset the deduping pref to its default value.
-    personal_data_manager_->pref_service_->SetInteger(
-        prefs::kAutofillLastVersionDeduped, 0);
-  }
-
-  void TearDown() override {
-    // Order of destruction is important as BrowserAutofillManager relies on
-    // PersonalDataManager to be around when it gets destroyed.
-    test::ReenableSystemServices();
-    OSCryptMocker::TearDown();
+    SetUpHelper();
   }
 
   void InitializeFeatures() {
@@ -698,11 +740,10 @@ TEST_P(FormDataImporterTest, ComplementCountry) {
 TEST_P(FormDataImporterTest, InvalidPhoneNumber) {
   std::vector<std::pair<ServerFieldType, std::string>>
       profile_with_invalid_phone_number = GetDefaultProfileTypeValuePairs();
-  auto phone_number_it =
-      base::ranges::find(profile_with_invalid_phone_number,
-                         std::pair<ServerFieldType, std::string>(
-                             PHONE_HOME_WHOLE_NUMBER, kDefaultPhone));
-  phone_number_it->second = "invalid";
+  const int phone_number_index = 3;
+  ASSERT_EQ(profile_with_invalid_phone_number[phone_number_index].first,
+            PHONE_HOME_WHOLE_NUMBER);
+  profile_with_invalid_phone_number[phone_number_index].second = "invalid";
   std::unique_ptr<FormStructure> form_structure =
       ConstructFormStructureFromTypeValuePairs(
           profile_with_invalid_phone_number);
@@ -724,11 +765,69 @@ TEST_P(FormDataImporterTest, InvalidPhoneNumber) {
     remove_invalid_phone_number_feature.InitAndEnableFeature(
         features::kAutofillRemoveInvalidPhoneNumberOnImport);
 
-    profile_with_invalid_phone_number.erase(phone_number_it);
+    profile_with_invalid_phone_number.erase(
+        profile_with_invalid_phone_number.begin() + phone_number_index);
     ImportAddressProfilesAndVerifyExpectation(
         *form_structure, {ConstructProfileFromTypeValuePairs(
                              profile_with_invalid_phone_number)});
   }
+}
+
+TEST_P(FormDataImporterTest, PhoneNumberRegionMetrics) {
+  // This test is only applicable if the feature is enabled.
+  if (!ConsiderVariationCountryCodeForPhoneNumbers())
+    return;
+
+  auto ImportWithPhoneNumber =
+      [this](const std::string& number,
+             AutofillMetrics::PhoneNumberImportParsingResult expected_result) {
+        // Remove existing profiles, to prevent an update instead of an import.
+        personal_data_manager_->ClearAllLocalData();
+
+        std::vector<std::pair<ServerFieldType, std::string>>
+            profile_with_invalid_phone_number =
+                GetDefaultProfileTypeValuePairs();
+        ASSERT_EQ(profile_with_invalid_phone_number[3].first,
+                  PHONE_HOME_WHOLE_NUMBER);
+        profile_with_invalid_phone_number[3].second = number;
+        std::unique_ptr<FormStructure> form_structure =
+            ConstructFormStructureFromTypeValuePairs(
+                profile_with_invalid_phone_number);
+
+        // Profiles with invalid phone number are rejected.
+        bool expect_success =
+            expected_result == AutofillMetrics::PhoneNumberImportParsingResult::
+                                   PARSED_WITH_VARIATION_COUNTRY_CODE ||
+            expected_result == AutofillMetrics::PhoneNumberImportParsingResult::
+                                   PARSED_WITH_BOTH;
+        base::HistogramTester histogram_tester;
+        ImportAddressProfiles(expect_success, *form_structure);
+        EXPECT_THAT(
+            histogram_tester.GetAllSamples(
+                "Autofill.ProfileImport.PhoneNumberParsingResult"),
+            testing::UnorderedElementsAre(base::Bucket(expected_result, 1)));
+      };
+
+  // `form_data_importer_` is initialized with app locale set to "en".
+  autofill_client_->SetVariationConfigCountryCode("DE");
+
+  ImportWithPhoneNumber(
+      "invalid", AutofillMetrics::PhoneNumberImportParsingResult::CANNOT_PARSE);
+
+  // The German phone number validation is very lenient and accepts all US
+  // numbers we could find. Thus no test for
+  // AutofillMetrics::PhoneNumberImportParsingResult::PARSED_WITH_APP_LOCALE.
+
+  // A German phone number only parses with the German variation country code.
+  ImportWithPhoneNumber("01578 7912345",
+                        AutofillMetrics::PhoneNumberImportParsingResult::
+                            PARSED_WITH_VARIATION_COUNTRY_CODE);
+
+  // For phone numbers in international format the region is ignored. So this
+  // Austrian phone number parses as both.
+  ImportWithPhoneNumber(
+      "+43 650 3847567",
+      AutofillMetrics::PhoneNumberImportParsingResult::PARSED_WITH_BOTH);
 }
 
 // ImportAddressProfiles tests.
@@ -1439,15 +1538,16 @@ TEST_P(FormDataImporterTest, ImportAddressProfiles_SameProfileWithConflict) {
       ConstructFormStructureFromTypeValuePairs(conflicting_type_value_pairs);
 
   std::vector<std::pair<ServerFieldType, std::string>>
-      resulting_type_value_pairs{{NAME_FULL, kDefaultFullName},
-                                 {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
-                                 {ADDRESS_HOME_CITY, kDefaultCity},
-                                 {ADDRESS_HOME_STATE, kDefaultState},
-                                 {ADDRESS_HOME_ZIP, kDefaultZip},
-                                 // The phone number is spelled differently.
-                                 {PHONE_HOME_WHOLE_NUMBER, kDefaultPhone},
-                                 // Country information is added.
-                                 {ADDRESS_HOME_COUNTRY, "US"}};
+      resulting_type_value_pairs{
+          {NAME_FULL, kDefaultFullName},
+          {ADDRESS_HOME_LINE1, kDefaultAddressLine1},
+          {ADDRESS_HOME_CITY, kDefaultCity},
+          {ADDRESS_HOME_STATE, kDefaultState},
+          {ADDRESS_HOME_ZIP, kDefaultZip},
+          // The phone number remains in domestic format.
+          {PHONE_HOME_WHOLE_NUMBER, kDefaultPhoneDomesticFormatting},
+          // Country information is added.
+          {ADDRESS_HOME_COUNTRY, "US"}};
 
   // Verify that importing the conflicting profile will result in an update of
   // the existing profile rather than creating a new one.
@@ -4225,8 +4325,112 @@ TEST_P(FormDataImporterTest, RemoveInaccessibleProfileValuesMetrics) {
       "Autofill.ProfileImport.InaccessibleFieldsRemoved.";
   histogram_tester.ExpectUniqueSample(metric + "Total", true, 1);
   histogram_tester.ExpectUniqueSample(
-      metric + "DE",
+      metric + "ByFieldType",
       AutofillMetrics::SettingsVisibleFieldTypeForMetrics::kState, 1);
+}
+
+// Tests a 2-page multi-step import.
+TEST_P(FormDataImporterTest, MultiStepImport) {
+  base::test::ScopedFeatureList multistep_import_feature;
+  multistep_import_feature.InitAndEnableFeature(
+      features::kAutofillEnableMultiStepImports);
+
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructSplitDefaultProfileFormStructure(/*part=*/1);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+
+  form_structure = ConstructSplitDefaultProfileFormStructure(/*part=*/2);
+  ImportAddressProfileAndVerifyImportOfDefaultProfile(*form_structure);
+}
+
+// Tests that imported profiles remain multi-step candidates if
+// |kAutofillEnableMultiStepImportComplements| is true, which enables
+// complementing the profile with additional information on further pages.
+TEST_P(FormDataImporterTest, MultiStepImportComplement) {
+  base::test::ScopedFeatureList multistep_import_with_complement_feature;
+  multistep_import_with_complement_feature.InitAndEnableFeatureWithParameters(
+      features::kAutofillEnableMultiStepImports,
+      {{features::kAutofillEnableMultiStepImportComplements.name, "true"}});
+
+  // Import the default profile without an email address.
+  std::vector<std::pair<ServerFieldType, std::string>> type_value_pairs =
+      GetDefaultProfileTypeValuePairs();
+  EXPECT_EQ(type_value_pairs[2].first, EMAIL_ADDRESS);
+  type_value_pairs.erase(type_value_pairs.begin() + 2);
+
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructFormStructureFromTypeValuePairs(type_value_pairs);
+  ImportAddressProfilesAndVerifyExpectation(
+      *form_structure, {ConstructProfileFromTypeValuePairs(type_value_pairs)});
+
+  // Import the email address in a separate form. Without multi-step imports,
+  // this information cannot be associated to a profile. The resulting profile
+  // is the default one.
+  // The autocomplete attribute is set manually, because for small forms (number
+  // of fields < kMinRequiredFieldsForHeuristics), no heuristics are used.
+  FormData form =
+      ConstructFormDateFromTypeValuePairs({{EMAIL_ADDRESS, kDefaultMail}});
+  form.fields[0].autocomplete_attribute = "email";
+  form_structure = ConstructFormStructureFromFormData(form);
+  ImportAddressProfileAndVerifyImportOfDefaultProfile(*form_structure);
+}
+
+// Tests that multi-step candidate profiles from different origins are not
+// merged.
+TEST_P(FormDataImporterTest, MultiStepImportDifferentOrigin) {
+  base::test::ScopedFeatureList multistep_import_feature;
+  multistep_import_feature.InitAndEnableFeature(
+      features::kAutofillEnableMultiStepImports);
+
+  FormData form = ConstructSplitDefaultFormData(/*part=*/1);
+  form.url = GURL("https://wwww.foo.com");
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructFormStructureFromFormData(form);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+
+  form = ConstructSplitDefaultFormData(/*part=*/2);
+  form.url = GURL("https://wwww.bar.com");
+  form_structure = ConstructFormStructureFromFormData(form);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+}
+
+// Tests that multi-step candidates profiles are invalidated after some TTL.
+TEST_P(FormDataImporterTest, MultiStepImportTTL) {
+  base::test::ScopedFeatureList multistep_import_feature_set_ttl;
+  multistep_import_feature_set_ttl.InitAndEnableFeatureWithParameters(
+      features::kAutofillEnableMultiStepImports,
+      {{features::kAutofillMultiStepImportCandidateTTL.name, "30m"}});
+  TestAutofillClock test_clock;
+
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructSplitDefaultProfileFormStructure(/*part=*/1);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+
+  test_clock.Advance(base::Minutes(31));
+
+  form_structure = ConstructSplitDefaultProfileFormStructure(/*part=*/2);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+}
+
+// Tests that multi-step candidates profiles are cleared if the browsing history
+// is deleted.
+TEST_P(FormDataImporterTest, MultiStepImportDeleteOnBrowsingHistoryCleared) {
+  base::test::ScopedFeatureList multistep_import_feature;
+  multistep_import_feature.InitAndEnableFeature(
+      features::kAutofillEnableMultiStepImports);
+
+  std::unique_ptr<FormStructure> form_structure =
+      ConstructSplitDefaultProfileFormStructure(/*part=*/1);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
+
+  personal_data_manager_->OnURLsDeleted(
+      /*history_service=*/nullptr,
+      history::DeletionInfo::ForUrls(
+          {history::URLRow(form_structure->source_url())},
+          /*favicon_urls=*/{}));
+
+  form_structure = ConstructSplitDefaultProfileFormStructure(/*part=*/2);
+  ImportAddressProfilesAndVerifyExpectation(*form_structure, {});
 }
 
 // Runs the suite with the feature |kAutofillEnableSupportForApartmentNumbers|,
@@ -4239,5 +4443,73 @@ INSTANTIATE_TEST_SUITE_P(,
                          testing::Combine(testing::Bool(),
                                           testing::Bool(),
                                           testing::Bool()));
+
+class FormDataImporterNonParameterizedTest : public FormDataImporterTestBase,
+                                             public testing::Test {
+ private:
+  void SetUp() override { SetUpHelper(); }
+};
+
+TEST_F(FormDataImporterNonParameterizedTest,
+       ProcessCreditCardImportCandidate_EmptyCreditCard) {
+  std::unique_ptr<CreditCard> imported_credit_card;
+  FormData form;
+  AddFullCreditCardForm(&form, "Clyde Barrow", "378282246310005", "04", "2999");
+
+  // |form_data_importer_|'s |imported_credit_card_record_type_| is set to
+  // LOCAL_CARD because we need to make sure we do not return early in the
+  // NEW_CARD case, and LOCAL_CARD with upstream enabled but empty
+  // |imported_credit_card| is the most likely scenario for a crash.
+  form_data_importer_->imported_credit_card_record_type_ =
+      FormDataImporter::ImportedCreditCardRecordType::LOCAL_CARD;
+
+  // We need a sync service so that
+  // LocalCardMigrationManager::ShouldOfferLocalCardMigration() does not crash.
+  syncer::TestSyncService sync_service;
+  personal_data_manager_->OnSyncServiceInitialized(&sync_service);
+
+  EXPECT_FALSE(form_data_importer_->ProcessCreditCardImportCandidate(
+      FormStructure(form), std::move(imported_credit_card),
+      /*detected_upi_id=*/"",
+      /*credit_card_autofill_enabled=*/true,
+      /*is_credit_card_upstream_enabled=*/true));
+  personal_data_manager_->OnSyncServiceInitialized(nullptr);
+}
+
+TEST_F(FormDataImporterNonParameterizedTest,
+       ShouldOfferUploadCardOrLocalCardSave) {
+  // Should not offer save for null cards.
+  std::unique_ptr<CreditCard> imported_credit_card;
+  EXPECT_FALSE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(),
+      /*is_credit_card_upload_enabled=*/false));
+
+  imported_credit_card = std::make_unique<CreditCard>(test::GetCreditCard());
+
+  // Should not offer save for local cards if upstream is not enabled.
+  form_data_importer_->imported_credit_card_record_type_ =
+      FormDataImporter::ImportedCreditCardRecordType::LOCAL_CARD;
+  EXPECT_FALSE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(), /*is_credit_card_upload_enabled=*/false));
+
+  // Should offer save for local cards if upstream is enabled.
+  EXPECT_TRUE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(), /*is_credit_card_upload_enabled=*/true));
+
+  // Should not offer save for server cards.
+  form_data_importer_->imported_credit_card_record_type_ =
+      FormDataImporter::ImportedCreditCardRecordType::SERVER_CARD;
+  EXPECT_FALSE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(), /*is_credit_card_upload_enabled=*/true));
+
+  // Should always offer save for new cards; upload save if it is enabled, local
+  // save otherwise.
+  form_data_importer_->imported_credit_card_record_type_ =
+      FormDataImporter::ImportedCreditCardRecordType::NEW_CARD;
+  EXPECT_TRUE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(), /*is_credit_card_upload_enabled=*/true));
+  EXPECT_TRUE(form_data_importer_->ShouldOfferUploadCardOrLocalCardSave(
+      imported_credit_card.get(), /*is_credit_card_upload_enabled=*/false));
+}
 
 }  // namespace autofill

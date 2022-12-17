@@ -28,8 +28,12 @@
 #include "components/webrtc/media_stream_devices_controller.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
+#include "third_party/blink/public/common/mediastream/media_stream_request.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 
 #if BUILDFLAG(IS_ANDROID)
 #include <vector>
@@ -50,7 +54,7 @@
 using content::BrowserThread;
 
 using MediaResponseCallback =
-    base::OnceCallback<void(const blink::MediaStreamDevices& devices,
+    base::OnceCallback<void(const blink::mojom::StreamDevicesSet& devices,
                             blink::mojom::MediaStreamRequestResult result,
                             std::unique_ptr<content::MediaStreamUI> ui)>;
 
@@ -114,8 +118,9 @@ void UpdatePageSpecificContentSettings(
              : content_settings::PageSpecificContentSettings::CAMERA_BLOCKED);
   }
 
-  // TODO(crbug.com/698985): Use `GetLastCommittedURL` if web_contents represent
-  // NTP.
+  // We should always use `GetLastCommittedURL` if web_contents represent NTP.
+  // Otherwise, the Microphone permission request on NTP will be gated for
+  // incorrect origin.
   GURL embedding_origin;
   if (permissions::PermissionsClient::Get()->DoOriginsMatchNewTabPage(
           request.security_origin,
@@ -175,20 +180,25 @@ bool PermissionBubbleMediaAccessHandler::CheckMediaAccessPermission(
     const GURL& security_origin,
     blink::mojom::MediaStreamType type,
     const extensions::Extension* extension) {
-  Profile* profile =
-      Profile::FromBrowserContext(render_frame_host->GetBrowserContext());
-  ContentSettingsType content_settings_type =
+  blink::PermissionType permission_type =
       type == blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE
-          ? ContentSettingsType::MEDIASTREAM_MIC
-          : ContentSettingsType::MEDIASTREAM_CAMERA;
+          ? blink::PermissionType::AUDIO_CAPTURE
+          : blink::PermissionType::VIDEO_CAPTURE;
 
-  DCHECK(!security_origin.is_empty());
-  permissions::PermissionManager* permission_manager =
-      PermissionManagerFactory::GetForProfile(profile);
-  return permission_manager
-             ->GetPermissionStatusForFrame(content_settings_type,
-                                           render_frame_host, security_origin)
-             .content_setting == CONTENT_SETTING_ALLOW;
+  // TODO(crbug.com/1321100): Remove `security_origin`.
+  if (render_frame_host->GetLastCommittedOrigin().GetURL() != security_origin) {
+    return false;
+  }
+  // It is OK to ignore `security_origin` because it will be calculated from
+  // `render_frame_host` and we always ignore `requesting_origin` for
+  // `AUDIO_CAPTURE` and `VIDEO_CAPTURE`.
+  // `render_frame_host->GetMainFrame()->GetLastCommittedOrigin()` will be used
+  // instead.
+  return render_frame_host->GetBrowserContext()
+             ->GetPermissionController()
+             ->GetPermissionStatusForCurrentDocument(permission_type,
+                                                     render_frame_host) ==
+         blink::mojom::PermissionStatus::GRANTED;
 }
 
 void PermissionBubbleMediaAccessHandler::HandleRequest(
@@ -204,7 +214,7 @@ void PermissionBubbleMediaAccessHandler::HandleRequest(
     // If screen capturing isn't enabled on Android, we'll use "invalid state"
     // as result, same as on desktop.
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::INVALID_STATE, nullptr);
     return;
   }
@@ -300,7 +310,7 @@ void PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse(
     content::WebContents* web_contents,
     int64_t request_id,
     content::MediaStreamRequest request,
-    const blink::MediaStreamDevices& devices,
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
     blink::mojom::MediaStreamRequestResult result,
     bool blocked_by_permissions_policy,
     ContentSetting audio_setting,
@@ -318,20 +328,40 @@ void PermissionBubbleMediaAccessHandler::OnMediaStreamRequestResponse(
                                       video_setting);
   }
 
+  // At most one stream is expected as this function is not used with the
+  // getDisplayMediaSet API (only used with getUserMedia).
+  DCHECK_LE(stream_devices_set.stream_devices.size(), 1u);
+  blink::mojom::StreamDevices devices;
+  if (!stream_devices_set.stream_devices.empty()) {
+    devices = *stream_devices_set.stream_devices[0];
+  }
+
   std::unique_ptr<content::MediaStreamUI> ui;
-  if (!devices.empty()) {
+  if (devices.audio_device.has_value() || devices.video_device.has_value()) {
     ui = MediaCaptureDevicesDispatcher::GetInstance()
              ->GetMediaStreamCaptureIndicator()
              ->RegisterMediaStream(web_contents, devices);
   }
-  OnAccessRequestResponse(web_contents, request_id, devices, result,
+  OnAccessRequestResponse(web_contents, request_id, stream_devices_set, result,
+                          std::move(ui));
+}
+
+void PermissionBubbleMediaAccessHandler::OnAccessRequestResponseForBinding(
+    content::WebContents* web_contents,
+    int64_t request_id,
+    blink::mojom::StreamDevicesSetPtr stream_devices_set,
+    blink::mojom::MediaStreamRequestResult result,
+    std::unique_ptr<content::MediaStreamUI> ui) {
+  DCHECK(stream_devices_set);
+  DCHECK(ui);
+  OnAccessRequestResponse(web_contents, request_id, *stream_devices_set, result,
                           std::move(ui));
 }
 
 void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
     content::WebContents* web_contents,
     int64_t request_id,
-    const blink::MediaStreamDevices& devices,
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
     blink::mojom::MediaStreamRequestResult result,
     std::unique_ptr<content::MediaStreamUI> ui) {
   DCHECK_CURRENTLY_ON(BrowserThread::UI);
@@ -369,11 +399,10 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
         // Using WeakPtr since callback can come at any time and we might be
         // destroyed.
         system_media_permissions::RequestSystemAudioCapturePermisson(
-            base::BindOnce(
-                &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                weak_factory_.GetWeakPtr(), web_contents, request_id, devices,
-                result, std::move(ui)),
-            {content::BrowserThread::UI});
+            base::BindOnce(&PermissionBubbleMediaAccessHandler::
+                               OnAccessRequestResponseForBinding,
+                           weak_factory_.GetWeakPtr(), web_contents, request_id,
+                           stream_devices_set.Clone(), result, std::move(ui)));
         return;
       } else if (system_audio_permission == SystemPermission::kRestricted ||
                  system_audio_permission == SystemPermission::kDenied) {
@@ -397,11 +426,10 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
         // Using WeakPtr since callback can come at any time and we might be
         // destroyed.
         system_media_permissions::RequestSystemVideoCapturePermisson(
-            base::BindOnce(
-                &PermissionBubbleMediaAccessHandler::OnAccessRequestResponse,
-                weak_factory_.GetWeakPtr(), web_contents, request_id, devices,
-                result, std::move(ui)),
-            {content::BrowserThread::UI});
+            base::BindOnce(&PermissionBubbleMediaAccessHandler::
+                               OnAccessRequestResponseForBinding,
+                           weak_factory_.GetWeakPtr(), web_contents, request_id,
+                           stream_devices_set.Clone(), result, std::move(ui)));
         return;
       } else if (system_video_permission == SystemPermission::kRestricted ||
                  system_video_permission == SystemPermission::kDenied) {
@@ -431,7 +459,7 @@ void PermissionBubbleMediaAccessHandler::OnAccessRequestResponse(
             base::Unretained(this), web_contents));
   }
 
-  std::move(callback).Run(devices, final_result, std::move(ui));
+  std::move(callback).Run(stream_devices_set, final_result, std::move(ui));
 }
 
 void PermissionBubbleMediaAccessHandler::WebContentsDestroyed(

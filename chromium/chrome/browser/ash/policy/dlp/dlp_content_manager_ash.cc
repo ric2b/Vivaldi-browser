@@ -113,6 +113,11 @@ void DlpContentManagerAsh::OnWindowDestroying(aura::Window* window) {
   MaybeChangeOnScreenRestrictions();
 }
 
+void DlpContentManagerAsh::OnWindowTitleChanged(aura::Window* window) {
+  CheckRunningVideoCapture();
+  CheckRunningScreenShares();
+}
+
 DlpContentRestrictionSet DlpContentManagerAsh::GetOnScreenPresentRestrictions()
     const {
   return on_screen_restrictions_;
@@ -160,7 +165,7 @@ void DlpContentManagerAsh::OnVideoCaptureStarted(const ScreenshotArea& area) {
     //  onscreen restrictions.
     MaybeReportEvent(info.restriction_info,
                      DlpRulesManager::Restriction::kScreenshot);
-    running_video_capture_info_->reported_confidential_contents.UnionWith(
+    running_video_capture_info_->reported_confidential_contents.InsertOrUpdate(
         info.confidential_contents);
   }
   if (IsWarn(info.restriction_info) && reporting_manager_) {
@@ -253,8 +258,8 @@ void DlpContentManagerAsh::OnScreenShareStarted(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
   for (const content::DesktopMediaID& id : screen_share_ids) {
-    AddScreenShare(label, id, application_title, stop_callback,
-                   state_change_callback, source_callback);
+    AddOrUpdateScreenShare(label, id, application_title, stop_callback,
+                           state_change_callback, source_callback);
   }
   CheckRunningScreenShares();
 }
@@ -642,7 +647,7 @@ void DlpContentManagerAsh::CheckRunningVideoCapture() {
     //  onscreen restrictions.
     MaybeReportEvent(info.restriction_info,
                      DlpRulesManager::Restriction::kScreenshot);
-    running_video_capture_info_->reported_confidential_contents.UnionWith(
+    running_video_capture_info_->reported_confidential_contents.InsertOrUpdate(
         info.confidential_contents);
   }
 
@@ -659,7 +664,7 @@ void DlpContentManagerAsh::CheckRunningVideoCapture() {
     // capture to proceed.
     RemoveAllowedContents(info.confidential_contents,
                           DlpRulesManager::Restriction::kScreenshot);
-    running_video_capture_info_->confidential_contents.UnionWith(
+    running_video_capture_info_->confidential_contents.InsertOrUpdate(
         info.confidential_contents);
     running_video_capture_info_->had_warning_restriction = true;
     return;

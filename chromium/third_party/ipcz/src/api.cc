@@ -7,8 +7,12 @@
 
 #include "api.h"
 #include "ipcz/api_object.h"
+#include "ipcz/box.h"
 #include "ipcz/ipcz.h"
 #include "ipcz/node.h"
+#include "ipcz/node_link_memory.h"
+#include "ipcz/portal.h"
+#include "ipcz/router.h"
 #include "util/ref_counted.h"
 
 extern "C" {
@@ -63,11 +67,26 @@ IpczResult CreateNode(const IpczDriver* driver,
 
 IpczResult ConnectNode(IpczHandle node_handle,
                        IpczDriverHandle driver_transport,
-                       uint32_t num_initial_portals,
+                       size_t num_initial_portals,
                        IpczConnectNodeFlags flags,
                        const void* options,
                        IpczHandle* initial_portals) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Node* node = ipcz::Node::FromHandle(node_handle);
+  if (!node || driver_transport == IPCZ_INVALID_HANDLE) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  if (num_initial_portals == 0 || !initial_portals) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  if (num_initial_portals > ipcz::NodeLinkMemory::kMaxInitialPortals) {
+    return IPCZ_RESULT_OUT_OF_RANGE;
+  }
+
+  return node->ConnectNode(
+      driver_transport, flags,
+      absl::Span<IpczHandle>(initial_portals, num_initial_portals));
 }
 
 IpczResult OpenPortals(IpczHandle node_handle,
@@ -75,7 +94,15 @@ IpczResult OpenPortals(IpczHandle node_handle,
                        const void* options,
                        IpczHandle* portal0,
                        IpczHandle* portal1) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Node* node = ipcz::Node::FromHandle(node_handle);
+  if (!node || !portal0 || !portal1) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  ipcz::Portal::Pair portals = ipcz::Portal::CreatePair(WrapRefCounted(node));
+  *portal0 = ipcz::Portal::ReleaseAsHandle(std::move(portals.first));
+  *portal1 = ipcz::Portal::ReleaseAsHandle(std::move(portals.second));
+  return IPCZ_RESULT_OK;
 }
 
 IpczResult MergePortals(IpczHandle portal0,
@@ -89,31 +116,46 @@ IpczResult QueryPortalStatus(IpczHandle portal_handle,
                              uint32_t flags,
                              const void* options,
                              IpczPortalStatus* status) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Portal* portal = ipcz::Portal::FromHandle(portal_handle);
+  if (!portal) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+  if (!status || status->size < sizeof(IpczPortalStatus)) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  return portal->QueryStatus(*status);
 }
 
 IpczResult Put(IpczHandle portal_handle,
                const void* data,
-               uint32_t num_bytes,
+               size_t num_bytes,
                const IpczHandle* handles,
-               uint32_t num_handles,
+               size_t num_handles,
                uint32_t flags,
                const IpczPutOptions* options) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Portal* portal = ipcz::Portal::FromHandle(portal_handle);
+  if (!portal) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+  return portal->Put(
+      absl::MakeSpan(static_cast<const uint8_t*>(data), num_bytes),
+      absl::MakeSpan(handles, num_handles),
+      options ? options->limits : nullptr);
 }
 
 IpczResult BeginPut(IpczHandle portal_handle,
                     IpczBeginPutFlags flags,
                     const IpczBeginPutOptions* options,
-                    uint32_t* num_bytes,
+                    size_t* num_bytes,
                     void** data) {
   return IPCZ_RESULT_UNIMPLEMENTED;
 }
 
 IpczResult EndPut(IpczHandle portal_handle,
-                  uint32_t num_bytes_produced,
+                  size_t num_bytes_produced,
                   const IpczHandle* handles,
-                  uint32_t num_handles,
+                  size_t num_handles,
                   IpczEndPutFlags flags,
                   const void* options) {
   return IPCZ_RESULT_UNIMPLEMENTED;
@@ -123,24 +165,28 @@ IpczResult Get(IpczHandle portal_handle,
                IpczGetFlags flags,
                const void* options,
                void* data,
-               uint32_t* num_bytes,
+               size_t* num_bytes,
                IpczHandle* handles,
-               uint32_t* num_handles) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+               size_t* num_handles) {
+  ipcz::Portal* portal = ipcz::Portal::FromHandle(portal_handle);
+  if (!portal) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+  return portal->Get(flags, data, num_bytes, handles, num_handles);
 }
 
 IpczResult BeginGet(IpczHandle portal_handle,
                     uint32_t flags,
                     const void* options,
                     const void** data,
-                    uint32_t* num_bytes,
-                    uint32_t* num_handles) {
+                    size_t* num_bytes,
+                    size_t* num_handles) {
   return IPCZ_RESULT_UNIMPLEMENTED;
 }
 
 IpczResult EndGet(IpczHandle portal_handle,
-                  uint32_t num_bytes_consumed,
-                  uint32_t num_handles,
+                  size_t num_bytes_consumed,
+                  size_t num_handles,
                   IpczEndGetFlags flags,
                   const void* options,
                   IpczHandle* handles) {
@@ -150,12 +196,23 @@ IpczResult EndGet(IpczHandle portal_handle,
 IpczResult Trap(IpczHandle portal_handle,
                 const IpczTrapConditions* conditions,
                 IpczTrapEventHandler handler,
-                uint64_t context,
+                uintptr_t context,
                 uint32_t flags,
                 const void* options,
                 IpczTrapConditionFlags* satisfied_condition_flags,
                 IpczPortalStatus* status) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Portal* portal = ipcz::Portal::FromHandle(portal_handle);
+  if (!portal || !handler || !conditions ||
+      conditions->size < sizeof(*conditions)) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  if (status && status->size < sizeof(*status)) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  return portal->router()->Trap(*conditions, handler, context,
+                                satisfied_condition_flags, status);
 }
 
 IpczResult Box(IpczHandle node_handle,
@@ -163,14 +220,37 @@ IpczResult Box(IpczHandle node_handle,
                uint32_t flags,
                const void* options,
                IpczHandle* handle) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  ipcz::Node* node = ipcz::Node::FromHandle(node_handle);
+  if (!node || driver_handle == IPCZ_INVALID_DRIVER_HANDLE || !handle) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  auto box = ipcz::MakeRefCounted<ipcz::Box>(
+      ipcz::DriverObject(node->driver(), driver_handle));
+  *handle = ipcz::Box::ReleaseAsHandle(std::move(box));
+  return IPCZ_RESULT_OK;
 }
 
 IpczResult Unbox(IpczHandle handle,
                  IpczUnboxFlags flags,
                  const void* options,
                  IpczDriverHandle* driver_handle) {
-  return IPCZ_RESULT_UNIMPLEMENTED;
+  if (!driver_handle) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  ipcz::Ref<ipcz::Box> box = ipcz::Box::TakeFromHandle(handle);
+  if (!box) {
+    return IPCZ_RESULT_INVALID_ARGUMENT;
+  }
+
+  if (flags & IPCZ_UNBOX_PEEK) {
+    *driver_handle = box->object().handle();
+    std::ignore = box.release();
+  } else {
+    *driver_handle = box->object().release();
+  }
+  return IPCZ_RESULT_OK;
 }
 
 constexpr IpczAPI kCurrentAPI = {

@@ -42,6 +42,13 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
                                  public AppListModelProvider::Observer,
                                  public SearchBoxModelObserver {
  public:
+  enum class PlaceholderTextType {
+    kShortcuts = 0,
+    kTabs = 1,
+    kSettings = 2,
+    kGames = 3
+  };
+
   SearchBoxView(SearchBoxViewDelegate* delegate,
                 AppListViewDelegate* view_delegate,
                 AppListView* app_list_view = nullptr);
@@ -156,15 +163,12 @@ class ASH_EXPORT SearchBoxView : public SearchBoxViewBase,
   // Whether the search box has a non-empty, non-whitespace query.
   bool HasValidQuery();
 
+  // Calculates the correct sizing for search box icons and buttons.
+  int GetSearchBoxIconSize();
+  int GetSearchBoxButtonSize();
+
  private:
   class FocusRingLayer;
-
-  enum class PlaceholderTextType {
-    kShortcuts = 0,
-    kTabs = 1,
-    kSettings = 2,
-    kMaxValue = kSettings
-  };
 
   // Updates the text field text color.
   void UpdateTextColor();

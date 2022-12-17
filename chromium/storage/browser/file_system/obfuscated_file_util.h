@@ -112,7 +112,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   // deleted when one StorageKey/type pair is deleted.
   ObfuscatedFileUtil(scoped_refptr<SpecialStoragePolicy> special_storage_policy,
                      const base::FilePath& file_system_directory,
-                     const base::FilePath& bucket_base_path,
                      leveldb::Env* env_override,
                      GetTypeStringForURLCallback get_type_string_for_url,
                      const std::set<std::string>& known_type_strings,
@@ -175,6 +174,16 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   bool IsDirectoryEmpty(FileSystemOperationContext* context,
                         const FileSystemURL& url);
 
+  // Gets the topmost directory specific to this BucketLocator and type. This
+  // will contain both the directory database's files and all the backing file
+  // subdirectories.
+  // Returns the topmost origin directory if `type_string` is empty.
+  // Returns a base::FileError if the directory is undefined.
+  base::FileErrorOr<base::FilePath> GetDirectoryForBucketAndType(
+      const BucketLocator& bucket_locator,
+      const std::string& type_string,
+      bool create);
+
   // Gets the topmost directory specific to this StorageKey and type.  This will
   // contain both the directory database's files and all the backing file
   // subdirectories.
@@ -223,6 +232,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   bool is_incognito() { return is_incognito_; }
 
   ObfuscatedFileUtilDelegate* delegate() { return delegate_.get(); }
+  // Not owned.
+  SandboxFileSystemBackendDelegate* sandbox_delegate() {
+    return sandbox_delegate_;
+  }
 
  private:
   using FileId = SandboxDirectoryDatabase::FileId;
@@ -238,7 +251,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   static std::unique_ptr<ObfuscatedFileUtil> CreateForTesting(
       scoped_refptr<SpecialStoragePolicy> special_storage_policy,
       const base::FilePath& file_system_directory,
-      const base::FilePath& bucket_base_path,
       leveldb::Env* env_override,
       bool is_incognito);
 
@@ -298,19 +310,18 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   SandboxDirectoryDatabase* GetDirectoryDatabase(const FileSystemURL& url,
                                                  bool create);
 
-  // Gets the topmost directory specific to this StorageKey.  This will
-  // contain both the filesystem type subdirectories.
-  base::FilePath GetDirectoryForStorageKey(const blink::StorageKey& storage_key,
-                                           bool create,
-                                           base::File::Error* error_code);
+  // Gets the topmost directory specific to this StorageKey. This will
+  // contain both of the filesystem type subdirectories.
+  // NOTE: this function uses base::ScopedAllowBaseSyncPrimitives and
+  // calls QuotaManagerProxy::GetOrCreateBucketSync() which relies on a
+  // blocking base::WaitableEvent.
+  base::FileErrorOr<base::FilePath> GetDirectoryForStorageKey(
+      const blink::StorageKey& storage_key,
+      bool create);
 
-  // Returns a valid file path to the directory corresponding to the specified
-  // non-default `bucket` and `file_type.` Will return a FileError if an invalid
-  // file path is found.
-  base::FileErrorOr<base::FilePath> GetDirectoryWithBucket(
-      bool create,
-      BucketLocator bucket,
-      std::string file_type);
+  // A helper function used by the GetDirectoryFor* methods to ensure that
+  // `path` is a valid directory or that a valid directory can be constructed.
+  base::File::Error GetDirectoryHelper(const base::FilePath& path, bool create);
 
   void InvalidateUsageCache(FileSystemOperationContext* context,
                             const blink::StorageKey& storage_key,
@@ -341,7 +352,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) ObfuscatedFileUtil
   std::unique_ptr<SandboxOriginDatabaseInterface> origin_database_;
   scoped_refptr<SpecialStoragePolicy> special_storage_policy_;
   base::FilePath file_system_directory_;
-  base::FilePath bucket_base_path_;
   raw_ptr<leveldb::Env> env_override_;
   bool is_incognito_;
 

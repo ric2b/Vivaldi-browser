@@ -4,6 +4,7 @@
 
 package org.chromium.android_webview.common;
 
+import org.chromium.base.BaseFeatures;
 import org.chromium.base.BaseSwitches;
 import org.chromium.blink_public.common.BlinkFeatures;
 import org.chromium.cc.base.CcSwitches;
@@ -18,6 +19,7 @@ import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.content_public.common.ContentSwitches;
 import org.chromium.gpu.config.GpuFeatures;
 import org.chromium.gpu.config.GpuSwitches;
+import org.chromium.net.NetFeatures;
 import org.chromium.services.network.NetworkServiceFeatures;
 import org.chromium.webrtc_overrides.WebRtcOverridesFeatures;
 
@@ -98,14 +100,22 @@ public final class ProductionSupportedFlagList {
                     "Disable sending HTTP/2 SETTINGS parameters with reserved identifiers."),
             Flag.commandLine(VariationsSwitches.ENABLE_FINCH_SEED_DELTA_COMPRESSION,
                     "Enables delta-compression when requesting a new seed from the server."),
+            Flag.commandLine(AwSwitches.WEBVIEW_MP_ARCH_FENCED_FRAMES,
+                    "Enables MPArch-based fenced frames. Also implies SharedStorageAPI, "
+                            + "and PrivacySandboxAdsAPIsOverride"),
+            Flag.commandLine(AwSwitches.WEBVIEW_SHADOW_DOM_FENCED_FRAMES,
+                    "Enables ShadowDOM-based fenced frames. Also implies SharedStorageAPI, "
+                            + "and PrivacySandboxAdsAPIsOverride"),
+            Flag.commandLine(AwSwitches.WEBVIEW_DISABLE_APP_RECOVERY,
+                    "Disables WebView from checking for app recovery mitigations."),
+            Flag.commandLine(AwSwitches.WEBVIEW_ENABLE_APP_RECOVERY,
+                    "Enables WebView to check for app recovery mitigations."),
             Flag.baseFeature(GpuFeatures.WEBVIEW_VULKAN,
                     "Use Vulkan for composite. Requires Android device and OS support. May crash "
                             + "if enabled on unsupported device."),
             Flag.baseFeature(GpuFeatures.WEBVIEW_SURFACE_CONTROL,
-                    "Use SurfaceControl. Requires WebViewZeroCopyVideo and Android device and OS "
+                    "Use SurfaceControl. Requires WebViewThreadSafeMedia and Android device and OS "
                             + "support."),
-            Flag.baseFeature(GpuFeatures.WEBVIEW_ZERO_COPY_VIDEO,
-                    "Avoid extra copy for video frames when possible"),
             Flag.baseFeature(GpuFeatures.WEBVIEW_THREAD_SAFE_MEDIA,
                     "Use thread-safe media path, requires Android P."),
             Flag.baseFeature(VizFeatures.WEBVIEW_NEW_INVALIDATE_HEURISTIC,
@@ -151,6 +161,8 @@ public final class ProductionSupportedFlagList {
             Flag.baseFeature(AutofillFeatures.AUTOFILL_ACROSS_IFRAMES,
                     "Enable Autofill for frame-transcending forms (forms whose fields live in "
                             + "different frames)."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_RANKING_FORMULA,
+                    "Enables new autofill suggestion ranking formula"),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_SUPPORT_FOR_MORE_STRUCTURE_IN_NAMES,
                     "Enables support for names with a rich structure including multiple last "
                             + "names."),
@@ -160,13 +172,11 @@ public final class ProductionSupportedFlagList {
                             + "names and house numberse."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_FIX_FILLABLE_FIELD_TYPES,
                     "Fix how it is determined if a field type is fillable with Autofill"),
-            Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_MERCHANT_BOUND_VIRTUAL_CARDS,
-                    "When enabled, merchant bound virtual cards will be offered when users "
-                            + "interact with a payment form."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_AUGMENTED_PHONE_COUNTRY_CODE,
                     "Enables support for phone code number fields with additional text."),
-            Flag.baseFeature(AutofillFeatures.AUTOFILL_USE_UNASSOCIATED_LISTED_ELEMENTS,
-                    "Caches unowned listed elements in the document."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_ENFORCE_DELAYS_IN_STRIKE_DATABASE,
+                    "Enforce delay between offering Autofill opportunities in the "
+                            + "strike database."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_PARSING_PATTERN_PROVIDER,
                     "Enables Autofill to use its new method to retrieve parsing patterns."),
             Flag.baseFeature(AutofillFeatures.AUTOFILL_PAGE_LANGUAGE_DETECTION,
@@ -176,6 +186,20 @@ public final class ProductionSupportedFlagList {
             Flag.baseFeature(AutofillFeatures.AUTOFILL_PARSE_MERCHANT_PROMO_CODE_FIELDS,
                     "When enabled, Autofill will attempt to find merchant promo/coupon/gift code "
                             + "fields when parsing forms."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_ENABLE_NAME_SURENAME_PARSING,
+                    "Adds new name surname field combinations to the parsing logic"),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_RATIONALIZE_STREET_ADDRESS_AND_ADDRESS_LINE,
+                    "Rationalizes (street address, address line 2) field sequences to "
+                            + "(address line1, address line 2)."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_FILL_CREDIT_CARD_AS_PER_FORMAT_STRING,
+                    "When enabled, Autofill tries to infer the credit card expiry date format "
+                            + "from the label and placeholder."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_CONSIDER_PLACEHOLDER_FOR_PARSING,
+                    "When enabled, Autofill local heuristics consider the placeholder attribute "
+                            + "for determining field types."),
+            Flag.baseFeature(AutofillFeatures.AUTOFILL_SERVER_BEHAVIORS,
+                    "When enabled, Autofill will request experimental "
+                            + "predictions from the Autofill API."),
             Flag.baseFeature(FeatureConstants.KEYBOARD_ACCESSORY_PAYMENT_VIRTUAL_CARD_FEATURE,
                     "When enabled, merchant bound virtual cards will be offered in the keyboard "
                             + "accessory."),
@@ -216,10 +240,8 @@ public final class ProductionSupportedFlagList {
                             + " number in the minor version position in the User-Agent string."),
             Flag.baseFeature(NetworkServiceFeatures.URL_LOADER_SYNC_CLIENT,
                     "Optimizes communication between URLLoader and CorsURLLoader."),
-            Flag.baseFeature(NetworkServiceFeatures.COMBINE_RESPONSE_BODY,
-                    "Reduces URLLoaderClient mojo calls."),
             Flag.baseFeature(NetworkServiceFeatures.FASTER_SET_COOKIE, "Optimizes cookie access."),
-            Flag.baseFeature(NetworkServiceFeatures.OPTIMIZE_NETWORK_BUFFERS,
+            Flag.baseFeature(NetFeatures.OPTIMIZE_NETWORK_BUFFERS,
                     "Optimizes buffer size for reading from the network or InputStream."),
             Flag.baseFeature(BlinkFeatures.SET_TIMEOUT_WITHOUT_CLAMP,
                     "Enables faster setTimeout(,0) by removing the 1 ms clamping."),
@@ -227,8 +249,10 @@ public final class ProductionSupportedFlagList {
                     "Defers the first commit until FCP or timeout for cross-origin navigations."),
             Flag.baseFeature(BlinkFeatures.EARLY_CODE_CACHE,
                     "Enables fetching the code cache earlier in navigation."),
-            Flag.baseFeature(ContentFeatures.PRELOAD_COOKIES,
-                    "Enables preload cookie database on NetworkContext creation."),
+            Flag.baseFeature(BlinkFeatures.HTML_PARAM_ELEMENT_URL_SUPPORT,
+                    "Enables the <param> element's URL-setting features (this functionality is"
+                            + " being deprecated and removed, so ENABLED is the safe/current"
+                            + " behavior, and DISABLED is the tested/new behavior)."),
             Flag.baseFeature(ContentFeatures.NAVIGATION_REQUEST_PRECONNECT,
                     "Enables preconnecting for frame requests."),
             Flag.baseFeature(ContentFeatures.NAVIGATION_NETWORK_RESPONSE_QUEUE,
@@ -299,6 +323,26 @@ public final class ProductionSupportedFlagList {
             Flag.baseFeature(BlinkFeatures.ESTABLISH_GPU_CHANNEL_ASYNC,
                     "Enables establishing the GPU channel asnchronously when requesting a new "
                             + "layer tree frame sink."),
+            Flag.baseFeature(BlinkFeatures.DEFER_BEGIN_MAIN_FRAME_DURING_LOADING,
+                    "If enabled, the parser may continue parsing if BeginMainFrame was "
+                            + "recently called."),
+            Flag.baseFeature(BlinkFeatures.DECODE_SCRIPT_SOURCE_OFF_THREAD,
+                    "If enabled, script source text will be decoded and hashed off the main"
+                            + "thread."),
+            Flag.baseFeature(BaseFeatures.OPTIMIZE_DATA_URLS,
+                    "Optimizes parsing and loading of data: URLs."),
+            Flag.baseFeature(BlinkFeatures.EVENT_PATH, "Enables the deprecated Event.path API."),
+            Flag.baseFeature(BlinkFeatures.PREFETCH_FONT_LOOKUP_TABLES,
+                    "If enabled, font lookup tables will be prefetched on renderer startup."),
+            Flag.baseFeature(BlinkFeatures.PRECOMPILE_INLINE_SCRIPTS,
+                    "If enabled, inline scripts will be stream compiled using a background HTML"
+                            + " scanner."),
+            Flag.baseFeature(BaseFeatures.RUN_TASKS_BY_BATCHES,
+                    "Run tasks in queue for 8ms before before sending a system message."),
+            Flag.baseFeature(BlinkFeatures.OFFSET_PARENT_NEW_SPEC_BEHAVIOR,
+                    "Enables new HTMLElement.offsetParent behavior to match other browsers."),
+            Flag.baseFeature(AwFeatures.WEBVIEW_RECORD_APP_DATA_DIRECTORY_SIZE,
+                    "Record the size of the embedding app's data directory")
             // Add new commandline switches and features above. The final entry should have a
             // trailing comma for cleaner diffs.
     };

@@ -79,12 +79,12 @@
 #include "chrome/browser/profiles/profile_attributes_storage.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/wallpaper_controller_client_impl.h"
-#include "chrome/browser/ui/browser_dialogs.h"
 #include "chrome/common/chrome_constants.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_switches.h"
 #include "chrome/common/pref_names.h"
 #include "chromeos/ash/components/dbus/upstart/upstart_client.h"
+#include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
 #include "chromeos/components/onc/certificate_scope.h"
 #include "chromeos/dbus/common/dbus_method_call_status.h"
 #include "chromeos/dbus/cryptohome/UserDataAuth.pb.h"
@@ -92,7 +92,6 @@
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/userdataauth/userdataauth_client.h"
 #include "chromeos/login/login_state/login_state.h"
-#include "chromeos/network/proxy/proxy_config_service_impl.h"
 #include "components/account_id/account_id.h"
 #include "components/crash/core/common/crash_key.h"
 #include "components/policy/core/common/policy_details.h"
@@ -1256,8 +1255,6 @@ void ChromeUserManagerImpl::OnUserNotAllowed(const std::string& user_email) {
   LOG(ERROR) << "Shutdown session because a user is not allowed to be in the "
                 "current session";
   SessionController::Get()->ShowMultiprofilesSessionAbortedDialog(user_email);
-  chrome::RecordDialogCreation(
-      chrome::DialogIdentifier::MULTIPROFILES_SESSION_ABORTED);
 }
 
 void ChromeUserManagerImpl::UpdateNumberOfUsers() {

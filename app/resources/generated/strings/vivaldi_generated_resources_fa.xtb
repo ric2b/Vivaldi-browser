@@ -153,7 +153,7 @@
 <translation id="3683524264665795342">درخواست اشتراک‌گذاری صفحه <ph name="APP_NAME" /></translation>
 <translation id="3708684582558000260">به سایت‌های بسته‌شده، اجازه‌ی تکمیل ارسال و دریافت اطلاعات داده نشود</translation>
 <translation id="3711931198657368127">جای‌گذاری و رفتن به <ph name="URL" /></translation>
-<translation id="3727187387656390258">بررسی بالاپرها</translation>
+<translation id="3727187387656390258">بررسی پنجره‌های بازشو</translation>
 <translation id="3760460896538743390">بازرسی صفحه‌ی &amp;پس‌زمینه</translation>
 <translation id="3797900183766075808">جستجوی <ph name="SEARCH_ENGINE" /> برای «<ph name="SEARCH_TERMS" />»</translation>
 <translation id="3800806661949714323">نمایش همه موارد (توصیه می‌شود)</translation>
@@ -327,7 +327,7 @@
 <translation id="6900284862687837908">برنامه پس‌زمینه: <ph name="BACKGROUND_APP_URL" /></translation>
 <translation id="6904344821472985372">ابطال دسترسی به فایل</translation>
 <translation id="6945221475159498467">انتخاب</translation>
-<translation id="6955446738988643816">بازرسی بالاپرها</translation>
+<translation id="6955446738988643816">بررسی پنجره‌های بازشو</translation>
 <translation id="6970856801391541997">چاپ صفحات خاص</translation>
 <translation id="6991665348624301627">انتخاب مقصد</translation>
 <translation id="7005848115657603926">محدوده صفحه معتبر نیست، از <ph name="EXAMPLE_PAGE_RANGE" /> استفاده کنید</translation>

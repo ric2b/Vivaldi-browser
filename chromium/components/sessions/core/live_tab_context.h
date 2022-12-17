@@ -36,6 +36,7 @@ class SESSIONS_EXPORT LiveTabContext {
   // TODO(blundell): Rename.
   virtual void ShowBrowserWindow() = 0;
   virtual SessionID GetSessionID() const = 0;
+  virtual SessionWindow::WindowType GetWindowType() const = 0;
   virtual int GetTabCount() const = 0;
   virtual int GetSelectedIndex() const = 0;
   virtual std::string GetAppName() const = 0;
@@ -93,7 +94,7 @@ class SESSIONS_EXPORT LiveTabContext {
       const std::map<std::string, std::string>& extra_data);
   virtual void CloseTab() = 0;
 
-   // see Browser::viv_ext_data()
+  // see Browser::viv_ext_data()
   virtual std::string GetVivExtData() const;
 
   virtual LiveTab* AddRestoredTab(

@@ -35,6 +35,14 @@
 #include "third_party/blink/public/common/features.h"
 #include "ui/base/l10n/l10n_util.h"
 
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/ui/hats/trust_safety_sentiment_service.h"
+#endif
+
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chrome/browser/profiles/profiles_state.h"
+#endif
+
 namespace {
 
 constexpr char kBlockedTopicsTopicKey[] = "topic";
@@ -135,6 +143,22 @@ void SortTopicsForDisplay(
             });
 }
 
+// Returns whether |profile_type|, and the current browser session on CrOS,
+// represent a regular (e.g. non guest, non system, non kiosk) profile.
+bool IsRegularProfile(profile_metrics::BrowserProfileType profile_type) {
+  if (profile_type != profile_metrics::BrowserProfileType::kRegular)
+    return false;
+
+#if BUILDFLAG(IS_CHROMEOS)
+  // Any Device Local account, which is a CrOS concept powering things like
+  // Kiosks and Managed Guest Sessions, is not considered regular.
+  return !profiles::IsPublicSession() && !profiles::IsKioskSession() &&
+         !profiles::IsChromeAppKioskSession();
+#else
+  return true;
+#endif
+}
+
 }  // namespace
 
 PrivacySandboxService::PrivacySandboxService() = default;
@@ -149,6 +173,9 @@ PrivacySandboxService::PrivacySandboxService(
     content::InterestGroupManager* interest_group_manager,
     profile_metrics::BrowserProfileType profile_type,
     content::BrowsingDataRemover* browsing_data_remover,
+#if !BUILDFLAG(IS_ANDROID)
+    TrustSafetySentimentService* sentiment_service,
+#endif
     browsing_topics::BrowsingTopicsService* browsing_topics_service)
     : privacy_sandbox_settings_(privacy_sandbox_settings),
       cookie_settings_(cookie_settings),
@@ -159,6 +186,9 @@ PrivacySandboxService::PrivacySandboxService(
       interest_group_manager_(interest_group_manager),
       profile_type_(profile_type),
       browsing_data_remover_(browsing_data_remover),
+#if !BUILDFLAG(IS_ANDROID)
+      sentiment_service_(sentiment_service),
+#endif
       browsing_topics_service_(browsing_topics_service) {
   DCHECK(privacy_sandbox_settings_);
   DCHECK(pref_service_);
@@ -202,20 +232,21 @@ PrivacySandboxService::PrivacySandboxService(
 
 PrivacySandboxService::~PrivacySandboxService() = default;
 
-PrivacySandboxService::DialogType
-PrivacySandboxService::GetRequiredDialogType() {
+PrivacySandboxService::PromptType
+PrivacySandboxService::GetRequiredPromptType() {
   const auto third_party_cookies_blocked =
       AreThirdPartyCookiesBlocked(cookie_settings_);
-  return GetRequiredDialogTypeInternal(pref_service_, profile_type_,
+  return GetRequiredPromptTypeInternal(pref_service_, profile_type_,
                                        privacy_sandbox_settings_,
                                        third_party_cookies_blocked);
 }
 
-void PrivacySandboxService::DialogActionOccurred(
-    PrivacySandboxService::DialogAction action) {
+void PrivacySandboxService::PromptActionOccurred(
+    PrivacySandboxService::PromptAction action) {
+  InformSentimentService(action);
   switch (action) {
-    case (DialogAction::kNoticeShown): {
-      DCHECK_EQ(DialogType::kNotice, GetRequiredDialogType());
+    case (PromptAction::kNoticeShown): {
+      DCHECK_EQ(PromptType::kNotice, GetRequiredPromptType());
       // The new Privacy Sandbox pref can be enabled when the notice has been
       // shown. Note that a notice will not have been shown if the user disabled
       // the old Privacy Sandbox pref.
@@ -225,32 +256,32 @@ void PrivacySandboxService::DialogActionOccurred(
           base::UserMetricsAction("Settings.PrivacySandbox.Notice.Shown"));
       break;
     }
-    case (DialogAction::kNoticeOpenSettings): {
+    case (PromptAction::kNoticeOpenSettings): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Notice.OpenedSettings"));
       break;
     }
-    case (DialogAction::kNoticeAcknowledge): {
+    case (PromptAction::kNoticeAcknowledge): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Notice.Acknowledged"));
       break;
     }
-    case (DialogAction::kNoticeDismiss): {
+    case (PromptAction::kNoticeDismiss): {
       base::RecordAction(
           base::UserMetricsAction("Settings.PrivacySandbox.Notice.Dismissed"));
       break;
     }
-    case (DialogAction::kNoticeClosedNoInteraction): {
+    case (PromptAction::kNoticeClosedNoInteraction): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Notice.ClosedNoInteraction"));
       break;
     }
-    case (DialogAction::kConsentShown): {
+    case (PromptAction::kConsentShown): {
       base::RecordAction(
           base::UserMetricsAction("Settings.PrivacySandbox.Consent.Shown"));
       break;
     }
-    case (DialogAction::kConsentAccepted): {
+    case (PromptAction::kConsentAccepted): {
       pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, true);
       pref_service_->SetBoolean(prefs::kPrivacySandboxConsentDecisionMade,
                                 true);
@@ -258,7 +289,7 @@ void PrivacySandboxService::DialogActionOccurred(
           base::UserMetricsAction("Settings.PrivacySandbox.Consent.Accepted"));
       break;
     }
-    case (DialogAction::kConsentDeclined): {
+    case (PromptAction::kConsentDeclined): {
       pref_service_->SetBoolean(prefs::kPrivacySandboxApisEnabledV2, false);
       pref_service_->SetBoolean(prefs::kPrivacySandboxConsentDecisionMade,
                                 true);
@@ -266,14 +297,19 @@ void PrivacySandboxService::DialogActionOccurred(
           base::UserMetricsAction("Settings.PrivacySandbox.Consent.Declined"));
       break;
     }
-    case (DialogAction::kConsentMoreInfoOpened): {
+    case (PromptAction::kConsentMoreInfoOpened): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Consent.LearnMoreExpanded"));
       break;
     }
-    case (DialogAction::kConsentClosedNoDecision): {
+    case (PromptAction::kConsentClosedNoDecision): {
       base::RecordAction(base::UserMetricsAction(
           "Settings.PrivacySandbox.Consent.ClosedNoInteraction"));
+      break;
+    }
+    case (PromptAction::kNoticeLearnMore): {
+      base::RecordAction(
+          base::UserMetricsAction("Settings.PrivacySandbox.Notice.LearnMore"));
       break;
     }
     default:
@@ -295,9 +331,12 @@ bool PrivacySandboxService::IsUrlSuitableForDialog(const GURL& url) {
   // Chrome history is valid as the dialog mentions history.
   if (url == GURL(chrome::kChromeUIHistoryURL))
     return true;
-  // Only a Chrome controlled New Tab Page is valid.
-  if (url == GURL(chrome::kChromeUINewTabPageURL))
+  // Only a Chrome controlled New Tab Page is valid. Third party NTP is still
+  // Chrome controlled, but is without Google branding.
+  if (url == GURL(chrome::kChromeUINewTabPageURL) ||
+      url == GURL(chrome::kChromeUINewTabPageThirdPartyURL)) {
     return true;
+  }
 
   return false;
 }
@@ -425,7 +464,7 @@ void PrivacySandboxService::OnPrivacySandboxV2PrefChanged() {
         base::Time::Min(), base::Time::Max(),
         content::BrowsingDataRemover::DATA_TYPE_INTEREST_GROUPS |
             content::BrowsingDataRemover::DATA_TYPE_AGGREGATION_SERVICE |
-            content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS |
+            content::BrowsingDataRemover::DATA_TYPE_ATTRIBUTION_REPORTING |
             content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS,
         content::BrowsingDataRemover::ORIGIN_TYPE_UNPROTECTED_WEB);
   }
@@ -722,7 +761,7 @@ void PrivacySandboxService::RecordPrivacySandbox3StartupMetrics() {
                                   sandbox_v2_enabled
                                       ? PSStartupStates::kNoticeShownEnabled
                                       : PSStartupStates::kNoticeShownDisabled);
-  } else {  // No dialog currently required.
+  } else {  // No prompt currently required.
     base::UmaHistogramEnumeration(
         privacy_sandbox_startup_histogram,
         sandbox_v2_enabled ? PSStartupStates::kNoDialogRequiredEnabled
@@ -732,7 +771,7 @@ void PrivacySandboxService::RecordPrivacySandbox3StartupMetrics() {
 
 void PrivacySandboxService::LogPrivacySandboxState() {
   // Do not record metrics for non-regular profiles.
-  if (profile_type_ != profile_metrics::BrowserProfileType::kRegular)
+  if (!IsRegularProfile(profile_type_))
     return;
 
   // Start by recording any metrics for Privacy Sandbox 3.
@@ -902,45 +941,50 @@ void PrivacySandboxService::SetTopicAllowed(
   privacy_sandbox_settings_->SetTopicAllowed(topic, allowed);
 }
 
-/*static*/ PrivacySandboxService::DialogType
-PrivacySandboxService::GetRequiredDialogTypeInternal(
+/*static*/ PrivacySandboxService::PromptType
+PrivacySandboxService::GetRequiredPromptTypeInternal(
     PrefService* pref_service,
     profile_metrics::BrowserProfileType profile_type,
     privacy_sandbox::PrivacySandboxSettings* privacy_sandbox_settings,
     bool third_party_cookies_blocked) {
-  // If the dialog is disabled for testing, never show it.
+  // If the prompt is disabled for testing, never show it.
   if (g_dialog_diabled_for_tests)
-    return DialogType::kNone;
+    return PromptType::kNone;
 
-  // If the profile isn't a regular profile, no dialog should ever be shown.
-  if (profile_type != profile_metrics::BrowserProfileType::kRegular)
-    return DialogType::kNone;
+  // If the profile isn't a regular profile, no prompt should ever be shown.
+  if (!IsRegularProfile(profile_type))
+    return PromptType::kNone;
 
-  // If the release 3 feature is not enabled, no dialog is required.
+  // If the release 3 feature is not enabled, no prompt is required.
   if (!base::FeatureList::IsEnabled(privacy_sandbox::kPrivacySandboxSettings3))
-    return DialogType::kNone;
+    return PromptType::kNone;
 
   // Forced testing feature parameters override everything.
   if (privacy_sandbox::kPrivacySandboxSettings3DisableDialogForTesting.Get())
-    return DialogType::kNone;
+    return PromptType::kNone;
+
+  if (base::FeatureList::IsEnabled(
+          privacy_sandbox::kDisablePrivacySandboxPrompts)) {
+    return PromptType::kNone;
+  }
 
   if (privacy_sandbox::kPrivacySandboxSettings3ForceShowConsentForTesting.Get())
-    return DialogType::kConsent;
+    return PromptType::kConsent;
 
   if (privacy_sandbox::kPrivacySandboxSettings3ForceShowNoticeForTesting.Get())
-    return DialogType::kNotice;
+    return PromptType::kNotice;
 
-  // If neither consent or notice is required, no dialog is required.
+  // If neither consent or notice is required, no prompt is required.
   if (!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() &&
       !privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get()) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // Only one of the consent or notice should be required by Finch parameters.
   DCHECK(!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() ||
          !privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get());
 
-  // Start by checking for any previous decision about the dialog, such as
+  // Start by checking for any previous decision about the prompt, such as
   // it already having been shown, or not having been shown for some reason.
   // These checks for previous decisions occur in advance of their corresponding
   // decisions later in this function, so that changes to profile state to not
@@ -950,17 +994,17 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   // Privacy Sandbox off, we do not attempt to re-show one.
   if (pref_service->GetBoolean(
           prefs::kPrivacySandboxNoConfirmationSandboxDisabled)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If a consent decision has already been made, no dialog is required.
+  // If a consent decision has already been made, no prompt is required.
   if (pref_service->GetBoolean(prefs::kPrivacySandboxConsentDecisionMade))
-    return DialogType::kNone;
+    return PromptType::kNone;
 
-  // If only a notice is required, and has been shown, no dialog is required.
+  // If only a notice is required, and has been shown, no prompt is required.
   if (!privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get() &&
       pref_service->GetBoolean(prefs::kPrivacySandboxNoticeDisplayed)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // If a user wasn't shown a confirmation because the sandbox was previously
@@ -968,58 +1012,58 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   // enable the Sandbox on the settings page.
   if (pref_service->GetBoolean(
           prefs::kPrivacySandboxNoConfirmationSandboxRestricted)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If a user wasn't shown a dialog previously because the Privacy Sandbox
+  // If a user wasn't shown a prompt previously because the Privacy Sandbox
   // was managed, do not show them one.
   if (pref_service->GetBoolean(
           prefs::kPrivacySandboxNoConfirmationSandboxManaged)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // If a user wasn't shown a confirmation because they block third party
   // cookies, we do not attempt to re-show one.
   if (pref_service->GetBoolean(
           prefs::kPrivacySandboxNoConfirmationThirdPartyCookiesBlocked)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // If the user wasn't shown a confirmation because they are already manually
   // controlling the sandbox, do not attempt to show one.
   if (pref_service->GetBoolean(
           prefs::kPrivacySandboxNoConfirmationManuallyControlled)) {
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If the Privacy Sandbox is restricted, no dialog is shown.
+  // If the Privacy Sandbox is restricted, no prompt is shown.
   if (privacy_sandbox_settings->IsPrivacySandboxRestricted()) {
     pref_service->SetBoolean(
         prefs::kPrivacySandboxNoConfirmationSandboxRestricted, true);
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If the Privacy Sandbox is managed, no dialog is shown.
+  // If the Privacy Sandbox is managed, no prompt is shown.
   if (pref_service->FindPreference(prefs::kPrivacySandboxApisEnabledV2)
           ->IsManaged()) {
     pref_service->SetBoolean(prefs::kPrivacySandboxNoConfirmationSandboxManaged,
                              true);
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If the user blocks third party cookies, then no dialog is shown.
+  // If the user blocks third party cookies, then no prompt is shown.
   if (third_party_cookies_blocked) {
     pref_service->SetBoolean(
         prefs::kPrivacySandboxNoConfirmationThirdPartyCookiesBlocked, true);
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
-  // If the Privacy Sandbox has been manually controlled by the user, no dialog
+  // If the Privacy Sandbox has been manually controlled by the user, no prompt
   // is shown.
   if (pref_service->GetBoolean(prefs::kPrivacySandboxManuallyControlledV2)) {
     pref_service->SetBoolean(
         prefs::kPrivacySandboxNoConfirmationManuallyControlled, true);
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // If a user now requires consent, but has previously seen a notice, whether
@@ -1033,7 +1077,7 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
     // However, this may not be the first time that this function is being
     // called. The API for this service guarantees, and clients depend, on
     // successive calls to this function returning the same value. Browser
-    // restarts & updates via DialogActionOccurred() notwithstanding. To achieve
+    // restarts & updates via PromptActionOccurred() notwithstanding. To achieve
     // this, we need to distinguish between the case where the user themselves
     // previously disabled the APIs, and when this logic disabled them
     // previously due to having insufficient confirmation.
@@ -1045,12 +1089,12 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
 
     if (pref_service->GetBoolean(
             prefs::kPrivacySandboxDisabledInsufficientConfirmation)) {
-      return DialogType::kConsent;
+      return PromptType::kConsent;
     } else {
       DCHECK(!pref_service->GetBoolean(prefs::kPrivacySandboxApisEnabledV2));
       pref_service->SetBoolean(
           prefs::kPrivacySandboxNoConfirmationSandboxDisabled, true);
-      return DialogType::kNone;
+      return PromptType::kNone;
     }
   }
 
@@ -1065,16 +1109,55 @@ PrivacySandboxService::GetRequiredDialogTypeInternal(
   if (!pref_service->GetBoolean(prefs::kPrivacySandboxApisEnabled)) {
     pref_service->SetBoolean(
         prefs::kPrivacySandboxNoConfirmationSandboxDisabled, true);
-    return DialogType::kNone;
+    return PromptType::kNone;
   }
 
   // Check if the users requires a consent. This information is provided by
   // feature parameter to allow Finch based geo-targeting.
   if (privacy_sandbox::kPrivacySandboxSettings3ConsentRequired.Get()) {
-    return DialogType::kConsent;
+    return PromptType::kConsent;
   }
 
   // Finally a notice is required.
   DCHECK(privacy_sandbox::kPrivacySandboxSettings3NoticeRequired.Get());
-  return DialogType::kNotice;
+  return PromptType::kNotice;
+}
+
+void PrivacySandboxService::InformSentimentService(
+    PrivacySandboxService::PromptAction action) {
+#if !BUILDFLAG(IS_ANDROID)
+  if (!sentiment_service_)
+    return;
+
+  TrustSafetySentimentService::FeatureArea area;
+  switch (action) {
+    case PromptAction::kNoticeOpenSettings:
+      area = TrustSafetySentimentService::FeatureArea::
+          kPrivacySandbox3NoticeSettings;
+      break;
+    case PromptAction::kNoticeAcknowledge:
+      area = TrustSafetySentimentService::FeatureArea::kPrivacySandbox3NoticeOk;
+      break;
+    case PromptAction::kNoticeDismiss:
+      area = TrustSafetySentimentService::FeatureArea::
+          kPrivacySandbox3NoticeDismiss;
+      break;
+    case PromptAction::kNoticeLearnMore:
+      area = TrustSafetySentimentService::FeatureArea::
+          kPrivacySandbox3NoticeLearnMore;
+      break;
+    case PromptAction::kConsentAccepted:
+      area = TrustSafetySentimentService::FeatureArea::
+          kPrivacySandbox3ConsentAccept;
+      break;
+    case PromptAction::kConsentDeclined:
+      area = TrustSafetySentimentService::FeatureArea::
+          kPrivacySandbox3ConsentDecline;
+      break;
+    default:
+      return;
+  }
+
+  sentiment_service_->InteractedWithPrivacySandbox3(area);
+#endif
 }

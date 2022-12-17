@@ -5,6 +5,8 @@
 #ifndef CONTENT_SERVICES_AUCTION_WORKLET_BIDDER_WORKLET_H_
 #define CONTENT_SERVICES_AUCTION_WORKLET_BIDDER_WORKLET_H_
 
+#include <stdint.h>
+
 #include <cmath>
 #include <list>
 #include <memory>
@@ -75,7 +77,8 @@ class BidderWorklet : public mojom::BidderWorklet {
                 const GURL& script_source_url,
                 const absl::optional<GURL>& bidding_wasm_helper_url,
                 const absl::optional<GURL>& trusted_bidding_signals_url,
-                const url::Origin& top_window_origin);
+                const url::Origin& top_window_origin,
+                absl::optional<uint16_t> experiment_group_id);
   explicit BidderWorklet(const BidderWorklet&) = delete;
   ~BidderWorklet() override;
   BidderWorklet& operator=(const BidderWorklet&) = delete;
@@ -101,6 +104,7 @@ class BidderWorklet : public mojom::BidderWorklet {
       const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
       mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
       base::Time auction_start_time,
+      uint64_t trace_id,
       GenerateBidCallback generate_bid_callback) override;
   void SendPendingSignalsRequests() override;
   void ReportWin(
@@ -116,6 +120,7 @@ class BidderWorklet : public mojom::BidderWorklet {
       const absl::optional<url::Origin>& browser_signal_top_level_seller_origin,
       uint32_t bidding_signals_data_version,
       bool has_bidding_signals_data_version,
+      uint64_t trace_id,
       ReportWinCallback report_win_callback) override;
   void ConnectDevToolsAgent(
       mojo::PendingAssociatedReceiver<blink::mojom::DevToolsAgent> agent)
@@ -134,6 +139,7 @@ class BidderWorklet : public mojom::BidderWorklet {
     absl::optional<url::Origin> browser_signal_top_level_seller_origin;
     mojom::BiddingBrowserSignalsPtr bidding_browser_signals;
     base::Time auction_start_time;
+    uint64_t trace_id;
 
     // Set while loading is in progress.
     std::unique_ptr<TrustedSignalsRequestManager::Request>
@@ -165,6 +171,7 @@ class BidderWorklet : public mojom::BidderWorklet {
     url::Origin browser_signal_seller_origin;
     absl::optional<url::Origin> browser_signal_top_level_seller_origin;
     absl::optional<uint32_t> bidding_signals_data_version;
+    uint64_t trace_id;
 
     ReportWinCallback callback;
   };
@@ -194,6 +201,7 @@ class BidderWorklet : public mojom::BidderWorklet {
         absl::optional<uint32_t> bidding_signals_data_version,
         absl::optional<GURL> debug_loss_report_url,
         absl::optional<GURL> debug_win_report_url,
+        absl::optional<double> set_priority,
         std::vector<std::string> error_msgs)>;
     using ReportWinCallbackInternal =
         base::OnceCallback<void(absl::optional<GURL> report_url,
@@ -212,6 +220,7 @@ class BidderWorklet : public mojom::BidderWorklet {
                    const absl::optional<url::Origin>&
                        browser_signal_top_level_seller_origin,
                    const absl::optional<uint32_t>& bidding_signals_data_version,
+                   uint64_t trace_id,
                    ReportWinCallbackInternal callback);
 
     void GenerateBid(
@@ -225,6 +234,7 @@ class BidderWorklet : public mojom::BidderWorklet {
         mojom::BiddingBrowserSignalsPtr bidding_browser_signals,
         base::Time auction_start_time,
         scoped_refptr<TrustedSignals::Result> trusted_bidding_signals_result,
+        uint64_t trace_id,
         GenerateBidCallbackInternal callback);
 
     void ConnectDevToolsAgent(
@@ -280,8 +290,7 @@ class BidderWorklet : public mojom::BidderWorklet {
                           absl::optional<std::string> error_msg);
   void OnWasmDownloaded(WorkletWasmLoader::Result worklet_script,
                         absl::optional<std::string> error_msg);
-  void RunReadyGenerateBidTasks();
-  void RunReportWinTasks();
+  void RunReadyTasks();
 
   void OnTrustedBiddingSignalsDownloaded(
       GenerateBidTaskList::iterator task,
@@ -305,6 +314,7 @@ class BidderWorklet : public mojom::BidderWorklet {
       absl::optional<uint32_t> bidding_signals_data_version,
       absl::optional<GURL> debug_loss_report_url,
       absl::optional<GURL> debug_win_report_url,
+      absl::optional<double> set_priority,
       std::vector<std::string> error_msgs);
 
   // Invokes the `callback` of `task` with the provided values, and removes

@@ -953,24 +953,27 @@ namespace {
 class CapabilityDelegationMessageListener final : public NativeEventListener {
  public:
   void Invoke(ExecutionContext*, Event* event) override {
-    delegate_payment_request_ =
-        static_cast<MessageEvent*>(event)->delegatePaymentRequest();
+    delegated_capability_ =
+        static_cast<MessageEvent*>(event)->delegatedCapability();
   }
 
-  bool DelegatePaymentRequest() {
-    bool value = delegate_payment_request_.value();
-    delegate_payment_request_.reset();
-    return value;
+  bool DelegateCapability() {
+    if (delegated_capability_ == mojom::blink::DelegatedCapability::kNone)
+      return false;
+    delegated_capability_ = mojom::blink::DelegatedCapability::kNone;
+    return true;
   }
 
  private:
-  absl::optional<bool> delegate_payment_request_;
+  mojom::blink::DelegatedCapability delegated_capability_ =
+      mojom::blink::DelegatedCapability::kNone;
 };
 
 }  // namespace
 
 TEST_F(WebFrameTest, CapabilityDelegationMessageEventTest) {
-  ScopedCapabilityDelegationPaymentRequestForTest capability_delegation(true);
+  ScopedCapabilityDelegationFullscreenRequestForTest fullscreen_delegation(
+      true);
 
   RegisterMockedHttpURLLoad("single_iframe.html");
   RegisterMockedHttpURLLoad("visible_iframe.html");
@@ -993,45 +996,79 @@ TEST_F(WebFrameTest, CapabilityDelegationMessageEventTest) {
   ScriptExecutionCallbackHelper callback_helper(
       web_view_helper.LocalMainFrame()->MainWorldScriptContext());
 
-  String post_message_wo_payment_request(
-      "window.frames[0].postMessage('0', {targetOrigin: '*'});");
-  String post_message_w_payment_request(
-      "window.frames[0].postMessage("
-      "'1', {targetOrigin: '*', delegate: 'payment'});");
+  {
+    String post_message_wo_request(
+        "window.frames[0].postMessage('0', {targetOrigin: '/'});");
+    String post_message_w_payment_request(
+        "window.frames[0].postMessage("
+        "'1', {targetOrigin: '/', delegate: 'payment'});");
 
-  // The delegation info is not passed through a postMessage that is sent
-  // without either user activation or the delegation option.
-  ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
-                           post_message_wo_payment_request, &callback_helper);
-  RunPendingTasks();
-  EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_FALSE(message_event_listener->DelegatePaymentRequest());
+    // The delegation info is not passed through a postMessage that is sent
+    // without either user activation or the delegation option.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_wo_request, &callback_helper);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_FALSE(message_event_listener->DelegateCapability());
 
-  // The delegation info is not passed through a postMessage that is sent
-  // without user activation but with the delegation option.
-  ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
-                           post_message_w_payment_request, &callback_helper);
-  RunPendingTasks();
-  EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_FALSE(message_event_listener->DelegatePaymentRequest());
+    // The delegation info is not passed through a postMessage that is sent
+    // without user activation but with the delegation option.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_w_payment_request, &callback_helper);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_FALSE(message_event_listener->DelegateCapability());
 
-  // The delegation info is not passed through a postMessage that is sent with
-  // user activation but without the delegation option.
-  ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
-                           post_message_wo_payment_request, &callback_helper,
-                           /*wait_for_promise=*/true, /*user_gesture=*/true);
-  RunPendingTasks();
-  EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_FALSE(message_event_listener->DelegatePaymentRequest());
+    // The delegation info is not passed through a postMessage that is sent with
+    // user activation but without the delegation option.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_wo_request, &callback_helper,
+                             /*wait_for_promise=*/true, /*user_gesture=*/true);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_FALSE(message_event_listener->DelegateCapability());
 
-  // The delegation info is passed through a postMessage that is sent with both
-  // user activation and the delegation option.
-  ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
-                           post_message_w_payment_request, &callback_helper,
-                           /*wait_for_promise=*/true, /*user_gesture=*/true);
-  RunPendingTasks();
-  EXPECT_TRUE(callback_helper.DidComplete());
-  EXPECT_TRUE(message_event_listener->DelegatePaymentRequest());
+    // The delegation info is passed through a postMessage that is sent with
+    // both user activation and the delegation option.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_w_payment_request, &callback_helper,
+                             /*wait_for_promise=*/true, /*user_gesture=*/true);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_TRUE(message_event_listener->DelegateCapability());
+  }
+
+  {
+    String post_message_w_fullscreen_request(
+        "window.frames[0].postMessage("
+        "'1', {targetOrigin: '/', delegate: 'fullscreen'});");
+
+    // The delegation info is passed through a postMessage that is sent with
+    // both user activation and the delegation option for another known
+    // capability.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_w_fullscreen_request,
+                             &callback_helper,
+                             /*wait_for_promise=*/true, /*user_gesture=*/true);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_TRUE(message_event_listener->DelegateCapability());
+  }
+
+  {
+    String post_message_w_unknown_request(
+        "window.frames[0].postMessage("
+        "'1', {targetOrigin: '/', delegate: 'foo'});");
+
+    // The delegation info is not passed through a postMessage that is sent with
+    // user activation and the delegation option for an unknown capability.
+    ExecuteScriptInMainWorld(web_view_helper.GetWebView()->MainFrameImpl(),
+                             post_message_w_unknown_request, &callback_helper,
+                             /*wait_for_promise=*/true, /*user_gesture=*/true);
+    RunPendingTasks();
+    EXPECT_TRUE(callback_helper.DidComplete());
+    EXPECT_FALSE(message_event_listener->DelegateCapability());
+  }
 }
 
 TEST_F(WebFrameTest, FormWithNullFrame) {
@@ -1574,8 +1611,8 @@ bool SetTextAutosizingMultiplier(Document* document, float multiplier) {
           ComputedStyle::Clone(layout_object->StyleRef());
       modified_style->SetTextAutosizingMultiplier(multiplier);
       EXPECT_EQ(multiplier, modified_style->TextAutosizingMultiplier());
-      layout_object->SetModifiedStyleOutsideStyleRecalc(
-          std::move(modified_style), LayoutObject::ApplyStyleChanges::kNo);
+      layout_object->SetStyle(std::move(modified_style),
+                              LayoutObject::ApplyStyleChanges::kNo);
       multiplier_set = true;
     }
   }
@@ -4056,7 +4093,7 @@ TEST_F(WebFrameTest, DontZoomInOnFocusedInTouchAction) {
       .SetTextAutosizingEnabled(false);
   web_view_helper.GetWebView()
       ->GetSettings()
-      ->SetAutoZoomFocusedNodeToLegibleScale(true);
+      ->SetAutoZoomFocusedEditableToLegibleScale(true);
   web_view_helper.Resize(gfx::Size(viewport_width, viewport_height));
 
   float initial_scale = web_view_helper.GetWebView()->PageScaleFactor();
@@ -6281,8 +6318,21 @@ TEST_F(WebFrameTest, DISABLED_PositionForPointTest) {
   EXPECT_EQ(64, ComputeOffset(layout_object, 1000, 1000));
 }
 
+#if BUILDFLAG(IS_FUCHSIA)
+// TODO(crbug.com/1090246): Fix these tests on Fuchsia and re-enable.
+#define MAYBE_SelectRangeStaysHorizontallyAlignedWhenMoved \
+  DISABLED_SelectRangeStaysHorizontallyAlignedWhenMoved
+#define MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved \
+  DISABLED_MoveCaretStaysHorizontallyAlignedWhenMoved
+#else
+#define MAYBE_SelectRangeStaysHorizontallyAlignedWhenMoved \
+  SelectRangeStaysHorizontallyAlignedWhenMoved
+#define MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved \
+  MoveCaretStaysHorizontallyAlignedWhenMoved
+#endif
+// TODO(crbug.com/1317375): Build these tests on all platforms.
 #if !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
-TEST_F(WebFrameTest, SelectRangeStaysHorizontallyAlignedWhenMoved) {
+TEST_F(WebFrameTest, MAYBE_SelectRangeStaysHorizontallyAlignedWhenMoved) {
   RegisterMockedHttpURLLoad("move_caret.html");
 
   frame_test_helpers::WebViewHelper web_view_helper;
@@ -6331,7 +6381,7 @@ TEST_F(WebFrameTest, SelectRangeStaysHorizontallyAlignedWhenMoved) {
   EXPECT_EQ(end_rect, initial_end_rect);
 }
 
-TEST_F(WebFrameTest, MoveCaretStaysHorizontallyAlignedWhenMoved) {
+TEST_F(WebFrameTest, MAYBE_MoveCaretStaysHorizontallyAlignedWhenMoved) {
   WebLocalFrameImpl* frame;
   RegisterMockedHttpURLLoad("move_caret.html");
 
@@ -6364,7 +6414,7 @@ TEST_F(WebFrameTest, MoveCaretStaysHorizontallyAlignedWhenMoved) {
   EXPECT_EQ(start_rect, initial_start_rect);
   EXPECT_EQ(end_rect, initial_end_rect);
 }
-#endif
+#endif  // !BUILDFLAG(IS_MAC) && !BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CHROMEOS)
 
 class CompositedSelectionBoundsTest
     : public WebFrameTest,
@@ -6785,7 +6835,7 @@ TEST_F(WebFrameTest, ReplaceMisspelledRange) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "_wellcome_.", exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -6831,7 +6881,7 @@ TEST_F(WebFrameTest, RemoveSpellingMarkers) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "_wellcome_.", exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -6882,7 +6932,7 @@ TEST_F(WebFrameTest, RemoveSpellingMarkersUnderWords) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, " wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -6956,7 +7006,7 @@ TEST_F(WebFrameTest, SlowSpellcheckMarkerPosition) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -6990,7 +7040,7 @@ TEST_F(WebFrameTest, SpellcheckResultErasesMarkers) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "welcome ", exception_state);
 
@@ -7026,7 +7076,7 @@ TEST_F(WebFrameTest, SpellcheckResultsSavedInDocument) {
   web_view_helper.GetWebView()->GetSettings()->SetEditingBehavior(
       mojom::EditingBehavior::kEditingWindowsBehavior);
 
-  element->focus();
+  element->Focus();
   NonThrowableExceptionState exception_state;
   document->execCommand("InsertText", false, "wellcome ", exception_state);
   EXPECT_FALSE(exception_state.HadException());
@@ -7415,12 +7465,11 @@ TEST_F(WebFrameTest, SiteForCookiesForRedirect) {
 
   frame_test_helpers::WebViewHelper web_view_helper;
   web_view_helper.InitializeAndLoad(base_url_ + "first_party_redirect.html");
-  EXPECT_TRUE(
-      web_view_helper.GetWebView()
-          ->MainFrameImpl()
-          ->GetDocument()
-          .SiteForCookies()
-          .IsEquivalent(net::SiteForCookies::FromUrl(ToKURL(redirect))));
+  EXPECT_TRUE(web_view_helper.GetWebView()
+                  ->MainFrameImpl()
+                  ->GetDocument()
+                  .SiteForCookies()
+                  .IsEquivalent(net::SiteForCookies::FromUrl(GURL(redirect))));
 }
 
 class TestNewWindowWebViewClient
@@ -7438,7 +7487,7 @@ class TestNewWindowWebViewClient
                       network::mojom::blink::WebSandboxFlags,
                       const SessionStorageNamespaceId&,
                       bool& consumed_user_gesture,
-                      const absl::optional<WebImpression>&) override {
+                      const absl::optional<Impression>&) override {
     EXPECT_TRUE(false);
     return nullptr;
   }
@@ -7856,40 +7905,6 @@ TEST_F(WebFrameTest, PushStateStartsAndStops) {
       web_view_helper.LocalMainFrame());
   EXPECT_EQ(client.StartLoadingCount(), 2);
   EXPECT_EQ(client.StopLoadingCount(), 2);
-}
-
-TEST_F(WebFrameTest, IPAddressSpace) {
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view =
-      web_view_helper.InitializeAndLoad("data:text/html,ip_address_space");
-
-  network::mojom::IPAddressSpace values[] = {
-      network::mojom::IPAddressSpace::kUnknown,
-      network::mojom::IPAddressSpace::kLocal,
-      network::mojom::IPAddressSpace::kPrivate,
-      network::mojom::IPAddressSpace::kPublic};
-
-  for (auto value : values) {
-    auto params = std::make_unique<WebNavigationParams>();
-    params->url = url_test_helpers::ToKURL("about:blank");
-    params->navigation_timings.navigation_start = base::TimeTicks::Now();
-    params->navigation_timings.fetch_start = base::TimeTicks::Now();
-    params->is_browser_initiated = true;
-    MockPolicyContainerHost mock_policy_container_host;
-    params->policy_container = std::make_unique<WebPolicyContainer>(
-        WebPolicyContainerPolicies(),
-        mock_policy_container_host.BindNewEndpointAndPassDedicatedRemote());
-    params->policy_container->policies.ip_address_space = value;
-    params->sandbox_flags = network::mojom::WebSandboxFlags::kNone;
-    web_view_helper.LocalMainFrame()->CommitNavigation(std::move(params),
-                                                       nullptr);
-    frame_test_helpers::PumpPendingRequestsForFrameToLoad(
-        web_view_helper.LocalMainFrame());
-
-    ExecutionContext* context =
-        web_view->MainFrameImpl()->GetFrame()->DomWindow();
-    EXPECT_EQ(value, context->AddressSpace());
-  }
 }
 
 TEST_F(WebFrameTest,
@@ -8657,97 +8672,6 @@ TEST_F(WebFrameTest, ClearFullscreenConstraintsOnNavigation) {
   EXPECT_EQ(400, layout_view->LogicalHeight().Floor());
   EXPECT_FLOAT_EQ(0.5, web_view_impl->MinimumPageScaleFactor());
   EXPECT_FLOAT_EQ(5.0, web_view_impl->MaximumPageScaleFactor());
-}
-
-TEST_F(WebFrameTest, OverlayFullscreenVideo) {
-  ScopedForceOverlayFullscreenVideoForTest force_overlay_fullscreen_video(true);
-  RegisterMockedHttpURLLoad("fullscreen_video.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_video.html", nullptr, nullptr);
-  web_view_helper.Resize(gfx::Size(600, 400));
-
-  // Ensure that the local frame view has a paint artifact compositor. It's
-  // created lazily, and doing so after entering fullscreen would undo the
-  // overlay video layer modification.
-  UpdateAllLifecyclePhases(web_view_impl);
-
-  const cc::LayerTreeHost* layer_tree_host = web_view_helper.GetLayerTreeHost();
-
-  LocalFrame* frame = web_view_impl->MainFrameImpl()->GetFrame();
-  LocalFrame::NotifyUserActivation(
-      frame, mojom::UserActivationNotificationType::kTest);
-  auto* video =
-      To<HTMLVideoElement>(frame->GetDocument()->getElementById("video"));
-  EXPECT_TRUE(video->UsesOverlayFullscreenVideo());
-  EXPECT_FALSE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
-
-  const cc::Layer* root_layer = layer_tree_host->root_layer();
-  const char* view_background_layer_name =
-      "Scrolling background of LayoutView #document";
-  EXPECT_EQ(1u, CcLayersByName(root_layer, view_background_layer_name).size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
-  // "spinner" is a composited element in the shadow DOM of the video element.
-  // Not checking "video" because the element itself paints nothing.
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "spinner").size());
-
-  video->webkitEnterFullscreen();
-  web_view_impl->DidEnterFullscreen();
-  UpdateAllLifecyclePhases(web_view_impl);
-  EXPECT_TRUE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()),
-            SK_AlphaTRANSPARENT);
-
-  root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(0u, CcLayersByName(root_layer, view_background_layer_name).size());
-  EXPECT_EQ(0u, CcLayersByDOMElementId(root_layer, "other").size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "spinner").size());
-
-  web_view_impl->DidExitFullscreen();
-  UpdateAllLifecyclePhases(web_view_impl);
-  EXPECT_FALSE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
-
-  root_layer = layer_tree_host->root_layer();
-  EXPECT_EQ(1u, CcLayersByName(root_layer, view_background_layer_name).size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "other").size());
-  EXPECT_EQ(1u, CcLayersByDOMElementId(root_layer, "spinner").size());
-}
-
-TEST_F(WebFrameTest, OverlayFullscreenVideoInIframe) {
-  ScopedForceOverlayFullscreenVideoForTest force_overlay_fullscreen_video(true);
-  RegisterMockedHttpURLLoad("fullscreen_video_in_iframe.html");
-  RegisterMockedHttpURLLoad("fullscreen_video.html");
-  frame_test_helpers::WebViewHelper web_view_helper;
-  WebViewImpl* web_view_impl = web_view_helper.InitializeAndLoad(
-      base_url_ + "fullscreen_video_in_iframe.html", nullptr, nullptr);
-  web_view_helper.Resize(gfx::Size(600, 400));
-
-  const cc::LayerTreeHost* layer_tree_host = web_view_helper.GetLayerTreeHost();
-  LocalFrame* iframe =
-      To<WebLocalFrameImpl>(
-          web_view_helper.GetWebView()->MainFrame()->FirstChild())
-          ->GetFrame();
-  LocalFrame::NotifyUserActivation(
-      iframe, mojom::UserActivationNotificationType::kTest);
-  auto* video =
-      To<HTMLVideoElement>(iframe->GetDocument()->getElementById("video"));
-  EXPECT_TRUE(video->UsesOverlayFullscreenVideo());
-  EXPECT_FALSE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
-
-  video->webkitEnterFullscreen();
-  web_view_impl->DidEnterFullscreen();
-  UpdateAllLifecyclePhases(web_view_impl);
-  EXPECT_TRUE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()),
-            SK_AlphaTRANSPARENT);
-
-  web_view_impl->DidExitFullscreen();
-  UpdateAllLifecyclePhases(web_view_impl);
-  EXPECT_FALSE(video->IsFullscreen());
-  EXPECT_EQ(SkColorGetA(layer_tree_host->background_color()), SK_AlphaOPAQUE);
 }
 
 TEST_F(WebFrameTest, WebXrImmersiveOverlay) {
@@ -10325,7 +10249,7 @@ TEST_F(WebFrameTest, SiteForCookiesFromChildWithRemoteMainFrame) {
   EXPECT_TRUE(local_frame->GetDocument().SiteForCookies().IsNull());
 
   SchemeRegistry::RegisterURLSchemeAsFirstPartyWhenTopLevel("http");
-  EXPECT_TRUE(net::SiteForCookies::FromUrl(ToKURL(not_base_url_))
+  EXPECT_TRUE(net::SiteForCookies::FromUrl(GURL(not_base_url_))
                   .IsEquivalent(local_frame->GetDocument().SiteForCookies()));
   SchemeRegistry::RemoveURLSchemeAsFirstPartyWhenTopLevel("http");
 }
@@ -12059,7 +11983,7 @@ class WebFrameSimTest : public SimTest {
         true);
     WebView().GetPage()->GetSettings().SetViewportStyle(
         mojom::blink::ViewportStyle::kMobile);
-    WebView().GetSettings()->SetAutoZoomFocusedNodeToLegibleScale(true);
+    WebView().GetSettings()->SetAutoZoomFocusedEditableToLegibleScale(true);
     WebView().GetSettings()->SetShrinksViewportContentToFit(true);
     WebView().SetDefaultPageScaleLimits(0.25f, 5);
   }
@@ -12333,7 +12257,7 @@ TEST_F(WebFrameSimTest, TestScrollFocusedEditableElementIntoView) {
   WebView().EnableFakePageScaleAnimationForTesting(true);
   WebView().GetPage()->GetSettings().SetTextAutosizingEnabled(false);
   WebView().GetPage()->GetSettings().SetViewportEnabled(false);
-  WebView().GetSettings()->SetAutoZoomFocusedNodeToLegibleScale(true);
+  WebView().GetSettings()->SetAutoZoomFocusedEditableToLegibleScale(true);
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -12440,7 +12364,7 @@ TEST_F(WebFrameSimTest, TestScrollFocusedEditableInRootScroller) {
   WebView().EnableFakePageScaleAnimationForTesting(true);
   WebView().GetPage()->GetSettings().SetTextAutosizingEnabled(false);
   WebView().GetPage()->GetSettings().SetViewportEnabled(false);
-  WebView().GetSettings()->SetAutoZoomFocusedNodeToLegibleScale(true);
+  WebView().GetSettings()->SetAutoZoomFocusedEditableToLegibleScale(true);
 
   SimRequest request("https://example.com/test.html", "text/html");
   LoadURL("https://example.com/test.html");
@@ -12619,8 +12543,8 @@ TEST_F(WebFrameSimTest, ScrollFocusedIntoViewClipped) {
   EXPECT_GT(clip->scrollTop(), 0);
 }
 
-//  This test ensures that we scroll to the correct scale when the focused
-//  element has a selection rather than a carret.
+// This test ensures that we scroll to the correct scale when the focused
+// element has a selection rather than a caret.
 TEST_F(WebFrameSimTest, ScrollFocusedSelectionIntoView) {
   UseAndroidSettings();
   WebView().MainFrameViewWidget()->Resize(gfx::Size(400, 600));
@@ -12810,7 +12734,7 @@ TEST_F(WebFrameSimTest, ScrollFocusedEditableIntoViewNoLayoutObject) {
   Compositor().BeginFrame();
 
   Element* input = GetDocument().getElementById("target");
-  input->focus();
+  input->Focus();
 
   ScrollableArea* area = GetDocument().View()->LayoutViewport();
   area->SetScrollOffset(ScrollOffset(0, 0),
@@ -14298,6 +14222,38 @@ TEST_F(WebFrameTest, FrameOwnerColorScheme) {
   EXPECT_EQ(frame->GetColorScheme(), mojom::blink::ColorScheme::kDark);
   EXPECT_EQ(frame->contentDocument()->GetStyleEngine().GetOwnerColorScheme(),
             mojom::blink::ColorScheme::kDark);
+}
+
+TEST_F(WebFrameSimTest, RenderBlockingPromotesResource) {
+  ScopedBlockingAttributeForTest enabled_scope(true);
+
+  SimRequest main_request("https://example.com/", "text/html");
+  SimSubresourceRequest script_request("https://example.com/script.js",
+                                       "text/javascript");
+
+  LoadURL("https://example.com/");
+  main_request.Write(R"HTML(
+    <!doctype html>
+    <script defer fetchpriority="low" src="script.js"></script>
+  )HTML");
+
+  Resource* script = GetDocument().Fetcher()->AllResources().at(
+      ToKURL("https://example.com/script.js"));
+
+  // Script is fetched at the low priority due to `fetchpriority="low"`.
+  ASSERT_TRUE(script);
+  EXPECT_EQ(ResourceLoadPriority::kLow,
+            script->GetResourceRequest().Priority());
+
+  main_request.Complete(R"HTML(
+    <script defer fetchpriority="low" blocking="render" src="script.js"></script>
+  )HTML");
+
+  // `blocking=render` promotes the priority to high.
+  EXPECT_EQ(ResourceLoadPriority::kHigh,
+            script->GetResourceRequest().Priority());
+
+  script_request.Complete();
 }
 
 }  // namespace blink

@@ -9,16 +9,11 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/time/time.h"
-#include "chrome/browser/cart/cart_db_content.pb.h"
-#include "chrome/browser/cart/cart_service.h"
-#include "chrome/browser/cart/cart_service_factory.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/commerce/core/commerce_feature_list.h"
 #include "components/commerce/core/commerce_heuristics_data.h"
-#include "components/search/ntp_features.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/document_service.h"
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_user_data.h"
@@ -27,6 +22,12 @@
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 #include "services/metrics/public/cpp/ukm_builders.h"
 #include "services/metrics/public/cpp/ukm_recorder.h"
+#if !BUILDFLAG(IS_ANDROID)
+#include "chrome/browser/cart/cart_db_content.pb.h"
+#include "chrome/browser/cart/cart_service.h"
+#include "chrome/browser/cart/cart_service_factory.h"
+#include "components/search/ntp_features.h"
+#endif
 
 namespace cart {
 
@@ -38,6 +39,7 @@ std::string GetDomain(const GURL& url) {
       url, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
 }
 
+#if !BUILDFLAG(IS_ANDROID)
 void ConstructCartProto(cart_db::ChromeCartContentProto* proto,
                         const GURL& navigation_url,
                         std::vector<mojom::ProductPtr> products) {
@@ -59,6 +61,7 @@ void ConstructCartProto(cart_db::ChromeCartContentProto* proto,
     }
   }
 }
+#endif
 
 }  // namespace
 
@@ -184,7 +187,9 @@ CommerceHintService::CommerceHintService(content::WebContents* web_contents)
   DCHECK(!web_contents->GetBrowserContext()->IsOffTheRecord());
   Profile* profile =
       Profile::FromBrowserContext(web_contents->GetBrowserContext());
+#if !BUILDFLAG(IS_ANDROID)
   service_ = CartServiceFactory::GetInstance()->GetForProfile(profile);
+#endif
   optimization_guide_decider_ =
       OptimizationGuideKeyedServiceFactory::GetForProfile(profile);
   if (optimization_guide_decider_) {
@@ -223,6 +228,7 @@ bool CommerceHintService::ShouldSkip(const GURL& url) {
 void CommerceHintService::OnAddToCart(const GURL& navigation_url,
                                       const absl::optional<GURL>& cart_url,
                                       const std::string& product_id) {
+#if !BUILDFLAG(IS_ANDROID)
   if (ShouldSkip(navigation_url))
     return;
   absl::optional<GURL> validated_cart = cart_url;
@@ -247,15 +253,19 @@ void CommerceHintService::OnAddToCart(const GURL& navigation_url,
   ConstructCartProto(&proto, navigation_url, std::move(products));
   service_->AddCart(GetDomain(navigation_url), validated_cart,
                     std::move(proto));
+#endif
 }
 
 void CommerceHintService::OnRemoveCart(const GURL& url) {
+#if !BUILDFLAG(IS_ANDROID)
   service_->DeleteCart(url, false);
+#endif
 }
 
 void CommerceHintService::OnCartUpdated(
     const GURL& cart_url,
     std::vector<mojom::ProductPtr> products) {
+#if !BUILDFLAG(IS_ANDROID)
   if (ShouldSkip(cart_url))
     return;
   absl::optional<GURL> validated_cart = cart_url;
@@ -268,6 +278,7 @@ void CommerceHintService::OnCartUpdated(
   cart_db::ChromeCartContentProto proto;
   ConstructCartProto(&proto, cart_url, std::move(products));
   service_->AddCart(proto.key(), validated_cart, std::move(proto));
+#endif
 }
 
 void CommerceHintService::OnFormSubmit(const GURL& navigation_url,
@@ -280,7 +291,7 @@ void CommerceHintService::OnFormSubmit(const GURL& navigation_url,
   bool random = (bytes[0] >> 1) & 0x1;
   bool reported = report_truth ? is_purchase : random;
   ukm::builders::Shopping_FormSubmitted(
-      ukm::GetSourceIdForWebContentsDocument(&GetWebContents()))
+      GetWebContents().GetPrimaryMainFrame()->GetPageUkmSourceId())
       .SetIsTransaction(reported)
       .Record(ukm::UkmRecorder::Get());
   base::UmaHistogramBoolean("Commerce.Carts.FormSubmitIsTransaction", reported);
@@ -296,7 +307,7 @@ void CommerceHintService::OnWillSendRequest(const GURL& navigation_url,
   bool random = (bytes[0] >> 1) & 0x1;
   bool reported = report_truth ? is_addtocart : random;
   ukm::builders::Shopping_WillSendRequest(
-      ukm::GetSourceIdForWebContentsDocument(&GetWebContents()))
+      GetWebContents().GetPrimaryMainFrame()->GetPageUkmSourceId())
       .SetIsAddToCart(reported)
       .Record(ukm::UkmRecorder::Get());
   base::UmaHistogramBoolean("Commerce.Carts.XHRIsAddToCart", reported);

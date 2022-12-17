@@ -36,6 +36,7 @@
 
 #include "base/auto_reset.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/input/web_keyboard_event.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/strings/grit/blink_strings.h"
@@ -66,7 +67,9 @@
 #include "third_party/blink/renderer/core/html/canvas/image_data.h"
 #include "third_party/blink/renderer/core/html/custom/element_internals.h"
 #include "third_party/blink/renderer/core/html/fenced_frame/html_fenced_frame_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_button_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_field_set_element.h"
+#include "third_party/blink/renderer/core/html/forms/html_form_control_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_input_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_label_element.h"
 #include "third_party/blink/renderer/core/html/forms/html_legend_element.h"
@@ -375,8 +378,8 @@ void AXNodeObject::AlterSliderOrSpinButtonValue(bool increase) {
     return;
   }
 
-  // TODO(crbug.com/1099069): add a separate flag for keyboard event synthesis
-  if (!RuntimeEnabledFeatures::AccessibilityObjectModelEnabled())
+  if (!RuntimeEnabledFeatures::
+          SynthesizedKeyboardEventsForAccessibilityActionsEnabled())
     return;
 
   // Otherwise, fire a keyboard event instead.
@@ -1251,10 +1254,8 @@ ax::mojom::blink::Role AXNodeObject::NativeRoleIgnoringAria() const {
     return RoleFromLayoutObjectOrNode();
 
   // Treat <iframe>, <frame> and <fencedframe> the same.
-  if (IsA<HTMLIFrameElement>(*GetNode()) || IsA<HTMLFrameElement>(*GetNode()) ||
-      IsA<HTMLFencedFrameElement>(*GetNode())) {
+  if (IsFrame(GetNode()))
     return ax::mojom::blink::Role::kIframe;
-  }
 
   // There should only be one banner/contentInfo per page. If header/footer are
   // being used within an article or section then it should not be exposed as
@@ -1506,7 +1507,7 @@ bool AXNodeObject::IsLoaded() const {
   if (!GetDocument())
     return false;
 
-  if (GetDocument()->Parser())
+  if (!GetDocument()->IsLoadCompleted())
     return false;
 
   // Check for a navigation API single-page app navigation in progress.
@@ -1835,6 +1836,16 @@ AccessibilityExpanded AXNodeObject::IsExpanded() const {
     return To<HTMLSelectElement>(element)->PopupIsVisible()
                ? kExpandedExpanded
                : kExpandedCollapsed;
+  }
+
+  // For form controls that act as triggering elements for popups of type
+  // kPopup, then set aria-expanded=false when the popup is hidden, and
+  // aria-expanded=true when it is showing.
+  if (auto* form_control = DynamicTo<HTMLFormControlElement>(element)) {
+    if (auto popup = form_control->togglePopupElement().element;
+        popup && popup->PopupType() == PopupValueType::kAuto) {
+      return popup->popupOpen() ? kExpandedExpanded : kExpandedCollapsed;
+    }
   }
 
   if (IsA<HTMLSummaryElement>(*element)) {
@@ -2489,9 +2500,9 @@ RGBA32 AXNodeObject::ColorValue() const {
   if (!EqualIgnoringASCIICase(type, "color"))
     return AXObject::ColorValue();
 
-  // HTMLInputElement::value always returns a string parseable by Color.
+  // HTMLInputElement::Value always returns a string parseable by Color.
   Color color;
-  bool success = color.SetFromString(input->value());
+  bool success = color.SetFromString(input->Value());
   DCHECK(success);
   return color.Rgb();
 }
@@ -2968,7 +2979,7 @@ String AXNodeObject::GetValueForControl() const {
         input->type() != input_type_names::kRadio &&
         input->type() != input_type_names::kReset &&
         input->type() != input_type_names::kSubmit) {
-      return input->value();
+      return input->Value();
     }
   }
 
@@ -3099,6 +3110,11 @@ bool AXNodeObject::IsEditableRoot() const {
       << GetDocument()->Lifecycle().ToString();
 #endif  // DCHECK_IS_ON()
 
+  // Catches the case where the 'contenteditable' attribute is set on an atomic
+  // text field (which shouldn't have any effect).
+  if (IsAtomicTextField())
+    return false;
+
   // The DOM inside native text fields is an implementation detail that should
   // not be exposed to platform accessibility APIs.
   if (EnclosingTextControl(node))
@@ -3169,14 +3185,14 @@ bool AXNodeObject::OnNativeSetValueAction(const String& string) {
 
   auto* html_input_element = DynamicTo<HTMLInputElement>(*GetNode());
   if (html_input_element && layout_object->IsTextFieldIncludingNG()) {
-    html_input_element->setValue(
+    html_input_element->SetValue(
         string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
   }
 
   if (auto* text_area_element = DynamicTo<HTMLTextAreaElement>(*GetNode())) {
     DCHECK(layout_object->IsTextAreaIncludingNG());
-    text_area_element->setValue(
+    text_area_element->SetValue(
         string, TextFieldEventBehavior::kDispatchInputAndChangeEvent);
     return true;
   }
@@ -3225,8 +3241,7 @@ String AXNodeObject::TextAlternative(
     NameSources* name_sources) const {
   // If nameSources is non-null, relatedObjects is used in filling it in, so it
   // must be non-null as well.
-  if (name_sources)
-    DCHECK(related_objects);
+  DCHECK(!name_sources || related_objects);
 
   bool found_text_alternative = false;
 
@@ -3257,7 +3272,7 @@ String AXNodeObject::TextAlternative(
   // points to itself. The easiest way to check this is by testing whether this
   // node has already been visited.
   if (recursive && !visited.Contains(this)) {
-    String value_for_name = GetValueContributionToName();
+    String value_for_name = GetValueContributionToName(visited);
     if (!value_for_name.IsNull())
       return value_for_name;
   }
@@ -3433,9 +3448,6 @@ String AXNodeObject::TextFromDescendants(
     AXObjectSet& visited,
     const AXObject* aria_label_or_description_root,
     bool recursive) const {
-#if defined(AX_FAIL_FAST_BUILD)
-  DCHECK(!is_adding_children_);
-#endif
   if (!CanHaveChildren())
     return recursive ? String() : GetElement()->GetInnerTextWithoutUpdate();
 
@@ -3444,11 +3456,16 @@ String AXNodeObject::TextFromDescendants(
   ax::mojom::blink::NameFrom last_used_name_from =
       ax::mojom::blink::NameFrom::kUninitialized;
 
+  // Ensure that if this node needs to invalidate its children (e.g. due to
+  // included in tree status change), that we do it now, rather than while
+  // traversing the children.
+  UpdateCachedAttributeValuesIfNeeded();
+
+  const AXObjectVector& children = ChildrenIncludingIgnored();
 #if defined(AX_FAIL_FAST_BUILD)
   base::AutoReset<bool> auto_reset(&is_computing_text_from_descendants_, true);
 #endif
-
-  for (AXObject* child : ChildrenIncludingIgnored()) {
+  for (AXObject* child : children) {
     constexpr size_t kMaxDescendantsForTextAlternativeComputation = 100;
     if (visited.size() > kMaxDescendantsForTextAlternativeComputation)
       break;
@@ -3938,17 +3955,18 @@ void AXNodeObject::AddImageMapChildren() {
 }
 
 void AXNodeObject::AddPopupChildren() {
-  if (!AXObjectCache().UseAXMenuList()) {
-    auto* html_select_element = DynamicTo<HTMLSelectElement>(GetNode());
-    if (html_select_element && html_select_element->UsesMenuList())
+  auto* html_select_element = DynamicTo<HTMLSelectElement>(GetNode());
+  if (html_select_element) {
+    if (!AXObjectCache().UseAXMenuList() && html_select_element->UsesMenuList())
       AddChildAndCheckIncluded(html_select_element->PopupRootAXObject());
     return;
   }
 
   auto* html_input_element = DynamicTo<HTMLInputElement>(GetNode());
-  if (!html_input_element)
+  if (html_input_element) {
+    AddChildAndCheckIncluded(html_input_element->PopupRootAXObject());
     return;
-  AddChildAndCheckIncluded(html_input_element->PopupRootAXObject());
+  }
 }
 
 bool AXNodeObject::CanAddLayoutChild(LayoutObject& child) {
@@ -3963,11 +3981,35 @@ bool AXNodeObject::CanAddLayoutChild(LayoutObject& child) {
   // pseudo element.
   DCHECK(child.GetNode()->IsPseudoElement());
 
-  // Only add this inner pseudo element if it hasn't been added elsewhere.
-  // An example is ::before with ::first-letter.
-  AXObject* ax_preexisting = AXObjectCache().Get(&child);
-  return !ax_preexisting || !ax_preexisting->CachedParentObject() ||
-         ax_preexisting->CachedParentObject() == this;
+  // ---------------------------------------------------------------------------
+  // Under certain circumstances the LayoutTreeBuilderTraversal and LayoutObject
+  // trees do not match, e.g. for the combination of ::before/::after and
+  // ::marker pseudo elements in legacy layout.
+  // In this case, there is a danger that the AXObject created for |child| will
+  // be added in two places.Unfortunately, this requires a slow check.
+  // For more info, see discussion here:
+  // https://crrev.com/c/chromium/src/+/3591572/9/third_party/blink/renderer/modules/accessibility/ax_node_object.cc#3973
+  // TODO(accessibility) Remove this once legacy layout is completely removed,
+  // as this problem will go away.
+  AXObject* ax_dom_parent = AXObjectCache().GetWithoutInvalidation(
+      LayoutTreeBuilderTraversal::Parent(*child.GetNode()));
+  if (ax_dom_parent &&
+      !ax_dom_parent->ShouldUseLayoutObjectTraversalForChildren()) {
+    DCHECK_NE(ax_dom_parent, this);
+    for (Node* child_node =
+             LayoutTreeBuilderTraversal::FirstChild(*ax_dom_parent->GetNode());
+         child_node;
+         child_node = LayoutTreeBuilderTraversal::NextSibling(*child_node)) {
+      if (child_node == child.GetNode()) {
+        // Different AX parent would have the same AX child (via
+        // LayoutTreeBuilderTraversal).
+        return false;
+      }
+    }
+  }
+  // ---------------------------------------------------------------------------
+
+  return true;
 }
 
 #if DCHECK_IS_ON()
@@ -4119,6 +4161,10 @@ void AXNodeObject::AddChildren() {
 #endif
 
 #if defined(AX_FAIL_FAST_BUILD)
+  SANITIZER_CHECK(!is_computing_text_from_descendants_)
+      << "Should not attempt to simultaneously compute text from descendants "
+         "and add children on: "
+      << ToString(true, true);
   SANITIZER_CHECK(!is_adding_children_)
       << " Reentering method on " << GetNode();
   base::AutoReset<bool> reentrancy_protector(&is_adding_children_, true);
@@ -4548,19 +4594,37 @@ bool AXNodeObject::OnNativeFocusAction() {
     return true;
   }
 
-  // If the object is not natively focusable but can be focused using an ARIA
-  // active descendant, perform a native click instead. This will enable Web
-  // apps that set accessibility focus using an active descendant to capture and
-  // act on the click event. Otherwise, there is no other way to inform the app
-  // that an AT has requested the focus to be changed, except if the app is
-  // using AOM. To be extra safe, exclude objects that are clickable themselves.
-  // This won't prevent anyone from having a click handler on the object's
-  // container.
-  if (!IsClickable() && CanBeActiveDescendant()) {
-    return OnNativeClickAction();
+  // If this node is already the currently focused node, then calling
+  // focus() won't do anything.  That is a problem when focus is removed
+  // from the webpage to chrome, and then returns.  In these cases, we need
+  // to do what keyboard and mouse focus do, which is reset focus first.
+  if (document->FocusedElement() == element) {
+    document->ClearFocusedElement();
+
+    // Calling ClearFocusedElement could result in changes to the document,
+    // like this AXObject becoming detached.
+    if (IsDetached())
+      return false;
   }
 
-  element->focus();
+  if (base::FeatureList::IsEnabled(blink::features::kSimulateClickOnAXFocus)) {
+    // If the object is not natively focusable but can be focused using an ARIA
+    // active descendant, perform a native click instead. This will enable Web
+    // apps that set accessibility focus using an active descendant to capture
+    // and act on the click event. Otherwise, there is no other way to inform
+    // the app that an AT has requested the focus to be changed, except if the
+    // app is using AOM. To be extra safe, exclude objects that are clickable
+    // themselves. This won't prevent anyone from having a click handler on the
+    // object's container.
+    //
+    // This code is in the process of being removed. See the comment above
+    // |kSimulateClickOnAXFocus| in `blink/common/features.cc`.
+    if (!IsClickable() && CanBeActiveDescendant()) {
+      return OnNativeClickAction();
+    }
+  }
+
+  element->Focus();
   return true;
 }
 
@@ -4863,7 +4927,7 @@ String AXNodeObject::NativeTextAlternative(
       name_sources->push_back(NameSource(*found_text_alternative, kValueAttr));
       name_sources->back().type = name_from;
     }
-    String value = input_element->value();
+    String value = input_element->Value();
     if (!value.IsNull()) {
       text_alternative = value;
       if (name_sources) {
@@ -4929,7 +4993,7 @@ String AXNodeObject::NativeTextAlternative(
       name_sources->back().type = name_from;
     }
     name_from = ax::mojom::blink::NameFrom::kAttribute;
-    String value = input_element->value();
+    String value = input_element->Value();
     if (!value.IsNull()) {
       text_alternative = value;
       if (name_sources) {
@@ -5009,7 +5073,7 @@ String AXNodeObject::NativeTextAlternative(
     name_from = ax::mojom::blink::NameFrom::kValue;
 
     String displayed_file_path = GetValueForControl();
-    String upload_button_text = input_element->UploadButton()->value();
+    String upload_button_text = input_element->UploadButton()->Value();
     if (!displayed_file_path.IsEmpty()) {
       text_alternative = displayed_file_path + ", " + upload_button_text;
     } else {
@@ -5430,7 +5494,7 @@ String AXNodeObject::Description(
           DescriptionSource(found_description, kValueAttr));
       description_sources->back().type = description_from;
     }
-    String value = input_element->value();
+    String value = input_element->Value();
     if (!value.IsNull()) {
       description = value;
       if (description_sources) {
@@ -5552,6 +5616,39 @@ String AXNodeObject::Description(
         description_sources->back().text = description;
       } else {
         return description;
+      }
+    }
+  }
+
+  // For form controls that act as triggering elements for popups of type kHint,
+  // then set aria-describedby to the hint popup.
+  if (auto* form_control = DynamicTo<HTMLFormControlElement>(element)) {
+    auto popup = form_control->togglePopupElement();
+    if (popup.element && popup.element->PopupType() == PopupValueType::kHint) {
+      description_from = ax::mojom::blink::DescriptionFrom::kPopupElement;
+      if (description_sources) {
+        description_sources->push_back(
+            DescriptionSource(found_description, popup.attribute_name));
+        description_sources->back().type = description_from;
+      }
+      AXObject* popup_ax_object = AXObjectCache().GetOrCreate(popup.element);
+      if (popup_ax_object) {
+        AXObjectSet visited;
+        description = RecursiveTextAlternative(*popup_ax_object,
+                                               popup_ax_object, visited);
+        if (related_objects) {
+          related_objects->push_back(
+              MakeGarbageCollected<NameSourceRelatedObject>(popup_ax_object,
+                                                            description));
+        }
+        if (description_sources) {
+          DescriptionSource& source = description_sources->back();
+          source.related_objects = *related_objects;
+          source.text = description;
+          found_description = true;
+        } else {
+          return description;
+        }
       }
     }
   }
@@ -5707,7 +5804,7 @@ String AXNodeObject::PlaceholderFromNativeAttribute() const {
   return ToTextControl(node)->StrippedPlaceholder();
 }
 
-String AXNodeObject::GetValueContributionToName() const {
+String AXNodeObject::GetValueContributionToName(AXObjectSet& visited) const {
   if (IsTextField())
     return SlowGetValueForControlIncludingContentEditable();
 
@@ -5728,9 +5825,11 @@ String AXNodeObject::GetValueContributionToName() const {
     AXObjectVector selected_options;
     SelectedOptions(selected_options);
     for (const auto& child : selected_options) {
-      if (accumulated_text.length())
-        accumulated_text.Append(" ");
-      accumulated_text.Append(child->ComputedName());
+      if (visited.insert(child).is_new_entry) {
+        if (accumulated_text.length())
+          accumulated_text.Append(" ");
+        accumulated_text.Append(child->ComputedName());
+      }
     }
     return accumulated_text.ToString();
   }

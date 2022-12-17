@@ -94,11 +94,8 @@ class AutocompleteResult {
                           AutocompleteResult* old_matches,
                           TemplateURLService* template_url_service);
 
-  // Adds a new set of matches to the result set.  Does not re-sort.  Calls
-  // PossiblySwapContentsAndDescriptionForURLSuggestion(input) on all added
-  // matches; see comments there for more information.
-  void AppendMatches(const AutocompleteInput& input,
-                     const ACMatches& matches);
+  // Adds a new set of matches to the result set.  Does not re-sort.
+  void AppendMatches(const ACMatches& matches);
 
   // Removes duplicates, puts the list in sorted order and culls to leave only
   // the best GetMaxMatches() matches. Sets the default match to the best match
@@ -246,11 +243,14 @@ class AutocompleteResult {
 
   void MergeHiddenGroupIds(const std::vector<int>& hidden_group_ids);
 
-  // Logs metrics for when |new_result| replaces |old_result| asynchronously.
-  // |old_result| a list of the comparators for the old matches.
-  static void LogAsynchronousUpdateMetrics(
+  // Logs metrics for when `new_result` replaces `old_result`. `old_result` is a
+  // list of the comparators for the old matches. `in_start` specifies whether
+  // this is during the synchronous initial autocomplete pass of an input or the
+  // subsequent asynchronous passes.
+  static void LogUpdateMetrics(
       const std::vector<MatchDedupComparator>& old_result,
-      const AutocompleteResult& new_result);
+      const AutocompleteResult& new_result,
+      bool in_start);
 
   // This value should be comfortably larger than any max-autocomplete-matches
   // under consideration.

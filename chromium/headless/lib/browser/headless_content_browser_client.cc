@@ -115,9 +115,9 @@ HeadlessContentBrowserClient::~HeadlessContentBrowserClient() = default;
 
 std::unique_ptr<content::BrowserMainParts>
 HeadlessContentBrowserClient::CreateBrowserMainParts(
-    content::MainFunctionParams parameters) {
-  auto browser_main_parts = std::make_unique<HeadlessBrowserMainParts>(
-      std::move(parameters), browser_);
+    bool /* is_integration_test */) {
+  auto browser_main_parts =
+      std::make_unique<HeadlessBrowserMainParts>(browser_);
 
   browser_->set_browser_main_parts(browser_main_parts.get());
 
@@ -216,6 +216,9 @@ void HeadlessContentBrowserClient::AppendExtraCommandLineSwitches(
   }
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
 
+  if (old_command_line.HasSwitch(switches::kDisablePDFTagging))
+    command_line->AppendSwitch(switches::kDisablePDFTagging);
+
   // If we're spawning a renderer, then override the language switch.
   std::string process_type =
       command_line->GetSwitchValueASCII(::switches::kProcessType);
@@ -286,7 +289,7 @@ void HeadlessContentBrowserClient::AllowCertificateError(
     int cert_error,
     const net::SSLInfo& ssl_info,
     const GURL& request_url,
-    bool is_main_frame_request,
+    bool is_primary_main_frame_request,
     bool strict_enforcement,
     base::OnceCallback<void(content::CertificateRequestResultType)> callback) {
   if (!callback.is_null()) {

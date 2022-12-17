@@ -29,6 +29,7 @@
 #include "components/autofill/core/browser/form_types.h"
 #include "components/autofill/core/browser/metrics/form_events/address_form_event_logger.h"
 #include "components/autofill/core/browser/metrics/form_events/credit_card_form_event_logger.h"
+#include "components/autofill/core/browser/metrics/form_interactions_counter.h"
 #include "components/autofill/core/browser/payments/autofill_offer_manager.h"
 #include "components/autofill/core/browser/payments/card_unmask_delegate.h"
 #include "components/autofill/core/browser/payments/credit_card_access_manager.h"
@@ -36,6 +37,7 @@
 #include "components/autofill/core/browser/personal_data_manager.h"
 #include "components/autofill/core/browser/single_field_form_fill_router.h"
 #include "components/autofill/core/browser/sync_utils.h"
+#include "components/autofill/core/browser/touch_to_fill_delegate.h"
 #include "components/autofill/core/browser/ui/popup_types.h"
 #include "components/autofill/core/common/dense_set.h"
 #include "components/autofill/core/common/form_data.h"
@@ -59,6 +61,30 @@ class FormStructureBrowserTest;
 
 struct FormData;
 struct FormFieldData;
+struct SuggestionsContext;
+
+// Use <Phone><WebOTP><OTC> as the bit pattern to identify the metrics state.
+enum class PhoneCollectionMetricState {
+  kNone = 0,    // Site did not collect phone, not use OTC, not use WebOTP
+  kOTC = 1,     // Site used OTC only
+  kWebOTP = 2,  // Site used WebOTP only
+  kWebOTPPlusOTC = 3,  // Site used WebOTP and OTC
+  kPhone = 4,          // Site collected phone, not used neither WebOTP nor OTC
+  kPhonePlusOTC = 5,   // Site collected phone number and used OTC
+  kPhonePlusWebOTP = 6,         // Site collected phone number and used WebOTP
+  kPhonePlusWebOTPPlusOTC = 7,  // Site collected phone number and used both
+  kMaxValue = kPhonePlusWebOTPPlusOTC,
+};
+
+namespace phone_collection_metric {
+constexpr uint32_t kOTCUsed = 1 << 0;
+constexpr uint32_t kWebOTPUsed = 1 << 1;
+constexpr uint32_t kPhoneCollected = 1 << 2;
+}  // namespace phone_collection_metric
+
+namespace metrics {
+class AutofillMetricsBaseTest;
+}
 
 // We show the credit card signin promo only a certain number of times.
 constexpr int kCreditCardSigninPromoImpressionLimit = 3;
@@ -81,7 +107,7 @@ class BrowserAutofillManager : public AutofillManager,
   BrowserAutofillManager(AutofillDriver* driver,
                          AutofillClient* client,
                          const std::string& app_locale,
-                         AutofillDownloadManagerState enable_download_manager);
+                         EnableDownloadManager enable_download_manager);
 
   BrowserAutofillManager(const BrowserAutofillManager&) = delete;
   BrowserAutofillManager& operator=(const BrowserAutofillManager&) = delete;
@@ -136,20 +162,20 @@ class BrowserAutofillManager : public AutofillManager,
                                  const FormData& form,
                                  const FormFieldData& field,
                                  int unique_id);
-  virtual void FillCreditCardForm(int query_id,
-                                  const FormData& form,
-                                  const FormFieldData& field,
-                                  const CreditCard& credit_card,
-                                  const std::u16string& cvc);
+  void FillCreditCardForm(int query_id,
+                          const FormData& form,
+                          const FormFieldData& field,
+                          const CreditCard& credit_card,
+                          const std::u16string& cvc) override;
   void DidShowSuggestions(bool has_autofill_suggestions,
                           const FormData& form,
                           const FormFieldData& field);
 
   // Called only from Autofill Assistant through
   // ContentAutofillDriver::FillFormForAssistant().
-  virtual void FillProfileForm(const autofill::AutofillProfile& profile,
-                               const FormData& form,
-                               const FormFieldData& field);
+  void FillProfileForm(const AutofillProfile& profile,
+                       const FormData& form,
+                       const FormFieldData& field) override;
 
   // Fetches the related virtual card information given the related actual card
   // |guid| and fills the information into the form.
@@ -171,32 +197,21 @@ class BrowserAutofillManager : public AutofillManager,
   // from the database. Returns true if deletion is allowed.
   bool RemoveAutofillProfileOrCreditCard(int unique_id);
 
-  // Remove the specified suggestion from single field filling.
+  // Remove the specified suggestion from single field filling. |frontend_id| is
+  // the PopupItemId of the suggestion.
   void RemoveCurrentSingleFieldSuggestion(const std::u16string& name,
-                                          const std::u16string& value);
+                                          const std::u16string& value,
+                                          int frontend_id);
 
   // Invoked when the user selected |value| in a suggestions list from single
-  // field filling.
-  void OnSingleFieldSuggestionSelected(const std::u16string& value);
+  // field filling. |frontend_id| is the PopupItemId of the suggestion.
+  void OnSingleFieldSuggestionSelected(const std::u16string& value,
+                                       int frontend_id);
 
   // Invoked when the user selects the "Hide Suggestions" item in the
   // Autocomplete drop-down.
   virtual void OnUserHideSuggestions(const FormData& form,
                                      const FormFieldData& field);
-
-  // Returns true only if the previewed form should be cleared.
-  bool ShouldClearPreviewedForm();
-
-  AutofillOfferManager* offer_manager() { return offer_manager_; }
-
-  CreditCardAccessManager* credit_card_access_manager() {
-    return credit_card_access_manager_.get();
-  }
-
-  payments::FullCardRequest* GetOrCreateFullCardRequest();
-
-  base::WeakPtr<payments::FullCardRequest::UIDelegate>
-  GetAsFullCardRequestUIDelegate();
 
   const std::string& app_locale() const { return app_locale_; }
 
@@ -223,6 +238,9 @@ class BrowserAutofillManager : public AutofillManager,
   void DidSuppressPopup(const FormData& form, const FormFieldData& field);
 
   // AutofillManager:
+  AutofillOfferManager* GetOfferManager() override;
+  CreditCardAccessManager* GetCreditCardAccessManager() override;
+  bool ShouldClearPreviewedForm() override;
   void OnFocusNoLongerOnForm(bool had_interacted_form) override;
   void OnFocusOnFormFieldImpl(const FormData& form,
                               const FormFieldData& field,
@@ -233,8 +251,11 @@ class BrowserAutofillManager : public AutofillManager,
   void OnDidEndTextFieldEditing() override;
   void OnHidePopup() override;
   void SelectFieldOptionsDidChange(const FormData& form) override;
+  void JavaScriptChangedAutofilledValue(
+      const FormData& form,
+      const FormFieldData& field,
+      const std::u16string& old_value) override;
   void PropagateAutofillPredictions(
-      content::RenderFrameHost* rfh,
       const std::vector<FormStructure*>& forms) override;
   void Reset() override;
 
@@ -272,10 +293,29 @@ class BrowserAutofillManager : public AutofillManager,
     return has_observed_one_time_code_field_;
   }
 
+  // Reports whether a document collects phone numbers, uses one time code, uses
+  // WebOTP. There are cases that the reporting is not expected:
+  //   1. some unit tests do not set necessary members,
+  //   |browser_autofill_manager_|
+  //   2. there is no form and WebOTP is not used
+  void ReportAutofillWebOTPMetrics(bool used_web_otp) override;
+
+  // Handles the logic for when the user selects to see promo code offer
+  // details. It opens a new tab and navigates to the offer details page, and
+  // then logs that the promo code suggestions footer was selected.
+  void OnSeePromoCodeOfferDetailsSelected(const GURL& offer_details_url,
+                                          const std::u16string& value,
+                                          int frontend_id);
+
 #if defined(UNIT_TEST)
   void SetExternalDelegateForTest(
       std::unique_ptr<AutofillExternalDelegate> external_delegate) {
     external_delegate_ = std::move(external_delegate);
+  }
+
+  void SetTouchToFillDelegateForTest(
+      std::unique_ptr<TouchToFillDelegate> touch_to_fill_delegate) {
+    touch_to_fill_delegate_ = std::move(touch_to_fill_delegate);
   }
 
   // A public wrapper that calls |DeterminePossibleFieldTypesForUpload| for
@@ -289,12 +329,6 @@ class BrowserAutofillManager : public AutofillManager,
     DeterminePossibleFieldTypesForUpload(profiles, credit_cards,
                                          last_unlocked_credit_card_cvc,
                                          app_locale, submitted_form);
-  }
-
-  // A public wrapper that calls |MakeFrontendID| for testing purposes only.
-  int MakeFrontendIDForTest(const std::string& cc_backend_id,
-                            const std::string& profile_backend_id) const {
-    return MakeFrontendID(cc_backend_id, profile_backend_id);
   }
 
   // A public wrapper that calls |ShouldTriggerRefill| for testing purposes
@@ -313,17 +347,13 @@ class BrowserAutofillManager : public AutofillManager,
       FormStructure* form_structure) {
     PreProcessStateMatchingTypes(profiles, form_structure);
   }
-#endif
+
+  AutofillSuggestionGenerator* suggestion_generator() {
+    return suggestion_generator_.get();
+  }
+#endif  // defined(UNIT_TEST)
 
  protected:
-  // Test code should prefer to use this constructor.
-  BrowserAutofillManager(AutofillDriver* driver,
-                         AutofillClient* client,
-                         PersonalDataManager* personal_data,
-                         const std::string app_locale = "en-US",
-                         AutofillDownloadManagerState enable_download_manager =
-                             DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
-
   // Uploads the form data to the Autofill server. |observed_submission|
   // indicates that upload is the result of a submission event.
   virtual void UploadFormData(const FormStructure& submitted_form,
@@ -338,20 +368,6 @@ class BrowserAutofillManager : public AutofillManager,
       const base::TimeTicks& submission_time,
       bool observed_submission);
 
-  // Maps suggestion backend ID to and from an integer identifying it. Two of
-  // these intermediate integers are packed by MakeFrontendID to make the IDs
-  // that this class generates for the UI and for IPC.
-  virtual int BackendIDToInt(const std::string& backend_id) const;
-  virtual std::string IntToBackendID(int int_id) const;
-
-  // Methods for packing and unpacking credit card and profile IDs for sending
-  // and receiving to and from the renderer process.
-  int MakeFrontendID(const std::string& cc_backend_id,
-                     const std::string& profile_backend_id) const;
-  void SplitFrontendID(int frontend_id,
-                       std::string* cc_backend_id,
-                       std::string* profile_backend_id) const;
-
   // AutofillManager:
   void OnFormSubmittedImpl(const FormData& form,
                            bool known_success,
@@ -363,11 +379,13 @@ class BrowserAutofillManager : public AutofillManager,
   void OnTextFieldDidScrollImpl(const FormData& form,
                                 const FormFieldData& field,
                                 const gfx::RectF& bounding_box) override {}
-  void OnAskForValuesToFillImpl(int query_id,
-                                const FormData& form,
-                                const FormFieldData& field,
-                                const gfx::RectF& transformed_box,
-                                bool autoselect_first_suggestion) override;
+  void OnAskForValuesToFillImpl(
+      int query_id,
+      const FormData& form,
+      const FormFieldData& field,
+      const gfx::RectF& transformed_box,
+      bool autoselect_first_suggestion,
+      TouchToFillEligible touch_to_fill_eligible) override;
   void OnSelectControlDidChangeImpl(const FormData& form,
                                     const FormFieldData& field,
                                     const gfx::RectF& bounding_box) override;
@@ -433,57 +451,9 @@ class BrowserAutofillManager : public AutofillManager,
     base::OneShotTimer on_refill_timer;
     // The field type groups that were initially filled.
     std::set<FieldTypeGroup> type_groups_originally_filled;
-  };
-
-  // Indicates the reason why autofill suggestions are suppressed.
-  enum class SuppressReason {
-    kNotSuppressed,
-    // Suggestions are not shown because an ablation experiment is enabled.
-    kAblation,
-    // Address suggestions are not shown because the field is annotated with
-    // autocomplete=off and the directive is being observed by the browser.
-    kAutocompleteOff,
-    // Suggestions are not shown because this form is on a secure site, but
-    // submits insecurely. This is only used when the user has started typing,
-    // otherwise a warning is shown.
-    kInsecureForm,
-    // Suggestions are not shown because the field is annotated with
-    // an unrecognized autocompelte attribute and the field is not credit card
-    // related. For credit card fields, the unrecognized attribute is ignored.
-    kAutocompleteUnrecognized,
-  };
-
-  // The context for the list of suggestions available for a given field to be
-  // returned by GetAvailableSuggestions().
-  struct SuggestionsContext {
-    FormStructure* form_structure = nullptr;
-    AutofillField* focused_field = nullptr;
-    bool is_autofill_available = false;
-    bool is_context_secure = false;
-    bool is_filling_credit_card = false;
-    // Flag to indicate whether all suggestions come from Google Payments.
-    bool should_display_gpay_logo = false;
-    SuppressReason suppress_reason = SuppressReason::kNotSuppressed;
-    // Indicates whether the form filling is under ablation, meaning that
-    // autofill popups are suppressed.
-    AblationGroup ablation_group = AblationGroup::kDefault;
-    // Indicates whether the form filling is under ablation, under the condition
-    // that the user has data to fill on file. All users that don't have data
-    // to fill are in the AbationGroup::kDefault.
-    // Note that it is possible (due to implementation details) that this is
-    // incorrectly set to kDefault: If the user has typed some characters into a
-    // text field, it may look like no suggestions are available, but in
-    // practice the suggestions are just filtered out (Autofill only suggests
-    // matches that start with the typed prefix). Any consumers of the
-    // conditional_ablation_group attribute should monitor it over time.
-    // Any transitions of conditional_ablation_group from {kAblation,
-    // kControl} to kDefault should just be ignored and the previously reported
-    // value should be used. As the ablation experience is stable within a day,
-    // such a transition typically indicates that the user has type a prefix
-    // which led to the filtering of all autofillable data. In short: once
-    // either kAblation or kControl were reported, consumers should stick to
-    // that.
-    AblationGroup conditional_ablation_group = AblationGroup::kDefault;
+    // If populated, this map determines which values will be filled into a
+    // field (it does not matter whether the field already contains a value).
+    std::map<FieldGlobalId, std::u16string> forced_fill_values;
   };
 
   // CreditCardAccessManager::Accessor
@@ -495,6 +465,8 @@ class BrowserAutofillManager : public AutofillManager,
   // Returns false if Autofill is disabled or if no Autofill data is available.
   bool RefreshDataModels();
 
+  // TODO(crbug.com/1249665): Change unique_id to frontend_id and move the
+  // functions to AutofillSuggestionGenerator.
   // Gets the card referred to by the guid |unique_id|. Returns |nullptr| if
   // card does not exist.
   CreditCard* GetCreditCard(int unique_id);
@@ -621,6 +593,7 @@ class BrowserAutofillManager : public AutofillManager,
       AutofillField* autofill_field,
       absl::variant<const AutofillProfile*, const CreditCard*>
           profile_or_credit_card,
+      const std::map<FieldGlobalId, std::u16string>& forced_fill_values,
       FormFieldData* field_data,
       bool should_notify,
       const std::u16string& cvc,
@@ -641,9 +614,20 @@ class BrowserAutofillManager : public AutofillManager,
   //  It's been less than kLimitBeforeRefillMs since the original fill.
   bool ShouldTriggerRefill(const FormStructure& form_structure);
 
+  // Schedules a call of TriggerRefill. Virtual for testing.
+  virtual void ScheduleRefill(const FormData& form);
+
   // Attempts to refill the form that was changed dynamically. Should only be
   // called if ShouldTriggerRefill returns true.
   void TriggerRefill(const FormData& form);
+
+  // This function is called by JavaScriptChangedAutofilledValue and may trigger
+  // a refill in case the website used JavaScript to reformat an expiration date
+  // like "05/2023" into "05 / 20" (i.e. it broke the year by cutting the last
+  // two digits instead of stripping the first two digits).
+  void MaybeTriggerRefillForExpirationDate(const FormData& form,
+                                           const FormFieldData& field,
+                                           const std::u16string& old_value);
 
   // Replaces the contents of |suggestions| with available suggestions for
   // |field|. |context| will contain additional information about the
@@ -675,9 +659,10 @@ class BrowserAutofillManager : public AutofillManager,
   void SetDataList(const std::vector<std::u16string>& values,
                    const std::vector<std::u16string>& labels);
 
-  // Delegate to perform external processing (display, selection) on
+  // Delegates to perform external processing (display, selection) on
   // our behalf.
   std::unique_ptr<AutofillExternalDelegate> external_delegate_;
+  std::unique_ptr<TouchToFillDelegate> touch_to_fill_delegate_;
 
   std::string app_locale_;
 
@@ -748,12 +733,6 @@ class BrowserAutofillManager : public AutofillManager,
   CreditCard credit_card_;
   std::u16string last_unlocked_credit_card_cvc_;
 
-  // Suggestion backend ID to ID mapping. We keep two maps to convert back and
-  // forth. These should be used only by BackendIDToInt and IntToBackendID.
-  // Note that the integers are not frontend IDs.
-  mutable std::map<std::string, int> backend_to_int_map_;
-  mutable std::map<int, std::string> int_to_backend_map_;
-
   // Delegate used in test to get notifications on certain events.
   raw_ptr<BrowserAutofillManagerTestDelegate> test_delegate_ = nullptr;
 
@@ -765,11 +744,29 @@ class BrowserAutofillManager : public AutofillManager,
   // interaction and re-used throughout the context of this manager.
   AutofillSyncSigninState sync_state_ = AutofillSyncSigninState::kNumSyncStates;
 
+  // Used to keep track of user interactions with text fields, Autocomplete and
+  // Autofill.
+  std::unique_ptr<FormInteractionsCounter> form_interactions_counter_;
+
+  // Helps with measuring whether phone number is collected and whether it is in
+  // conjunction with WebOTP or OneTimeCode (OTC).
+  // value="0" label="Phone Not Collected, WebOTP Not Used, OTC Not Used"
+  // value="1" label="Phone Not Collected, WebOTP Not Used, OTC Used"
+  // value="2" label="Phone Not Collected, WebOTP Used, OTC Not Used"
+  // value="3" label="Phone Not Collected, WebOTP Used, OTC Used"
+  // value="4" label="Phone Collected, WebOTP Not Used, OTC Not Used"
+  // value="5" label="Phone Collected, WebOTP Not Used, OTC Used"
+  // value="6" label="Phone Collected, WebOTP Used, OTC Not Used"
+  // value="7" label="Phone Collected, WebOTP Used, OTC Used"
+  uint32_t phone_collection_metric_state_ = 0;
+
   base::WeakPtrFactory<BrowserAutofillManager> weak_ptr_factory_{this};
 
   friend class AutofillAssistantTest;
+  friend class AutofillMetricsCrossFrameFormTest;
   friend class BrowserAutofillManagerTest;
   friend class AutofillMetricsTest;
+  friend class metrics::AutofillMetricsBaseTest;
   friend class FormStructureBrowserTest;
   friend class GetMatchingTypesTest;
   friend class CreditCardAccessoryControllerTest;

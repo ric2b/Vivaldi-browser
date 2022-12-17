@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'chrome://resources/cr_elements/cr_tab_box/cr_tab_box.js';
+
 import {Time} from 'chrome://resources/mojo/mojo/public/mojom/base/time.mojom-webui.js';
 
 import {QuotaInternalsBrowserProxy} from './quota_internals_browser_proxy.js';
@@ -79,8 +81,8 @@ async function getHostUsageString(host: string, type: string): Promise<string> {
   return currentTotalUsageObj.hostUsage.toString();
 }
 
-async function renderDiskAvailability() {
-  const result = await getProxy().getDiskAvailability();
+async function renderDiskAvailabilityAndTempPoolSize() {
+  const result = await getProxy().getDiskAvailabilityAndTempPoolSize();
 
   const rowTemplate: HTMLTemplateElement =
       document.body.querySelector<HTMLTemplateElement>('#listener-row')!;
@@ -93,11 +95,15 @@ async function renderDiskAvailability() {
   const availableSpaceBytes =
       (Number(result.availableSpace) / (1024 ** 3)).toFixed(2);
   const totalSpaceBytes = (Number(result.totalSpace) / (1024 ** 3)).toFixed(2);
+  const tempPoolSizeBytes =
+      (Number(result.tempPoolSize) / (1024 ** 3)).toFixed(2);
 
   listenerRow.querySelector('.total-space')!.textContent =
       `${totalSpaceBytes} GB`;
   listenerRow.querySelector('.available-space')!.textContent =
       `${availableSpaceBytes} GB`;
+  listenerRow.querySelector('.temp-pool-size')!.textContent =
+      `${tempPoolSizeBytes} GB`;
 
   tableBody.append(listenerRow);
 }
@@ -282,22 +288,10 @@ async function renderUsageAndQuotaStats() {
 }
 
 document.addEventListener('DOMContentLoaded', () => {
-  renderDiskAvailability();
+  renderDiskAvailabilityAndTempPoolSize();
   renderEvictionStats();
   renderGlobalUsage();
   renderUsageAndQuotaStats();
   document.body.querySelector('#trigger-notification')!.addEventListener(
       'click', () => getProxy().simulateStoragePressure());
-
-  document.body.querySelector('#summary-tab')!.addEventListener('click', () => {
-    document.body.querySelector('#usage-tabpanel')!.removeAttribute('selected');
-    document.body.querySelector('#summary-tabpanel')!.setAttribute(
-        'selected', 'selected');
-  });
-
-  document.querySelector('#usage-tab')!.addEventListener('click', () => {
-    document.querySelector('#summary-tabpanel')!.removeAttribute('selected');
-    document.querySelector('#usage-tabpanel')!.setAttribute(
-        'selected', 'selected');
-  });
 });

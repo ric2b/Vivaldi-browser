@@ -188,9 +188,6 @@ HttpProxyConnectJob::HttpProxyConnectJob(
                  NetLogSourceType::HTTP_PROXY_CONNECT_JOB,
                  NetLogEventType::HTTP_PROXY_CONNECT_JOB_CONNECT),
       params_(std::move(params)),
-      next_state_(STATE_NONE),
-      has_restarted_(false),
-      has_established_connection_(false),
       http_auth_controller_(
           params_->tunnel()
               ? base::MakeRefCounted<HttpAuthController>(
@@ -441,9 +438,9 @@ int HttpProxyConnectJob::DoBeginConnect() {
 int HttpProxyConnectJob::DoTransportConnect() {
   ProxyServer::Scheme scheme = GetProxyServerScheme();
   if (scheme == ProxyServer::SCHEME_HTTP) {
-    nested_connect_job_ = TransportConnectJob::CreateTransportConnectJob(
-        params_->transport_params(), priority(), socket_tag(),
-        common_connect_job_params(), this, &net_log());
+    nested_connect_job_ = std::make_unique<TransportConnectJob>(
+        priority(), socket_tag(), common_connect_job_params(),
+        params_->transport_params(), this, &net_log());
   } else {
     DCHECK_EQ(scheme, ProxyServer::SCHEME_HTTPS);
     DCHECK(params_->ssl_params());
@@ -660,7 +657,8 @@ int HttpProxyConnectJob::DoQuicProxyCreateSession() {
       quic_version, ssl_params->privacy_mode(), kH2QuicTunnelPriority,
       socket_tag(), params_->network_isolation_key(),
       ssl_params->GetDirectConnectionParams()->secure_dns_policy(),
-      /*use_dns_aliases=*/false, ssl_params->ssl_config().GetCertVerifyFlags(),
+      /*use_dns_aliases=*/false, /*require_dns_https_alpn=*/false,
+      ssl_params->ssl_config().GetCertVerifyFlags(),
       GURL("https://" + proxy_server.ToString()), net_log(),
       &quic_net_error_details_,
       /*failed_on_default_network_callback=*/CompletionOnceCallback(),

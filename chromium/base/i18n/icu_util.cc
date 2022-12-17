@@ -10,6 +10,8 @@
 #include <windows.h>
 #endif
 
+#include <string.h>
+
 #include <memory>
 #include <string>
 
@@ -51,9 +53,8 @@
 #include "third_party/icu/source/common/unicode/unistr.h"
 #endif
 
-#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA) ||   \
-    ((BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
-     !BUILDFLAG(IS_CHROMECAST))
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_FUCHSIA) || \
+    BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS))
 #include "third_party/icu/source/i18n/unicode/timezone.h"
 #endif
 
@@ -324,8 +325,7 @@ void InitializeIcuTimeZone() {
       FuchsiaIntlProfileWatcher::GetPrimaryTimeZoneIdForIcuInitialization();
   icu::TimeZone::adoptDefault(
       icu::TimeZone::createTimeZone(icu::UnicodeString::fromUTF8(zone_id)));
-#elif (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) && \
-    !BUILDFLAG(IS_CHROMECAST)
+#elif BUILDFLAG(IS_CHROMEOS) || (BUILDFLAG(IS_LINUX) && !BUILDFLAG(IS_CASTOS))
   // To respond to the time zone change properly, the default time zone
   // cache in ICU has to be populated on starting up.
   // See TimeZoneMonitorLinux::NotifyClientsFromImpl().
@@ -407,26 +407,29 @@ static void U_CALLCONV TraceICUData(const void* context,
     }
     case UTRACE_UBRK_CREATE_LINE: {
       const char* lb_type = va_arg(args, const char*);
+      auto lb_type_len = strlen(lb_type);
       va_end(args);
       ICUCreateInstance value;
-      switch (lb_type[0]) {
-        case '\0':
-          value = ICUCreateInstance::kLineBreakIterator;
-          break;
-        case 'l':
-          DCHECK(strcmp(lb_type, "loose") == 0);
-          value = ICUCreateInstance::kLineBreakIteratorTypeLoose;
-          break;
-        case 'n':
-          DCHECK(strcmp(lb_type, "normal") == 0);
-          value = ICUCreateInstance::kLineBreakIteratorTypeNormal;
-          break;
-        case 's':
-          DCHECK(strcmp(lb_type, "strict") == 0);
-          value = ICUCreateInstance::kLineBreakIteratorTypeStrict;
-          break;
-        default:
-          return;
+      if (lb_type_len < 6) {
+        DCHECK(strcmp(lb_type, "line") == 0);
+        value = ICUCreateInstance::kLineBreakIterator;
+      } else {
+        switch (lb_type[5]) {
+          case 'l':
+            DCHECK(strcmp(lb_type, "line_loose") == 0);
+            value = ICUCreateInstance::kLineBreakIteratorTypeLoose;
+            break;
+          case 'n':
+            DCHECK(strcmp(lb_type, "line_normal") == 0);
+            value = ICUCreateInstance::kLineBreakIteratorTypeNormal;
+            break;
+          case 's':
+            DCHECK(strcmp(lb_type, "line_strict") == 0);
+            value = ICUCreateInstance::kLineBreakIteratorTypeStrict;
+            break;
+          default:
+            return;
+        }
       }
       base::UmaHistogramEnumeration(kICUCreateInstance, value);
       return;

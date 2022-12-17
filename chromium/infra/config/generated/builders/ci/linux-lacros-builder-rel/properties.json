@@ -26,7 +26,7 @@
                 "apply_configs": [
                   "chromeos"
                 ],
-                "config": "chromium"
+                "config": "chromium_no_telemetry_dependencies"
               }
             }
           },
@@ -54,7 +54,7 @@
                   "use_clang_coverage",
                   "chromeos"
                 ],
-                "config": "chromium"
+                "config": "chromium_no_telemetry_dependencies"
               },
               "parent": {
                 "bucket": "ci",
@@ -87,11 +87,10 @@
       ]
     }
   },
-  "$build/goma": {
-    "enable_ats": true,
-    "rpc_extra_params": "?prod",
-    "server_host": "goma.chromium.org",
-    "use_luci_auth": true
+  "$build/reclient": {
+    "instance": "rbe-chromium-trusted",
+    "jobs": 500,
+    "metrics_project": "chromium-reclient-metrics"
   },
   "$recipe_engine/resultdb/test_presentation": {
     "column_keys": [],

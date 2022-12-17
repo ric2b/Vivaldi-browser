@@ -53,6 +53,16 @@ SchemePageLoadMetricsObserver::OnCommit(
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+SchemePageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class is interested in events that are dispatched only for the primary
+  // page or preprocessed by PageLoadTracker to be per-outermost page. So, no
+  // need to forward events at the observer layer.
+  return STOP_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SchemePageLoadMetricsObserver::OnHidden(
     const page_load_metrics::mojom::PageLoadTiming& timing) {
   return STOP_OBSERVING;

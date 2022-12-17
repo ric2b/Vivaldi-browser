@@ -39,20 +39,16 @@ using InitializeGLTextureParams =
 SharedImageBackingFactoryGLImage::SharedImageBackingFactoryGLImage(
     const GpuPreferences& gpu_preferences,
     const GpuDriverBugWorkarounds& workarounds,
-    const GpuFeatureInfo& gpu_feature_info,
+    const gles2::FeatureInfo* feature_info,
     ImageFactory* image_factory,
     gl::ProgressReporter* progress_reporter,
     const bool for_shared_memory_gmbs)
     : SharedImageBackingFactoryGLCommon(gpu_preferences,
                                         workarounds,
-                                        gpu_feature_info,
+                                        feature_info,
                                         progress_reporter),
       image_factory_(image_factory),
       for_shared_memory_gmbs_(for_shared_memory_gmbs) {
-  scoped_refptr<gles2::FeatureInfo> feature_info =
-      new gles2::FeatureInfo(workarounds, gpu_feature_info);
-  feature_info->Initialize(ContextType::CONTEXT_TYPE_OPENGLES2,
-                           use_passthrough_, gles2::DisallowedFeatures());
   gpu_memory_buffer_formats_ =
       feature_info->feature_flags().gpu_memory_buffer_formats;
   // Return if scanout images are not supported
@@ -279,15 +275,8 @@ bool SharedImageBackingFactoryGLImage::IsSupported(
        (usage & SHARED_IMAGE_USAGE_RASTER))) {
     return false;
   }
-  bool needs_interop_factory = (usage & SHARED_IMAGE_USAGE_WEBGPU) ||
-                               (usage & SHARED_IMAGE_USAGE_VIDEO_DECODE);
-#if BUILDFLAG(IS_ANDROID)
-  // Scanout on Android requires explicit fence synchronization which is only
-  // supported by the interop factory.
-  needs_interop_factory |= usage & SHARED_IMAGE_USAGE_SCANOUT;
-#endif
-
-  if (needs_interop_factory) {
+  if ((usage & SHARED_IMAGE_USAGE_WEBGPU) ||
+      (usage & SHARED_IMAGE_USAGE_VIDEO_DECODE)) {
     // return false if it needs interop factory
     return false;
   }

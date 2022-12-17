@@ -876,9 +876,7 @@ class SessionRestoreImpl : public BrowserListObserver {
         vivaldi::IsVivaldiRunning() && !vivaldi::IsDebuggingVivaldi();
     Browser* browser = Browser::Create(params);
 
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
     browser->window()->MaybeRestoreSideSearchStatePerWindow(extra_data);
-#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
 
     return browser;
   }
@@ -1091,7 +1089,7 @@ Browser* SessionRestore::RestoreSession(
 void SessionRestore::RestoreSessionAfterCrash(Browser* browser) {
   auto* profile = browser->profile();
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   // Desks restore a window to the right desk, so we should not reuse any
   // browser window. Otherwise, the conflict of the parent desk arises because
   // tabs created in this |browser| should remain in the current active desk,

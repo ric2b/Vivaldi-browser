@@ -61,12 +61,16 @@ AnchorConfiguration GetPermissionPromptBubbleAnchorConfiguration(
     return GetPageInfoAnchorConfiguration(browser);
   }
   BrowserView* browser_view = BrowserView::GetBrowserViewForBrowser(browser);
-  if (browser_view->GetLocationBarView()->chip()) {
+  if (browser_view->GetLocationBarView()->IsChipActive()) {
     return {browser_view->GetLocationBarView(),
             browser_view->GetLocationBarView()->chip()->button(),
             views::BubbleBorder::TOP_LEFT};
   }
   return GetPageInfoAnchorConfiguration(browser);
+}
+
+AnchorConfiguration GetAppMenuAnchorConfiguration(Browser* browser) {
+  return GetPageInfoAnchorConfiguration(browser, kAppMenuButton);
 }
 
 gfx::Rect GetPageInfoAnchorRect(Browser* browser) {

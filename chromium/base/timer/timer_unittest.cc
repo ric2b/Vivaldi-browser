@@ -65,6 +65,7 @@ void RunTest_OneShotTimers(
 
   task_environment.FastForwardBy(kTestDelay);
   EXPECT_TRUE(receiver.WasCalled());
+  EXPECT_FALSE(timer.IsRunning());
 }
 
 void RunTest_OneShotTimers_Cancel(
@@ -99,6 +100,7 @@ void RunTest_OneShotSelfDeletingTimer(
       FROM_HERE, kTestDelay,
       BindLambdaForTesting([&receiver, timer = std::move(timer)]() mutable {
         receiver.OnCalled();
+        EXPECT_FALSE(timer->IsRunning());
         timer.reset();
       }));
 
@@ -119,6 +121,7 @@ void RunTest_RepeatingTimer(
 
   task_environment.FastForwardBy(20 * kTestDelay);
   EXPECT_EQ(receiver.TimesCalled(), 20);
+  EXPECT_TRUE(timer.IsRunning());
 }
 
 void RunTest_RepeatingTimer_Cancel(
@@ -261,6 +264,7 @@ TEST(TimerTest, OneShotTimerWithTickClock) {
               BindOnce(&Receiver::OnCalled, Unretained(&receiver)));
   task_environment.FastForwardBy(kTestDelay);
   EXPECT_TRUE(receiver.WasCalled());
+  EXPECT_FALSE(timer.IsRunning());
 }
 
 TEST_P(TimerTestWithThreadType, RepeatingTimer) {
@@ -342,22 +346,42 @@ TEST(TimerTest, TaskEnvironmentShutdown) {
   // Timer destruct. SHOULD NOT CRASH, of course.
 }
 
-TEST(TimerTest, TaskEnvironmentShutdownSelfOwningTimer) {
-  // This test verifies that shutdown of the task environment does not cause
-  // crashes if there is a pending timer not yet fired and |Timer::user_task_|
-  // owns the timer. The test may only trigger exceptions if debug heap checking
-  // is enabled.
+TEST(TimerTest, TaskEnvironmentSelfOwningTimer) {
+  // This test verifies that a timer does not cause crashes if
+  // |Timer::user_task_| owns the timer. The test may only trigger exceptions if
+  // debug heap checking is enabled.
 
   auto timer = std::make_unique<OneShotTimer>();
   auto* timer_ptr = timer.get();
 
-  test::TaskEnvironment task_environment;
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
 
   timer_ptr->Start(FROM_HERE, kTestDelay,
                    BindLambdaForTesting([timer = std::move(timer)]() {}));
-  // |Timer::user_task_| owns sole reference to |timer|.
+  // |Timer::user_task_| owns sole reference to |timer|. Both will be destroyed
+  // once the task ran. SHOULD NOT CRASH.
+  task_environment.FastForwardUntilNoTasksRemain();
+}
 
-  // Task environment destructs by falling out of scope. SHOULD NOT CRASH.
+TEST(TimerTest, TaskEnvironmentSelfOwningTimerStopped) {
+  // This test verifies that a timer does not cause crashes when stopped if
+  // |Timer::user_task_| owns the timer. The test may only trigger exceptions if
+  // debug heap checking is enabled.
+
+  auto timer = std::make_unique<OneShotTimer>();
+  auto* timer_ptr = timer.get();
+
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+
+  timer_ptr->Start(FROM_HERE, kTestDelay,
+                   BindLambdaForTesting([timer = std::move(timer)]() {
+                     // Stop destroys |Timer::user_task_| which owns sole
+                     // reference to |timer|. SHOULD NOT CRASH.
+                     timer->Stop();
+                   }));
+  task_environment.FastForwardUntilNoTasksRemain();
 }
 
 TEST(TimerTest, NonRepeatIsRunning) {
@@ -466,6 +490,7 @@ TEST(TimerTest, AbandonedTaskIsCancelled) {
   // After AbandonAndStop(), the task is correctly treated as cancelled.
   timer.AbandonAndStop();
   EXPECT_EQ(0u, task_environment.GetPendingMainThreadTaskCount());
+  EXPECT_FALSE(timer.IsRunning());
 }
 
 TEST(TimerTest, DeadlineTimer) {
@@ -489,6 +514,124 @@ TEST(TimerTest, DeadlineTimerCancel) {
 
   MockRepeatingCallback<void()> callback;
   timer.Start(FROM_HERE, start + Seconds(5), callback.Get());
+
+  EXPECT_CALL(callback, Run()).Times(0);
+  timer.Stop();
+  task_environment.FastForwardBy(Seconds(5));
+  EXPECT_EQ(start + Seconds(5), TimeTicks::Now());
+}
+
+TEST(TimerTest, DeadlineTimerTaskDestructed) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  RunLoop run_loop;
+  DeadlineTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  MockRepeatingCallback<void()> destructed;
+  ScopedClosureRunner scoped_closure(destructed.Get());
+  timer.Start(FROM_HERE, start + Seconds(5),
+              BindOnce([](ScopedClosureRunner) {}, std::move(scoped_closure)));
+
+  EXPECT_CALL(destructed, Run());
+  timer.Stop();
+  testing::Mock::VerifyAndClearExpectations(&destructed);
+}
+
+TEST(TimerTest, MetronomeTimer) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  MetronomeTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  // Ensure the run_loop.Run() below doesn't straddle over multiple ticks.
+  task_environment.AdvanceClock(
+      start.SnappedToNextTick(TimeTicks(), Seconds(5)) - start);
+  start = TimeTicks::Now();
+
+  RunLoop run_loop;
+  timer.Start(FROM_HERE, Seconds(5), run_loop.QuitClosure());
+  run_loop.Run();
+  EXPECT_EQ(start + Seconds(5), TimeTicks::Now());
+}
+
+TEST(TimerTest, MetronomeTimerCustomPhase) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  RunLoop run_loop;
+  MetronomeTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  timer.Start(FROM_HERE, Seconds(5), run_loop.QuitClosure(), start);
+  run_loop.Run();
+  EXPECT_EQ(start + Seconds(5), TimeTicks::Now());
+}
+
+TEST(TimerTest, MetronomeTimerReset) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  RunLoop run_loop;
+  TimeTicks start = TimeTicks::Now();
+  MetronomeTimer timer(FROM_HERE, Seconds(5), run_loop.QuitClosure(), start);
+
+  timer.Reset();
+  run_loop.Run();
+  EXPECT_EQ(start + Seconds(5), TimeTicks::Now());
+}
+
+TEST(TimerTest, MetronomeTimerStartTwice) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  MetronomeTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  {
+    RunLoop run_loop;
+    timer.Start(FROM_HERE, Seconds(4), run_loop.QuitClosure(), start);
+    run_loop.Run();
+  }
+  EXPECT_EQ(start + Seconds(4), TimeTicks::Now());
+
+  {
+    RunLoop run_loop;
+    timer.Start(FROM_HERE, Seconds(2), run_loop.QuitClosure(), start);
+    run_loop.Run();
+  }
+  EXPECT_EQ(start + Seconds(6), TimeTicks::Now());
+}
+
+TEST(TimerTest, MetronomeTimerMultiple) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  MetronomeTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  // Ensure the subsequent FastForwardBy() don't straddle over multiple ticks.
+  task_environment.AdvanceClock(
+      start.SnappedToNextTick(TimeTicks(), Seconds(5)) - start);
+
+  MockRepeatingCallback<void()> callback;
+  timer.Start(FROM_HERE, Seconds(5), callback.Get());
+
+  // The first tick is skipped because it is too close. Ticks at 5s and 10s.
+  EXPECT_CALL(callback, Run()).Times(2);
+  task_environment.FastForwardBy(Seconds(10));
+
+  EXPECT_CALL(callback, Run()).Times(2);
+  // Ticks at 15s and 25s, while 20s is missed.
+  task_environment.AdvanceClock(Seconds(12));
+  task_environment.FastForwardBy(Seconds(3));
+}
+
+TEST(TimerTest, MetronomeTimerCancel) {
+  test::TaskEnvironment task_environment(
+      test::TaskEnvironment::TimeSource::MOCK_TIME);
+  RunLoop run_loop;
+  MetronomeTimer timer;
+  TimeTicks start = TimeTicks::Now();
+
+  MockRepeatingCallback<void()> callback;
+  timer.Start(FROM_HERE, Seconds(5), callback.Get());
 
   EXPECT_CALL(callback, Run()).Times(0);
   timer.Stop();

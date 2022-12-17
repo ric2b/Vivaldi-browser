@@ -15,6 +15,7 @@
 #include "base/files/file_path.h"
 #include "base/location.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/task/single_thread_task_runner.h"
@@ -46,7 +47,6 @@
 #include "components/signin/public/identity_manager/identity_manager.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/base/escape.h"
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 #include "chrome/browser/extensions/extension_service.h"
@@ -263,29 +263,6 @@ void CloseProfileWindows(Profile* profile) {
   BrowserList::CloseAllBrowsersWithProfile(profile,
                                            BrowserList::CloseCallback(),
                                            BrowserList::CloseCallback(), false);
-}
-
-void BubbleViewModeFromAvatarBubbleMode(BrowserWindow::AvatarBubbleMode mode,
-                                        Profile* profile,
-                                        BubbleViewMode* bubble_view_mode) {
-  switch (mode) {
-    case BrowserWindow::AVATAR_BUBBLE_MODE_SIGNIN:
-      *bubble_view_mode = BUBBLE_VIEW_MODE_GAIA_SIGNIN;
-      return;
-    case BrowserWindow::AVATAR_BUBBLE_MODE_ADD_ACCOUNT:
-      *bubble_view_mode = BUBBLE_VIEW_MODE_GAIA_ADD_ACCOUNT;
-      return;
-    case BrowserWindow::AVATAR_BUBBLE_MODE_REAUTH:
-      *bubble_view_mode = BUBBLE_VIEW_MODE_GAIA_REAUTH;
-      return;
-    case BrowserWindow::AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN:
-      *bubble_view_mode = BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
-      return;
-    case BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT:
-      *bubble_view_mode = profile->IsIncognitoProfile()
-                              ? profiles::BUBBLE_VIEW_MODE_INCOGNITO
-                              : profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER;
-  }
 }
 
 BrowserAddedForProfileObserver::BrowserAddedForProfileObserver(

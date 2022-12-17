@@ -19,6 +19,7 @@
 #include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
+#include "chrome/browser/profiles/profile_manager_observer.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/chrome_switches.h"
 #include "components/adverse_adblocking/adverse_ad_filter_list_factory.h"
@@ -92,6 +93,69 @@ struct PreloadedFavicon {
 #include "extraparts/preloaded_favicons.inc"
 }  // namespace
 
+#if !BUILDFLAG(IS_ANDROID)
+// This whole class is needed to set up preloaded favicons for each profile as
+// currently PostProfileInit is only called for the first profile loaded on
+// startup. It looks like there is a plan for PostProfileInit to be called
+// everytime a profile is loaded, and we can move the favicon preloading there
+// once that happens.
+class VivaldiBrowserMainExtraParts::PreloadedFaviconInitializer
+    : public ProfileManagerObserver {
+ public:
+  explicit PreloadedFaviconInitializer();
+  ~PreloadedFaviconInitializer() override;
+
+  PreloadedFaviconInitializer(const PreloadedFaviconInitializer&) = delete;
+  PreloadedFaviconInitializer& operator=(const PreloadedFaviconInitializer&) =
+      delete;
+
+  // ProfileManagerObserver:
+  void OnProfileAdded(Profile* profile) override;
+  void OnProfileManagerDestroying() override;
+
+ private:
+  base::ScopedObservation<ProfileManager, ProfileManagerObserver>
+      profile_manager_observer_{this};
+};
+
+VivaldiBrowserMainExtraParts::PreloadedFaviconInitializer::
+    PreloadedFaviconInitializer() {
+  profile_manager_observer_.Observe(g_browser_process->profile_manager());
+}
+
+VivaldiBrowserMainExtraParts::PreloadedFaviconInitializer::
+    ~PreloadedFaviconInitializer() = default;
+
+void VivaldiBrowserMainExtraParts::PreloadedFaviconInitializer::OnProfileAdded(
+    Profile* profile) {
+  if (profile->IsSystemProfile()) {
+    // Ignore the system profile that is used for displaying the profile picker.
+    return;
+  }
+
+  auto* favicon_service = FaviconServiceFactory::GetForProfile(
+      profile, ServiceAccessType::EXPLICIT_ACCESS);
+  for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
+    std::string png;
+    if (!base::Base64Decode(kPreloadedFavicons[i].favicon_png_base64, &png)) {
+      NOTREACHED();
+    }
+    favicon_service->SetOnDemandFavicons(
+        GURL(kPreloadedFavicons[i].page_url),
+        GURL(kPreloadedFavicons[i].favicon_url),
+        favicon_base::IconType::kFavicon,
+        gfx::Image::CreateFrom1xPNGBytes(
+            reinterpret_cast<const unsigned char*>(png.c_str()), png.length()),
+        base::DoNothing());
+  }
+}
+
+void VivaldiBrowserMainExtraParts::PreloadedFaviconInitializer::
+    OnProfileManagerDestroying() {
+  profile_manager_observer_.Reset();
+}
+#endif  // !BUILDFLAG(IS_ANDROID)
+
 VivaldiBrowserMainExtraParts::VivaldiBrowserMainExtraParts() {}
 
 VivaldiBrowserMainExtraParts::~VivaldiBrowserMainExtraParts() {}
@@ -164,6 +228,10 @@ void VivaldiBrowserMainExtraParts::
 
 void VivaldiBrowserMainExtraParts::PreProfileInit() {
   EnsureBrowserContextKeyedServiceFactoriesBuilt();
+#if !BUILDFLAG(IS_ANDROID)
+  preloaded_favicon_initializer_ =
+      std::make_unique<PreloadedFaviconInitializer>();
+#endif  // !BUILDFLAG(IS_ANDROID)
 }
 
 void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
@@ -176,6 +244,7 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
         std::make_unique<translate::VivaldiTranslateLanguageList>();
   }
 
+#if BUILDFLAG(IS_ANDROID)
   auto* favicon_service = FaviconServiceFactory::GetForProfile(
       profile, ServiceAccessType::EXPLICIT_ACCESS);
   for (size_t i = 0; i < std::size(kPreloadedFavicons); i++) {
@@ -191,6 +260,8 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
             reinterpret_cast<const unsigned char*>(png.c_str()), png.length()),
         base::DoNothing());
   }
+#endif  // BUILDFLAG(IS_ANDROID)
+
 
 #if !BUILDFLAG(IS_ANDROID)
   base::CommandLine& cmd_line = *base::CommandLine::ForCurrentProcess();
@@ -208,6 +279,7 @@ void VivaldiBrowserMainExtraParts::PostProfileInit(Profile* profile,
 
   // Sanetize contentsettings visible in our web-ui.
   std::list<ContentSettingsType> ui_exposed_settings = {
+      ContentSettingsType::AUTOPLAY,
       ContentSettingsType::BLUETOOTH_SCANNING,
       ContentSettingsType::GEOLOCATION,
       ContentSettingsType::MEDIASTREAM_CAMERA,

@@ -23,6 +23,7 @@
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_web_ui_view.h"
+#include "chrome/browser/ui/views/side_search/side_search_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/side_panel_toolbar_button.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
 #include "chrome/common/webui_url_constants.h"
@@ -478,6 +479,8 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
   histogram_tester_.ExpectBucketCount(
       "SideSearch.OpenAction",
       SideSearchOpenActionType::kTapOnSideSearchToolbarButton, 1);
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.TimeSinceSidePanelAvailableToFirstOpen", 1);
 
   // Toggling the close button should close the side panel.
   NotifyCloseButtonClick(browser());
@@ -616,6 +619,8 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
   NotifyButtonClick(browser());
   TestSidePanelOpenEntrypointState(browser());
   EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.TimeSinceSidePanelAvailableToFirstOpen", 1);
 
   ActivateTabAt(browser(), 0);
   EXPECT_TRUE(GetSidePanelButtonFor(browser())->GetVisible());
@@ -626,20 +631,36 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
   NotifyButtonClick(browser());
   TestSidePanelOpenEntrypointState(browser());
   EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.TimeSinceSidePanelAvailableToFirstOpen", 2);
+  // TimeShownOpenedVia[Entrypoint/TabSwitch] is emitted when the side panel for
+  // a given tab is hidden.
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.SidePanel.TimeShownOpenedViaEntrypoint", 1);
 
   ActivateTabAt(browser(), 1);
   TestSidePanelOpenEntrypointState(browser());
   EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.SidePanel.TimeShownOpenedViaEntrypoint", 2);
 
   // Close the side panel on Tab 2 and switch to Tab 1. The side panel should be
   // still be visible for Tab 1, respecting its per-tab state.
   NotifyCloseButtonClick(browser());
   EXPECT_TRUE(GetSidePanelButtonFor(browser())->GetVisible());
   EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.SidePanel.TimeShownOpenedViaTabSwitch", 1);
 
   ActivateTabAt(browser(), 0);
   TestSidePanelOpenEntrypointState(browser());
   EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+
+  NotifyCloseButtonClick(browser());
+  EXPECT_TRUE(GetSidePanelButtonFor(browser())->GetVisible());
+  EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.SidePanel.TimeShownOpenedViaTabSwitch", 2);
 }
 
 IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
@@ -714,8 +735,9 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
   EXPECT_NE(nullptr, GetSidePanelContentsFor(browser(), 1));
 
   // Simulate a crash in the hosted side panel contents.
-  auto* rph_second_tab =
-      GetSidePanelContentsFor(browser(), 1)->GetMainFrame()->GetProcess();
+  auto* rph_second_tab = GetSidePanelContentsFor(browser(), 1)
+                             ->GetPrimaryMainFrame()
+                             ->GetProcess();
   content::RenderProcessHostWatcher crash_observer_second_tab(
       rph_second_tab,
       content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
@@ -728,8 +750,9 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
 
   // Simulate a crash in the side panel contents of the first tab which is not
   // currently active.
-  auto* rph_first_tab =
-      GetSidePanelContentsFor(browser(), 0)->GetMainFrame()->GetProcess();
+  auto* rph_first_tab = GetSidePanelContentsFor(browser(), 0)
+                            ->GetPrimaryMainFrame()
+                            ->GetProcess();
   content::RenderProcessHostWatcher crash_observer_first_tab(
       rph_first_tab, content::RenderProcessHostWatcher::WATCH_FOR_PROCESS_EXIT);
   EXPECT_TRUE(rph_first_tab->Shutdown(content::RESULT_CODE_KILLED));
@@ -744,6 +767,72 @@ IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
   NotifyButtonClick(browser());
   EXPECT_TRUE(side_panel->GetVisible());
   EXPECT_NE(nullptr, GetSidePanelContentsFor(browser(), 0));
+}
+
+IN_PROC_BROWSER_TEST_P(SideSearchBrowserControllerTest,
+                       TimeUntilOpenMetricEmittedCorrectlyMultipleNavigations) {
+  // Perform a search and navigate multiple times to non-matching pages before
+  // finally opening the side panel.
+  NavigateActiveTab(browser(), GetMatchingSearchUrl());
+  NavigateActiveTab(browser(), GetNonMatchingUrl());
+  NavigateActiveTab(browser(), GetNonMatchingUrl());
+  NavigateActiveTab(browser(), GetNonMatchingUrl());
+  NotifyButtonClick(browser());
+  TestSidePanelOpenEntrypointState(browser());
+  EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectTotalCount(
+      "SideSearch.TimeSinceSidePanelAvailableToFirstOpen", 1);
+}
+
+// Only test the side search icon view chip in the DSE configuration.
+using SideSearchIconViewTest = SideSearchBrowserControllerTest;
+INSTANTIATE_TEST_SUITE_P(All, SideSearchIconViewTest, testing::Values(true));
+
+// Tests that metrics correctly capture whether the label was visible when the
+// entrypoint was toggled.
+IN_PROC_BROWSER_TEST_P(SideSearchIconViewTest,
+                       LabelVisibilityMetricsCorrectlyEmittedWhenToggled) {
+  auto* button_view = GetSidePanelButtonFor(browser());
+  ASSERT_NE(nullptr, button_view);
+  auto* icon_view = views::AsViewClass<SideSearchIconView>(button_view);
+
+  // Get the browser into a state where the icon view is visible.
+  NavigateActiveTab(browser(), GetNonMatchingUrl());
+  ASSERT_FALSE(icon_view->GetVisible());
+  NavigateActiveTab(browser(), GetMatchingSearchUrl());
+  NavigateActiveTab(browser(), GetNonMatchingUrl());
+  EXPECT_TRUE(icon_view->GetVisible());
+
+  // Show the icon's label and toggle the side panel. It should correctly log
+  // being shown while the label was visible.
+  EXPECT_TRUE(icon_view->GetVisible());
+  icon_view->SetLabelVisibilityForTesting(true);
+  NotifyButtonClick(browser());
+  EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectBucketCount(
+      "SideSearch.PageActionIcon.LabelVisibleWhenToggled",
+      SideSearchPageActionLabelVisibility::kVisible, 1);
+  histogram_tester_.ExpectBucketCount(
+      "SideSearch.PageActionIcon.LabelVisibleWhenToggled",
+      SideSearchPageActionLabelVisibility::kNotVisible, 0);
+
+  // Close the side panel.
+  NotifyCloseButtonClick(browser());
+  EXPECT_TRUE(icon_view->GetVisible());
+  EXPECT_FALSE(GetSidePanelFor(browser())->GetVisible());
+
+  // Hide the icon's label and toggle the side panel. It should correctly log
+  // being shown while the label was hidden.
+  EXPECT_TRUE(icon_view->GetVisible());
+  icon_view->SetLabelVisibilityForTesting(false);
+  NotifyButtonClick(browser());
+  EXPECT_TRUE(GetSidePanelFor(browser())->GetVisible());
+  histogram_tester_.ExpectBucketCount(
+      "SideSearch.PageActionIcon.LabelVisibleWhenToggled",
+      SideSearchPageActionLabelVisibility::kVisible, 1);
+  histogram_tester_.ExpectBucketCount(
+      "SideSearch.PageActionIcon.LabelVisibleWhenToggled",
+      SideSearchPageActionLabelVisibility::kNotVisible, 1);
 }
 
 // Fixture for testing side panel clobbering behavior with global panels.
@@ -1119,8 +1208,8 @@ IN_PROC_BROWSER_TEST_P(SideSearchExtensionsTest,
   NavigateInSideContents(third_url, third_url);
 }
 
-#if BUILDFLAG(IS_MAC)
-// TODO(crbug.com/1305891): Test is flaky on Mac bots.
+#if BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)
+// TODO(crbug.com/1305891): Test is flaky on Mac and Windows bots.
 #define MAYBE_DeclarativeNetRequestInterceptsSidePanelNavigations \
   DISABLED_DeclarativeNetRequestInterceptsSidePanelNavigations
 #else

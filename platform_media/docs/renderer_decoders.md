@@ -22,7 +22,7 @@ The VideoDecoder and AudioDecoder APIs are push based and in addition the metada
 
 ## **Not implemented** : IPCVideoDecoder
 
-Patricia Aas started to implement a cross-platform IPCVideoDecoder as a solution for Mac not having a VideoDecoder implementation. This class was similar in how it used the [**Platform Media Pipeline**][1] to [**IPCAudioDecoder**][2] which is used for WebAudio.
+Patricia Aas started to implement a cross-platform IPCVideoDecoder as a solution for Mac not having a VideoDecoder implementation.
 
 However, the Mac Gpu pipeline expects to receive a container stream, and the container has already been stripped by the [MP4StreamParser][3] when the VideoDecoder receives its encoded buffers.
 
@@ -32,7 +32,7 @@ To present a pulling type interface to the [**Platform Media Pipeline**][1] this
 
 To be able to get more than one encoded buffer at a time, the *VideoDecoder::GetMaxDecodeRequests()* function was overridden, and in fact made dynamic based on experimental heuristics.
 
-This was also intended to work with the GStreamer platform code, see [**Pipeline Implementations**][6], and there you will even find the start of an IPCAudioDecoder(Adapter) (the name was taken for the class used by WebAudio).
+This was also intended to work with the GStreamer platform code, see [**Pipeline Implementations**][6].
 
 ### Experimental work
 
@@ -45,7 +45,6 @@ The code as it was left after Christmas 2016 is here (rebased to July 2017 but n
 [Chromium patches - top three commits][5] The commit 'Very rough stuff' is just a series of hacks so that platform_media can try to reassemble the mp4 file again.
 
 [1]: gpu_pipeline.md
-[2]: ipc_audio_decoder.md
 [3]: ../../chromium/media/formats/mp4/mp4_stream_parser.h
 [4]: http://git.viv.int/?p=vivaldi.git;a=shortlog;h=refs/heads/patricia/ipc-video-decoder-1
 [5]: http://git.viv.int/?p=chromium/src.git;a=shortlog;h=refs/heads/patricia/ipc-video-decoder-1

@@ -135,7 +135,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
       std::vector<std::unique_ptr<FileSystemBackend>> additional_backends,
       const std::vector<URLRequestAutoMountHandler>& auto_mount_handlers,
       const base::FilePath& partition_path,
-      const base::FilePath& bucket_base_path,
       const FileSystemOptions& options);
 
   // Exposed for base::MakeRefCounted(). Instances should be obtained from the
@@ -149,7 +148,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
       std::vector<std::unique_ptr<FileSystemBackend>> additional_backends,
       const std::vector<URLRequestAutoMountHandler>& auto_mount_handlers,
       const base::FilePath& partition_path,
-      const base::FilePath& bucket_base_path,
       const FileSystemOptions& options,
       base::PassKey<FileSystemContext>);
 
@@ -216,7 +214,7 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   // Used for OpenFileSystem.
   using OpenFileSystemCallback =
-      base::OnceCallback<void(const GURL& root,
+      base::OnceCallback<void(const FileSystemURL& root_url,
                               const std::string& name,
                               base::File::Error result)>;
 
@@ -240,7 +238,10 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // If `create` is true this may actually set up a filesystem instance
   // (e.g. by creating the root directory or initializing the database
   // entry etc).
+  // Provide a non-null BucketLocator to override the default storage bucket
+  // for the root URL (which will be propagated to child URLs).
   void OpenFileSystem(const blink::StorageKey& storage_key,
+                      const absl::optional<storage::BucketLocator>& bucket,
                       FileSystemType type,
                       OpenFileSystemMode mode,
                       OpenFileSystemCallback callback);
@@ -307,8 +308,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   const base::FilePath& partition_path() const { return partition_path_; }
 
-  const base::FilePath& bucket_base_path() const { return bucket_base_path_; }
-
   // Same as `CrackFileSystemURL`, but cracks FileSystemURL created from `url`
   // and `storage_key`.
   FileSystemURL CrackURL(const GURL& url,
@@ -354,6 +353,16 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // license data to the new backend.
   PluginPrivateFileSystemBackend* plugin_private_backend() const {
     return plugin_private_backend_.get();
+  }
+
+  void ResolveURLOnOpenFileSystemForTesting(
+      const blink::StorageKey& storage_key,
+      const absl::optional<storage::BucketLocator>& bucket,
+      FileSystemType type,
+      OpenFileSystemMode mode,
+      OpenFileSystemCallback callback) {
+    ResolveURLOnOpenFileSystem(storage_key, bucket, type, mode,
+                               std::move(callback));
   }
 
  private:
@@ -420,11 +429,15 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
   // ResolveURLOnOpenFileSystem is called, either by OnGetOrCreateBucket
   // on successful bucket creation, or (tests onlyh) by OpenFileSystem
   // directly in the absence of a quota manager.
-  void ResolveURLOnOpenFileSystem(const blink::StorageKey& storage_key,
-                                  FileSystemType type,
-                                  OpenFileSystemMode mode,
-                                  OpenFileSystemCallback callback);
-  void DidResolveURLOnOpenFileSystem(OpenFileSystemCallback callback,
+  // `bucket` will be populated if the non-default storage bucket was used.
+  void ResolveURLOnOpenFileSystem(
+      const blink::StorageKey& storage_key,
+      const absl::optional<storage::BucketLocator>& bucket,
+      FileSystemType type,
+      OpenFileSystemMode mode,
+      OpenFileSystemCallback callback);
+  void DidResolveURLOnOpenFileSystem(const FileSystemURL& filesystem_root_url,
+                                     OpenFileSystemCallback callback,
                                      const GURL& filesystem_root,
                                      const std::string& filesystem_name,
                                      base::File::Error error);
@@ -474,10 +487,6 @@ class COMPONENT_EXPORT(STORAGE_BROWSER) FileSystemContext
 
   // The base path of the storage partition for this context.
   const base::FilePath partition_path_;
-
-  // The base path of the file directory where StorageBucket data is stored for
-  // this context.
-  const base::FilePath bucket_base_path_;
 
   const bool is_incognito_;
 

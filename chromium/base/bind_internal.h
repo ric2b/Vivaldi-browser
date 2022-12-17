@@ -21,7 +21,6 @@
 #include "base/memory/raw_scoped_refptr_mismatch_checker.h"
 #include "base/memory/weak_ptr.h"
 #include "base/notreached.h"
-#include "base/template_util.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE) && !HAS_FEATURE(objc_arc)
@@ -364,14 +363,14 @@ template <typename Functor, typename SFINAE = void>
 struct IsCallableObject : std::false_type {};
 
 template <typename Callable>
-struct IsCallableObject<Callable, void_t<decltype(&Callable::operator())>>
+struct IsCallableObject<Callable, std::void_t<decltype(&Callable::operator())>>
     : std::true_type {};
 
 // HasRefCountedTypeAsRawPtr inherits from true_type when any of the |Args| is a
 // raw pointer to a RefCounted type.
 template <typename... Ts>
 struct HasRefCountedTypeAsRawPtr
-    : disjunction<NeedsScopedRefptrButGetsRawPtr<Ts>...> {};
+    : std::disjunction<NeedsScopedRefptrButGetsRawPtr<Ts>...> {};
 
 // ForceVoidReturn<>
 //
@@ -859,8 +858,8 @@ bool QueryCancellationTraits(const BindStateBase* base,
 template <typename Functor, typename Receiver, typename... Unused>
 std::enable_if_t<
     !(MakeFunctorTraits<Functor>::is_method &&
-      std::is_pointer_v<std::decay_t<Receiver>> &&
-      IsRefCountedType<std::remove_pointer_t<std::decay_t<Receiver>>>::value)>
+      IsPointerV<std::decay_t<Receiver>> &&
+      IsRefCountedType<RemovePointerT<std::decay_t<Receiver>>>::value)>
 BanUnconstructedRefCountedReceiver(const Receiver& receiver, Unused&&...) {}
 
 template <typename Functor>
@@ -870,8 +869,8 @@ void BanUnconstructedRefCountedReceiver() {}
 template <typename Functor, typename Receiver, typename... Unused>
 std::enable_if_t<
     MakeFunctorTraits<Functor>::is_method &&
-    std::is_pointer_v<std::decay_t<Receiver>> &&
-    IsRefCountedType<std::remove_pointer_t<std::decay_t<Receiver>>>::value>
+    IsPointerV<std::decay_t<Receiver>> &&
+    IsRefCountedType<RemovePointerT<std::decay_t<Receiver>>>::value>
 BanUnconstructedRefCountedReceiver(const Receiver& receiver, Unused&&...) {
   DCHECK(receiver);
 
@@ -912,7 +911,7 @@ BanUnconstructedRefCountedReceiver(const Receiver& receiver, Unused&&...) {
 // This stores all the state passed into Bind().
 template <typename Functor, typename... BoundArgs>
 struct BindState final : BindStateBase {
-  using IsCancellable = bool_constant<
+  using IsCancellable = std::bool_constant<
       CallbackCancellationTraits<Functor,
                                  std::tuple<BoundArgs...>>::is_cancellable>;
   template <typename ForwardFunctor, typename... ForwardBoundArgs>
@@ -1006,19 +1005,20 @@ struct MakeBindStateTypeImpl<true, Functor, Receiver, BoundArgs...> {
   static_assert(!std::is_array_v<std::remove_reference_t<Receiver>>,
                 "First bound argument to a method cannot be an array.");
   static_assert(
-      !std::is_pointer_v<DecayedReceiver> ||
-          IsRefCountedType<std::remove_pointer_t<DecayedReceiver>>::value,
+      !IsPointerV<DecayedReceiver> ||
+          IsRefCountedType<RemovePointerT<DecayedReceiver>>::value,
       "Receivers may not be raw pointers. If using a raw pointer here is safe"
       " and has no lifetime concerns, use base::Unretained() and document why"
       " it's safe.");
+
   static_assert(!HasRefCountedTypeAsRawPtr<std::decay_t<BoundArgs>...>::value,
                 "A parameter is a refcounted type and needs scoped_refptr.");
 
  public:
   using Type = BindState<
       std::decay_t<Functor>,
-      std::conditional_t<std::is_pointer_v<DecayedReceiver>,
-                         scoped_refptr<std::remove_pointer_t<DecayedReceiver>>,
+      std::conditional_t<IsPointerV<DecayedReceiver>,
+                         scoped_refptr<RemovePointerT<DecayedReceiver>>,
                          DecayedReceiver>,
       MakeStorageType<BoundArgs>...>;
 };

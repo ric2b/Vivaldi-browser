@@ -23,7 +23,6 @@ namespace extension_misc {
 const char kCalendarAppId[] = "ejjicmeblgpmajnghnpcppodonldlgfn";
 const char kDataSaverExtensionId[] = "pfmgfdlgomnbgkofeojodiodmgpgmkac";
 const char kDocsOfflineExtensionId[] = "ghbmnnjooekpmoecnnnilnnbdlolhkhi";
-const char kEnterpriseWebStoreAppId[] = "afchcafgojfnemjkcbhfekplkmjaldaa";
 const char kGoogleMapsAppId[] = "lneaknkopdijkpnocmklfnjbeapigfbh";
 const char kGooglePhotosAppId[] = "hcglmfcclpfgljeaiahehebeoaiicbko";
 const char kGooglePlayBooksAppId[] = "mmimngoggfoobjdlefbcabngfnmieonb";
@@ -41,7 +40,6 @@ const char* const kBuiltInFirstPartyExtensionIds[] = {
     kDataSaverExtensionId,
     kDocsOfflineExtensionId,
     kGoogleDriveAppId,
-    kEnterpriseWebStoreAppId,
     kGmailAppId,
     kGoogleDocsAppId,
     kGoogleMapsAppId,
@@ -74,9 +72,14 @@ const char* const kBuiltInFirstPartyExtensionIds[] = {
 #if BUILDFLAG(IS_CHROMEOS)
 const char kAssessmentAssistantExtensionId[] =
     "gndmhdcefbhlchkhipcnnbkcmicncehk";
+const char kEchoExtensionId[] = "kddnkjkcjddckihglkfcickdhbmaodcn";
 const char kGnubbyAppId[] = "beknehfpfkghjoafdifaflglpjkojoco";
 const char kGnubbyV3ExtensionId[] = "lfboplenmmjcmpbkeemecobbadnmpfhi";
 const char kGCSEExtensionId[] = "cfmgaohenjcikllcgjpepfadgbflcjof";
+const char kContactCenterInsightsExtensionId[] =
+    "oebfonohdfogiaaaelfmjlkjbgdbaahf";
+const char kBruSecurityKeyForwarderExtensionId[] =
+    "lcooaekmckohjjnpaaokodoepajbnill";
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 const char kAccessibilityCommonExtensionId[] =
@@ -118,12 +121,7 @@ const char kGoogleSpeechSynthesisExtensionId[] =
     "gjjabgpgjpampikjhjpfhneeoapjbjaf";
 const char kWallpaperManagerId[] = "obklkkbkpaoaejdabbfldmcfplpdgolj";
 const char kHelpAppExtensionId[] = "honijodknafkokifofgiaalefdiedpko";
-const char kEchoExtensionId[] = "kddnkjkcjddckihglkfcickdhbmaodcn";
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
-#if BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
-// The extension id of the Hangout Service extnsion.
-const char kHangoutServiceExtensionId[] = "nkeimhogjdpnpccoofpliimaahmaaome";
-#endif
 
 const char kAppStateNotInstalled[] = "not_installed";
 const char kAppStateInstalled[] = "installed";

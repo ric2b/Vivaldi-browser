@@ -35,7 +35,6 @@ SendTabToSelfEntry::SendTabToSelfEntry(
     const GURL& url,
     const std::string& title,
     base::Time shared_time,
-    base::Time original_navigation_time,
     const std::string& device_name,
     const std::string& target_device_sync_cache_guid)
     : guid_(guid),
@@ -44,7 +43,6 @@ SendTabToSelfEntry::SendTabToSelfEntry(
       device_name_(device_name),
       target_device_sync_cache_guid_(target_device_sync_cache_guid),
       shared_time_(shared_time),
-      original_navigation_time_(original_navigation_time),
       notification_dismissed_(false),
       opened_(false) {
   DCHECK(!guid_.empty());
@@ -69,10 +67,6 @@ const std::string& SendTabToSelfEntry::GetTitle() const {
 
 base::Time SendTabToSelfEntry::GetSharedTime() const {
   return shared_time_;
-}
-
-base::Time SendTabToSelfEntry::GetOriginalNavigationTime() const {
-  return original_navigation_time_;
 }
 
 const std::string& SendTabToSelfEntry::GetDeviceName() const {
@@ -107,8 +101,6 @@ SendTabToSelfLocal SendTabToSelfEntry::AsLocalProto() const {
   pb_entry->set_title(GetTitle());
   pb_entry->set_url(GetURL().spec());
   pb_entry->set_shared_time_usec(TimeToProtoTime(GetSharedTime()));
-  pb_entry->set_navigation_time_usec(
-      TimeToProtoTime(GetOriginalNavigationTime()));
   pb_entry->set_device_name(GetDeviceName());
   pb_entry->set_target_device_sync_cache_guid(GetTargetDeviceSyncCacheGuid());
   pb_entry->set_opened(IsOpened());
@@ -136,15 +128,10 @@ std::unique_ptr<SendTabToSelfEntry> SendTabToSelfEntry::FromProto(
     shared_time = now;
   }
 
-  base::Time navigation_time;
-  if (pb_entry.has_navigation_time_usec()) {
-    navigation_time = ProtoTimeToTime(pb_entry.navigation_time_usec());
-  }
-
   // Protobuf parsing enforces utf8 encoding for all strings.
   auto entry = std::make_unique<SendTabToSelfEntry>(
-      guid, url, pb_entry.title(), shared_time, navigation_time,
-      pb_entry.device_name(), pb_entry.target_device_sync_cache_guid());
+      guid, url, pb_entry.title(), shared_time, pb_entry.device_name(),
+      pb_entry.target_device_sync_cache_guid());
 
   if (pb_entry.opened()) {
     entry->MarkOpened();
@@ -176,8 +163,7 @@ std::unique_ptr<SendTabToSelfEntry> SendTabToSelfEntry::FromRequiredFields(
   if (guid.empty() || !url.is_valid()) {
     return nullptr;
   }
-  return std::make_unique<SendTabToSelfEntry>(guid, url, "", base::Time(),
-                                              base::Time(), "",
+  return std::make_unique<SendTabToSelfEntry>(guid, url, "", base::Time(), "",
                                               target_device_sync_cache_guid);
 }
 

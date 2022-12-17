@@ -104,6 +104,34 @@ absl::optional<base::Value> ResourceReader::ReadJSON(
   return json;
 }
 
+/* static */
+gfx::Image ResourceReader::ReadPngImage(base::StringPiece resource_url) {
+  std::string resource_path;
+  if (!ResourceReader::IsResourceURL(resource_url, &resource_path)) {
+    LOG(ERROR) << "resource_url does not start with " << kResourceUrlPrefix
+               << " prefix: " << resource_url;
+    return gfx::Image();
+  }
+#if BUILDFLAG(IS_ANDROID)
+  // On Android we need to strip the prefix resources folder from the path.
+  else {
+    resource_path.erase(0, std::string(kResourceUrlPrefix).size() - 1);
+  }
+#endif // IS_ANDROID
+  ResourceReader reader(std::move(resource_path));
+  if (!reader.IsValid()) {
+    LOG(ERROR) << reader.GetError();
+    return gfx::Image();
+  }
+  gfx::Image image =
+      gfx::Image::CreateFrom1xPNGBytes(reader.data(), reader.size());
+  if (image.IsEmpty()) {
+    LOG(ERROR) << "Failed to read " << resource_url << " as PNG image";
+    return gfx::Image();
+  }
+  return image;
+}
+
 ResourceReader::ResourceReader(std::string resource_path)
     : resource_path_(std::move(resource_path)) {
   DCHECK(!resource_path_.empty());

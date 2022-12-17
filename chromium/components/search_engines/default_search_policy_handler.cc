@@ -197,6 +197,7 @@ void DefaultSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
   dict->SetString(DefaultSearchManager::kID,
                   base::NumberToString(kInvalidTemplateURLID));
   dict->SetInteger(DefaultSearchManager::kPrepopulateID, 0);
+  dict->SetInteger(DefaultSearchManager::kStarterPackId, 0);
   dict->SetString(DefaultSearchManager::kSyncGUID, std::string());
   dict->SetString(DefaultSearchManager::kOriginatingURL, std::string());
   dict->SetBoolean(DefaultSearchManager::kSafeForAutoReplace, true);
@@ -206,6 +207,9 @@ void DefaultSearchPolicyHandler::ApplyPolicySettings(const PolicyMap& policies,
                   base::Time::Now().ToInternalValue());
   dict->SetInteger(DefaultSearchManager::kUsageCount, 0);
   dict->SetBoolean(DefaultSearchManager::kCreatedByPolicy, true);
+
+  // Vivaldi requires a position to be present, even if invalid.
+  dict->SetString(DefaultSearchManager::kPosition, "");
 
   // For the name and keyword, default to the host if not specified.  If
   // there is no host (as is the case with file URLs of the form:

@@ -6,6 +6,7 @@
 
 #include <lib/ui/scenic/cpp/commands.h>
 
+#include "base/fuchsia/fuchsia_logging.h"
 #include "content/browser/accessibility/browser_accessibility_manager_fuchsia.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/accessibility/platform/fuchsia/accessibility_bridge_fuchsia_registry.h"
@@ -369,13 +370,6 @@ fuchsia::ui::gfx::mat4 BrowserAccessibilityFuchsia::GetFuchsiaTransform()
   if (GetData().relative_bounds.transform)
     transform = *GetData().relative_bounds.transform;
 
-  // If this node is the root of its AXTree, apply the inverse device scale
-  // factor.
-  if (manager()->GetRoot() == this) {
-    transform.PostScale(1 / manager()->device_scale_factor(),
-                        1 / manager()->device_scale_factor());
-  }
-
   // Convert to fuchsia's transform type.
   std::array<float, 16> mat = {};
   transform.matrix().getColMajor(mat.data());
@@ -393,7 +387,15 @@ uint32_t BrowserAccessibilityFuchsia::GetOffsetContainerOrRootNodeID() const {
 
   BrowserAccessibilityFuchsia* fuchsia_container =
       ToBrowserAccessibilityFuchsia(offset_container);
-  DCHECK(fuchsia_container);
+
+  // TODO(https://crbug.com/1321935): Remove this check once we understand why
+  // we're getting non-existent offset container IDs from blink.
+  if (!fuchsia_container) {
+    ZX_LOG(ERROR, ZX_OK) << "Node " << GetId()
+                         << " references non-existent offset container ID "
+                         << offset_container_id;
+    return 0;
+  }
 
   return fuchsia_container->GetFuchsiaNodeID();
 }

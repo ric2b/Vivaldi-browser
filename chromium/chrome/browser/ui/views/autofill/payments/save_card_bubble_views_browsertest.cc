@@ -46,6 +46,7 @@
 #include "components/autofill/core/browser/autofill_experiments.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
 #include "components/autofill/core/browser/form_data_importer.h"
+#include "components/autofill/core/browser/metrics/payments/manage_cards_prompt_metrics.h"
 #include "components/autofill/core/browser/payments/credit_card_save_manager.h"
 #include "components/autofill/core/browser/payments/credit_card_save_strike_database.h"
 #include "components/autofill/core/browser/payments/payments_client.h"
@@ -89,14 +90,11 @@
 #include "ui/views/widget/widget.h"
 #include "ui/views/window/non_client_view.h"
 #include "url/url_constants.h"
-#if BUILDFLAG(ENABLE_DICE_SUPPORT)
-#include "chrome/browser/ui/views/sync/dice_bubble_sync_promo_view.h"
-#endif
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/services/multidevice_setup/public/cpp/prefs.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ui/settings_window_manager_chromeos.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #endif
 
@@ -135,7 +133,7 @@ namespace autofill {
 
 class SaveCardBubbleViewsFullFormBrowserTest
     : public SyncTest,
-      public AutofillManager::ObserverForTest,
+      public AutofillManager::Observer,
       public CreditCardSaveManager::ObserverForTest,
       public SaveCardBubbleControllerImpl::ObserverForTest {
  protected:
@@ -178,9 +176,8 @@ class SaveCardBubbleViewsFullFormBrowserTest
     ASSERT_TRUE(SetupClients());
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     // Install the Settings App.
-    web_app::WebAppProvider::GetForTest(GetProfile(0))
-        ->system_web_app_manager()
-        .InstallSystemAppsForTesting();
+    ash::SystemWebAppManager::GetForTest(GetProfile(0))
+        ->InstallSystemAppsForTesting();
 #endif
 
     // It's important to use the blank tab here and not some arbitrary page.
@@ -195,8 +192,8 @@ class SaveCardBubbleViewsFullFormBrowserTest
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_);
     ContentAutofillDriver::GetForRenderFrameHost(
-        GetActiveWebContents()->GetMainFrame())
-        ->browser_autofill_manager()
+        GetActiveWebContents()->GetPrimaryMainFrame())
+        ->autofill_manager()
         ->client()
         ->GetPaymentsClient()
         ->set_url_loader_factory_for_testing(test_shared_loader_factory_);
@@ -206,21 +203,22 @@ class SaveCardBubbleViewsFullFormBrowserTest
     WaitForPersonalDataManagerToBeLoaded(GetProfile(0));
 
     // Set up this class as the ObserverForTest implementation.
-    credit_card_save_manager_ = ContentAutofillDriver::GetForRenderFrameHost(
-                                    GetActiveWebContents()->GetMainFrame())
-                                    ->browser_autofill_manager()
-                                    ->client()
-                                    ->GetFormDataImporter()
-                                    ->credit_card_save_manager_.get();
+    credit_card_save_manager_ =
+        ContentAutofillDriver::GetForRenderFrameHost(
+            GetActiveWebContents()->GetPrimaryMainFrame())
+            ->autofill_manager()
+            ->client()
+            ->GetFormDataImporter()
+            ->credit_card_save_manager_.get();
     credit_card_save_manager_->SetEventObserverForTesting(this);
     AddEventObserverToController();
 
     // Set up this class as the ObserverForTest implementation.
     AutofillManager* autofill_manager =
         ContentAutofillDriver::GetForRenderFrameHost(
-            GetActiveWebContents()->GetMainFrame())
+            GetActiveWebContents()->GetPrimaryMainFrame())
             ->autofill_manager();
-    autofill_manager->SetEventObserverForTesting(this);
+    autofill_manager->AddObserver(this);
 
     // Set up the fake geolocation data.
     geolocation_overrider_ =
@@ -228,7 +226,7 @@ class SaveCardBubbleViewsFullFormBrowserTest
             kFakeGeolocationLatitude, kFakeGeolocationLongitude);
   }
 
-  // AutofillManager::ObserverForTest:
+  // AutofillManager::Observer
   void OnFormParsed() override {
     if (event_waiter_)
       event_waiter_->OnEvent(DialogEvent::DYNAMIC_FORM_PARSED);
@@ -909,8 +907,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestSettings,
   // Metrics should have been recorded correctly.
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
-      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1),
-                  Bucket(AutofillMetrics::MANAGE_CARDS_MANAGE_CARDS, 1)));
+      ElementsAre(Bucket(ManageCardsPromptMetric::kManageCardsShown, 1),
+                  Bucket(ManageCardsPromptMetric::kManageCardsManageCards, 1)));
 }
 
 // Tests the local save bubble. Ensures that the bubble behaves correctly if
@@ -2353,8 +2351,9 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForManageCard,
   // Bubble should be showing.
   EXPECT_TRUE(
       FindViewInBubbleById(DialogViewId::MANAGE_CARDS_VIEW)->GetVisible());
-  histogram_tester.ExpectUniqueSample("Autofill.ManageCardsPrompt.Local",
-                                      AutofillMetrics::MANAGE_CARDS_SHOWN, 1);
+  histogram_tester.ExpectUniqueSample(
+      "Autofill.ManageCardsPrompt.Local",
+      ManageCardsPromptMetric::kManageCardsShown, 1);
 }
 
 // Tests the manage cards bubble. Ensures that clicking the [Done]
@@ -2386,8 +2385,8 @@ IN_PROC_BROWSER_TEST_F(SaveCardBubbleViewsFullFormBrowserTestForManageCard,
   EXPECT_EQ(nullptr, GetSaveCardBubbleViews());
   EXPECT_THAT(
       histogram_tester.GetAllSamples("Autofill.ManageCardsPrompt.Local"),
-      ElementsAre(Bucket(AutofillMetrics::MANAGE_CARDS_SHOWN, 1),
-                  Bucket(AutofillMetrics::MANAGE_CARDS_DONE, 1)));
+      ElementsAre(Bucket(ManageCardsPromptMetric::kManageCardsShown, 1),
+                  Bucket(ManageCardsPromptMetric::kManageCardsDone, 1)));
 }
 
 }  // namespace autofill

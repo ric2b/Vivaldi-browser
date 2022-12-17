@@ -5,20 +5,28 @@
 #ifndef CHROME_BROWSER_UI_APP_LIST_SEARCH_GAMES_GAME_RESULT_H_
 #define CHROME_BROWSER_UI_APP_LIST_SEARCH_GAMES_GAME_RESULT_H_
 
+#include "ash/public/cpp/style/color_mode_observer.h"
 #include "base/memory/weak_ptr.h"
-#include "chrome/browser/apps/app_discovery_service/app_discovery_service.h"
+#include "chrome/browser/apps/app_discovery_service/app_discovery_util.h"
 #include "chrome/browser/apps/app_discovery_service/result.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "url/gurl.h"
 
 class AppListControllerDelegate;
 class Profile;
-class SkBitmap;
+
+namespace apps {
+class AppDiscoveryService;
+}
+
+namespace gfx {
+class ImageSkia;
+}
 
 namespace app_list {
 
 // Search result for cloud gaming search.
-class GameResult : public ChromeSearchResult {
+class GameResult : public ChromeSearchResult, public ash::ColorModeObserver {
  public:
   GameResult(Profile* profile,
              AppListControllerDelegate* list_controller,
@@ -35,16 +43,23 @@ class GameResult : public ChromeSearchResult {
   void Open(int event_flags) override;
 
  private:
+  // ash::ColorModeObserver:
+  void OnColorModeChanged(bool dark_mode_enabled) override;
   void UpdateText(const apps::Result& game, const std::u16string& query);
+  void OnIconLoaded(const gfx::ImageSkia& image, apps::DiscoveryError error);
   void SetGenericIcon();
-  void OnIconLoaded(const SkBitmap* bitmap);
 
   Profile* profile_;
   AppListControllerDelegate* list_controller_;
 
-  const GURL launch_url_;
+  GURL launch_url_;
+  bool is_icon_masking_allowed_;
+  const int dimension_;
 
-  base::WeakPtrFactory<GameResult> weak_ptr_factory_{this};
+  // Whether this game result uses a generic backup icon.
+  bool uses_generic_icon_ = false;
+
+  base::WeakPtrFactory<GameResult> weak_factory_{this};
 };
 
 }  // namespace app_list

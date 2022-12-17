@@ -71,14 +71,14 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   const AXNodeData& GetData() const;
   gfx::NativeViewAccessible GetFocus() const;
   gfx::NativeViewAccessible GetParent() const;
-  int GetChildCount() const;
-  gfx::NativeViewAccessible ChildAtIndex(int index) const;
+  size_t GetChildCount() const;
+  gfx::NativeViewAccessible ChildAtIndex(size_t index) const;
 
   std::string GetName() const;
 
   // This returns nullopt if there's no parent, it's unable to find the child in
   // the list of its parent's children, or its parent doesn't have children.
-  virtual absl::optional<int> GetIndexInParent();
+  virtual absl::optional<size_t> GetIndexInParent();
 
   // Returns a stack of ancestors of this node. The node at the top of the stack
   // is the top most ancestor.
@@ -425,6 +425,10 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // PDF.
   bool IsPlatformDocument() const;
 
+  // Returns true if this object is a platform document as described above and
+  // also has at least some content.
+  bool IsPlatformDocumentWithContent() const;
+
  protected:
   AXPlatformNodeBase();
 
@@ -554,6 +558,9 @@ class AX_EXPORT AXPlatformNodeBase : public AXPlatformNode {
   // cannot be found in the accessibility tree.
   int GetHypertextOffsetFromEndpoint(AXPlatformNodeBase* endpoint_object,
                                      int endpoint_offset);
+
+  AXPlatformNodeBase::AXPosition HypertextOffsetToEndpoint(
+      int hypertext_offset) const;
 
   bool IsSameHypertextCharacter(const AXLegacyHypertext& old_hypertext,
                                 size_t old_char_index,

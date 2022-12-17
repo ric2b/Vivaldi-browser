@@ -15,7 +15,10 @@ import sys
 import tempfile
 import traceback
 
-import common
+# Add src/testing/ into sys.path for importing common without pylint errors.
+sys.path.append(
+    os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+from scripts import common
 
 WINDOWS_SHEET_CONFIG = {
   "spreadsheet_id": "1TmBr9jnf1-hrjntiVBzT9EtkINGrtoBYFMWad2MBeaY",
@@ -92,7 +95,7 @@ def main_run(args):
     if rc == 0 and sheet_config is not None:
       print("Tests succeeded. Updating annotations sheet...")
 
-      config_file = tempfile.NamedTemporaryFile(delete=False)
+      config_file = tempfile.NamedTemporaryFile(delete=False, mode='w+')
       json.dump(sheet_config, config_file, indent=4)
       config_filename = config_file.name
       config_file.close()

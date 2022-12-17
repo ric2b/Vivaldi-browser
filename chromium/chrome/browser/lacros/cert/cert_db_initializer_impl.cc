@@ -20,6 +20,7 @@
 #include "chromeos/crosapi/mojom/cert_database.mojom.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "crypto/scoped_nss_types.h"
@@ -64,12 +65,6 @@ void CertDbInitializerImpl::Start() {
     // database for secondary profiles when NSS library is replaced with
     // something more flexible.
     return InitializeReadOnlyCertDb();
-  }
-
-  // TODO(b/200784079): This is backwards compatibility code. It can be
-  // removed in ChromeOS-M100.
-  if (lacros_service->GetInterfaceVersion(CrosapiCertDb::Uuid_) == 0) {
-    return LegacyInitializeForMainProfile();
   }
 
   if (lacros_service->GetInterfaceVersion(CrosapiCertDb::Uuid_) >=
@@ -122,7 +117,7 @@ void CertDbInitializerImpl::InitializeForMainProfile() {
                      weak_factory_.GetWeakPtr()));
 
   const crosapi::mojom::BrowserInitParams* init_params =
-      chromeos::LacrosService::Get()->init_params();
+      chromeos::BrowserInitParams::Get();
   base::FilePath nss_db_path;
   if (init_params->default_paths->user_nss_database) {
     nss_db_path = init_params->default_paths->user_nss_database.value();
@@ -176,37 +171,4 @@ CertDbInitializerImpl::CreateNssCertDatabaseGetterForIOThread() {
 void CertDbInitializerImpl::OnCertsChangedInAsh() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   net::CertDatabase::GetInstance()->NotifyObserversCertDBChanged();
-}
-
-// ======================= Backwards compatibility code ========================
-
-// TODO(b/200784079): This is backwards compatibility code. It can be
-// removed in ChromeOS-M100.
-void CertDbInitializerImpl::LegacyInitializeForMainProfile() {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  chromeos::LacrosService::Get()
-      ->GetRemote<crosapi::mojom::CertDatabase>()
-      ->GetCertDatabaseInfo(
-          base::BindOnce(&CertDbInitializerImpl::OnLegacyCertDbInfoReceived,
-                         weak_factory_.GetWeakPtr()));
-}
-
-// TODO(b/200784079): This is backwards compatibility code. It can be
-// removed in ChromeOS-M100.
-void CertDbInitializerImpl::OnLegacyCertDbInfoReceived(
-    crosapi::mojom::GetCertDatabaseInfoResultPtr cert_db_info) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-
-  auto init_database_callback = base::BindPostTask(
-      base::SequencedTaskRunnerHandle::Get(),
-      base::BindOnce(&CertDbInitializerImpl::OnCertDbInitializationFinished,
-                     weak_factory_.GetWeakPtr()));
-
-  content::GetIOThreadTaskRunner({})->PostTask(
-      FROM_HERE,
-      base::BindOnce(&CertDbInitializerIOImpl::InitializeLegacyNssCertDatabase,
-                     base::Unretained(cert_db_initializer_io_.get()),
-                     std::move(cert_db_info),
-                     std::move(init_database_callback)));
 }

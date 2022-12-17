@@ -15,6 +15,7 @@
 #include "base/trace_event/trace_event.h"
 #include "media/base/limits.h"
 #include "media/base/media_log.h"
+#include "media/base/media_switches.h"
 #include "media/base/video_types.h"
 #include "media/base/video_util.h"
 #include "media/gpu/chromeos/chromeos_status.h"
@@ -264,7 +265,9 @@ V4L2Status V4L2VideoDecoder::InitializeBackend() {
   DCHECK_CALLED_ON_VALID_SEQUENCE(decoder_sequence_checker_);
   DCHECK(state_ == State::kInitialized);
 
-  can_use_decoder_ = num_instances_.Increment() < kMaxNumOfInstances;
+  can_use_decoder_ =
+      num_instances_.Increment() < kMaxNumOfInstances ||
+      !base::FeatureList::IsEnabled(media::kLimitConcurrentDecoderInstances);
   if (!can_use_decoder_) {
     VLOGF(1) << "Reached maximum number of decoder instances ("
              << kMaxNumOfInstances << ")";
@@ -438,8 +441,6 @@ CroStatus V4L2VideoDecoder::SetupOutputFormat(const gfx::Size& size,
       output_queue_->SetFormat(fourcc.ToV4L2PixFmt(), picked_size, 0);
   DCHECK(format);
   gfx::Size adjusted_size(format->fmt.pix_mp.width, format->fmt.pix_mp.height);
-  DCHECK_EQ(adjusted_size.width() % 16, 0);
-  DCHECK_EQ(adjusted_size.height() % 16, 0);
   if (!gfx::Rect(adjusted_size).Contains(gfx::Rect(picked_size))) {
     VLOGF(1) << "The adjusted coded size (" << adjusted_size.ToString()
              << ") should contains the original coded size("

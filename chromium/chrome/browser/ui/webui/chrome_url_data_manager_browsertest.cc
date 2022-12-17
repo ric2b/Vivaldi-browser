@@ -149,7 +149,7 @@ class ChromeURLDataManagerWebUITrustedTypesTest
  public:
   ChromeURLDataManagerWebUITrustedTypesTest() {
     std::vector<base::Feature> enabled_features;
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
     if (GetParam() == std::string("chrome://welcome"))
       enabled_features.push_back(welcome::kForceEnabled);
 #endif
@@ -296,7 +296,6 @@ static constexpr const char* const kChromeUrls[] = {
 #endif
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     "chrome://account-manager-error",
-    "chrome://account-manager-welcome",
     "chrome://account-migration-welcome",
     "chrome://add-supervision",
     // TODO(crbug.com/1102129): DCHECK failure in
@@ -317,7 +316,8 @@ static constexpr const char* const kChromeUrls[] = {
     "chrome://linux-proxy-config",
     "chrome://multidevice-setup",
     "chrome://network",
-    "chrome://oobe",
+    // TODO(crbug.com/1329058): Eliminate chrome://oobe/login
+    "chrome://oobe/login",
     "chrome://os-credits",
     "chrome://os-settings",
     "chrome://power",

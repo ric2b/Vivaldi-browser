@@ -5,11 +5,17 @@
 module Classes {
   header "classes/inlined_class.h"
   header "classes/outlined_class.h"
+  header "classes/polymorphism.h"
   requires cplusplus
 }
 
 module Enums {
   header "enum/enum.h"
+  requires cplusplus
+}
+
+module Language {
+  header "language/nodiscard.h"
   requires cplusplus
 }
 
@@ -20,7 +26,9 @@ module Namespace {
 
 
 module Pointer {
+  header "pointer/object_passing.h"
   header "pointer/pointer_returner.h"
+  header "pointer/unique_ptr.h"
   requires cplusplus
 }
 

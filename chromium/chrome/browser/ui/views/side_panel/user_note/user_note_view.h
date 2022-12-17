@@ -5,8 +5,27 @@
 #ifndef CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_USER_NOTE_USER_NOTE_VIEW_H_
 #define CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_USER_NOTE_USER_NOTE_VIEW_H_
 
+#include <memory>
+
+#include "chrome/browser/ui/views/side_panel/user_note/user_note_ui_coordinator.h"
 #include "components/user_notes/browser/user_note_instance.h"
-#include "ui/views/view.h"
+
+namespace views {
+class Label;
+class Textarea;
+class View;
+}  // namespace views
+
+namespace views {
+class Label;
+class Textarea;
+class View;
+class MenuRunner;
+}
+
+namespace ui {
+class MenuModel;
+}
 
 // View of a user note in the side panel in multiple states. The view in the
 // default state draws a label with a date, a menu button, and a label with a
@@ -23,30 +42,53 @@ class UserNoteView : public views::View {
     kCreating,
     // State that will display an existing user note to be edited.
     kEditing,
-    // State that will display an orphan user note (note without a highlight in
-    // the page).
-    kOrphaned
+    // State that will display a detached user note (note without a highlight
+    // on the page).
+    kDetached
   };
 
   explicit UserNoteView(
+      UserNoteUICoordinator* coordinator,
       user_notes::UserNoteInstance* user_note_instance,
       UserNoteView::State state = UserNoteView::State::kDefault);
   UserNoteView(const UserNoteView&) = delete;
   UserNoteView& operator=(const UserNoteView&) = delete;
   ~UserNoteView() override;
 
-  const base::UnguessableToken& UserNoteId() {
-    return user_note_instance_->model().id();
-  }
+  const base::UnguessableToken& UserNoteId() { return id_; }
+
+  const gfx::Rect& user_note_rect() const { return rect_; }
 
  private:
-  std::unique_ptr<views::View> CreateHeaderView(std::string& note_date);
-  std::unique_ptr<views::View> CreateQuoteView(std::string& note_quote);
-  std::unique_ptr<views::View> CreateBodyView(std::string& note_text);
-  std::unique_ptr<views::View> CreateButtonsView();
-  std::unique_ptr<views::View> CreateTextareaView(std::string& text);
+  void CreateOrUpdateNoteView(UserNoteView::State state,
+                              base::Time date,
+                              const std::string content,
+                              const std::string quote);
+  void OnCancelUserNote(UserNoteView::State state);
+  void OnAddUserNote();
+  void OnSaveUserNote();
+  void OnOpenMenu();
+  void OnMenuClosed();
+  void OnEditUserNote(int event_flags);
+  void OnDeleteUserNote(int event_flags);
+  void OnLearnUserNote(int event_flags);
+  void SetCreatingOrEditState(const std::string content,
+                              UserNoteView::State state);
+  void SetDefaultOrDetachedState(base::Time date,
+                                 const std::string content,
+                                 const std::string quote);
 
   raw_ptr<user_notes::UserNoteInstance> user_note_instance_;
+  raw_ptr<views::Textarea> text_area_ = nullptr;
+  raw_ptr<views::View> button_container_ = nullptr;
+  raw_ptr<views::Label> user_note_body_ = nullptr;
+  raw_ptr<views::View> user_note_header_ = nullptr;
+  raw_ptr<views::View> user_note_quote_ = nullptr;
+  raw_ptr<UserNoteUICoordinator> coordinator_ = nullptr;
+  std::unique_ptr<views::MenuRunner> menu_runner_;
+  std::unique_ptr<ui::MenuModel> dialog_model_;
+  base::UnguessableToken id_;
+  gfx::Rect rect_;
 };
 
 #endif  // CHROME_BROWSER_UI_VIEWS_SIDE_PANEL_USER_NOTE_USER_NOTE_VIEW_H_

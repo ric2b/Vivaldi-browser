@@ -47,7 +47,8 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   DeskTemplate(const std::string& uuid,
                DeskTemplateSource source,
                const std::string& name,
-               const base::Time created_time);
+               const base::Time created_time,
+               DeskTemplateType type);
 
   DeskTemplate(const DeskTemplate&) = delete;
   DeskTemplate& operator=(const DeskTemplate&) = delete;
@@ -59,7 +60,7 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   // A special value to use as an icon identifier for an incognito window.
   static constexpr char kIncognitoWindowIdentifier[] = "incognito_window";
 
-  base::GUID uuid() const { return uuid_; }
+  const base::GUID& uuid() const { return uuid_; }
   DeskTemplateSource source() const { return source_; }
   base::Time created_time() const { return created_time_; }
 
@@ -74,7 +75,6 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   }
 
   DeskTemplateType type() const { return type_; }
-  void set_type(DeskTemplateType type) { type_ = type; }
 
   const ::app_restore::RestoreData* desk_restore_data() const {
     return desk_restore_data_.get();
@@ -113,10 +113,17 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   // Sets `desk_index` as the desk to launch on for all windows in the template.
   void SetDeskIndex(int desk_index);
 
-  // Returns `this` in string format. Used for debugging and in feedback logs.
+  // Returns `this` in string format. Used for feedback logs.
   std::string ToString() const;
 
+  // Returns `this` in string format. Used for debugging.
+  std::string ToDebugString() const;
+
  private:
+  // Returns a string containing basic information for `this`. It could be used
+  // for `ToString` and `ToDebugString` according to the given `for_debugging`.
+  std::string GetDeskTemplateInfo(bool for_debugging) const;
+
   const base::GUID uuid_;  // We utilize the string based base::GUID to uniquely
                            // identify the template.
 
@@ -124,7 +131,7 @@ class ASH_PUBLIC_EXPORT DeskTemplate {
   const DeskTemplateSource source_;
 
   // The type of this desk template.
-  DeskTemplateType type_ = DeskTemplateType::kTemplate;
+  const DeskTemplateType type_;
 
   const base::Time created_time_;  // Template creation time.
 

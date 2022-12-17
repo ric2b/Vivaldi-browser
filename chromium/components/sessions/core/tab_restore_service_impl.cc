@@ -122,6 +122,7 @@ const SessionCommand::id_type kCommandSetTabGroupData = 10;
 const SessionCommand::id_type kCommandSetTabUserAgentOverride2 = 11;
 const SessionCommand::id_type kCommandSetWindowUserTitle = 12;
 const SessionCommand::id_type kCommandCreateGroup = 13;
+const SessionCommand::id_type kCommandAddTabExtraData = 14;
 
 // Vivaldi extensions. Might be necessary to preserve these values
 const sessions::SessionCommand::id_type kCommandSetExtData = 200;
@@ -248,6 +249,24 @@ bool DeserializeWindowShowState(int show_state_int,
   return false;
 }
 
+// Converts an int to a window type. Returns true on success, false otherwise.
+bool DeserializeWindowType(int type_int,
+                           sessions::SessionWindow::WindowType* type) {
+  switch (static_cast<sessions::SessionWindow::WindowType>(type_int)) {
+    case sessions::SessionWindow::TYPE_NORMAL:
+    case sessions::SessionWindow::TYPE_POPUP:
+    case sessions::SessionWindow::TYPE_APP:
+    case sessions::SessionWindow::TYPE_DEVTOOLS:
+    case sessions::SessionWindow::TYPE_APP_POPUP:
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+    case sessions::SessionWindow::TYPE_CUSTOM_TAB:
+#endif
+      *type = static_cast<sessions::SessionWindow::WindowType>(type_int);
+      return true;
+  }
+  return false;
+}
+
 // Superset of WindowPayloadObsolete/WindowPayloadObsolete2 and the other fields
 // that can appear in the Pickle version of a Window command. This is used as a
 // convenient destination for parsing the various fields in a WindowCommand.
@@ -269,6 +288,8 @@ struct WindowCommandFields {
   int window_height = 0;
   int window_show_state = 0;
   std::string workspace;
+
+  int type = 0;
 };
 
 std::unique_ptr<sessions::TabRestoreService::Window>
@@ -277,6 +298,7 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
                              int32_t* num_tabs) {
   WindowCommandFields fields;
   ui::WindowShowState show_state = ui::SHOW_STATE_DEFAULT;
+  auto type = sessions::SessionWindow::TYPE_NORMAL;
 
   if (command->id() == kCommandWindow) {
     std::unique_ptr<base::Pickle> pickle(command->PayloadAsPickle());
@@ -301,6 +323,14 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
       return nullptr;
     }
 
+    // New field in M104, use default if it fails to read.
+    // TODO(crbug.com/1332968): After some time (say M114), this code can be
+    // added into parsing above which fails when ReadInt() fails.
+    if (!it.ReadInt(&parsed_fields.type)) {
+      parsed_fields.type =
+          static_cast<int>(sessions::SessionWindow::TYPE_NORMAL);
+    }
+
     // Validate the parameters. If the entire pickles parses but any of the
     // validation fails assume corruption.
     if (parsed_fields.window_width < 0 || parsed_fields.window_height < 0)
@@ -312,6 +342,10 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
       return nullptr;
     }
 
+    // Validate window type.
+    if (!DeserializeWindowType(parsed_fields.type, &type)) {
+      return nullptr;
+    }
     // New fields added to the pickle in later versions would be parsed and
     // validated here.
 
@@ -356,6 +390,7 @@ CreateWindowEntryFromCommand(const SessionCommand* command,
   // Create the Window entry.
   std::unique_ptr<sessions::TabRestoreService::Window> window =
       std::make_unique<sessions::TabRestoreService::Window>();
+  window->type = type;
   window->selected_tab_index = fields.selected_tab_index;
   window->timestamp = base::Time::FromDeltaSinceWindowsEpoch(
       base::Microseconds(fields.timestamp));
@@ -499,6 +534,7 @@ class TabRestoreServiceImpl::PersistenceDelegate
   // Creates a window close command.
   static std::unique_ptr<SessionCommand> CreateWindowCommand(
       SessionID window_id,
+      SessionWindow::WindowType type,
       int selected_tab_index,
       int num_tabs,
       const gfx::Rect& bounds,
@@ -782,7 +818,7 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForWindow(
     return;  // No tabs to persist.
 
   command_storage_manager_->ScheduleCommand(CreateWindowCommand(
-      window.id, std::min(real_selected_tab, valid_tab_count - 1),
+      window.id, window.type, std::min(real_selected_tab, valid_tab_count - 1),
       valid_tab_count, window.bounds, window.show_state, window.workspace,
       window.timestamp));
 
@@ -885,12 +921,18 @@ void TabRestoreServiceImpl::PersistenceDelegate::ScheduleCommandsForTab(
                                            navigations[i]));
     }
   }
+
+  for (const auto& data : tab.extra_data) {
+    command_storage_manager_->ScheduleCommand(CreateAddExtraDataCommand(
+        kCommandAddTabExtraData, tab.id, data.first, data.second));
+  }
 }
 
 // static
 std::unique_ptr<SessionCommand>
 TabRestoreServiceImpl::PersistenceDelegate::CreateWindowCommand(
     SessionID window_id,
+    SessionWindow::WindowType type,
     int selected_tab_index,
     int num_tabs,
     const gfx::Rect& bounds,
@@ -919,6 +961,8 @@ TabRestoreServiceImpl::PersistenceDelegate::CreateWindowCommand(
     pickle.WriteString(workspace);
   else
     pickle.WriteString(std::string());
+
+  pickle.WriteInt(type);
 
   std::unique_ptr<SessionCommand> command(
       new SessionCommand(kCommandWindow, pickle));
@@ -1295,6 +1339,21 @@ void TabRestoreServiceImpl::PersistenceDelegate::CreateEntriesFromCommands(
         break;
       }
 
+      case kCommandAddTabExtraData: {
+        if (!current_tab) {
+          // Should be in a tab when we get this.
+          return;
+        }
+        SessionID tab_id = SessionID::InvalidValue();
+        std::string key;
+        std::string data;
+        if (!RestoreAddExtraDataCommand(command, &tab_id, &key, &data))
+          return;
+
+        current_tab->extra_data[key] = std::move(data);
+        break;
+      }
+
       // Macro defined in  vivaldi_persistent_tab_restore_service.inc
       VIVALDI_PERSISTENT_TAB_CASES
 
@@ -1340,6 +1399,8 @@ void TabRestoreServiceImpl::PersistenceDelegate::OnGotPreviousSession(
 bool TabRestoreServiceImpl::PersistenceDelegate::ConvertSessionWindowToWindow(
     SessionWindow* session_window,
     Window* window) {
+  window->type = session_window->type;
+
   // The group visual datas must be stored in both |window| and each
   // grouped tab.
   std::map<tab_groups::TabGroupId, tab_groups::TabGroupVisualData>

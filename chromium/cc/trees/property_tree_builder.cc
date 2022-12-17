@@ -112,14 +112,16 @@ class PropertyTreeBuilderContext {
 
 // Methods to query state from the AnimationHost ----------------------
 bool OpacityIsAnimating(const MutatorHost& host, Layer* layer) {
-  return host.IsAnimatingOpacityProperty(layer->element_id(),
-                                         layer->GetElementTypeForAnimation());
+  return host.IsAnimatingProperty(layer->element_id(),
+                                  layer->GetElementTypeForAnimation(),
+                                  TargetProperty::OPACITY);
 }
 
 bool HasPotentiallyRunningOpacityAnimation(const MutatorHost& host,
                                            Layer* layer) {
-  return host.HasPotentiallyRunningOpacityAnimation(
-      layer->element_id(), layer->GetElementTypeForAnimation());
+  return host.HasPotentiallyRunningAnimationForProperty(
+      layer->element_id(), layer->GetElementTypeForAnimation(),
+      TargetProperty::OPACITY);
 }
 
 bool HasPotentialOpacityAnimation(const MutatorHost& host, Layer* layer) {
@@ -128,25 +130,49 @@ bool HasPotentialOpacityAnimation(const MutatorHost& host, Layer* layer) {
 }
 
 bool FilterIsAnimating(const MutatorHost& host, Layer* layer) {
-  return host.IsAnimatingFilterProperty(layer->element_id(),
-                                        layer->GetElementTypeForAnimation());
+  return host.IsAnimatingProperty(layer->element_id(),
+                                  layer->GetElementTypeForAnimation(),
+                                  TargetProperty::FILTER);
 }
 
 bool HasPotentiallyRunningFilterAnimation(const MutatorHost& host,
                                           Layer* layer) {
-  return host.HasPotentiallyRunningFilterAnimation(
-      layer->element_id(), layer->GetElementTypeForAnimation());
+  return host.HasPotentiallyRunningAnimationForProperty(
+      layer->element_id(), layer->GetElementTypeForAnimation(),
+      TargetProperty::FILTER);
 }
 
 bool TransformIsAnimating(const MutatorHost& host, Layer* layer) {
-  return host.IsAnimatingTransformProperty(layer->element_id(),
-                                           layer->GetElementTypeForAnimation());
+  DCHECK(!host.IsAnimatingProperty(layer->element_id(),
+                                   layer->GetElementTypeForAnimation(),
+                                   TargetProperty::SCALE) &&
+         !host.IsAnimatingProperty(layer->element_id(),
+                                   layer->GetElementTypeForAnimation(),
+                                   TargetProperty::ROTATE) &&
+         !host.IsAnimatingProperty(layer->element_id(),
+                                   layer->GetElementTypeForAnimation(),
+                                   TargetProperty::TRANSLATE))
+      << "individual transform properties only supported in layer lists mode";
+  return host.IsAnimatingProperty(layer->element_id(),
+                                  layer->GetElementTypeForAnimation(),
+                                  TargetProperty::TRANSFORM);
 }
 
 bool HasPotentiallyRunningTransformAnimation(const MutatorHost& host,
                                              Layer* layer) {
-  return host.HasPotentiallyRunningTransformAnimation(
-      layer->element_id(), layer->GetElementTypeForAnimation());
+  DCHECK(!host.HasPotentiallyRunningAnimationForProperty(
+             layer->element_id(), layer->GetElementTypeForAnimation(),
+             TargetProperty::SCALE) &&
+         !host.HasPotentiallyRunningAnimationForProperty(
+             layer->element_id(), layer->GetElementTypeForAnimation(),
+             TargetProperty::ROTATE) &&
+         !host.HasPotentiallyRunningAnimationForProperty(
+             layer->element_id(), layer->GetElementTypeForAnimation(),
+             TargetProperty::TRANSLATE))
+      << "individual transform properties only supported in layer lists mode";
+  return host.HasPotentiallyRunningAnimationForProperty(
+      layer->element_id(), layer->GetElementTypeForAnimation(),
+      TargetProperty::TRANSFORM);
 }
 
 float MaximumAnimationScale(const MutatorHost& host, Layer* layer) {
@@ -236,6 +262,13 @@ bool PropertyTreeBuilderContext::AddTransformNodeIfNeeded(
   // the Running state right after commit on the compositor thread.
   const bool has_any_transform_animation = HasAnyAnimationTargetingProperty(
       mutator_host_, layer, TargetProperty::TRANSFORM);
+  DCHECK(!HasAnyAnimationTargetingProperty(mutator_host_, layer,
+                                           TargetProperty::SCALE) &&
+         !HasAnyAnimationTargetingProperty(mutator_host_, layer,
+                                           TargetProperty::ROTATE) &&
+         !HasAnyAnimationTargetingProperty(mutator_host_, layer,
+                                           TargetProperty::TRANSLATE))
+      << "individual transform properties only supported in layer lists mode";
 
   const bool has_surface = created_render_surface;
 
@@ -683,13 +716,15 @@ void PropertyTreeBuilderContext::AddScrollNodeIfNeeded(
 void SetSafeOpaqueBackgroundColor(const DataForRecursion& data_from_ancestor,
                                   Layer* layer,
                                   DataForRecursion* data_for_children) {
-  SkColor background_color = layer->background_color();
+  // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
+  SkColor background_color = layer->background_color().toSkColor();
   data_for_children->safe_opaque_background_color =
       SkColorGetA(background_color) == 255
           ? background_color
           : data_from_ancestor.safe_opaque_background_color;
+  // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
   layer->SetSafeOpaqueBackgroundColor(
-      data_for_children->safe_opaque_background_color);
+      SkColor4f::FromColor(data_for_children->safe_opaque_background_color));
 }
 
 void PropertyTreeBuilderContext::BuildPropertyTreesInternal(

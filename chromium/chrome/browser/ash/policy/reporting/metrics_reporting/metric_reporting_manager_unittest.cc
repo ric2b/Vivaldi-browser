@@ -24,6 +24,7 @@
 #include "components/reporting/metrics/sampler.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 using ::testing::_;
 using ::testing::ByMove;
@@ -84,7 +85,7 @@ class FakeCollector : public CollectorBase {
   ~FakeCollector() override { --(*collector_count_); }
 
  protected:
-  void OnMetricDataCollected(MetricData) override {}
+  void OnMetricDataCollected(absl::optional<MetricData>) override {}
 
  private:
   raw_ptr<int> collector_count_;
@@ -328,20 +329,10 @@ INSTANTIATE_TEST_SUITE_P(
     MetricReportingManagerInfoTests,
     MetricReportingManagerInfoTest,
     ::testing::ValuesIn<MetricReportingManagerTestCase>(
-        {{"NetworkInfo_FeatureDisabled",
+        {{"NetworkInfo",
           /*enabled_features=*/{},
-          /*disabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
-          /*is_affiliated=*/false,
-          network_info_settings,
-          /*expected_count_before_login=*/0,
-          /*expected_count_after_login=*/0},
-         {"NetworkInfo_FeatureEnabled",
-          /*enabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
           /*disabled_features=*/{},
-          /*is_affiliated=*/false,
-          network_info_settings,
+          /*is_affiliated=*/false, network_info_settings,
           /*expected_count_before_login=*/1,
           /*expected_count_after_login=*/1},
          {"CpuInfo",
@@ -413,28 +404,16 @@ INSTANTIATE_TEST_SUITE_P(
     MetricReportingManagerEventTests,
     MetricReportingManagerEventTest,
     ::testing::ValuesIn<MetricReportingManagerTestCase>(
-        {{"NetworkEvent_FeatureDisabled",
+        {{"NetworkEvent_Unaffiliated",
           /*enabled_features=*/{},
-          /*disabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
-          /*is_affiliated=*/true,
-          network_event_settings,
-          /*expected_count_before_login=*/0,
-          /*expected_count_after_login=*/0},
-         {"NetworkEvent_Unaffiliated",
-          /*enabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
           /*disabled_features=*/{},
-          /*is_affiliated=*/false,
-          network_event_settings,
+          /*is_affiliated=*/false, network_event_settings,
           /*expected_count_before_login=*/0,
           /*expected_count_after_login=*/0},
          {"NetworkEvent_Default",
-          /*enabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
+          /*enabled_features=*/{},
           /*disabled_features=*/{},
-          /*is_affiliated=*/true,
-          network_event_settings,
+          /*is_affiliated=*/true, network_event_settings,
           /*expected_count_before_login=*/0,
           /*expected_count_after_login=*/1},
          {"AudioEvent_Unaffiliated",
@@ -701,28 +680,16 @@ INSTANTIATE_TEST_SUITE_P(
     MetricReportingManagerPeriodicEventTests,
     MetricReportingManagerPeriodicEventTest,
     ::testing::ValuesIn<MetricReportingManagerTestCase>(
-        {{"NetworkPeriodicEvent_FeatureDisabled",
+        {{"NetworkPeriodicEvent_Unaffiliated",
           /*enabled_features=*/{},
-          /*disabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
-          /*is_affiliated=*/true,
-          network_event_settings,
-          /*expected_count_before_login=*/0,
-          /*expected_count_after_login=*/0},
-         {"NetworkPeriodicEvent_Unaffiliated",
-          /*enabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
           /*disabled_features=*/{},
-          /*is_affiliated=*/false,
-          network_event_settings,
+          /*is_affiliated=*/false, network_event_settings,
           /*expected_count_before_login=*/0,
           /*expected_count_after_login=*/0},
          {"NetworkPeriodicEvent_Default",
-          /*enabled_features=*/
-          {MetricReportingManager::kEnableNetworkTelemetryReporting},
+          /*enabled_features=*/{},
           /*disabled_features=*/{},
-          /*is_affiliated=*/true,
-          network_event_settings,
+          /*is_affiliated=*/true, network_event_settings,
           /*expected_count_before_login=*/0,
           /*expected_count_after_login=*/1}}),
     [](const testing::TestParamInfo<

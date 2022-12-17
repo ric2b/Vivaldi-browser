@@ -42,6 +42,7 @@ namespace {
 static constexpr char kUrlHandlerWildcardPrefix[] = "%2A.";
 // Keep in sync with web_app_origin_association_task.cc.
 static wtf_size_t kMaxUrlHandlersSize = 10;
+static wtf_size_t kMaxShortcutsSize = 10;
 static wtf_size_t kMaxOriginLength = 2000;
 
 // The max number of file extensions an app can handle via the File Handling
@@ -169,6 +170,7 @@ bool ManifestParser::Parse() {
   manifest_->file_handlers = ParseFileHandlers(root_object.get());
   manifest_->protocol_handlers = ParseProtocolHandlers(root_object.get());
   manifest_->url_handlers = ParseUrlHandlers(root_object.get());
+  manifest_->lock_screen = ParseLockScreen(root_object.get());
   manifest_->note_taking = ParseNoteTaking(root_object.get());
   manifest_->related_applications = ParseRelatedApplications(root_object.get());
   manifest_->prefer_related_applications =
@@ -203,6 +205,12 @@ bool ManifestParser::Parse() {
   }
 
   manifest_->handle_links = ParseHandleLinks(root_object.get());
+
+  if (RuntimeEnabledFeatures::WebAppTabStripEnabled(execution_context_) &&
+      manifest_->display_override.Contains(
+          mojom::blink::DisplayMode::kTabbed)) {
+    manifest_->tab_strip = ParseTabStrip(root_object.get());
+  }
 
   ManifestUmaUtil::ParseSucceeded(manifest_);
 
@@ -740,6 +748,14 @@ Vector<mojom::blink::ManifestShortcutItemPtr> ManifestParser::ParseShortcuts(
   }
 
   for (wtf_size_t i = 0; i < shortcuts_list->size(); ++i) {
+    if (i == kMaxShortcutsSize) {
+      AddErrorInfo("property 'shortcuts' contains more than " +
+                   String::Number(kMaxShortcutsSize) +
+                   " valid elements, only the first " +
+                   String::Number(kMaxShortcutsSize) + " are parsed.");
+      break;
+    }
+
     JSONObject* shortcut_object = JSONObject::Cast(shortcuts_list->at(i));
     if (!shortcut_object)
       continue;
@@ -1378,6 +1394,37 @@ ManifestParser::ParseUrlHandler(const JSONObject* object) {
   return std::move(url_handler);
 }
 
+KURL ManifestParser::ParseLockScreenStartUrl(const JSONObject* lock_screen) {
+  if (!lock_screen->Get("start_url")) {
+    return KURL();
+  }
+  KURL start_url = ParseURL(lock_screen, "start_url", manifest_url_,
+                            ParseURLRestrictions::kWithinScope);
+  if (!start_url.IsValid()) {
+    // Error already reported by ParseURL.
+    return KURL();
+  }
+
+  return start_url;
+}
+
+mojom::blink::ManifestLockScreenPtr ManifestParser::ParseLockScreen(
+    const JSONObject* manifest) {
+  if (!manifest->Get("lock_screen")) {
+    return nullptr;
+  }
+
+  const JSONObject* lock_screen_object = manifest->GetJSONObject("lock_screen");
+  if (!lock_screen_object) {
+    AddErrorInfo("property 'lock_screen' ignored, type object expected.");
+    return nullptr;
+  }
+  auto lock_screen = mojom::blink::ManifestLockScreen::New();
+  lock_screen->start_url = ParseLockScreenStartUrl(lock_screen_object);
+
+  return lock_screen;
+}
+
 KURL ManifestParser::ParseNoteTakingNewNoteUrl(const JSONObject* note_taking) {
   if (!note_taking->Get("new_note_url")) {
     return KURL();
@@ -1540,8 +1587,10 @@ ManifestParser::ParseIsolatedAppPermissions(const JSONObject* object) {
     new_policy.feature_name = feature;
     for (const auto& origin : allowlist) {
       // PermissionsPolicyParser expects origin strings to be wrapped in single
-      // quotes, as they would be in the header's permissions policy string.
-      String wrapped_origin = "'" + origin + "'";
+      // quotes, as they would be in the header's permissions policy string. The
+      // asterisk is a token, which does not need to be wrapped in single
+      // quotes.
+      String wrapped_origin = (origin == "*" ? origin : "'" + origin + "'");
       new_policy.allowlist.push_back(wrapped_origin);
     }
     policy.push_back(new_policy);
@@ -1757,8 +1806,21 @@ mojom::blink::ManifestUserPreferencesPtr ManifestParser::ParseUserPreferences(
     return nullptr;
   }
 
-  result->color_scheme_dark =
-      ParsePreferenceOverrides(user_preferences_map, "color_scheme_dark");
+  if (user_preferences_map->Get("color_scheme")) {
+    JSONObject* color_scheme_map =
+        user_preferences_map->GetJSONObject("color_scheme");
+    if (!color_scheme_map) {
+      AddErrorInfo("property 'color_scheme' ignored, object expected.");
+      return nullptr;
+    }
+    result->color_scheme_dark =
+        ParsePreferenceOverrides(color_scheme_map, "dark");
+  } else {
+    // TODO(crbug.com/1318305): Remove this path once the new format has become
+    // the norm.
+    result->color_scheme_dark =
+        ParsePreferenceOverrides(user_preferences_map, "color_scheme_dark");
+  }
 
   return result;
 }
@@ -1780,6 +1842,77 @@ mojom::blink::HandleLinks ManifestParser::ParseHandleLinks(
   if (enum_value == mojom::blink::HandleLinks::kUndefined)
     return mojom::blink::HandleLinks::kAuto;
   return enum_value;
+}
+
+mojom::blink::ManifestTabStripPtr ManifestParser::ParseTabStrip(
+    const JSONObject* object) {
+  if (!object->Get("tab_strip"))
+    return nullptr;
+
+  JSONObject* tab_strip_object = object->GetJSONObject("tab_strip");
+  if (!tab_strip_object) {
+    AddErrorInfo("property 'tab_strip' ignored, object expected.");
+    return nullptr;
+  }
+
+  auto result = mojom::blink::ManifestTabStrip::New();
+
+  JSONValue* home_tab_value = tab_strip_object->Get("home_tab");
+  if (home_tab_value && home_tab_value->GetType() == JSONValue::kTypeObject) {
+    JSONObject* home_tab_object = tab_strip_object->GetJSONObject("home_tab");
+    JSONValue* home_tab_icons = home_tab_object->Get("icons");
+
+    auto home_tab_params = mojom::blink::HomeTabParams::New();
+    String string_value;
+    if (home_tab_icons && !(home_tab_icons->AsString(&string_value) &&
+                            string_value.LowerASCII() == "auto")) {
+      home_tab_params->icons = ParseIcons(home_tab_object);
+    }
+    result->home_tab =
+        mojom::blink::HomeTabUnion::NewParams(std::move(home_tab_params));
+  } else {
+    result->home_tab = mojom::blink::HomeTabUnion::NewVisibility(
+        ParseTabStripMemberVisibility(home_tab_value));
+  }
+
+  JSONValue* new_tab_button_value = tab_strip_object->Get("new_tab_button");
+  if (new_tab_button_value &&
+      new_tab_button_value->GetType() == JSONValue::kTypeObject) {
+    JSONObject* new_tab_button_object =
+        tab_strip_object->GetJSONObject("new_tab_button");
+    JSONValue* new_tab_button_url = new_tab_button_object->Get("url");
+
+    auto new_tab_button_params = mojom::blink::NewTabButtonParams::New();
+    String string_value;
+    if (new_tab_button_url && !(new_tab_button_url->AsString(&string_value) &&
+                                string_value.LowerASCII() == "auto")) {
+      KURL url = ParseURL(new_tab_button_object, "url", manifest_url_,
+                          ParseURLRestrictions::kWithinScope);
+      if (!url.IsNull())
+        new_tab_button_params->url = url;
+    }
+    result->new_tab_button = mojom::blink::NewTabButtonUnion::NewParams(
+        std::move(new_tab_button_params));
+  } else {
+    result->new_tab_button = mojom::blink::NewTabButtonUnion::NewVisibility(
+        ParseTabStripMemberVisibility(new_tab_button_value));
+  }
+
+  return result;
+}
+
+mojom::blink::TabStripMemberVisibility
+ManifestParser::ParseTabStripMemberVisibility(const JSONValue* json_value) {
+  if (!json_value)
+    return mojom::blink::TabStripMemberVisibility::kAuto;
+
+  String string_value;
+  if (json_value->AsString(&string_value) &&
+      string_value.LowerASCII() == "absent") {
+    return mojom::blink::TabStripMemberVisibility::kAbsent;
+  }
+
+  return mojom::blink::TabStripMemberVisibility::kAuto;
 }
 
 void ManifestParser::AddErrorInfo(const String& error_msg,

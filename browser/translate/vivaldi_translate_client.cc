@@ -18,11 +18,11 @@
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/chrome_notification_types.h"
+#include "chrome/browser/language/accept_languages_service_factory.h"
 #include "chrome/browser/language/language_model_manager_factory.h"
 #include "chrome/browser/language/url_language_histogram_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_key.h"
-#include "chrome/browser/translate/translate_accept_languages_factory.h"
 #include "chrome/browser/translate/translate_model_service_factory.h"
 #include "chrome/browser/translate/translate_ranker_factory.h"
 #include "chrome/browser/translate/translate_service.h"
@@ -38,7 +38,6 @@
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/translate/core/browser/language_state.h"
 #include "components/translate/core/browser/page_translated_details.h"
-#include "components/translate/core/browser/translate_accept_languages.h"
 #include "components/translate/core/browser/translate_browser_metrics.h"
 #include "components/translate/core/browser/translate_download_manager.h"
 #include "components/translate/core/browser/translate_infobar_delegate.h"
@@ -177,11 +176,11 @@ VivaldiTranslateClient::CreateTranslatePrefs(PrefService* prefs) {
   return ChromeTranslateClient::CreateTranslatePrefs(prefs);
 }
 
-// static
-translate::TranslateAcceptLanguages*
-VivaldiTranslateClient::GetTranslateAcceptLanguages(
-    content::BrowserContext* browser_context) {
-  return TranslateAcceptLanguagesFactory::GetForBrowserContext(browser_context);
+language::AcceptLanguagesService*
+VivaldiTranslateClient::GetAcceptLanguagesService() {
+  DCHECK(web_contents());
+  return AcceptLanguagesServiceFactory::GetForBrowserContext(
+      web_contents()->GetBrowserContext());
 }
 
 // static
@@ -352,12 +351,6 @@ PrefService* VivaldiTranslateClient::GetPrefs() {
 std::unique_ptr<translate::TranslatePrefs>
 VivaldiTranslateClient::GetTranslatePrefs() {
   return CreateTranslatePrefs(GetPrefs());
-}
-
-translate::TranslateAcceptLanguages*
-VivaldiTranslateClient::GetTranslateAcceptLanguages() {
-  DCHECK(web_contents());
-  return GetTranslateAcceptLanguages(web_contents()->GetBrowserContext());
 }
 
 #if BUILDFLAG(IS_ANDROID)

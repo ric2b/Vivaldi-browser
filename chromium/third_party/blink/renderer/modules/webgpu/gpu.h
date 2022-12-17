@@ -5,16 +5,18 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBGPU_GPU_H_
 
+#include <dawn/webgpu.h>
+
 #include "base/memory/scoped_refptr.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context_lifecycle_observer.h"
+#include "third_party/blink/renderer/modules/modules_export.h"
 #include "third_party/blink/renderer/platform/bindings/script_wrappable.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/supplementable.h"
 
 // Forward declarations from webgpu.h
-struct WGPUDeviceProperties;
 typedef struct WGPUBufferImpl* WGPUBuffer;
 // Forward declaration from dawn_proc.h
 struct DawnProcTable;
@@ -48,9 +50,9 @@ struct BoxedMappableWGPUBufferHandles
   HashSet<void*> contents_;
 };
 
-class GPU final : public ScriptWrappable,
-                  public Supplement<NavigatorBase>,
-                  public ExecutionContextLifecycleObserver {
+class MODULES_EXPORT GPU final : public ScriptWrappable,
+                                 public Supplement<NavigatorBase>,
+                                 public ExecutionContextLifecycleObserver {
   DEFINE_WRAPPERTYPEINFO();
 
  public:
@@ -75,6 +77,7 @@ class GPU final : public ScriptWrappable,
   // gpu.idl
   ScriptPromise requestAdapter(ScriptState* script_state,
                                const GPURequestAdapterOptions* options);
+  String getPreferredCanvasFormat();
 
   // Store the buffer in a weak hash set so we can destroy it when the
   // context is destroyed.
@@ -87,12 +90,15 @@ class GPU final : public ScriptWrappable,
     return mappable_buffer_handles_.get();
   }
 
+  void SetDawnControlClientHolderForTesting(
+      scoped_refptr<DawnControlClientHolder> dawn_control_client);
+
  private:
   void OnRequestAdapterCallback(ScriptState* script_state,
                                 const GPURequestAdapterOptions* options,
                                 ScriptPromiseResolver* resolver,
-                                int32_t adapter_server_id,
-                                const WGPUDeviceProperties& properties,
+                                WGPURequestAdapterStatus status,
+                                WGPUAdapter adapter,
                                 const char* error_message);
 
   void RecordAdapterForIdentifiability(ScriptState* script_state,

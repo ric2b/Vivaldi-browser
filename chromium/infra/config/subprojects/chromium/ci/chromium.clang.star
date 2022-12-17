@@ -3,9 +3,9 @@
 # found in the LICENSE file.
 """Definitions of builders in the chromium.clang builder group."""
 
-load("//lib/builders.star", "os", "sheriff_rotations", "xcode")
+load("//lib/builders.star", "os", "reclient", "sheriff_rotations", "xcode")
 load("//lib/branches.star", "branches")
-load("//lib/ci.star", "ci", "rbe_instance", "rbe_jobs")
+load("//lib/ci.star", "ci")
 load("//lib/consoles.star", "consoles")
 
 ci.defaults.set(
@@ -102,8 +102,8 @@ ci.builder(
         short_name = "CF",
     ),
     notifies = ["CFI Linux"],
-    reclient_instance = rbe_instance.DEFAULT,
-    reclient_jobs = rbe_jobs.DEFAULT,
+    reclient_instance = reclient.instance.DEFAULT_TRUSTED,
+    reclient_jobs = reclient.jobs.DEFAULT,
 )
 
 ci.builder(
@@ -223,7 +223,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "misc",
+            category = "fyi",
             short_name = "clang-x64",
         ),
     ],
@@ -239,7 +239,7 @@ ci.builder(
         consoles.console_view_entry(
             branch_selector = branches.MAIN,
             console_view = "sheriff.fuchsia",
-            category = "misc",
+            category = "fyi",
             short_name = "clang-off",
         ),
     ],
@@ -394,7 +394,7 @@ ci.builder(
         short_name = "sim",
     ),
     cores = None,
-    os = os.MAC_11,
+    os = os.MAC_12,
     ssd = True,
     xcode = xcode.x13main,
 )
@@ -407,7 +407,7 @@ ci.builder(
         short_name = "dev",
     ),
     cores = None,
-    os = os.MAC_11,
+    os = os.MAC_12,
     ssd = True,
     xcode = xcode.x13main,
 )

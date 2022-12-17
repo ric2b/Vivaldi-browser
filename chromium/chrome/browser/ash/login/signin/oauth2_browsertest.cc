@@ -9,6 +9,7 @@
 
 #include "ash/components/login/auth/key.h"
 #include "ash/components/login/auth/user_context.h"
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
@@ -257,6 +258,8 @@ class OAuth2Test : public OobeBaseTest {
     // Disable sync since we don't really need this for these tests and it also
     // makes OAuth2Test.MergeSession test flaky http://crbug.com/408867.
     command_line->AppendSwitch(syncer::kDisableSync);
+    // Skip post login screens.
+    command_line->AppendSwitch(ash::switches::kOobeSkipPostLogin);
   }
 
   void RegisterAdditionalRequestHandlers() override {
@@ -1042,7 +1045,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, Throttle) {
   extensions::ResultCatcher catcher;
 
   std::unique_ptr<ExtensionTestMessageListener> non_google_xhr_listener(
-      new ExtensionTestMessageListener("non-google-xhr-received", false));
+      new ExtensionTestMessageListener("non-google-xhr-received"));
 
   // Load extension with a background page. The background page will
   // attempt to load `fake_google_page_url_` via XHR.
@@ -1056,7 +1059,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, Throttle) {
                                     non_google_page_url_.spec().c_str(),
                                     BoolToString(do_async_xhr()),
                                     BoolToString(/*should_throttle=*/true)));
-  ExtensionTestMessageListener listener("Both XHR's Opened", false);
+  ExtensionTestMessageListener listener("Both XHR's Opened");
   ASSERT_TRUE(listener.WaitUntilSatisfied());
 
   // Verify that we've sent XHR request from the extension side (async)...
@@ -1111,7 +1114,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTest, MAYBE_XHRNotThrottled) {
   extensions::ResultCatcher catcher;
 
   std::unique_ptr<ExtensionTestMessageListener> non_google_xhr_listener(
-      new ExtensionTestMessageListener("non-google-xhr-received", false));
+      new ExtensionTestMessageListener("non-google-xhr-received"));
 
   // Load extension with a background page. The background page will
   // attempt to load `fake_google_page_url_` via XHR.
@@ -1150,7 +1153,7 @@ class MergeSessionTimeoutTest : public MergeSessionTest {
  public:
   void SetUpCommandLine(base::CommandLine* command_line) override {
     MergeSessionTest::SetUpCommandLine(command_line);
-    command_line->AppendSwitch(switches::kShortMergeSessionTimeoutForTest);
+    command_line->AppendSwitch(::switches::kShortMergeSessionTimeoutForTest);
   }
 
   void RegisterAdditionalRequestHandlers() override {
@@ -1184,7 +1187,7 @@ IN_PROC_BROWSER_TEST_P(MergeSessionTimeoutTest, XHRMergeTimeout) {
   extensions::ResultCatcher catcher;
 
   std::unique_ptr<ExtensionTestMessageListener> non_google_xhr_listener(
-      new ExtensionTestMessageListener("non-google-xhr-received", false));
+      new ExtensionTestMessageListener("non-google-xhr-received"));
 
   // Load extension with a background page. The background page will
   // attempt to load `fake_google_page_url_` via XHR.

@@ -31,7 +31,6 @@
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/foundation_util.h"
 #include "base/strings/sys_string_conversions.h"
-#include "components/policy/core/common/preferences_mock_mac.h"
 #endif  // BUILDFLAG(IS_MAC)
 
 #if BUILDFLAG(IS_WIN)
@@ -53,16 +52,16 @@ scoped_refptr<extensions::Extension> AddMediaGalleriesApp(
   manifest->Set(extensions::manifest_keys::kPlatformAppBackgroundScripts,
                 std::move(background_script_list));
 
-  auto permission_detail_list = std::make_unique<base::ListValue>();
-  for (size_t i = 0; i < media_galleries_permissions.size(); i++)
-    permission_detail_list->Append(media_galleries_permissions[i]);
-  auto media_galleries_permission = std::make_unique<base::DictionaryValue>();
-  media_galleries_permission->Set("mediaGalleries",
-                                  std::move(permission_detail_list));
-  auto permission_list = std::make_unique<base::ListValue>();
-  permission_list->Append(std::move(media_galleries_permission));
-  manifest->Set(extensions::manifest_keys::kPermissions,
-                std::move(permission_list));
+  base::Value::List permission_detail_list;
+  for (const auto& permission : media_galleries_permissions)
+    permission_detail_list.Append(permission);
+  base::Value::Dict media_galleries_permission;
+  media_galleries_permission.Set("mediaGalleries",
+                                 std::move(permission_detail_list));
+  base::Value::List permission_list;
+  permission_list.Append(std::move(media_galleries_permission));
+  manifest->GetDict().Set(extensions::manifest_keys::kPermissions,
+                          std::move(permission_list));
 
   extensions::ExtensionPrefs* extension_prefs =
       extensions::ExtensionPrefs::Get(profile);
@@ -151,10 +150,6 @@ void EnsureMediaDirectoriesExists::Init() {
 #else
 
   ASSERT_TRUE(fake_dir_.CreateUniqueTempDir());
-
-#if BUILDFLAG(IS_MAC)
-  mac_preferences_ = std::make_unique<MockPreferences>();
-#endif  // BUILDFLAG(IS_MAC)
 
   ChangeMediaPathOverrides();
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_ANDROID)

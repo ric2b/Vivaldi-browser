@@ -117,6 +117,14 @@ class MediaStreamUI {
       std::vector<DesktopMediaID> screen_capture_ids,
       StateChangeCallback state_change) = 0;
 
+  // Called when the device is stopped because desktop capture identified by
+  // |label| source is about to be changed from |old_media_id| to
+  // |new_media_id|. Note that the switch is not necessarily completed.
+  virtual void OnDeviceStoppedForSourceChange(
+      const std::string& label,
+      const DesktopMediaID& old_media_id,
+      const DesktopMediaID& new_media_id) = 0;
+
   virtual void OnDeviceStopped(const std::string& label,
                                const DesktopMediaID& media_id) = 0;
 
@@ -144,10 +152,10 @@ class MediaStreamUI {
 };
 
 // Callback used return results of media access requests.
-using MediaResponseCallback =
-    base::OnceCallback<void(const blink::MediaStreamDevices& devices,
-                            blink::mojom::MediaStreamRequestResult result,
-                            std::unique_ptr<MediaStreamUI> ui)>;
+using MediaResponseCallback = base::OnceCallback<void(
+    const blink::mojom::StreamDevicesSet& stream_devices_set,
+    blink::mojom::MediaStreamRequestResult result,
+    std::unique_ptr<MediaStreamUI> ui)>;
 }  // namespace content
 
 #endif  // CONTENT_PUBLIC_BROWSER_MEDIA_STREAM_REQUEST_H_

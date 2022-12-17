@@ -87,12 +87,15 @@ class UnzipTest : public testing::Test {
   // successful. |options| hosts parameters for the unpack.
   bool DoUnzipWithOptions(const base::FilePath& zip_file,
                           const base::FilePath& output_dir,
-                          mojom::UnzipOptions options = {}) {
+                          mojom::UnzipOptionsPtr options) {
     mojo::PendingRemote<mojom::Unzipper> unzipper;
     receivers_.Add(&unzipper_, unzipper.InitWithNewPipeAndPassReceiver());
 
     base::RunLoop run_loop;
     bool result = false;
+
+    UnzipListenerCallback progress_callback = base::BindLambdaForTesting(
+        [&](uint64_t written_bytes) { base::DoNothing(); });
 
     UnzipCallback result_callback =
         base::BindLambdaForTesting([&](const bool success) {
@@ -100,8 +103,8 @@ class UnzipTest : public testing::Test {
           run_loop.QuitClosure().Run();
         });
 
-    Unzip(std::move(unzipper), zip_file, output_dir,
-          std::move(result_callback));
+    Unzip(std::move(unzipper), zip_file, output_dir, std::move(options),
+          std::move(progress_callback), std::move(result_callback));
 
     run_loop.Run();
     return result;
@@ -123,6 +126,50 @@ class UnzipTest : public testing::Test {
     DetectEncoding(std::move(unzipper), zip_file, std::move(result_callback));
     run_loop.Run();
     return result;
+  }
+
+  mojom::Info DoGetExtractedInfo(const base::FilePath& zip_file) {
+    mojo::PendingRemote<mojom::Unzipper> unzipper;
+    receivers_.Add(&unzipper_, unzipper.InitWithNewPipeAndPassReceiver());
+
+    base::RunLoop run_loop;
+    mojom::Info result;
+
+    GetExtractedInfoCallback result_callback =
+        base::BindLambdaForTesting([&](mojom::InfoPtr info) {
+          result = *info;
+          run_loop.QuitClosure().Run();
+        });
+
+    GetExtractedInfo(std::move(unzipper), zip_file, std::move(result_callback));
+    run_loop.Run();
+    return result;
+  }
+
+  uint64_t DoGetProgressSize(const base::FilePath& zip_file,
+                             const base::FilePath& output_dir) {
+    mojo::PendingRemote<mojom::Unzipper> unzipper;
+    receivers_.Add(&unzipper_, unzipper.InitWithNewPipeAndPassReceiver());
+
+    base::RunLoop run_loop;
+    uint64_t bytes = 0;
+    mojom::UnzipOptionsPtr options =
+        unzip::mojom::UnzipOptions::New("auto", "");
+
+    UnzipListenerCallback progress_callback =
+        base::BindLambdaForTesting([&](uint64_t written_bytes) {
+          bytes = written_bytes;
+          run_loop.QuitClosure().Run();
+        });
+
+    UnzipCallback result_callback = base::BindLambdaForTesting(
+        [&](const bool success) { run_loop.QuitClosure().Run(); });
+
+    Unzip(std::move(unzipper), zip_file, output_dir, std::move(options),
+          std::move(progress_callback), std::move(result_callback));
+
+    run_loop.Run();
+    return bytes;
   }
 
  protected:
@@ -183,6 +230,20 @@ TEST_F(UnzipTest, UnzipWithFilter) {
   EXPECT_FALSE(some_files_empty);
 }
 
+// Checks that the Unzipper service does not overwrite an existing file.
+TEST_F(UnzipTest, DuplicatedNames) {
+  EXPECT_FALSE(DoUnzip(GetArchivePath("Duplicate Filenames.zip"), unzip_dir_));
+
+  // Check that the first file was correctly extracted.
+  std::string content;
+  EXPECT_TRUE(
+      base::ReadFileToString(unzip_dir_.AppendASCII("Simple.txt"), &content));
+  EXPECT_EQ("Simple 1\n", content);
+
+  // Check that no other file was extracted.
+  EXPECT_EQ(1, CountFiles(unzip_dir_));
+}
+
 TEST_F(UnzipTest, DetectEncodingAbsentArchive) {
   EXPECT_EQ(UNKNOWN_ENCODING,
             DoDetectEncoding(GetArchivePath("absent_archive.zip")));
@@ -227,13 +288,48 @@ TEST_F(UnzipTest, DetectEncodingSjis) {
   }
 }
 
+TEST_F(UnzipTest, GetExtractedSize) {
+  mojom::Info result = DoGetExtractedInfo(GetArchivePath("good_archive.zip"));
+  EXPECT_TRUE(result.size_is_valid);
+  EXPECT_EQ(137, static_cast<int64_t>(result.size));
+}
+
+TEST_F(UnzipTest, GetExtractedSizeBrokenArchive) {
+  mojom::Info result = DoGetExtractedInfo(GetArchivePath("bad_archive.zip"));
+  EXPECT_FALSE(result.size_is_valid);
+}
+
 TEST_F(UnzipTest, UnzipWithOptions) {
-  EXPECT_TRUE(
-      DoUnzipWithOptions(GetArchivePath("good_archive.zip"), unzip_dir_));
+  unzip::mojom::UnzipOptionsPtr options =
+      unzip::mojom::UnzipOptions::New("auto", "");
+  EXPECT_TRUE(DoUnzipWithOptions(GetArchivePath("good_archive.zip"), unzip_dir_,
+                                 std::move(options)));
 
   // 8 files should have been extracted.
   bool some_files_empty = false;
   EXPECT_EQ(8, CountFiles(unzip_dir_, &some_files_empty));
+}
+
+TEST_F(UnzipTest, GetExtractedProgressSize) {
+  uint64_t result =
+      DoGetProgressSize(GetArchivePath("good_archive.zip"), unzip_dir_);
+  // Check: first file extracted is 23 bytes long.
+  EXPECT_EQ(23ul, result);
+}
+
+TEST_F(UnzipTest, ExtractEncrypted) {
+  mojom::Info result =
+      DoGetExtractedInfo(GetArchivePath("encrypted_archive.zip"));
+  EXPECT_TRUE(result.is_encrypted);
+
+  unzip::mojom::UnzipOptionsPtr options =
+      unzip::mojom::UnzipOptions::New("auto", "fake_password");
+  EXPECT_TRUE(DoUnzipWithOptions(GetArchivePath("encrypted_archive.zip"),
+                                 unzip_dir_, std::move(options)));
+
+  // Check: 5 files should have been extracted.
+  bool some_files_empty = false;
+  EXPECT_EQ(5, CountFiles(unzip_dir_, &some_files_empty));
 }
 
 }  // namespace

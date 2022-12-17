@@ -294,12 +294,15 @@ scoped_refptr<ShapeResult> ShapeResultView::CreateShapeResult() const {
         part.NumGlyphs(), part.num_characters_);
     new_run->glyph_data_.CopyFromRange(part.range_);
     for (HarfBuzzRunGlyphData& glyph_data : new_run->glyph_data_) {
+      DCHECK_GE(glyph_data.character_index, part.offset_);
       glyph_data.character_index -= part.offset_;
+      DCHECK_LT(glyph_data.character_index, part.num_characters_);
     }
 
     new_run->start_index_ += char_index_offset_;
     new_run->width_ = part.width_;
     new_run->num_characters_ = part.num_characters_;
+    new_run->CheckConsistency();
     new_result->runs_.push_back(std::move(new_run));
   }
 
@@ -392,6 +395,15 @@ ShapeResultView::RunInfoPart* ShapeResultView::PopulateRunInfoParts(
   return nullptr;
 }
 
+base::span<ShapeResultView::RunInfoPart> ShapeResultView::Parts() {
+  return {reinterpret_cast<ShapeResultView::RunInfoPart*>(parts_), num_parts_};
+}
+
+base::span<const ShapeResultView::RunInfoPart> ShapeResultView::Parts() const {
+  return {reinterpret_cast<const ShapeResultView::RunInfoPart*>(parts_),
+          num_parts_};
+}
+
 // static
 constexpr size_t ShapeResultView::ByteSize(wtf_size_t num_parts) {
   static_assert(sizeof(ShapeResultView) % alignof(RunInfoPart) == 0,
@@ -469,7 +481,7 @@ scoped_refptr<ShapeResultView> ShapeResultView::Create(
 unsigned ShapeResultView::PreviousSafeToBreakOffset(unsigned index) const {
   for (auto it = RunsOrParts().rbegin(); it != RunsOrParts().rend(); ++it) {
     const auto& part = *it;
-    unsigned run_start = part.start_index_;
+    unsigned run_start = part.start_index_ + char_index_offset_;
     if (index >= run_start) {
       unsigned offset = index - run_start;
       if (offset <= part.num_characters_) {

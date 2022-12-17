@@ -8,6 +8,7 @@
 #include "ash/assistant/ui/assistant_view_ids.h"
 #include "ash/assistant/ui/test_support/mock_assistant_view_delegate.h"
 #include "ash/assistant/util/test_support/macros.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
 #include "ash/public/cpp/style/color_provider.h"
 #include "ash/session/session_controller_impl.h"
@@ -126,10 +127,12 @@ TEST_F(SuggestionChipViewTest, ShouldHandleRemoteIcons) {
 TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
   base::test::ScopedFeatureList scoped_feature_list(
       chromeos::features::kDarkLightMode);
-  AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
-      Shell::Get()->session_controller()->GetActivePrefService());
   ASSERT_TRUE(chromeos::features::IsDarkLightModeEnabled());
-  ASSERT_FALSE(ColorProvider::Get()->IsDarkModeEnabled());
+
+  auto* color_provider = AshColorProvider::Get();
+  color_provider->OnActiveUserPrefServiceChanged(
+      Shell::Get()->session_controller()->GetActivePrefService());
+  const bool initial_dark_mode_status = color_provider->IsDarkModeEnabled();
 
   auto widget = CreateFramelessTestWidget();
   auto* suggestion_chip_view =
@@ -171,10 +174,9 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
 
   suggestion_chip_view->GetFocusManager()->ClearFocus();
 
-  // Change it to dark mode.
-  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
-      prefs::kDarkModeEnabled, true);
-  ASSERT_TRUE(ColorProvider::Get()->IsDarkModeEnabled());
+  // Switch the color mode.
+  color_provider->ToggleColorMode();
+  ASSERT_NE(initial_dark_mode_status, color_provider->IsDarkModeEnabled());
 
   EXPECT_EQ(label->GetEnabledColor(),
             ColorProvider::Get()->GetContentLayerColor(
@@ -200,11 +202,12 @@ TEST_F(SuggestionChipViewTest, DarkAndLightTheme) {
 }
 
 TEST_F(SuggestionChipViewTest, DarkAndLightModeFlagOff) {
-  ASSERT_FALSE(chromeos::features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   auto widget = CreateFramelessTestWidget();
   auto* suggestion_chip_view =

@@ -18,6 +18,7 @@
 #include "base/json/values_util.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/weak_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/utf_string_conversions.h"
@@ -53,6 +54,9 @@
 #include "chrome/browser/privacy_sandbox/privacy_sandbox_settings_factory.h"
 #include "chrome/browser/safe_browsing/safe_browsing_service.h"
 #include "chrome/browser/safe_browsing/verdict_cache_manager_factory.h"
+#include "chrome/browser/segmentation_platform/segmentation_platform_service_factory.h"
+#include "chrome/browser/segmentation_platform/ukm_data_manager_test_utils.h"
+#include "chrome/browser/segmentation_platform/ukm_database_client.h"
 #include "chrome/browser/signin/chrome_signin_client_factory.h"
 #include "chrome/browser/signin/test_signin_client_builder.h"
 #include "chrome/browser/spellchecker/spellcheck_custom_dictionary.h"
@@ -71,6 +75,8 @@
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/chrome_paths.h"
 #include "chrome/common/pref_names.h"
+#include "chrome/test/base/fake_profile_manager.h"
+#include "chrome/test/base/scoped_testing_local_state.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
@@ -81,6 +87,7 @@
 #include "components/autofill/core/browser/strike_database.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/common/autofill_constants.h"
+#include "components/autofill/core/common/autofill_features.h"
 #include "components/bookmarks/browser/bookmark_model.h"
 #include "components/bookmarks/test/bookmark_test_helpers.h"
 #include "components/browsing_data/content/browsing_data_helper.h"
@@ -118,11 +125,12 @@
 #include "components/permissions/permission_uma_util.h"
 #include "components/permissions/permission_util.h"
 #include "components/permissions/request_type.h"
-#include "components/prefs/testing_pref_service.h"
 #include "components/privacy_sandbox/privacy_sandbox_settings.h"
 #include "components/safe_browsing/core/browser/verdict_cache_manager.h"
 #include "components/security_interstitials/content/stateful_ssl_host_state_delegate.h"
+#include "components/segmentation_platform/public/features.h"
 #include "components/site_isolation/pref_names.h"
+#include "components/ukm/test_ukm_recorder.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browsing_data_filter_builder.h"
@@ -484,6 +492,68 @@ class RemoveFaviconTester {
   raw_ptr<favicon::FaviconService> favicon_service_ = nullptr;
 };
 
+class RemoveUkmDataTester {
+ public:
+  static constexpr auto kSegmentId = segmentation_platform::proto::
+      OPTIMIZATION_TARGET_SEGMENTATION_CHROME_LOW_USER_ENGAGEMENT;
+
+  RemoveUkmDataTester() : test_utils_(&ukm_recorder_) {
+    test_utils_.PreProfileInit({kSegmentId});
+    segmentation_platform::UkmDatabaseClient::GetInstance().PreProfileInit();
+  }
+
+  RemoveUkmDataTester(const RemoveUkmDataTester&) = delete;
+  RemoveUkmDataTester& operator=(const RemoveUkmDataTester&) = delete;
+
+  ~RemoveUkmDataTester() {
+    TestingBrowserProcess::GetGlobal()->SetProfileManager(nullptr);
+  }
+
+  [[nodiscard]] bool Init(Profile* profile) {
+    // Setup required dependencies for segmentation platform:
+    EXPECT_TRUE(temp_dir_.CreateUniqueTempDir());
+    TestingBrowserProcess::GetGlobal()->SetProfileManager(
+        std::make_unique<FakeProfileManager>(temp_dir_.GetPath()));
+
+    // Create the platform to kick off initialization.
+    segmentation_platform::SegmentationPlatformServiceFactory::GetForProfile(
+        profile);
+    history_service_ = HistoryServiceFactory::GetForProfile(
+        profile, ServiceAccessType::EXPLICIT_ACCESS);
+    if (!history_service_)
+      return false;
+    test_utils_.set_history_service(history_service_);
+
+    // Run model overrides to start storing UKM metrics.
+    test_utils_.WaitForModelRequestAndUpdateWith(
+        kSegmentId, test_utils_.GetSamplePageLoadMetadata("SELECT 1"));
+
+    return true;
+  }
+
+  [[nodiscard]] bool UkmDatabaseContainsURL(const GURL& url) {
+    return test_utils_.IsUrlInDatabase(url);
+  }
+
+  void AddURL(const GURL& url, base::Time time) {
+    test_utils_.RecordPageLoadUkm(url, time);
+
+    // Wait for URL to be written to database, UKM recorder needs to run all
+    // necessary tasks before sending observation.
+    while (!UkmDatabaseContainsURL(url)) {
+      base::RunLoop().RunUntilIdle();
+    }
+  }
+
+ private:
+  ukm::TestUkmRecorder ukm_recorder_;
+  base::ScopedTempDir temp_dir_;
+  raw_ptr<history::HistoryService> history_service_;
+  segmentation_platform::UkmDataManagerTestUtils test_utils_;
+
+  base::WeakPtrFactory<RemoveUkmDataTester> weak_ptr_factory_{this};
+};
+
 std::unique_ptr<KeyedService> BuildProtocolHandlerRegistry(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
@@ -661,11 +731,8 @@ class RemovePermissionPromptCountsTest {
     return autoblocker_->RecordDismissAndEmbargo(url, permission, false);
   }
 
-  void CheckEmbargo(const GURL& url,
-                    ContentSettingsType permission,
-                    ContentSetting expected_setting) {
-    EXPECT_EQ(expected_setting,
-              autoblocker_->GetEmbargoResult(url, permission).content_setting);
+  bool IsEmbargoed(const GURL& url, ContentSettingsType permission) {
+    return autoblocker_->IsEmbargoed(url, permission);
   }
 
  private:
@@ -926,7 +993,7 @@ class MockReportingService : public net::ReportingService {
       const std::string& user_agent,
       const std::string& group,
       const std::string& type,
-      std::unique_ptr<const base::Value> body,
+      base::Value::Dict body,
       int depth) override {
     NOTREACHED();
   }
@@ -1128,7 +1195,6 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
     web_app_provider_ = web_app::FakeWebAppProvider::Get(profile_.get());
-    web_app_provider_->SkipAwaitingExtensionSystem();
     web_app_provider_->StartWithSubsystems();
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 
@@ -1152,6 +1218,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
 
     ProtocolHandlerRegistryFactory::GetInstance()->SetTestingFactory(
         profile_.get(), base::BindRepeating(&BuildProtocolHandlerRegistry));
+
+    local_state_ = std::make_unique<ScopedTestingLocalState>(
+        TestingBrowserProcess::GetGlobal());
 
 #if BUILDFLAG(IS_ANDROID)
     static_cast<ChromeBrowsingDataRemoverDelegate*>(
@@ -1181,6 +1250,7 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
     profile_.reset();
     base::RunLoop().RunUntilIdle();
 
+    local_state_.reset();
     TestingBrowserProcess::GetGlobal()->SetLocalState(nullptr);
   }
 
@@ -1292,8 +1362,9 @@ class ChromeBrowsingDataRemoverDelegateTest : public testing::Test {
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
   std::unique_ptr<network::NetworkContext> network_context_;
   std::unique_ptr<TestingProfile> profile_;
+  std::unique_ptr<ScopedTestingLocalState> local_state_;
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
-  web_app::FakeWebAppProvider* web_app_provider_;
+  raw_ptr<web_app::FakeWebAppProvider> web_app_provider_;
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 };
 
@@ -1807,6 +1878,48 @@ TEST_F(ChromeBrowsingDataRemoverDelegateTest,
             GetOriginTypeMask());
   EXPECT_FALSE(tester.HistoryContainsURL(kOrigin1));
   EXPECT_TRUE(tester.HistoryContainsURL(kOrigin2));
+}
+
+class ChromeBrowsingDataRemoverDelegateEnabledUkmDatabaseTest
+    : public ChromeBrowsingDataRemoverDelegateTest {
+ public:
+  ChromeBrowsingDataRemoverDelegateEnabledUkmDatabaseTest() {
+    // Enable features that will trigger platform to store URLs in database.
+    feature_list_.InitWithFeatures(
+        {segmentation_platform::features::kSegmentationPlatformFeature,
+         segmentation_platform::features::
+             kSegmentationPlatformLowEngagementFeature,
+         segmentation_platform::features::kSegmentationPlatformUkmEngine},
+        {});
+  }
+};
+
+TEST_F(ChromeBrowsingDataRemoverDelegateEnabledUkmDatabaseTest, RemoveUkmUrls) {
+  RemoveUkmDataTester tester;
+  ASSERT_TRUE(tester.Init(GetProfile()));
+
+  const base::Time timestamp1 = base::Time::Now();
+  const base::Time timestamp2 = timestamp1 + base::Hours(2);
+
+  const GURL kOrigin1("http://host1.com:1");
+  tester.AddURL(kOrigin1, timestamp1);
+  const GURL kOrigin2("http://host2.com:1");
+  tester.AddURL(kOrigin2, timestamp2);
+  ASSERT_TRUE(tester.UkmDatabaseContainsURL(kOrigin2));
+
+  // Removing history URLs will remove URLs from the platform.
+  BlockUntilBrowsingDataRemoved(base::Time(), timestamp1 + base::Hours(1),
+                                constants::DATA_TYPE_HISTORY, false);
+
+  EXPECT_FALSE(tester.UkmDatabaseContainsURL(kOrigin1));
+  EXPECT_TRUE(tester.UkmDatabaseContainsURL(kOrigin2));
+
+  // Removing history URLs will remove URLs from the platform.
+  BlockUntilBrowsingDataRemoved(base::Time(), base::Time::Max(),
+                                constants::DATA_TYPE_HISTORY, false);
+
+  EXPECT_FALSE(tester.UkmDatabaseContainsURL(kOrigin1));
+  EXPECT_FALSE(tester.UkmDatabaseContainsURL(kOrigin2));
 }
 
 // Verify that clearing autofill form data works.
@@ -2734,16 +2847,16 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
         kOrigin1, ContentSettingsType::MIDI_SYSEX));
     EXPECT_FALSE(tester.RecordIgnoreAndEmbargo(
         kOrigin2, ContentSettingsType::DURABLE_STORAGE));
-    tester.CheckEmbargo(kOrigin2, ContentSettingsType::NOTIFICATIONS,
-                        CONTENT_SETTING_ASK);
+    EXPECT_FALSE(
+        tester.IsEmbargoed(kOrigin2, ContentSettingsType::NOTIFICATIONS));
     EXPECT_FALSE(tester.RecordDismissAndEmbargo(
         kOrigin2, ContentSettingsType::NOTIFICATIONS));
     EXPECT_FALSE(tester.RecordDismissAndEmbargo(
         kOrigin2, ContentSettingsType::NOTIFICATIONS));
     EXPECT_TRUE(tester.RecordDismissAndEmbargo(
         kOrigin2, ContentSettingsType::NOTIFICATIONS));
-    tester.CheckEmbargo(kOrigin2, ContentSettingsType::NOTIFICATIONS,
-                        CONTENT_SETTING_BLOCK);
+    EXPECT_TRUE(
+        tester.IsEmbargoed(kOrigin2, ContentSettingsType::NOTIFICATIONS));
 
     BlockUntilOriginDataRemoved(AnHourAgo(), base::Time::Max(),
                                 constants::DATA_TYPE_SITE_USAGE_DATA,
@@ -2760,8 +2873,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
                                        ContentSettingsType::DURABLE_STORAGE));
     EXPECT_EQ(3, tester.GetDismissCount(kOrigin2,
                                         ContentSettingsType::NOTIFICATIONS));
-    tester.CheckEmbargo(kOrigin2, ContentSettingsType::NOTIFICATIONS,
-                        CONTENT_SETTING_BLOCK);
+    EXPECT_TRUE(
+        tester.IsEmbargoed(kOrigin2, ContentSettingsType::NOTIFICATIONS));
 
     BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
                                   constants::DATA_TYPE_HISTORY, false);
@@ -2777,8 +2890,8 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
                                        ContentSettingsType::DURABLE_STORAGE));
     EXPECT_EQ(0, tester.GetDismissCount(kOrigin2,
                                         ContentSettingsType::NOTIFICATIONS));
-    tester.CheckEmbargo(kOrigin2, ContentSettingsType::NOTIFICATIONS,
-                        CONTENT_SETTING_ASK);
+    EXPECT_FALSE(
+        tester.IsEmbargoed(kOrigin2, ContentSettingsType::NOTIFICATIONS));
   }
   {
     // Test REMOVE_SITE_DATA.
@@ -2790,8 +2903,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
         kOrigin1, ContentSettingsType::NOTIFICATIONS));
     EXPECT_FALSE(tester.RecordDismissAndEmbargo(
         kOrigin1, ContentSettingsType::MIDI_SYSEX));
-    tester.CheckEmbargo(kOrigin1, ContentSettingsType::MIDI_SYSEX,
-                        CONTENT_SETTING_ASK);
+    EXPECT_FALSE(tester.IsEmbargoed(kOrigin1, ContentSettingsType::MIDI_SYSEX));
     EXPECT_FALSE(tester.RecordIgnoreAndEmbargo(
         kOrigin2, ContentSettingsType::DURABLE_STORAGE));
     EXPECT_FALSE(tester.RecordDismissAndEmbargo(
@@ -2819,8 +2931,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
         kOrigin1, ContentSettingsType::MIDI_SYSEX));
     EXPECT_EQ(
         3, tester.GetDismissCount(kOrigin1, ContentSettingsType::MIDI_SYSEX));
-    tester.CheckEmbargo(kOrigin1, ContentSettingsType::MIDI_SYSEX,
-                        CONTENT_SETTING_BLOCK);
+    EXPECT_TRUE(tester.IsEmbargoed(kOrigin1, ContentSettingsType::MIDI_SYSEX));
 
     BlockUntilBrowsingDataRemoved(AnHourAgo(), base::Time::Max(),
                                   constants::DATA_TYPE_SITE_USAGE_DATA, false);
@@ -2836,8 +2947,7 @@ TEST_F(ChromeBrowsingDataRemoverDelegateBlockPromptsTest,
                                        ContentSettingsType::DURABLE_STORAGE));
     EXPECT_EQ(0, tester.GetDismissCount(kOrigin2,
                                         ContentSettingsType::NOTIFICATIONS));
-    tester.CheckEmbargo(kOrigin1, ContentSettingsType::MIDI_SYSEX,
-                        CONTENT_SETTING_ASK);
+    EXPECT_FALSE(tester.IsEmbargoed(kOrigin1, ContentSettingsType::MIDI_SYSEX));
   }
 }
 

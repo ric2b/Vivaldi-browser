@@ -14,6 +14,9 @@
 #include "base/time/tick_clock.h"
 #include "base/time/time.h"
 
+#undef ENABLED_VLOG_LEVEL
+#define ENABLED_VLOG_LEVEL 1
+
 namespace ash {
 
 CalendarEventFetch::CalendarEventFetch(
@@ -22,25 +25,42 @@ CalendarEventFetch::CalendarEventFetch(
     FetchInternalErrorCallback internal_error_callback,
     const base::TickClock* tick_clock)
     : start_of_month_(start_of_month),
+      time_range_(calendar_utils::GetFetchStartEndTimes(start_of_month)),
       complete_callback_(std::move(complete_callback)),
       internal_error_callback_(std::move(internal_error_callback)),
       fetch_start_time_(base::Time::Now()),
       timeout_(tick_clock) {
-  CalendarClient* client = Shell::Get()->calendar_controller()->GetClient();
-  DCHECK(client);
-
-  const base::Time start_of_next_month =
-      calendar_utils::GetStartOfNextMonthUTC(start_of_month);
-  client->GetEventList(base::BindOnce(&CalendarEventFetch::OnResultReceived,
-                                      weak_factory_.GetWeakPtr()),
-                       start_of_month, start_of_next_month);
-
-  timeout_.Start(
-      FROM_HERE, calendar_utils::kEventFetchTimeout,
-      base::BindOnce(&CalendarEventFetch::OnTimeout, base::Unretained(this)));
+  SendFetchRequest();
 }
 
 CalendarEventFetch::~CalendarEventFetch() = default;
+
+void CalendarEventFetch::Cancel() {
+  std::move(cancel_closure_).Run();
+}
+
+void CalendarEventFetch::SendFetchRequest() {
+  if (cancel_closure_)
+    Cancel();
+
+  CalendarClient* client = Shell::Get()->calendar_controller()->GetClient();
+  DCHECK(client);
+
+  if (ash::features::IsCalendarModelDebugModeEnabled()) {
+    VLOG(1) << __FUNCTION__ << ": " << time_range_.first << " => "
+            << time_range_.second;
+  }
+
+  cancel_closure_ =
+      client->GetEventList(base::BindOnce(&CalendarEventFetch::OnResultReceived,
+                                          weak_factory_.GetWeakPtr()),
+                           time_range_.first, time_range_.second);
+  DCHECK(cancel_closure_);
+
+  timeout_.Start(FROM_HERE, calendar_utils::kEventFetchTimeout,
+                 base::BindOnce(&CalendarEventFetch::OnTimeout,
+                                weak_factory_.GetWeakPtr()));
+}
 
 void CalendarEventFetch::OnResultReceived(
     google_apis::ApiErrorCode error,

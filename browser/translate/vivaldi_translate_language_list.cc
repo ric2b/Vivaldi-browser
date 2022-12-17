@@ -8,7 +8,6 @@
 
 #include "base/command_line.h"
 #include "base/json/json_reader.h"
-#include "base/task/post_task.h"
 #include "base/vivaldi_switches.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"

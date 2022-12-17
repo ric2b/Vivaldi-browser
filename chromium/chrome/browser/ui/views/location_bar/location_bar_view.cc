@@ -31,7 +31,6 @@
 #include "chrome/browser/search_engines/template_url_service_factory.h"
 #include "chrome/browser/send_tab_to_self/send_tab_to_self_util.h"
 #include "chrome/browser/sharing/features.h"
-#include "chrome/browser/sharing/shared_clipboard/feature_flags.h"
 #include "chrome/browser/sharing/sms/sms_flags.h"
 #include "chrome/browser/sharing_hub/sharing_hub_features.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
@@ -51,6 +50,7 @@
 #include "chrome/browser/ui/omnibox/chrome_omnibox_client.h"
 #include "chrome/browser/ui/omnibox/omnibox_theme.h"
 #include "chrome/browser/ui/passwords/manage_passwords_ui_controller.h"
+#include "chrome/browser/ui/side_search/side_search_utils.h"
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/views/autofill/payments/local_card_migration_icon_view.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
@@ -139,10 +139,6 @@
 #include "ui/views/view_utils.h"
 #include "ui/views/widget/widget.h"
 
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
-#include "chrome/browser/ui/side_search/side_search_utils.h"
-#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
-
 namespace {
 
 int IncrementalMinimumWidth(const views::View* view) {
@@ -216,11 +212,13 @@ void LocationBarView::Init() {
   SetPaintToLayer();
   layer()->SetFillsBoundsOpaquely(false);
 
+  CreateChip();
+
   const gfx::FontList& font_list = views::style::GetFont(
       CONTEXT_OMNIBOX_PRIMARY, views::style::STYLE_PRIMARY);
 
   auto location_icon_view =
-      std::make_unique<LocationIconView>(font_list, this, this, profile_);
+      std::make_unique<LocationIconView>(font_list, this, this);
   location_icon_view->set_drag_controller(this);
   location_icon_view_ = AddChildView(std::move(location_icon_view));
 
@@ -305,15 +303,13 @@ void LocationBarView::Init() {
     // first so that they appear on the left side of the icon container.
     // TODO(crbug.com/1318890): Improve the ordering heuristics for page action
     // icons and determine a way to handle simultaneous icon animations.
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
-    if (side_search::IsDSESupportEnabled(profile_))
+    if (side_search::IsDSESupportEnabled(profile_) &&
+        browser_->is_type_normal()) {
       params.types_enabled.push_back(PageActionIconType::kSideSearch);
-#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
+    }
     params.types_enabled.push_back(PageActionIconType::kSendTabToSelf);
     params.types_enabled.push_back(PageActionIconType::kClickToCall);
     params.types_enabled.push_back(PageActionIconType::kQRCodeGenerator);
-    if (base::FeatureList::IsEnabled(kSharedClipboardUI))
-      params.types_enabled.push_back(PageActionIconType::kSharedClipboard);
     if (base::FeatureList::IsEnabled(kWebOTPCrossDevice))
       params.types_enabled.push_back(PageActionIconType::kSmsRemoteFetcher);
     if (!base::FeatureList::IsEnabled(
@@ -327,9 +323,6 @@ void LocationBarView::Init() {
     params.types_enabled.push_back(PageActionIconType::kTranslate);
     params.types_enabled.push_back(PageActionIconType::kZoom);
     params.types_enabled.push_back(PageActionIconType::kFileSystemAccess);
-    if (base::FeatureList::IsEnabled(features::kWebAuthConditionalUI)) {
-      params.types_enabled.push_back(PageActionIconType::kWebAuthn);
-    }
 
     if (dom_distiller::IsDomDistillerEnabled() && browser_->is_type_normal()) {
       params.types_enabled.push_back(PageActionIconType::kReaderMode);
@@ -356,7 +349,7 @@ void LocationBarView::Init() {
     }
   }
   if (browser_) {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+#if BUILDFLAG(IS_CHROMEOS)
     params.types_enabled.push_back(PageActionIconType::kSharingHub);
 #else
     if (sharing_hub::SharingHubOmniboxEnabled(profile_) && !is_popup_mode_)
@@ -828,26 +821,50 @@ bool LocationBarView::ActivateFirstInactiveBubbleForAccessibility() {
       ->ActivateFirstInactiveBubbleForAccessibility();
 }
 
+bool LocationBarView::IsChipActive() {
+  return chip_ && chip_->IsActive();
+}
+
+void LocationBarView::CreateChip() {
+  DCHECK(!chip_);
+
+  if (!browser_)
+    return;
+
+  if (web_app::AppBrowserController::IsWebApp(browser_))
+    return;
+
+  chip_ = AddChildViewAt(std::make_unique<PermissionChip>(), 0);
+}
+
 PermissionChip* LocationBarView::DisplayChip(
     permissions::PermissionPrompt::Delegate* delegate,
     bool should_bubble_start_open) {
   DCHECK(delegate);
-  return AddChip(std::make_unique<PermissionRequestChip>(
+  DCHECK(chip_);
+
+  chip_->SetupChip(std::make_unique<PermissionRequestChip>(
       browser(), delegate, should_bubble_start_open));
+
+  return chip_;
 }
 
 PermissionChip* LocationBarView::DisplayQuietChip(
     permissions::PermissionPrompt::Delegate* delegate,
     bool should_expand) {
   DCHECK(delegate);
-  return AddChip(std::make_unique<PermissionQuietChip>(browser(), delegate,
-                                                       should_expand));
+  DCHECK(chip_);
+
+  chip_->SetupChip(std::make_unique<PermissionQuietChip>(browser(), delegate,
+                                                         should_expand));
+
+  return chip_;
 }
 
 void LocationBarView::FinalizeChip() {
   DCHECK(chip_);
-  RemoveChildViewT(chip_.get());
-  chip_ = nullptr;
+  chip_->Finalize();
+  InvalidateLayout();
 }
 
 void LocationBarView::UpdateWithoutTabRestore() {
@@ -937,13 +954,6 @@ int LocationBarView::GetAvailableDecorationTextHeight() {
       GetLayoutConstant(LOCATION_BAR_BUBBLE_FONT_VERTICAL_PADDING);
   return std::max(
       0, LocationBarView::GetAvailableTextHeight() - (bubble_padding * 2));
-}
-
-PermissionChip* LocationBarView::AddChip(std::unique_ptr<PermissionChip> chip) {
-  DCHECK(!chip_);
-  // `chip_` must come first so it's in the correct place in the focus order.
-  chip_ = AddChildViewAt(std::move(chip), 0);
-  return chip_;
 }
 
 int LocationBarView::GetMinimumLeadingWidth() const {
@@ -1434,14 +1444,14 @@ ui::ImageModel LocationBarView::GetLocationIcon(
 }
 
 void LocationBarView::UpdateChipVisibility() {
-  if (!chip_) {
+  if (!IsChipActive()) {
     return;
   }
 
   if (IsEditingOrEmpty()) {
-    chip_->Hide();
-  } else {
-    chip_->Reshow();
+    // If a user starts typing, a permission request should be ignored and the
+    // chip finalized.
+    chip_->Finalize();
   }
 }
 

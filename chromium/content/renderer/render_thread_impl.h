@@ -60,10 +60,6 @@
 #include "third_party/blink/public/web/web_memory_statistics.h"
 #include "ui/gfx/native_widget_types.h"
 
-#if BUILDFLAG(IS_MAC)
-#include "third_party/blink/public/platform/mac/web_scrollbar_theme.h"
-#endif
-
 namespace blink {
 class WebResourceRequestSenderDelegate;
 class WebVideoCaptureImplManager;
@@ -112,6 +108,8 @@ class StreamTextureFactory;
 
 #if BUILDFLAG(IS_WIN)
 class DCOMPTextureFactory;
+class OverlayStateServiceProvider;
+class OverlayStateServiceProviderImpl;
 #endif
 
 // The RenderThreadImpl class represents the main thread, where RenderView
@@ -184,7 +182,6 @@ class CONTENT_EXPORT RenderThreadImpl
   blink::WebResourceRequestSenderDelegate* GetResourceRequestSenderDelegate() {
     return resource_request_sender_delegate_;
   }
-  void RegisterExtension(std::unique_ptr<v8::Extension> extension) override;
   int PostTaskToAllWebWorkers(base::RepeatingClosure closure) override;
   base::WaitableEvent* GetShutdownEvent() override;
   int32_t GetClientId() override;
@@ -273,6 +270,10 @@ class CONTENT_EXPORT RenderThreadImpl
 
 #if BUILDFLAG(IS_WIN)
   scoped_refptr<DCOMPTextureFactory> GetDCOMPTextureFactory();
+  // The OverlayStateService is only available where Media Foundation for
+  // clear is supported, otherwise GetOverlayStateServiceProvider will return
+  // nullptr.
+  OverlayStateServiceProvider* GetOverlayStateServiceProvider();
 #endif
 
   blink::WebVideoCaptureImplManager* video_capture_impl_manager() const {
@@ -373,20 +374,6 @@ class CONTENT_EXPORT RenderThreadImpl
 
   mojom::RendererHost* GetRendererHost();
 
-  struct RendererMemoryMetrics {
-    size_t partition_alloc_kb;
-    size_t blink_gc_kb;
-    size_t malloc_mb;
-    size_t discardable_kb;
-    size_t v8_main_thread_isolate_mb;
-    size_t total_allocated_mb;
-    size_t non_discardable_total_allocated_mb;
-    size_t total_allocated_per_render_view_mb;
-  };
-  bool GetRendererMemoryMetrics(RendererMemoryMetrics* memory_metrics) const;
-
-  void RecordMetricsForBackgroundedRendererPurge();
-
   // Sets the current pipeline rendering color space.
   void SetRenderingColorSpace(const gfx::ColorSpace& color_space);
 
@@ -395,27 +382,12 @@ class CONTENT_EXPORT RenderThreadImpl
   scoped_refptr<base::SingleThreadTaskRunner>
   CreateVideoFrameCompositorTaskRunner();
 
-  // In the case of kOnDemand, we wont be using the task_runner created in
-  // CreateVideoFrameCompositorTaskRunner.
-  // TODO(https://crbug/901513): Remove once kOnDemand is removed.
-  void SetVideoFrameCompositorTaskRunner(
-      scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-    video_frame_compositor_task_runner_ = task_runner;
-  }
-
-  void CreateSharedStorageWorkletService(
-      mojo::PendingReceiver<
-          shared_storage_worklet::mojom::SharedStorageWorkletService> receiver);
-
   // The time the run loop started for this thread.
   base::TimeTicks run_loop_start_time() const { return run_loop_start_time_; }
 
   void set_run_loop_start_time(base::TimeTicks run_loop_start_time) {
     run_loop_start_time_ = run_loop_start_time;
   }
-
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  scoped_refptr<gpu::GpuChannelHost> EstablishForcedGpuChannelSync();
 
  private:
   friend class RenderThreadImplBrowserTest;
@@ -490,12 +462,6 @@ class CONTENT_EXPORT RenderThreadImpl
   void OnRendererBackgrounded();
   void OnRendererForegrounded();
 
-  void RecordMemoryUsageAfterBackgrounded(const char* suffix,
-                                          int foregrounded_count);
-  void OnRecordMetricsForBackgroundedRendererPurgeTimerExpired(
-      const char* suffix,
-      int foregrounded_count_when_purged);
-
   void ReleaseFreeMemory();
 
   void OnSyncMemoryPressure(
@@ -534,11 +500,6 @@ class CONTENT_EXPORT RenderThreadImpl
   // software-based.
   bool is_gpu_compositing_disabled_ = false;
 
-  // FEATURE_FORCE_ACCESS_TO_GPU
-  // The channel from the renderer process to the GPU process.
-  scoped_refptr<gpu::GpuChannelHost> gpu_channel_;
-  scoped_refptr<gpu::GpuChannelHost> forced_gpu_channel_;
-
   // Utility class to provide GPU functionalities to media.
   // TODO(dcastagna): This should be just one scoped_ptr once
   // http://crbug.com/580386 is fixed.
@@ -565,6 +526,8 @@ class CONTENT_EXPORT RenderThreadImpl
 
 #if BUILDFLAG(IS_WIN)
   scoped_refptr<DCOMPTextureFactory> dcomp_texture_factory_;
+  std::unique_ptr<OverlayStateServiceProviderImpl>
+      overlay_state_service_provider_;
 #endif
 
   scoped_refptr<viz::ContextProviderCommandBuffer> shared_main_thread_contexts_;
@@ -585,10 +548,7 @@ class CONTENT_EXPORT RenderThreadImpl
   std::unique_ptr<VariationsRenderThreadObserver> variations_observer_;
 
   // Compositor settings.
-  int gpu_rasterization_msaa_sample_count_;
   bool is_lcd_text_enabled_;
-  bool is_zero_copy_enabled_;
-  bool is_gpu_memory_buffer_compositor_resources_enabled_;
   bool is_partial_raster_enabled_;
   bool is_elastic_overscroll_enabled_;
   bool is_threaded_animation_enabled_;
@@ -612,7 +572,6 @@ class CONTENT_EXPORT RenderThreadImpl
   std::set<std::unique_ptr<AgentSchedulingGroup>, base::UniquePtrComparator>
       agent_scheduling_groups_;
 
-  RendererMemoryMetrics purge_and_suspend_memory_metrics_;
   int process_foregrounded_count_;
 
   int32_t client_id_;

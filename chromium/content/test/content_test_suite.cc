@@ -8,6 +8,7 @@
 #include "base/base_switches.h"
 #include "base/command_line.h"
 #include "build/build_config.h"
+#include "content/browser/webui/content_web_ui_configs.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_paths.h"
 #include "content/public/common/network_service_util.h"
@@ -62,12 +63,15 @@ void ContentTestSuite::Initialize() {
   base::CommandLine* command_line = base::CommandLine::ForCurrentProcess();
   bool is_child_process = command_line->HasSwitch(switches::kTestChildProcess);
   if (!is_child_process) {
-    gl::GLSurfaceTestSupport::InitializeNoExtensionsOneOff();
+    gl::GLDisplay* display =
+        gl::GLSurfaceTestSupport::InitializeNoExtensionsOneOff();
     auto* gpu_feature_info = gpu::GetTestGpuThreadHolder()->GetGpuFeatureInfo();
     gl::init::SetDisabledExtensionsPlatform(
         gpu_feature_info->disabled_extensions);
-    gl::init::InitializeExtensionSettingsOneOffPlatform();
+    gl::init::InitializeExtensionSettingsOneOffPlatform(display);
   }
+
+  RegisterContentWebUIConfigs();
 }
 
 }  // namespace content

@@ -10,8 +10,10 @@
 #include "base/values.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/favicon/favicon_service_factory.h"
 #include "chrome/browser/profiles/profile.h"
 #include "components/bookmarks/browser/bookmark_model.h"
+#include "components/favicon/core/favicon_service.h"
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "ui/base/models/tree_node_iterator.h"
@@ -65,6 +67,8 @@ struct DefaultBookmarkItem {
   std::string thumbnail;
   std::string description;
   GURL url;
+  std::string favicon;
+  GURL favicon_url;
   bool speeddial = false;
   std::vector<DefaultBookmarkItem> children;
 };
@@ -87,7 +91,8 @@ class BookmarkUpdater {
     int failed_updates = 0;
   };
 
-  BookmarkUpdater(const DefaultBookmarkTree* default_bookmark_tree,
+  BookmarkUpdater(Profile* profile,
+                  const DefaultBookmarkTree* default_bookmark_tree,
                   BookmarkModel* model);
 
   void SetDeletedPartners(PrefService* prefs);
@@ -111,6 +116,11 @@ class BookmarkUpdater {
   const BookmarkNode* AddPartnerNode(const DefaultBookmarkItem& item,
                                      const BookmarkNode* parent_node);
 
+  void SetFavicon(const GURL& page_url,
+                  const GURL& icon_url,
+                  std::string icon_path);
+
+  Profile* profile_;
   const DefaultBookmarkTree* default_bookmark_tree_;
   BookmarkModel* model_;
   base::flat_set<base::GUID> deleted_partner_guids_;
@@ -241,6 +251,13 @@ void DefaultBookmarkParser::ParseBookmarkList(
       }
 
       item.thumbnail = details->thumbnail;
+
+      item.favicon = details->favicon;
+
+      GURL favicon_url(details->favicon_url);
+      if (favicon_url.is_valid()) {
+        item.favicon_url = std::move(favicon_url);
+      }
     }
 
     default_items->push_back(std::move(item));
@@ -276,9 +293,12 @@ absl::optional<base::Value> ReadDefaultBookmarks(std::string locale) {
 }
 
 BookmarkUpdater::BookmarkUpdater(
+    Profile* profile,
     const DefaultBookmarkTree* default_bookmark_tree,
     BookmarkModel* model)
-    : default_bookmark_tree_(default_bookmark_tree), model_(model) {}
+    : profile_(profile),
+      default_bookmark_tree_(default_bookmark_tree),
+      model_(model) {}
 
 void BookmarkUpdater::SetDeletedPartners(PrefService* prefs) {
   const base::Value* deleted_partners =
@@ -499,6 +519,8 @@ const BookmarkNode* BookmarkUpdater::AddPartnerNode(
     node = model_->AddURL(parent_node, index, title, item.url,
                           custom_meta.map(), absl::nullopt, item.guid);
     stats_.added_urls++;
+
+    SetFavicon(item.url, item.favicon_url, item.favicon);
   }
   return node;
 }
@@ -509,6 +531,8 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
     LOG(ERROR) << message << " - " << item.title;
     stats_.failed_updates++;
   };
+
+  SetFavicon(node->url(), item.favicon_url, item.favicon);
 
   if (model_->is_permanent_node(node))
     return error("Partner became a permamnent node");
@@ -561,6 +585,31 @@ void BookmarkUpdater::UpdatePartnerNode(const DefaultBookmarkItem& item,
   } else {
     stats_.updated_folders++;
   }
+}
+
+void BookmarkUpdater::SetFavicon(const GURL& page_url,
+                                 const GURL& icon_url,
+                                 std::string icon_path) {
+  if (page_url.is_empty() || icon_url.is_empty() || icon_path.empty())
+    return;
+
+  auto set_favicon_image =
+      [](base::WeakPtr<content::BrowserContext> browser_context, GURL page_url,
+         GURL icon_url, gfx::Image image) -> void {
+    if (!browser_context)
+      return;
+    Profile* profile = Profile::FromBrowserContext(browser_context.get());
+    auto* favicon_service = FaviconServiceFactory::GetForProfile(
+        profile, ServiceAccessType::EXPLICIT_ACCESS);
+    favicon_service->SetFavicons({page_url}, icon_url,
+                                 favicon_base::IconType::kFavicon, image);
+  };
+  base::ThreadPool::PostTaskAndReplyWithResult(
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::SKIP_ON_SHUTDOWN},
+      base::BindOnce(&ResourceReader::ReadPngImage, std::move(icon_path)),
+      base::BindOnce(set_favicon_image, profile_->GetWeakPtr(), page_url,
+                     icon_url));
 }
 
 void UpdatePartnersInModel(Profile* profile,
@@ -619,7 +668,7 @@ void UpdatePartnersInModel(Profile* profile,
       }
     }
 
-    BookmarkUpdater upgrader(&default_tree, model);
+    BookmarkUpdater upgrader(profile, &default_tree, model);
     upgrader.SetDeletedPartners(prefs);
     upgrader.RunCleanUpdate();
 

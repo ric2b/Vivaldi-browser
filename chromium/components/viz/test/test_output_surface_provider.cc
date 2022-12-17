@@ -18,8 +18,7 @@ TestOutputSurfaceProvider::~TestOutputSurfaceProvider() = default;
 std::unique_ptr<DisplayCompositorMemoryAndTaskController>
 TestOutputSurfaceProvider::CreateGpuDependency(
     bool gpu_compositing,
-    gpu::SurfaceHandle surface_handle,
-    const RendererSettings& renderer_settings) {
+    gpu::SurfaceHandle surface_handle) {
   // The output surface doesn't have a real gpu thread, and there is no overlay
   // support.
   return nullptr;
@@ -35,7 +34,7 @@ std::unique_ptr<OutputSurface> TestOutputSurfaceProvider::CreateOutputSurface(
   if (gpu_compositing) {
     return FakeSkiaOutputSurface::Create3d();
   } else {
-    return FakeOutputSurface::CreateSoftware(
+    return std::make_unique<FakeSoftwareOutputSurface>(
         std::make_unique<SoftwareOutputDevice>());
   }
 }

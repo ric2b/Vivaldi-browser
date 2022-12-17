@@ -6,6 +6,11 @@ package org.chromium.components.translate;
 
 import android.app.Activity;
 import android.content.Context;
+import android.database.DataSetObserver;
+import android.text.TextUtils;
+import android.view.View;
+
+import androidx.annotation.NonNull;
 
 import org.chromium.base.annotations.CalledByNative;
 import org.chromium.base.annotations.JNINamespace;
@@ -19,10 +24,12 @@ import org.chromium.components.messages.MessageDispatcherProvider;
 import org.chromium.components.messages.MessageIdentifier;
 import org.chromium.components.messages.MessageScopeType;
 import org.chromium.components.messages.PrimaryActionClickBehavior;
+import org.chromium.components.messages.PrimaryWidgetAppearance;
 import org.chromium.components.messages.SecondaryMenuMaxSize;
 import org.chromium.content_public.browser.WebContents;
 import org.chromium.ui.base.WindowAndroid;
 import org.chromium.ui.modelutil.PropertyModel;
+import org.chromium.ui.widget.RectProvider;
 import org.chromium.ui.widget.Toast;
 
 import java.lang.ref.WeakReference;
@@ -51,16 +58,16 @@ class TranslateMessage implements TranslateMessageSecondaryMenu.Handler {
         }
     }
 
-    private final WebContents mWebContents;
     private final Context mContext;
+    private final MessageDispatcher mMessageDispatcher;
+    private final WebContents mWebContents;
     private long mNativeTranslateMessage;
     private final int mDismissalDurationSeconds;
-    private final MessageDispatcher mMessageDispatcher;
 
     // Will be null before the message is shown.
     private PropertyModel mMessageProperties;
 
-    // Shows a Toast with the general translate error message.
+    /** Shows a Toast with the general translate error message. */
     @CalledByNative
     public static void showTranslateError(WebContents webContents) {
         Context context = getContextFromWebContents(webContents);
@@ -69,21 +76,33 @@ class TranslateMessage implements TranslateMessageSecondaryMenu.Handler {
         toast.show();
     }
 
+    /**
+     * Create a new TranslateMessage, or return null if creation failed.
+     *
+     * Creation could fail in cases where the MessageDispatcher cannot be retrieved, such as when
+     * the activity is being recreated or destroyed.
+     */
     @CalledByNative
     public static TranslateMessage create(
             WebContents webContents, long nativeTranslateMessage, int dismissalDurationSeconds) {
-        return new TranslateMessage(webContents, nativeTranslateMessage, dismissalDurationSeconds);
+        Context context = getContextFromWebContents(webContents);
+        if (context == null) return null;
+        MessageDispatcher messageDispatcher =
+                MessageDispatcherProvider.from(webContents.getTopLevelNativeWindow());
+        if (messageDispatcher == null) return null;
+
+        return new TranslateMessage(context, messageDispatcher, webContents, nativeTranslateMessage,
+                dismissalDurationSeconds);
     }
 
-    private TranslateMessage(
-            WebContents webContents, long nativeTranslateMessage, int dismissalDurationSeconds) {
+    private TranslateMessage(@NonNull Context context, @NonNull MessageDispatcher messageDispatcher,
+            @NonNull WebContents webContents, long nativeTranslateMessage,
+            int dismissalDurationSeconds) {
+        mContext = context;
+        mMessageDispatcher = messageDispatcher;
         mWebContents = webContents;
-        mContext = getContextFromWebContents(webContents);
-        assert mContext != null;
         mNativeTranslateMessage = nativeTranslateMessage;
         mDismissalDurationSeconds = dismissalDurationSeconds;
-
-        mMessageDispatcher = MessageDispatcherProvider.from(webContents.getTopLevelNativeWindow());
     }
 
     @CalledByNative
@@ -92,81 +111,47 @@ class TranslateMessage implements TranslateMessageSecondaryMenu.Handler {
     }
 
     @CalledByNative
-    public void showBeforeTranslateMessage(
-            String sourceLanguageDisplayName, String targetLanguageDisplayName) {
-        boolean needsDispatch = prepareMessageProperties();
+    public void showMessage(String title, String description, String primaryButtonText) {
+        boolean needsDispatch = mMessageProperties == null;
+        if (needsDispatch) {
+            mMessageProperties =
+                    new PropertyModel.Builder(MessageBannerProperties.ALL_KEYS)
+                            .with(MessageBannerProperties.MESSAGE_IDENTIFIER,
+                                    MessageIdentifier.TRANSLATE)
+                            .with(MessageBannerProperties.ICON_RESOURCE_ID,
+                                    R.drawable.infobar_translate_compact)
+                            .with(MessageBannerProperties.ICON_TINT_COLOR,
+                                    MessageBannerProperties.TINT_NONE)
+                            .with(MessageBannerProperties.SECONDARY_ICON_RESOURCE_ID,
+                                    R.drawable.settings_cog)
+                            .with(MessageBannerProperties.SECONDARY_MENU_BUTTON_DELEGATE,
+                                    new SecondaryMenuButtonDelegate())
+                            .with(MessageBannerProperties.SECONDARY_MENU_MAX_SIZE,
+                                    SecondaryMenuMaxSize.LARGE)
+                            .with(MessageBannerProperties.DISMISSAL_DURATION,
+                                    mDismissalDurationSeconds)
+                            .with(MessageBannerProperties.ON_PRIMARY_ACTION,
+                                    this::handlePrimaryAction)
+                            .with(MessageBannerProperties.ON_DISMISSED, this::handleDismiss)
+                            .build();
+        }
 
-        mMessageProperties.set(MessageBannerProperties.TITLE,
-                mContext.getString(R.string.translate_message_before_translate_title));
-        mMessageProperties.set(MessageBannerProperties.DESCRIPTION,
-                mContext.getString(R.string.translate_message_description,
-                        sourceLanguageDisplayName, targetLanguageDisplayName));
-        mMessageProperties.set(MessageBannerProperties.PRIMARY_BUTTON_TEXT,
-                mContext.getString(R.string.translate_button));
+        mMessageProperties.set(MessageBannerProperties.TITLE, title);
+        mMessageProperties.set(MessageBannerProperties.DESCRIPTION, description);
 
-        if (needsDispatch) dispatchMessage();
-    }
+        if (TextUtils.isEmpty(primaryButtonText)) {
+            mMessageProperties.set(MessageBannerProperties.PRIMARY_WIDGET_APPEARANCE,
+                    PrimaryWidgetAppearance.PROGRESS_SPINNER);
+        } else {
+            mMessageProperties.set(MessageBannerProperties.PRIMARY_BUTTON_TEXT, primaryButtonText);
+            mMessageProperties.set(MessageBannerProperties.PRIMARY_WIDGET_APPEARANCE,
+                    PrimaryWidgetAppearance.BUTTON_IF_TEXT_IS_SET);
+        }
 
-    @CalledByNative
-    public void showTranslationInProgressMessage(
-            String sourceLanguageDisplayName, String targetLanguageDisplayName) {
-        boolean needsDispatch = prepareMessageProperties();
-
-        mMessageProperties.set(MessageBannerProperties.TITLE,
-                mContext.getString(R.string.translate_message_before_translate_title));
-        mMessageProperties.set(MessageBannerProperties.DESCRIPTION,
-                mContext.getString(R.string.translate_message_description,
-                        sourceLanguageDisplayName, targetLanguageDisplayName));
-
-        // TODO(crbug.com/1304118): Once the functionality exists, this should show a progress
-        // indicator spinner in place of the primary button.
-        mMessageProperties.set(MessageBannerProperties.PRIMARY_BUTTON_TEXT, "");
-
-        if (needsDispatch) dispatchMessage();
-    }
-
-    @CalledByNative
-    public void showAfterTranslateMessage(
-            String sourceLanguageDisplayName, String targetLanguageDisplayName) {
-        boolean needsDispatch = prepareMessageProperties();
-
-        mMessageProperties.set(MessageBannerProperties.TITLE,
-                mContext.getString(R.string.translate_message_after_translate_title));
-        mMessageProperties.set(MessageBannerProperties.DESCRIPTION,
-                mContext.getString(R.string.translate_message_description,
-                        sourceLanguageDisplayName, targetLanguageDisplayName));
-        mMessageProperties.set(
-                MessageBannerProperties.PRIMARY_BUTTON_TEXT, mContext.getString(R.string.undo));
-
-        if (needsDispatch) dispatchMessage();
-    }
-
-    private boolean prepareMessageProperties() {
-        if (mMessageProperties != null) return false;
-
-        mMessageProperties =
-                new PropertyModel.Builder(MessageBannerProperties.ALL_KEYS)
-                        .with(MessageBannerProperties.MESSAGE_IDENTIFIER,
-                                MessageIdentifier.TRANSLATE)
-                        .with(MessageBannerProperties.ICON_RESOURCE_ID,
-                                R.drawable.infobar_translate_compact)
-                        .with(MessageBannerProperties.SECONDARY_ICON_RESOURCE_ID,
-                                R.drawable.settings_cog)
-                        .with(MessageBannerProperties.SECONDARY_MENU_BUTTON_DELEGATE,
-                                new SecondaryMenuButtonDelegate())
-                        .with(MessageBannerProperties.SECONDARY_MENU_MAX_SIZE,
-                                SecondaryMenuMaxSize.LARGE)
-                        .with(MessageBannerProperties.DISMISSAL_DURATION, mDismissalDurationSeconds)
-                        .with(MessageBannerProperties.ON_PRIMARY_ACTION, this::handlePrimaryAction)
-                        .with(MessageBannerProperties.ON_DISMISSED, this::handleDismiss)
-                        .build();
-
-        return true;
-    }
-
-    private void dispatchMessage() {
-        mMessageDispatcher.enqueueMessage(mMessageProperties, mWebContents,
-                MessageScopeType.NAVIGATION, /*highPriority=*/false);
+        if (needsDispatch) {
+            mMessageDispatcher.enqueueMessage(mMessageProperties, mWebContents,
+                    MessageScopeType.NAVIGATION, /*highPriority=*/false);
+        }
     }
 
     private @PrimaryActionClickBehavior int handlePrimaryAction() {
@@ -184,10 +169,7 @@ class TranslateMessage implements TranslateMessageSecondaryMenu.Handler {
 
     @CalledByNative
     public void dismiss() {
-        if (mMessageDispatcher != null) {
-            mMessageDispatcher.dismissMessage(
-                    mMessageProperties, DismissReason.DISMISSED_BY_FEATURE);
-        }
+        mMessageDispatcher.dismissMessage(mMessageProperties, DismissReason.DISMISSED_BY_FEATURE);
     }
 
     private static Context getContextFromWebContents(WebContents webContents) {
@@ -220,13 +202,41 @@ class TranslateMessage implements TranslateMessageSecondaryMenu.Handler {
                 menuItem.overflowMenuItemId, menuItem.languageCode, menuItem.hasCheckmark);
     }
 
-    private final class SecondaryMenuButtonDelegate implements ListMenuButtonDelegate {
+    private final class SecondaryMenuButtonDelegate
+            extends DataSetObserver implements ListMenuButtonDelegate {
+        /**
+         * Keeps track of the RectProvider supplied to anchor the AnchoredPopupWindow to the
+         * ListMenuButton. It's kept as a WeakReference so that this doesn't inadvertently extend
+         * the lifetime of the RectProvider and all of its references past the time when the popup
+         * window is dismissed.
+         */
+        private WeakReference<RectProvider> mRectProvider;
+
+        // ListMenuButtonDelegate implementation:
+        @Override
+        public RectProvider getRectProvider(View listMenuButton) {
+            RectProvider provider = ListMenuButtonDelegate.super.getRectProvider(listMenuButton);
+            mRectProvider = new WeakReference<RectProvider>(provider);
+            return provider;
+        }
+
         @Override
         public ListMenu getListMenu() {
-            return new TranslateMessageSecondaryMenu(mContext, TranslateMessage.this,
+            return new TranslateMessageSecondaryMenu(mContext, /*handler=*/TranslateMessage.this,
+                    /*dataSetObserver=*/this,
                     mNativeTranslateMessage == 0
                             ? null
                             : TranslateMessageJni.get().buildOverflowMenu(mNativeTranslateMessage));
+        }
+
+        // DataSetObserver implementation:
+        @Override
+        public void onChanged() {
+            // If the mRectProvider is set, then call setRect() with the existing Rect in order to
+            // force it to notify its observer, which will cause the AnchoredPopupWindow to update
+            // its onscreen dimensions to fit the new menu items.
+            RectProvider provider = mRectProvider.get();
+            if (provider != null) provider.setRect(provider.getRect());
         }
     }
 

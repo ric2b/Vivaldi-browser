@@ -32,6 +32,13 @@ class WebURL;
 
 namespace content_settings {
 
+#if defined(VIVALDI_BUILD)
+ContentSetting VivaldiGetContentSettingFromRules(
+    const ContentSettingsForOneType& rules,
+    const blink::WebFrame* frame,
+    const GURL& secondary_url);
+#endif  // defined(VIVALDI_BUILD)
+
 // This class serves as an agent of the browser-side content settings machinery
 // to implement browser-specified rules directly within the renderer process.
 // In some cases it forwards requests on to the browser to determine policy.
@@ -97,6 +104,9 @@ class ContentSettingsAgentImpl
   bool allow_running_insecure_content() const {
     return allow_running_insecure_content_;
   }
+#if defined(VIVALDI_BUILD)
+  bool AllowAutoplay(bool play_requested) override;
+#endif  // defined(VIVALDI_BUILD)
 
   void SetContentSettingsManager(
       mojo::Remote<mojom::ContentSettingsManager> manager) {

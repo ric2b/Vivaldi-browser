@@ -48,7 +48,9 @@
 #include "media/filters/gav1_video_decoder.h"
 #endif
 
-#include "media/base/bind_to_current_loop.h"
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
+#endif
 
 using ::testing::_;
 using ::testing::AnyNumber;
@@ -62,9 +64,9 @@ using ::testing::SaveArg;
 
 namespace media {
 
-std::vector<std::unique_ptr<VideoDecoder>> PipelineIntegrationTestBase::CreateVideoDecodersForTest(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+static std::vector<std::unique_ptr<VideoDecoder>> CreateVideoDecodersForTest(
     MediaLog* media_log,
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     CreateVideoDecodersCB prepend_video_decoders_cb) {
   std::vector<std::unique_ptr<VideoDecoder>> video_decoders;
 
@@ -72,10 +74,6 @@ std::vector<std::unique_ptr<VideoDecoder>> PipelineIntegrationTestBase::CreateVi
     video_decoders = prepend_video_decoders_cb.Run();
     DCHECK(!video_decoders.empty());
   }
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  AppendPlatformVideoDecoders(video_decoders, media_task_runner, media_log);
-#endif
 
 #if BUILDFLAG(ENABLE_LIBVPX)
   video_decoders.push_back(std::make_unique<OffloadingVpxVideoDecoder>());
@@ -97,12 +95,20 @@ std::vector<std::unique_ptr<VideoDecoder>> PipelineIntegrationTestBase::CreateVi
 #if BUILDFLAG(ENABLE_FFMPEG_VIDEO_DECODERS)
   video_decoders.push_back(std::make_unique<FFmpegVideoDecoder>(media_log));
 #endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  // This must called after adding all Chromium decoders so the implementation
+  // can decide if to prepend or append the platform decoders.
+  VivaldiDecoderConfig::AddVideoDecoders(media_task_runner, media_log,
+                                         video_decoders);
+#endif
+
   return video_decoders;
 }
 
-std::vector<std::unique_ptr<AudioDecoder>> PipelineIntegrationTestBase::CreateAudioDecodersForTest(
-    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
+static std::vector<std::unique_ptr<AudioDecoder>> CreateAudioDecodersForTest(
     MediaLog* media_log,
+    const scoped_refptr<base::SingleThreadTaskRunner>& media_task_runner,
     CreateAudioDecodersCB prepend_audio_decoders_cb) {
   std::vector<std::unique_ptr<AudioDecoder>> audio_decoders;
 
@@ -111,14 +117,18 @@ std::vector<std::unique_ptr<AudioDecoder>> PipelineIntegrationTestBase::CreateAu
     DCHECK(!audio_decoders.empty());
   }
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  AppendPlatformAudioDecoders(audio_decoders, media_task_runner);
-#endif
-
 #if BUILDFLAG(ENABLE_FFMPEG)
   audio_decoders.push_back(
       std::make_unique<FFmpegAudioDecoder>(media_task_runner, media_log));
 #endif
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  // This must called after adding all Chromium decoders so the implementation
+  // can decide if to prepend or append the platform decoders.
+  VivaldiDecoderConfig::AddAudioDecoders(media_task_runner, media_log,
+                                         audio_decoders);
+#endif
+
   return audio_decoders;
 }
 
@@ -249,6 +259,10 @@ void PipelineIntegrationTestBase::OnError(PipelineStatus status) {
     std::move(on_error_closure_).Run();
 }
 
+void PipelineIntegrationTestBase::OnFallback(PipelineStatus status) {
+  DCHECK(status != PIPELINE_OK);
+}
+
 void PipelineIntegrationTestBase::SetCreateRendererCB(
     CreateRendererCB create_renderer_cb) {
   create_renderer_cb_ = std::move(create_renderer_cb);
@@ -329,9 +343,6 @@ PipelineStatus PipelineIntegrationTestBase::StartWithFile(
   base::FilePath file_path(GetTestDataFilePath(filename));
   CHECK(file_data_source->Initialize(file_path)) << "Is " << file_path.value()
                                                  << " missing?";
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  filepath_ = file_path;
-#endif
   return StartInternal(std::move(file_data_source), cdm_context, test_type,
                        prepend_video_decoders_cb, prepend_audio_decoders_cb);
 }
@@ -476,11 +487,10 @@ void PipelineIntegrationTestBase::CreateDemuxer(
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  Demuxer * platformDemuxer = CreatePlatformDemuxer(data_source_,
-                                                    task_environment_,
-                                                    &media_log_);
-  if(platformDemuxer)
-      demuxer_.reset(platformDemuxer);
+  Demuxer* platformDemuxer = VivaldiCreatePlatformDemuxer(
+      data_source_, task_environment_, &media_log_);
+  if (platformDemuxer)
+    demuxer_.reset(platformDemuxer);
 #endif
 }
 
@@ -509,12 +519,9 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateDefaultRenderer(
   // Disable frame dropping if hashing is enabled.
   std::unique_ptr<VideoRenderer> video_renderer(new VideoRendererImpl(
       task_environment_.GetMainThreadTaskRunner(), video_sink_.get(),
-      base::BindRepeating(
-                 &PipelineIntegrationTestBase::CreateVideoDecodersForTest,
-                 base::Unretained(this),
-                 task_environment_.GetMainThreadTaskRunner(),
-                 &media_log_,
-                 prepend_video_decoders_cb_),
+      base::BindRepeating(&CreateVideoDecodersForTest, &media_log_,
+                          task_environment_.GetMainThreadTaskRunner(),
+                          prepend_video_decoders_cb_),
       false, &media_log_, nullptr));
 
   if (!clockless_playback_) {
@@ -545,12 +552,9 @@ std::unique_ptr<Renderer> PipelineIntegrationTestBase::CreateDefaultRenderer(
       (clockless_playback_)
           ? static_cast<AudioRendererSink*>(clockless_audio_sink_.get())
           : audio_sink_.get(),
-      base::BindRepeating(
-                 &PipelineIntegrationTestBase::CreateAudioDecodersForTest,
-                 base::Unretained(this),
-                 task_environment_.GetMainThreadTaskRunner(),
-                 &media_log_,
-                 prepend_audio_decoders_cb_),
+      base::BindRepeating(&CreateAudioDecodersForTest, &media_log_,
+                          task_environment_.GetMainThreadTaskRunner(),
+                          prepend_audio_decoders_cb_),
       &media_log_, nullptr));
   if (hashing_enabled_) {
     if (clockless_playback_)
@@ -648,10 +652,6 @@ PipelineStatus PipelineIntegrationTestBase::StartPipelineWithMediaSource(
     uint8_t test_type,
     FakeEncryptedMedia* encrypted_media) {
   ParseTestTypeFlags(test_type);
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    filepath_ = source->file_path();
-#endif
 
   if (fuzzing_) {
     EXPECT_CALL(*source, InitSegmentReceivedMock(_)).Times(AnyNumber());

@@ -20,10 +20,6 @@
 #include "media/ffmpeg/ffmpeg_common.h"
 #include "media/ffmpeg/ffmpeg_decoding_loop.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/ipc_audio_decoder.h"
-#endif
-
 namespace media {
 
 // AAC(M4A) decoding specific constants.
@@ -43,28 +39,7 @@ AudioFileReader::~AudioFileReader() {
 }
 
 bool AudioFileReader::Open() {
-  bool open = (OpenDemuxer() && OpenDecoder());
-
-  if (!open) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    if (!media::IPCAudioDecoder::IsAvailable())
-      return false;
-
-    ipc_audio_decoder_ = std::make_unique<IPCAudioDecoder>(protocol_);
-    if (!ipc_audio_decoder_->Initialize()) {
-      ipc_audio_decoder_.reset();
-      return false;
-    }
-
-    channels_ = ipc_audio_decoder_->channels();
-    sample_rate_ = ipc_audio_decoder_->sample_rate();
-
-    return true;
-#else
-    return false;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
-  }
-  return open;
+  return OpenDemuxer() && OpenDecoder();
 }
 
 bool AudioFileReader::OpenDemuxer() {
@@ -165,11 +140,6 @@ void AudioFileReader::Close() {
 int AudioFileReader::Read(
     std::vector<std::unique_ptr<AudioBus>>* decoded_audio_packets,
     int packets_to_read) {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (ipc_audio_decoder_) {
-      return ipc_audio_decoder_->Read(decoded_audio_packets);
-  }
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
   DCHECK(glue_ && codec_context_)
       << "AudioFileReader::Read() : reader is not opened!";
 
@@ -223,10 +193,6 @@ base::TimeDelta AudioFileReader::GetDuration() const {
 }
 
 int AudioFileReader::GetNumberOfFrames() const {
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (ipc_audio_decoder_)
-    return ipc_audio_decoder_->number_of_frames();
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
   return base::ClampCeil(GetDuration().InSecondsF() * sample_rate());
 }
 

@@ -20,7 +20,6 @@
 #include "content/browser/notifications/platform_notification_context_impl.h"
 #include "content/browser/service_worker/embedded_worker_test_helper.h"
 #include "content/browser/service_worker/service_worker_context_wrapper.h"
-#include "content/public/browser/permission_type.h"
 #include "content/public/common/content_client.h"
 #include "content/public/common/content_features.h"
 #include "content/public/test/browser_task_environment.h"
@@ -37,6 +36,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/notifications/notification_constants.h"
 #include "third_party/blink/public/common/notifications/notification_resources.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/notifications/notification_service.mojom.h"
 #include "third_party/blink/public/mojom/permissions/permission_status.mojom.h"
@@ -131,6 +131,7 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
         embedded_worker_helper_->context_wrapper(), &render_process_host_,
         url::Origin::Create(GURL(kTestOrigin)),
         /*document_url=*/GURL(),
+        /*weak_document_ptr=*/WeakDocumentPtr(),
         notification_service_remote_.BindNewPipeAndPassReceiver());
 
     // Provide a mock permission manager to the |browser_context_|.
@@ -405,10 +406,12 @@ class BlinkNotificationServiceImplTest : public ::testing::Test {
             browser_context_.GetPermissionControllerDelegate());
 
     ON_CALL(*mock_permission_manager,
-            GetPermissionStatus(PermissionType::NOTIFICATIONS, _, _))
+            GetPermissionStatusForCurrentDocument(
+                blink::PermissionType::NOTIFICATIONS, _))
         .WillByDefault(Return(permission_status));
     ON_CALL(*mock_permission_manager,
-            GetPermissionStatusForWorker(PermissionType::NOTIFICATIONS, _, _))
+            GetPermissionStatusForWorker(blink::PermissionType::NOTIFICATIONS,
+                                         _, _))
         .WillByDefault(Return(permission_status));
   }
 

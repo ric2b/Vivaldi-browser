@@ -134,7 +134,7 @@
 #endif
 
 #if BUILDFLAG(IS_FUCHSIA)
-#include "base/fuchsia/build_info.h"
+#include "base/fuchsia/system_info.h"
 #include "ui/platform_window/fuchsia/initialize_presenter_api_view.h"
 #endif  // BUILDFLAG(IS_FUCHSIA)
 
@@ -154,7 +154,12 @@ bool g_instance_already_created = false;
 // See http://crbug.com/141302.
 int g_browser_process_pid;
 
-void DumpStackTraceSignalHandler(int signal) {
+// A shutdown function set on signal callback registration.
+base::OnceCallback<void(int)> ShutdownHandler;
+
+void SignalHandler(int signal) {
+  std::move(ShutdownHandler).Run(signal);
+
   if (!base::CommandLine::ForCurrentProcess()->HasSwitch(
           switches::kDisableInProcessStackTraces) &&
       g_browser_process_pid == base::GetCurrentProcId()) {
@@ -407,7 +412,7 @@ void BrowserTestBase::SetUp() {
   // in-process browser tests. There is not a single TestSuite for all browser
   // tests and some use the cached values, so skipping the earlier
   // initialization is not an option.
-  base::ClearCachedBuildInfoForTesting();
+  base::ClearCachedSystemInfoForTesting();
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -605,6 +610,8 @@ void BrowserTestBase::SetUp() {
   tracing::EnableStartupTracingIfNeeded();
 
   {
+    using InvokedIn = ContentMainDelegate::InvokedIn;
+
     SetBrowserClientForTesting(delegate->CreateContentBrowserClient());
     if (command_line->HasSwitch(switches::kSingleProcess))
       SetRendererClientForTesting(delegate->CreateContentRendererClient());
@@ -615,10 +622,8 @@ void BrowserTestBase::SetUp() {
     delegate->PreSandboxStartup();
 
     DCHECK(!field_trial_list_);
-    if (delegate->ShouldCreateFeatureList()) {
+    if (delegate->ShouldCreateFeatureList(InvokedIn::kBrowserProcessUnderTest))
       field_trial_list_ = SetUpFieldTrialsAndFeatureList();
-      delegate->PostFieldTrialInitialization();
-    }
 
     base::ThreadPoolInstance::Create("Browser");
 
@@ -631,7 +636,7 @@ void BrowserTestBase::SetUp() {
           variations::VariationsIdsProvider::Mode::kUseSignedInState);
     }
 
-    delegate->PostEarlyInitialization(/*is_running_tests=*/true);
+    delegate->PostEarlyInitialization(InvokedIn::kBrowserProcessUnderTest);
 
     StartBrowserThreadPool();
     BrowserTaskExecutor::PostFeatureListSetup();
@@ -817,7 +822,7 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 #endif
 
   // Install a RunLoop timeout if none is present but do not override tests that
-  // set a ScopedLoopRunTimeout from their fixture's constructor (which
+  // set a ScopedRunLoopTimeout from their fixture's constructor (which
   // happens as part of setting up the test factory in gtest while
   // ProxyRunTestOnMainThreadLoop() happens later as part of SetUp()).
   absl::optional<base::test::ScopedRunLoopTimeout> scoped_run_timeout;
@@ -829,10 +834,13 @@ void BrowserTestBase::ProxyRunTestOnMainThreadLoop() {
 
 #if BUILDFLAG(IS_POSIX)
   g_browser_process_pid = base::GetCurrentProcId();
-  signal(SIGSEGV, DumpStackTraceSignalHandler);
+  signal(SIGSEGV, SignalHandler);
 
   if (handle_sigterm_)
-    signal(SIGTERM, DumpStackTraceSignalHandler);
+    signal(SIGTERM, SignalHandler);
+
+  ShutdownHandler = base::BindOnce(&BrowserTestBase::SignalRunTestOnMainThread,
+                                   base::Unretained(this));
 #endif  // BUILDFLAG(IS_POSIX)
 
   {

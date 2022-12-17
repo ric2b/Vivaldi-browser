@@ -48,6 +48,7 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "google_apis/gaia/gaia_auth_util.h"
+#include "google_apis/gaia/gaia_urls.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
 
 #if BUILDFLAG(IS_WIN)
@@ -255,12 +256,19 @@ void PasswordManager::RegisterProfilePrefs(
 #if BUILDFLAG(IS_ANDROID)
   registry->RegisterBooleanPref(prefs::kOfferToSavePasswordsEnabledGMS, true);
   registry->RegisterBooleanPref(prefs::kAutoSignInEnabledGMS, true);
+  registry->RegisterBooleanPref(prefs::kSettingsMigratedToUPM, false);
   registry->RegisterIntegerPref(
       prefs::kCurrentMigrationVersionToGoogleMobileServices, 0);
   registry->RegisterDoublePref(prefs::kTimeOfLastMigrationAttempt, 0.0);
   registry->RegisterBooleanPref(prefs::kRequiresMigrationAfterSyncStatusChange,
                                 false);
+  registry->RegisterBooleanPref(prefs::kPasswordsPrefWithNewLabelUsed, false);
+  registry->RegisterBooleanPref(
+      prefs::kUnenrolledFromGoogleMobileServicesDueToErrors, false);
 #endif
+  // Preferences for |PasswordChangeSuccessTracker|.
+  registry->RegisterIntegerPref(prefs::kPasswordChangeSuccessTrackerVersion, 0);
+  registry->RegisterListPref(prefs::kPasswordChangeSuccessTrackerFlows);
 }
 
 // static
@@ -464,7 +472,9 @@ void PasswordManager::OnDynamicFormSubmission(
 
   const PasswordForm* submitted_form = submitted_manager->GetSubmittedForm();
 
-  if (gaia::IsGaiaSignonRealm(GURL(submitted_form->signon_realm))) {
+  const GURL gaia_signon_realm =
+      GaiaUrls::GetInstance()->gaia_origin().GetURL();
+  if (GURL(submitted_form->signon_realm) == gaia_signon_realm) {
     // The GAIA signon realm (i.e. https://accounts.google.com) will always
     // perform a full page redirect once the user cleared the login flow. Thus
     // don't respond to other JavaScript based signals that would result in
@@ -559,6 +569,8 @@ void PasswordManager::HideManualFallbackForSaving() {
 void PasswordManager::OnPasswordFormsParsed(
     PasswordManagerDriver* driver,
     const std::vector<FormData>& form_data) {
+  if (NewFormsParsed(driver, form_data))
+    client_->RefreshPasswordManagerSettingsIfNeeded();
   CreatePendingLoginManagers(driver, form_data);
 
   PasswordGenerationFrameHelper* password_generation_manager =
@@ -717,8 +729,6 @@ PasswordFormManager* PasswordManager::ProvisionallySaveForm(
   // Cache the committed URL. Once the post-submit navigation concludes, we
   // compare the landing URL against the cached and report the difference.
   submitted_form_url_ = submitted_url;
-
-  ReportSubmittedFormFrameMetric(driver, *matched_manager->GetSubmittedForm());
 
   return matched_manager;
 }
@@ -1275,30 +1285,6 @@ PasswordFormManager* PasswordManager::GetMatchedManager(
   return nullptr;
 }
 
-void PasswordManager::ReportSubmittedFormFrameMetric(
-    const PasswordManagerDriver* driver,
-    const PasswordForm& form) {
-  if (!driver)
-    return;
-
-  metrics_util::SubmittedFormFrame frame;
-  if (driver->IsInPrimaryMainFrame()) {
-    frame = metrics_util::SubmittedFormFrame::MAIN_FRAME;
-  } else if (form.url == client()->GetLastCommittedURL()) {
-    frame =
-        metrics_util::SubmittedFormFrame::IFRAME_WITH_SAME_URL_AS_MAIN_FRAME;
-  } else {
-    std::string main_frame_signon_realm =
-        GetSignonRealm(client()->GetLastCommittedURL());
-    frame = (main_frame_signon_realm == form.signon_realm)
-                ? metrics_util::SubmittedFormFrame::
-                      IFRAME_WITH_DIFFERENT_URL_SAME_SIGNON_REALM_AS_MAIN_FRAME
-                : metrics_util::SubmittedFormFrame::
-                      IFRAME_WITH_DIFFERENT_SIGNON_REALM;
-  }
-  metrics_util::LogSubmittedFormFrame(frame);
-}
-
 void PasswordManager::TryToFindPredictionsToPossibleUsernameData() {
   if (!possible_username_ || possible_username_->form_predictions)
     return;
@@ -1352,6 +1338,13 @@ void PasswordManager::ShowManualFallbackForSaving(
   } else {
     HideManualFallbackForSaving();
   }
+}
+
+bool PasswordManager::NewFormsParsed(PasswordManagerDriver* driver,
+                                     const std::vector<FormData>& form_data) {
+  return base::ranges::any_of(form_data, [driver, this](const FormData& form) {
+    return !GetMatchedManager(driver, form.unique_renderer_id);
+  });
 }
 
 void PasswordManager::ResetPendingCredentials() {

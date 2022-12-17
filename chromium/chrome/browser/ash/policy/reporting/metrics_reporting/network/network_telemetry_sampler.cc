@@ -100,10 +100,12 @@ NetworkType GetNetworkType(const ::chromeos::NetworkTypePattern& type) {
   return NetworkType::NETWORK_TYPE_UNSPECIFIED;  // Unsupported
 }
 
-void OnHttpsLatencySamplerCompleted(MetricCallback callback,
+void OnHttpsLatencySamplerCompleted(OptionalMetricCallback callback,
                                     MetricData network_data,
-                                    MetricData latency_data) {
-  network_data.CheckTypeAndMergeFrom(latency_data);
+                                    absl::optional<MetricData> latency_data) {
+  if (latency_data.has_value()) {
+    network_data.CheckTypeAndMergeFrom(latency_data.value());
+  }
   std::move(callback).Run(std::move(network_data));
 }
 }  // namespace
@@ -113,7 +115,7 @@ NetworkTelemetrySampler::NetworkTelemetrySampler(Sampler* https_latency_sampler)
 
 NetworkTelemetrySampler::~NetworkTelemetrySampler() = default;
 
-void NetworkTelemetrySampler::Collect(MetricCallback callback) {
+void NetworkTelemetrySampler::MaybeCollect(OptionalMetricCallback callback) {
   auto handle_probe_result_cb =
       base::BindOnce(&NetworkTelemetrySampler::HandleNetworkTelemetryResult,
                      weak_ptr_factory_.GetWeakPtr(), std::move(callback));
@@ -125,11 +127,8 @@ void NetworkTelemetrySampler::Collect(MetricCallback callback) {
 }
 
 void NetworkTelemetrySampler::HandleNetworkTelemetryResult(
-    MetricCallback callback,
+    OptionalMetricCallback callback,
     ::chromeos::cros_healthd::mojom::TelemetryInfoPtr result) {
-  bool full_telemetry_reporting_enabled = base::FeatureList::IsEnabled(
-      MetricReportingManager::kEnableNetworkTelemetryReporting);
-
   if (result.is_null() || result->network_interface_result.is_null()) {
     DVLOG(1) << "cros_healthd: Error getting network result, result is null.";
   } else if (result->network_interface_result->is_error()) {
@@ -146,6 +145,7 @@ void NetworkTelemetrySampler::HandleNetworkTelemetryResult(
       /*limit=*/0,  // no limit to number of results
       &network_state_list);
   if (network_state_list.empty()) {
+    std::move(callback).Run(absl::nullopt);
     return;
   }
 
@@ -162,46 +162,41 @@ void NetworkTelemetrySampler::HandleNetworkTelemetryResult(
       continue;
     }
 
-    bool item_reported = full_telemetry_reporting_enabled;
-    NetworkTelemetry* network_telemetry = nullptr;
-    if (full_telemetry_reporting_enabled) {
-      if (network->IsOnline()) {
-        should_collect_latency = true;
-      }
+    should_report = true;
+    if (network->IsOnline()) {
+      should_collect_latency = true;
+    }
 
-      network_telemetry = metric_data.mutable_telemetry_data()
-                              ->mutable_networks_telemetry()
-                              ->add_network_telemetry();
+    NetworkTelemetry* const network_telemetry =
+        metric_data.mutable_telemetry_data()
+            ->mutable_networks_telemetry()
+            ->add_network_telemetry();
 
-      network_telemetry->set_guid(network->guid());
+    network_telemetry->set_guid(network->guid());
 
-      network_telemetry->set_connection_state(
-          GetNetworkConnectionState(network));
+    network_telemetry->set_type(GetNetworkType(type));
 
-      if (!network->device_path().empty()) {
-        network_telemetry->set_device_path(network->device_path());
-      }
+    network_telemetry->set_connection_state(GetNetworkConnectionState(network));
 
-      if (!network->GetIpAddress().empty()) {
-        network_telemetry->set_ip_address(network->GetIpAddress());
-      }
+    if (!network->device_path().empty()) {
+      network_telemetry->set_device_path(network->device_path());
+    }
 
-      if (!network->GetGateway().empty()) {
-        network_telemetry->set_gateway(network->GetGateway());
-      }
+    if (!network->GetIpAddress().empty()) {
+      network_telemetry->set_ip_address(network->GetIpAddress());
+    }
+
+    if (!network->GetGateway().empty()) {
+      network_telemetry->set_gateway(network->GetGateway());
     }
 
     if (type.Equals(::ash::NetworkTypePattern::WiFi())) {
+      network_telemetry->set_signal_strength(network->signal_strength());
+
       const auto& network_interface_info =
           GetWifiNetworkInterfaceInfo(network->device_path(), result);
       if (!network_interface_info.is_null() &&
           !network_interface_info->get_wireless_interface_info().is_null()) {
-        item_reported = true;
-        if (!network_telemetry) {
-          network_telemetry = metric_data.mutable_telemetry_data()
-                                  ->mutable_networks_telemetry()
-                                  ->add_network_telemetry();
-        }
         const auto& wireless_info =
             network_interface_info->get_wireless_interface_info();
 
@@ -225,23 +220,21 @@ void NetworkTelemetrySampler::HandleNetworkTelemetryResult(
           network_telemetry->set_link_quality(wireless_link_info->link_quality);
         }
       }
-      if (item_reported) {
-        network_telemetry->set_signal_strength(network->signal_strength());
-      }
-    }
-
-    if (item_reported) {
-      network_telemetry->set_type(GetNetworkType(type));
-      should_report = true;
     }
   }
 
   if (should_collect_latency) {
-    https_latency_sampler_->Collect(
+    https_latency_sampler_->MaybeCollect(
         base::BindOnce(OnHttpsLatencySamplerCompleted, std::move(callback),
                        std::move(metric_data)));
-  } else if (should_report) {
-    std::move(callback).Run(std::move(metric_data));
+    return;
   }
+  if (should_report) {
+    std::move(callback).Run(std::move(metric_data));
+    return;
+  }
+
+  std::move(callback).Run(absl::nullopt);
 }
+
 }  // namespace reporting

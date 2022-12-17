@@ -43,13 +43,6 @@ extern const base::Feature kRecordSnapshotSize;
 // WKWebView is set as NSURLRequestAttributionUser on iOS 15.
 extern const base::Feature kSetRequestAttribution;
 
-// When enabled, display non-live preview for context menus in web content.
-extern const base::Feature kWebViewNativeContextMenuPhase2;
-
-// When enabled, uses a screenshot transition to display context menus in web
-// content.
-extern const base::Feature kWebViewNativeContextMenuPhase2Screenshot;
-
 // When enabled, the default context menu from WKWebView is used.
 extern const base::Feature kDefaultWebViewContextMenu;
 
@@ -58,11 +51,6 @@ extern const base::Feature kDisableNonHTMLScreenshotOnIOS15;
 
 // Feature flag that enable Shared Highlighting color change in iOS.
 extern const base::Feature kIOSSharedHighlightingColorChange;
-
-// Feature flag that enables creating pending item on POST form submission.
-// Also, for GET form submissions with same page navigation, retains the
-// transition type of new navigation item.
-extern const base::Feature kCreatePendingItemForPostFormSubmission;
 
 // Enable the new download API if available.
 extern const base::Feature kEnableNewDownloadAPI;
@@ -81,7 +69,7 @@ extern const base::Feature kEnableUnrealizedWebStates;
 // for its current site.
 extern const base::Feature kMediaPermissionsControl;
 
-// Enables the Fullscreen API in WebKit (supported on iOS 15.4+). This API
+// Enables the Fullscreen API in WebKit (supported on iOS 16.0+). This API
 // allows web sites to enter fullscreen mode, with all browser UI hidden.
 extern const base::Feature kEnableFullscreenAPI;
 
@@ -89,7 +77,7 @@ extern const base::Feature kEnableFullscreenAPI;
 // loadSimulatedRequest:responseHTMLString: API to display error pages in
 // CRWWKNavigationHandler. The helper method IsLoadSimulatedRequestAPIEnabled()
 // should be used instead of directly checking this feature.
-extern const base::Feature kUseLoadSimulatedRequestForErrorPageNavigation;
+extern const base::Feature kUseLoadSimulatedRequestForOfflinePage;
 
 // When true, the native context menu for the web content are used.
 bool UseWebViewNativeContextMenuWeb();

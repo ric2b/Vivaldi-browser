@@ -8,6 +8,7 @@
 #include "build/build_config.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/permissions/permission_result.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 
 class PageInfoUiDelegate {
  public:
@@ -17,6 +18,8 @@ class PageInfoUiDelegate {
   virtual bool IsMultipleTabsOpen() = 0;
 #endif
   virtual permissions::PermissionResult GetPermissionStatus(
+      ContentSettingsType type) = 0;
+  virtual absl::optional<permissions::PermissionResult> GetEmbargoResult(
       ContentSettingsType type) = 0;
 };
 

@@ -33,6 +33,7 @@
 #include "components/autofill/core/common/form_data.h"
 #include "components/language/core/browser/language_usage_metrics.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
+#include "services/metrics/public/cpp/ukm_builders.h"
 
 namespace autofill {
 
@@ -42,6 +43,9 @@ namespace {
 
 // Exponential bucket spacing for UKM event data.
 constexpr double kAutofillEventDataBucketSpacing = 2.0;
+
+// Overflow bucket for form user interactions
+constexpr int64_t kFormUserInteractionsOverflowBucket = 20;
 
 // Translates structured name types into simple names that are used for
 // naming histograms.
@@ -323,6 +327,8 @@ int GetFieldTypeGroupPredictionQualityMetric(
         case NAME_SUFFIX:
         case EMAIL_ADDRESS:
         case PHONE_HOME_NUMBER:
+        case PHONE_HOME_NUMBER_PREFIX:
+        case PHONE_HOME_NUMBER_SUFFIX:
         case PHONE_HOME_CITY_CODE:
         case PHONE_HOME_CITY_CODE_WITH_TRUNK_PREFIX:
         case PHONE_HOME_COUNTRY_CODE:
@@ -1096,17 +1102,6 @@ void AutofillMetrics::LogCreditCardUploadFeedbackMetric(
 }
 
 // static
-void AutofillMetrics::LogManageCardsPromptMetric(ManageCardsPromptMetric metric,
-                                                 bool is_upload_save) {
-  DCHECK_LT(metric, NUM_MANAGE_CARDS_PROMPT_METRICS);
-  std::string destination = is_upload_save ? ".Upload" : ".Local";
-  std::string metric_with_destination =
-      "Autofill.ManageCardsPrompt" + destination;
-  base::UmaHistogramEnumeration(metric_with_destination, metric,
-                                NUM_MANAGE_CARDS_PROMPT_METRICS);
-}
-
-// static
 void AutofillMetrics::LogScanCreditCardPromptMetric(
     ScanCreditCardPromptMetric metric) {
   DCHECK_LT(metric, NUM_SCAN_CREDIT_CARD_PROMPT_METRICS);
@@ -1237,6 +1232,9 @@ void AutofillMetrics::LogOfferNotificationBubbleOfferMetric(
     case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
       histogram_name += "CardLinkedOffer";
       break;
+    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
+      histogram_name += "GPayPromoCodeOffer";
+      break;
     case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       histogram_name += "FreeListingCouponOffer";
       break;
@@ -1259,6 +1257,9 @@ void AutofillMetrics::LogOfferNotificationBubbleResultMetric(
     case AutofillOfferData::OfferType::GPAY_CARD_LINKED_OFFER:
       histogram_name += "CardLinkedOffer.";
       break;
+    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
+      histogram_name += "GPayPromoCodeOffer.";
+      break;
     case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       histogram_name += "FreeListingCouponOffer.";
       break;
@@ -1279,6 +1280,9 @@ void AutofillMetrics::LogOfferNotificationBubblePromoCodeButtonClicked(
   // Switch to different sub-histogram depending on offer type being displayed.
   // Card-linked offers do not have a promo code button.
   switch (offer_type) {
+    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
+      histogram_name += "GPayPromoCodeOffer";
+      break;
     case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       histogram_name += "FreeListingCouponOffer";
       break;
@@ -1297,6 +1301,9 @@ void AutofillMetrics::LogOfferNotificationBubbleSuppressed(
   // Switch to different sub-histogram depending on offer type being suppressed.
   // Card-linked offers will not be suppressed.
   switch (offer_type) {
+    case AutofillOfferData::OfferType::GPAY_PROMO_CODE_OFFER:
+      histogram_name += "GPayPromoCodeOffer";
+      break;
     case AutofillOfferData::OfferType::FREE_LISTING_COUPON_OFFER:
       histogram_name += "FreeListingCouponOffer";
       break;
@@ -1379,33 +1386,11 @@ void AutofillMetrics::LogCardUnmaskDurationAfterWebauthn(
     const base::TimeDelta& duration,
     AutofillClient::PaymentsRpcResult result,
     AutofillClient::PaymentsRpcCardType card_type) {
-  std::string result_suffix;
-
-  switch (result) {
-    case AutofillClient::PaymentsRpcResult::kSuccess:
-      result_suffix = "Success";
-      break;
-    case AutofillClient::PaymentsRpcResult::kTryAgainFailure:
-    case AutofillClient::PaymentsRpcResult::kPermanentFailure:
-      result_suffix = "Failure";
-      break;
-    case AutofillClient::PaymentsRpcResult::kNetworkError:
-      result_suffix = "NetworkError";
-      break;
-    case AutofillClient::PaymentsRpcResult::kVcnRetrievalTryAgainFailure:
-    case AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure:
-      result_suffix = "VcnRetrievalFailure";
-      break;
-    case AutofillClient::PaymentsRpcResult::kNone:
-      NOTREACHED();
-      return;
-  }
-
   base::UmaHistogramLongTimes("Autofill.BetterAuth.CardUnmaskDuration.Fido",
                               duration);
   base::UmaHistogramLongTimes("Autofill.BetterAuth.CardUnmaskDuration.Fido" +
-                                  GetCreditCardTypeSuffix(card_type) + "." +
-                                  result_suffix,
+                                  GetCreditCardTypeSuffix(card_type) +
+                                  PaymentsRpcResultToMetricsSuffix(result),
                               duration);
 }
 
@@ -2251,21 +2236,6 @@ void AutofillMetrics::LogStoredCreditCardMetrics(
 }
 
 // static
-void AutofillMetrics::LogStoredOfferMetrics(
-    const std::vector<std::unique_ptr<AutofillOfferData>>& offers) {
-  base::UmaHistogramCounts1000("Autofill.Offer.StoredOfferCount",
-                               offers.size());
-
-  for (const std::unique_ptr<AutofillOfferData>& offer : offers) {
-    base::UmaHistogramCounts1000(
-        "Autofill.Offer.StoredOfferRelatedMerchantCount",
-        offer->merchant_origins.size());
-    base::UmaHistogramCounts1000("Autofill.Offer.StoredOfferRelatedCardCount",
-                                 offer->eligible_instrument_id.size());
-  }
-}
-
-// static
 void AutofillMetrics::LogSyncedOfferDataBeingValid(bool valid) {
   base::UmaHistogramBoolean("Autofill.Offer.SyncedOfferDataBeingValid", valid);
 }
@@ -2388,7 +2358,8 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
     const DenseSet<FormType>& form_types,
     const base::TimeTicks& form_parsed_timestamp,
     FormSignature form_signature,
-    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger) {
+    AutofillMetrics::FormInteractionsUkmLogger* form_interactions_ukm_logger,
+    const FormInteractionCounts& form_interaction_counts) {
   UMA_HISTOGRAM_ENUMERATION("Autofill.FormSubmittedState", state,
                             AUTOFILL_FORM_SUBMITTED_STATE_ENUM_SIZE);
 
@@ -2424,7 +2395,7 @@ void AutofillMetrics::LogAutofillFormSubmittedState(
   }
   form_interactions_ukm_logger->LogFormSubmitted(
       is_for_credit_card, has_upi_vpa_field, form_types, state,
-      form_parsed_timestamp, form_signature);
+      form_parsed_timestamp, form_signature, form_interaction_counts);
 }
 
 // static
@@ -2551,13 +2522,16 @@ uint8_t AutofillMetrics::CreditCardSeamlessness::BitmaskMetric() const {
 void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
     const LogCreditCardSeamlessnessParam& p) {
   auto GetSeamlessness = [&p](bool only_newly_filled_fields,
-                              bool only_after_security_policy) {
+                              bool only_after_security_policy,
+                              bool only_visible_fields) {
     ServerFieldTypeSet autofilled_types;
     for (const auto& field : p.form) {
       FieldGlobalId id = field->global_id();
       if (only_newly_filled_fields && !p.newly_filled_fields.contains(id))
         continue;
       if (only_after_security_policy && !p.safe_fields.contains(id))
+        continue;
+      if (only_visible_fields && !field->is_visible)
         continue;
       autofilled_types.insert(field->Type().GetStorableType());
     }
@@ -2571,28 +2545,52 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtFillTime(
                                   s.BitmaskExclusiveMax());
   };
 
-  if (auto s = GetSeamlessness(false, false)) {
+  if (auto s = GetSeamlessness(false, false, false)) {
     RecordUma("Fillable.AtFillTimeBeforeSecurityPolicy", s);
     p.builder.SetFillable_BeforeSecurity_Bitmask(s.BitmaskMetric());
     p.builder.SetFillable_BeforeSecurity_Qualitative(
         s.QualitativeMetricAsInt());
     p.event_logger.Log(s.QualitativeFillableFormEvent(), p.form);
   }
-  if (auto s = GetSeamlessness(false, true)) {
+  if (auto s = GetSeamlessness(false, true, false)) {
     RecordUma("Fillable.AtFillTimeAfterSecurityPolicy", s);
     p.builder.SetFillable_AfterSecurity_Bitmask(s.BitmaskMetric());
     p.builder.SetFillable_AfterSecurity_Qualitative(s.QualitativeMetricAsInt());
   }
-  if (auto s = GetSeamlessness(true, false)) {
+  if (auto s = GetSeamlessness(true, false, false)) {
     RecordUma("Fills.AtFillTimeBeforeSecurityPolicy", s);
     p.builder.SetFilled_BeforeSecurity_Bitmask(s.BitmaskMetric());
     p.builder.SetFilled_BeforeSecurity_Qualitative(s.QualitativeMetricAsInt());
   }
-  if (auto s = GetSeamlessness(true, true)) {
+  if (auto s = GetSeamlessness(true, true, false)) {
     RecordUma("Fills.AtFillTimeAfterSecurityPolicy", s);
     p.builder.SetFilled_AfterSecurity_Bitmask(s.BitmaskMetric());
     p.builder.SetFilled_AfterSecurity_Qualitative(s.QualitativeMetricAsInt());
     p.event_logger.Log(s.QualitativeFillFormEvent(), p.form);
+  }
+  if (auto s = GetSeamlessness(false, false, true)) {
+    RecordUma("Fillable.AtFillTimeBeforeSecurityPolicy.Visible", s);
+    p.builder.SetFillable_BeforeSecurity_Visible_Bitmask(s.BitmaskMetric());
+    p.builder.SetFillable_BeforeSecurity_Visible_Qualitative(
+        s.QualitativeMetricAsInt());
+  }
+  if (auto s = GetSeamlessness(false, true, true)) {
+    RecordUma("Fillable.AtFillTimeAfterSecurityPolicy.Visible", s);
+    p.builder.SetFillable_AfterSecurity_Visible_Bitmask(s.BitmaskMetric());
+    p.builder.SetFillable_AfterSecurity_Visible_Qualitative(
+        s.QualitativeMetricAsInt());
+  }
+  if (auto s = GetSeamlessness(true, false, true)) {
+    RecordUma("Fills.AtFillTimeBeforeSecurityPolicy.Visible", s);
+    p.builder.SetFilled_BeforeSecurity_Visible_Bitmask(s.BitmaskMetric());
+    p.builder.SetFilled_BeforeSecurity_Visible_Qualitative(
+        s.QualitativeMetricAsInt());
+  }
+  if (auto s = GetSeamlessness(true, true, true)) {
+    RecordUma("Fills.AtFillTimeAfterSecurityPolicy.Visible", s);
+    p.builder.SetFilled_AfterSecurity_Visible_Bitmask(s.BitmaskMetric());
+    p.builder.SetFilled_AfterSecurity_Visible_Qualitative(
+        s.QualitativeMetricAsInt());
   }
 
   // In a multi-frame form, a cross-origin field is filled only if
@@ -2671,12 +2669,6 @@ void AutofillMetrics::LogCreditCardSeamlessnessAtSubmissionTime(
         "Autofill.CreditCard.SeamlessFills.AtSubmissionTime",
         seamlessness.QualitativeMetric());
   }
-}
-
-// static
-void AutofillMetrics::LogDetermineHeuristicTypesTiming(
-    const base::TimeDelta& duration) {
-  UMA_HISTOGRAM_TIMES("Autofill.Timing.DetermineHeuristicTypes", duration);
 }
 
 // static
@@ -3081,7 +3073,8 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
     const DenseSet<FormType>& form_types,
     AutofillFormSubmittedState state,
     const base::TimeTicks& form_parsed_timestamp,
-    FormSignature form_signature) {
+    FormSignature form_signature,
+    const FormInteractionCounts& form_interaction_counts) {
   if (!CanLog())
     return;
 
@@ -3090,7 +3083,14 @@ void AutofillMetrics::FormInteractionsUkmLogger::LogFormSubmitted(
       .SetIsForCreditCard(is_for_credit_card)
       .SetHasUpiVpaField(has_upi_vpa_field)
       .SetFormTypes(FormTypesToBitVector(form_types))
-      .SetFormSignature(HashFormSignature(form_signature));
+      .SetFormSignature(HashFormSignature(form_signature))
+      .SetFormElementUserModifications(
+          std::min(form_interaction_counts.form_element_user_modifications,
+                   kFormUserInteractionsOverflowBucket))
+      .SetAutofillFills(std::min(form_interaction_counts.autofill_fills,
+                                 kFormUserInteractionsOverflowBucket))
+      .SetAutocompleteFills(std::min(form_interaction_counts.autocomplete_fills,
+                                     kFormUserInteractionsOverflowBucket));
   if (form_parsed_timestamp.is_null())
     DCHECK(state == NON_FILLABLE_FORM_OR_NEW_DATA ||
            state == FILLABLE_FORM_AUTOFILLED_NONE_DID_NOT_SHOW_SUGGESTIONS)
@@ -3177,7 +3177,7 @@ void AutofillMetrics::
 }
 
 // static
-void AutofillMetrics::LogAddressFormImportStatustMetric(
+void AutofillMetrics::LogAddressFormImportStatusMetric(
     AutofillMetrics::AddressProfileImportStatusMetric metric) {
   base::UmaHistogramEnumeration("Autofill.AddressProfileImportStatus", metric);
 }
@@ -3402,11 +3402,20 @@ void AutofillMetrics::LogRemovedSettingInaccessibleFields(bool did_remove) {
 
 // static
 void AutofillMetrics::LogRemovedSettingInaccessibleField(
-    const std::string& country_code,
     ServerFieldType field) {
   base::UmaHistogramEnumeration(
-      "Autofill.ProfileImport.InaccessibleFieldsRemoved." + country_code,
+      "Autofill.ProfileImport.InaccessibleFieldsRemoved.ByFieldType",
       ConvertSettingsVisibleFieldTypeForMetrics(field));
+}
+
+// static
+void AutofillMetrics::LogPhoneNumberImportParsingResult(
+    bool with_variation_country_code,
+    bool with_app_locale) {
+  base::UmaHistogramEnumeration(
+      "Autofill.ProfileImport.PhoneNumberParsingResult",
+      static_cast<AutofillMetrics::PhoneNumberImportParsingResult>(
+          (with_variation_country_code << 1) | with_app_locale));
 }
 
 void AutofillMetrics::LogVerificationStatusOfNameTokensOnProfileUsage(
@@ -3549,6 +3558,32 @@ void AutofillMetrics::
   base::UmaHistogramBoolean(
       "Autofill.IsValueNotAutofilledOverExistingValueSameAsSubmittedValue",
       is_same);
+}
+
+const std::string PaymentsRpcResultToMetricsSuffix(
+    AutofillClient::PaymentsRpcResult result) {
+  std::string result_suffix;
+
+  switch (result) {
+    case AutofillClient::PaymentsRpcResult::kSuccess:
+      result_suffix = ".Success";
+      break;
+    case AutofillClient::PaymentsRpcResult::kTryAgainFailure:
+    case AutofillClient::PaymentsRpcResult::kPermanentFailure:
+      result_suffix = ".Failure";
+      break;
+    case AutofillClient::PaymentsRpcResult::kNetworkError:
+      result_suffix = ".NetworkError";
+      break;
+    case AutofillClient::PaymentsRpcResult::kVcnRetrievalTryAgainFailure:
+    case AutofillClient::PaymentsRpcResult::kVcnRetrievalPermanentFailure:
+      result_suffix = ".VcnRetrievalFailure";
+      break;
+    case AutofillClient::PaymentsRpcResult::kNone:
+      NOTREACHED();
+  }
+
+  return result_suffix;
 }
 
 }  // namespace autofill

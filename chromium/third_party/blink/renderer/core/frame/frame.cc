@@ -213,8 +213,10 @@ bool Frame::IsCrossOriginToOutermostMainFrame() const {
   return IsCrossOriginToMainFrame() || IsInFencedFrameTree();
 }
 
-bool Frame::IsCrossOriginToParentFrame() const {
+bool Frame::IsCrossOriginToParentOrOuterDocument() const {
   DCHECK(GetSecurityContext());
+  if (IsInFencedFrameTree())
+    return true;
   if (IsMainFrame())
     return false;
   Frame* parent = Tree().Parent();
@@ -370,15 +372,34 @@ void Frame::RenderFallbackContentWithResourceTiming(
 }
 
 bool Frame::IsInFencedFrameTree() const {
-  if (!blink::features::IsFencedFramesEnabled())
+  DCHECK(!IsDetached());
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
     return false;
 
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+  switch (ff_impl.value()) {
     case blink::features::FencedFramesImplementationType::kMPArch:
-      return GetPage()->IsMainFrameFencedFrameRoot();
+      return GetPage() && GetPage()->IsMainFrameFencedFrameRoot();
     case blink::features::FencedFramesImplementationType::kShadowDOM:
       return Tree().Top(FrameTreeBoundary::kFenced) !=
              Tree().Top(FrameTreeBoundary::kIgnoreFence);
+    default:
+      return false;
+  }
+}
+
+bool Frame::IsFencedFrameRoot() const {
+  DCHECK(!IsDetached());
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
+    return false;
+
+  switch (ff_impl.value()) {
+    case blink::features::FencedFramesImplementationType::kMPArch:
+      return IsInFencedFrameTree() && IsMainFrame();
+    case blink::features::FencedFramesImplementationType::kShadowDOM:
+      return IsInFencedFrameTree() &&
+             this == &Tree().Top(FrameTreeBoundary::kFenced);
     default:
       return false;
   }
@@ -388,13 +409,14 @@ absl::optional<mojom::blink::FencedFrameMode> Frame::GetFencedFrameMode()
     const {
   DCHECK(!IsDetached());
 
-  if (!blink::features::IsFencedFramesEnabled())
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
     return absl::nullopt;
 
   if (!IsInFencedFrameTree())
     return absl::nullopt;
 
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+  switch (ff_impl.value()) {
     case blink::features::FencedFramesImplementationType::kMPArch:
       return GetPage()->FencedFrameMode();
     case blink::features::FencedFramesImplementationType::kShadowDOM:
@@ -408,10 +430,11 @@ absl::optional<mojom::blink::FencedFrameMode> Frame::GetFencedFrameMode()
 }
 
 bool Frame::IsInShadowDOMOpaqueAdsFencedFrameTree() const {
-  if (!blink::features::IsFencedFramesEnabled())
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
     return false;
 
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+  switch (ff_impl.value()) {
     case blink::features::FencedFramesImplementationType::kMPArch:
       return false;
     case blink::features::FencedFramesImplementationType::kShadowDOM: {
@@ -425,10 +448,11 @@ bool Frame::IsInShadowDOMOpaqueAdsFencedFrameTree() const {
 }
 
 bool Frame::IsInMPArchOpaqueAdsFencedFrameTree() const {
-  if (!blink::features::IsFencedFramesEnabled())
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
     return false;
 
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+  switch (ff_impl.value()) {
     case blink::features::FencedFramesImplementationType::kMPArch:
       return GetPage() && GetPage()->FencedFrameMode() ==
                               mojom::blink::FencedFrameMode::kOpaqueAds;
@@ -597,15 +621,26 @@ void Frame::InsertAfter(Frame* new_child, Frame* previous_sibling) {
   GetPage()->IncrementSubframeCount();
 }
 
-void Frame::ScheduleFormSubmission(FrameScheduler* scheduler,
-                                   FormSubmission* form_submission) {
+base::OnceClosure Frame::ScheduleFormSubmission(
+    FrameScheduler* scheduler,
+    FormSubmission* form_submission) {
   form_submit_navigation_task_ = PostCancellableTask(
       *scheduler->GetTaskRunner(TaskType::kDOMManipulation), FROM_HERE,
       WTF::Bind(&FormSubmission::Navigate, WrapPersistent(form_submission)));
+  form_submit_navigation_task_version_++;
+
+  return WTF::Bind(&Frame::CancelFormSubmissionWithVersion,
+                   WrapWeakPersistent(this),
+                   form_submit_navigation_task_version_);
 }
 
 void Frame::CancelFormSubmission() {
   form_submit_navigation_task_.Cancel();
+}
+
+void Frame::CancelFormSubmissionWithVersion(uint64_t version) {
+  if (form_submit_navigation_task_version_ == version)
+    form_submit_navigation_task_.Cancel();
 }
 
 bool Frame::IsFormSubmissionPending() {
@@ -638,15 +673,19 @@ void Frame::SetOpenerDoNotNotify(Frame* opener) {
 }
 
 Frame* Frame::Parent(FrameTreeBoundary frame_tree_boundary) const {
+  // |parent_| will be null if detached, return early before accessing
+  // Page.
+  if (!parent_)
+    return nullptr;
+
   // TODO(crbug.com/1123606): Remove this once we use MPArch as the underlying
   // fenced frames implementation, instead of the
   // `FencedFrameShadowDOMDelegate`.
-  if (frame_tree_boundary == FrameTreeBoundary::kFenced &&
-      RuntimeEnabledFeatures::FencedFramesEnabled(
-          DomWindow()->GetExecutionContext()) &&
-      features::kFencedFramesImplementationTypeParam.Get() ==
-          features::FencedFramesImplementationType::kShadowDOM &&
-      Owner() && Owner()->GetFramePolicy().is_fenced) {
+  if (frame_tree_boundary == FrameTreeBoundary::kFenced && Owner() &&
+      Owner()->GetFramePolicy().is_fenced &&
+      GetPage()->FencedFramesImplementationType().has_value() &&
+      GetPage()->FencedFramesImplementationType().value() ==
+          features::FencedFramesImplementationType::kShadowDOM) {
     return nullptr;
   }
 
@@ -714,10 +753,11 @@ bool Frame::FocusCrossesFencedBoundary() {
 }
 
 bool Frame::ShouldAllowScriptFocus() {
-  if (!features::IsFencedFramesEnabled())
+  const auto& ff_impl = GetPage()->FencedFramesImplementationType();
+  if (!ff_impl)
     return true;
 
-  switch (blink::features::kFencedFramesImplementationTypeParam.Get()) {
+  switch (ff_impl.value()) {
     case blink::features::FencedFramesImplementationType::kMPArch:
       // For a newly-loaded page, no page will have focus. We allow a non-fenced
       // frame to get the first focus before enforcing if a page already has

@@ -6,7 +6,6 @@
 
 #include "base/files/file_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index_builder.h"
 #include "components/request_filter/adblock_filter/utils.h"
@@ -88,8 +87,8 @@ void GetRuleBufferFromFile(
     const std::string& checksum,
     BufferType buffer_type,
     base::OnceCallback<void(std::unique_ptr<std::string>)> callback) {
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(std::move(callback),
                      std::make_unique<std::string>(DoGetRuleBufferFromFile(
                          buffer_path, buffer_type, checksum))));

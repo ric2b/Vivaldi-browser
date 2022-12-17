@@ -4,6 +4,7 @@
 
 #include "chrome/browser/accessibility/live_caption_unavailability_notifier.h"
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/test/base/chrome_render_view_host_test_harness.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/test/navigation_simulator.h"
@@ -27,9 +28,7 @@ class LiveCaptionUnavailabilityNotifierTest
   LiveCaptionUnavailabilityNotifierTest& operator=(
       const LiveCaptionUnavailabilityNotifierTest&) = delete;
 
-  bool ShouldDisplayMediaFoundationRendererError() {
-    return notifier_->ShouldDisplayMediaFoundationRendererError();
-  }
+  bool ErrorSilencedForOrigin() { return notifier_->ErrorSilencedForOrigin(); }
 
   void OnMediaFoundationRendererErrorDoNotShowAgainCheckboxClicked(
       bool checked) {
@@ -57,23 +56,23 @@ class LiveCaptionUnavailabilityNotifierTest
 
  private:
   mojo::Remote<media::mojom::MediaFoundationRendererNotifier> remote_;
-  LiveCaptionUnavailabilityNotifier* notifier_;
+  raw_ptr<LiveCaptionUnavailabilityNotifier> notifier_;
 };
 
 TEST_F(LiveCaptionUnavailabilityNotifierTest, MediaFoundationRendererCreated) {
-  ASSERT_TRUE(ShouldDisplayMediaFoundationRendererError());
+  ASSERT_FALSE(ErrorSilencedForOrigin());
 
   OnMediaFoundationRendererErrorDoNotShowAgainCheckboxClicked(true);
-  ASSERT_FALSE(ShouldDisplayMediaFoundationRendererError());
+  ASSERT_TRUE(ErrorSilencedForOrigin());
 
   NavigateAndCommit(GURL(kExampleSiteSameOrigin));
-  ASSERT_FALSE(ShouldDisplayMediaFoundationRendererError());
+  ASSERT_TRUE(ErrorSilencedForOrigin());
 
   OnMediaFoundationRendererErrorDoNotShowAgainCheckboxClicked(false);
-  ASSERT_TRUE(ShouldDisplayMediaFoundationRendererError());
+  ASSERT_FALSE(ErrorSilencedForOrigin());
 
   NavigateAndCommit(GURL(kExampleSiteDifferentOrigin));
-  ASSERT_TRUE(ShouldDisplayMediaFoundationRendererError());
+  ASSERT_FALSE(ErrorSilencedForOrigin());
 }
 
 }  // namespace captions

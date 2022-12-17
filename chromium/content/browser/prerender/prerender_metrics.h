@@ -23,43 +23,9 @@ enum class PrerenderCancelledInterface {
   kUnknown = 0,  // For kCancel interfaces added by embedders or tests.
   kGamepadHapticsManager = 1,
   kGamepadMonitor = 2,
-  kNotificationService = 3,
+  // kNotificationService = 3,   Deprecated.
   kSyncEncryptionKeysExtension = 4,
   kMaxValue = kSyncEncryptionKeysExtension
-};
-
-// Used by PrerenderNavigationThrottle, to track the cross-origin cancellation
-// reason, and break it down into more cases.
-// Do not modify this enum.
-enum class PrerenderCrossOriginRedirectionMismatch {
-  kShouldNotBeReported = 0,
-  kPortMismatch = 1,
-  kHostMismatch = 2,
-  kHostPortMismatch = 3,
-  kSchemeMismatch = 4,
-  kSchemePortMismatch = 5,
-  kSchemeHostMismatch = 6,
-  kSchemeHostPortMismatch = 7,
-  kMaxValue = kSchemeHostPortMismatch
-};
-
-// Used by PrerenderNavigationThrottle. This is a breakdown enum for
-// PrerenderCrossOriginRedirectionMismatch.kSchemePortMismatch.
-// Do not modify this enum.
-enum class PrerenderCrossOriginRedirectionProtocolChange {
-  kHttpProtocolUpgrade = 0,
-  kHttpProtocolDowngrade = 1,
-  kMaxValue = kHttpProtocolDowngrade
-};
-
-// Used by PrerenderNavigationThrottle. This is a breakdown enum for
-// PrerenderCrossOriginRedirectionMismatch.kHostMismatch.
-// Do not modify this enum.
-enum class PrerenderCrossOriginRedirectionDomain {
-  kRedirectToSubDomain = 0,
-  kRedirectFromSubDomain = 1,
-  kCrossDomain = 2,
-  kMaxValue = kCrossDomain
 };
 
 void RecordPrerenderCancelledInterface(
@@ -74,33 +40,13 @@ void RecordPrerenderActivationTime(
     PrerenderTriggerType trigger_type,
     const std::string& embedder_histogram_suffix);
 
-// Records the status to UMA and UKM. `initiator_ukm_id` represents the page
-// that starts prerendering and `prerendered_ukm_id` represents the prerendered
-// page. `prerendered_ukm_id` is valid after the page is activated.
-void RecordPrerenderHostFinalStatus(
-    PrerenderHost::FinalStatus status,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix,
-    ukm::SourceId initiator_ukm_id,
-    ukm::SourceId prerendered_ukm_id);
-
-void RecordPrerenderRedirectionMismatchType(
-    PrerenderCrossOriginRedirectionMismatch case_type,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix);
-
-// Records whether the redirection was caused by HTTP protocol upgrade.
-void RecordPrerenderRedirectionProtocolChange(
-    PrerenderCrossOriginRedirectionProtocolChange change_type,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix);
-
-// Records whether the prerendering navigation was redirected to a subdomain
-// page.
-void RecordPrerenderRedirectionDomain(
-    PrerenderCrossOriginRedirectionDomain domain_type,
-    PrerenderTriggerType trigger_type,
-    const std::string& embedder_histogram_suffix);
+// Records the status to UMA and UKM, and reports the status other than
+// kActivated to DevTools. In the attributes, `initiator_ukm_id` represents the
+// page that starts prerendering. `prerendered_ukm_id` represents the
+// prerendered page and is valid after the page is activated.
+void RecordPrerenderHostFinalStatus(PrerenderHost::FinalStatus status,
+                                    const PrerenderAttributes& attributes,
+                                    ukm::SourceId prerendered_ukm_id);
 
 }  // namespace content
 

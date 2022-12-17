@@ -61,7 +61,7 @@
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chrome/browser/lacros/account_manager/account_manager_util.h"
 #include "chromeos/crosapi/mojom/account_manager.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #include "components/account_manager_core/account.h"
 #include "components/account_manager_core/account_manager_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -94,7 +94,15 @@ signin_metrics::ProfileSignout kAlwaysAllowedSignoutSources[] = {
     signin_metrics::ProfileSignout::FORCE_SIGNOUT_ALWAYS_ALLOWED_FOR_TEST,
     // Allowed, because access to this entry point is controlled to only be
     // enabled if the user may turn off sync.
-    signin_metrics::ProfileSignout::USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS};
+    signin_metrics::ProfileSignout::USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS,
+    // Allowed, because the dialog offers the option to the user to sign out.
+    // Note that the dialog is only shown on iOS and isn't planned to be shown
+    // on the other platforms since they already support user policies (no need
+    // for a notification in that case). Still, the metric is added to the
+    // kAlwaysAllowedSignoutSources for coherence.
+    signin_metrics::ProfileSignout::
+        USER_CLICKED_SIGNOUT_FROM_USER_POLICY_NOTIFICATION_DIALOG,
+};
 
 SigninClient::SignoutDecision IsSignoutAllowed(
     Profile* profile,
@@ -289,10 +297,6 @@ void ChromeSigninClient::VerifySyncToken() {
 #endif
 }
 
-bool ChromeSigninClient::IsNonEnterpriseUser(const std::string& username) {
-  return policy::BrowserPolicyConnector::IsNonEnterpriseUser(username);
-}
-
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 // Returns the account that must be auto-signed-in to the Main Profile in
 // Lacros.
@@ -313,7 +317,7 @@ ChromeSigninClient::GetInitialPrimaryAccount() {
     return absl::nullopt;
 
   const crosapi::mojom::AccountPtr& device_account =
-      chromeos::LacrosService::Get()->init_params()->device_account;
+      chromeos::BrowserInitParams::Get()->device_account;
   if (!device_account)
     return absl::nullopt;
 
@@ -329,11 +333,25 @@ absl::optional<bool> ChromeSigninClient::IsInitialPrimaryAccountChild() const {
   if (!profile_->IsMainProfile())
     return absl::nullopt;
 
-  DCHECK(chromeos::LacrosService::Get());
   const bool is_child_session =
-      chromeos::LacrosService::Get()->init_params()->session_type ==
+      chromeos::BrowserInitParams::Get()->session_type ==
       crosapi::mojom::SessionType::kChildSession;
   return is_child_session;
+}
+
+void ChromeSigninClient::RemoveAccount(
+    const account_manager::AccountKey& account_key) {
+  absl::optional<account_manager::Account> device_account =
+      GetInitialPrimaryAccount();
+  if (device_account.has_value() && device_account->key == account_key) {
+    DLOG(ERROR)
+        << "The primary account should not be removed from the main profile";
+    return;
+  }
+
+  g_browser_process->profile_manager()
+      ->GetAccountProfileMapper()
+      ->RemoveAccount(profile_->GetPath(), account_key);
 }
 
 void ChromeSigninClient::RemoveAllAccounts() {

@@ -5,12 +5,15 @@
 /**
  * @fileoverview Handles gesture-based commands.
  */
-import {EventGenerator} from '../../common/event_generator.js';
-
-import {GestureCommandData, GestureGranularity} from '../common/gesture_command_data.js';
-
-import {GestureInterface} from './gesture_interface.js';
-import {PointerHandler} from './pointer_handler.js';
+import {ChromeVoxState} from '/chromevox/background/chromevox_state.js';
+import {EventSourceState} from '/chromevox/background/event_source.js';
+import {GestureInterface} from '/chromevox/background/gesture_interface.js';
+import {Output} from '/chromevox/background/output/output.js';
+import {PointerHandler} from '/chromevox/background/pointer_handler.js';
+import {UserActionMonitor} from '/chromevox/background/user_action_monitor.js';
+import {EventSourceType} from '/chromevox/common/event_source_type.js';
+import {GestureCommandData, GestureGranularity} from '/chromevox/common/gesture_command_data.js';
+import {EventGenerator} from '/common/event_generator.js';
 
 const RoleType = chrome.automation.RoleType;
 const Gesture = chrome.accessibilityPrivate.Gesture;
@@ -24,12 +27,6 @@ export const GestureCommandHandler = {};
 GestureCommandHandler.setEnabled = function(state) {
   GestureCommandHandler.enabled_ = state;
 };
-chrome.runtime.onMessage.addListener((message) => {
-  if (message.target === 'GestureCommandHandler' &&
-      message.action === 'setEnabled') {
-    GestureCommandHandler.setEnabled(message.value);
-  }
-});
 
 /**
  * Global setting for the enabled state of this handler.
@@ -52,8 +49,7 @@ GestureCommandHandler.onAccessibilityGesture_ = function(gesture, x, y) {
 
   EventSourceState.set(EventSourceType.TOUCH_GESTURE);
 
-  const chromeVoxState = ChromeVoxState.instance;
-  const monitor = chromeVoxState ? chromeVoxState.getUserActionMonitor() : null;
+  const monitor = UserActionMonitor.instance;
   if (gesture !== Gesture.SWIPE_LEFT2 && monitor &&
       !monitor.onGesture(gesture)) {
     // UserActionMonitor returns true if this gesture should propagate.
@@ -133,7 +129,7 @@ GestureCommandHandler.init_ = function() {
   GestureCommandHandler.pointerHandler_ = new PointerHandler();
 
   GestureInterface.granularityGetter = () => GestureCommandHandler.granularity;
-  GestureInterface.granularitySetter = (granularity) =>
+  GestureInterface.granularitySetter = granularity =>
       GestureCommandHandler.granularity = granularity;
 };
 
@@ -144,3 +140,8 @@ GestureCommandHandler.init_ = function() {
 GestureCommandHandler.granularity = GestureGranularity.LINE;
 
 GestureCommandHandler.init_();
+
+BridgeHelper.registerHandler(
+    BridgeConstants.GestureCommandHandler.TARGET,
+    BridgeConstants.GestureCommandHandler.Action.SET_ENABLED,
+    enabled => GestureCommandHandler.setEnabled(enabled));

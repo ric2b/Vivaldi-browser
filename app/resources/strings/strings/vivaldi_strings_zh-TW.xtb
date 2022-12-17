@@ -1,39 +1,14 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <!DOCTYPE translationbundle>
 <translationbundle lang="zh-TW">
-<translation id="1089894737218087497">安裝單一用戶版本</translation>
-<translation id="1682285232070778125">將 Vivaldi 設為預設瀏覽器</translation>
-<translation id="1974060860693918893">進階</translation>
-<translation id="2134216661302048561">Vivaldi 安裝程式尚未完成安裝 Vivaldi 瀏覽器。確定要立即離開嗎？</translation>
-<translation id="2286454467119466181">簡單</translation>
-<translation id="237789874664518125">版權所有 <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有權利。&lt;a&gt;隱私政策&lt;/a&gt;</translation>
 <translation id="2392002507524894126">著作權 <ph name="YEAR" /> Vivaldi Technologies AS. 保留所有權利。</translation>
 <translation id="2611953850925269349">無論如何都要結束 Vivaldi 嗎？</translation>
 <translation id="2885378588091291677">工作管理員</translation>
-<translation id="3004507951429848293">點一下「接受並更新」按鈕表示您同意接受 Vivaldi 的&lt;a&gt;服務條款&lt;/a&gt;</translation>
-<translation id="335985608243443814">瀏覽...</translation>
-<translation id="3485073444286678268">目的資料夾無效，請重新選取。</translation>
 <translation id="3642991949832251880">無論如何都要結束 Vivaldi 嗎？</translation>
-<translation id="3784826321032465839">安裝 Vivaldi</translation>
 <translation id="4044951018940382324">Vivaldi</translation>
-<translation id="4079588913451946215">為全部使用者安裝</translation>
-<translation id="421958613172216971">選取資料夾</translation>
-<translation id="4234678621326711327">依照使用者安裝</translation>
-<translation id="4322221081772213228">點一下「接受並安裝」按鈕表示您同意接受 Vivaldi 的&lt;a&gt;服務條款&lt;/a&gt;</translation>
-<translation id="4380252528729894811">目的資料夾</translation>
-<translation id="460304900852424163">停用自動更新（不建議）</translation>
-<translation id="4619978527973181021">接受並安裝</translation>
-<translation id="479976146866774527">正在安裝 Vivaldi</translation>
-<translation id="5051728323101947360">將單一用戶版本的 Vivaldi 設為預設應用程式</translation>
 <translation id="5167047459440711824">警告：Vivaldi 無法禁止擴充功能在無痕模式記錄你的瀏覽記錄。如要在無痕模式中停用這個擴充功能，請取消選取這個選項。</translation>
-<translation id="5247376421371319618">接受並更新</translation>
 <translation id="5288672417093782294">前往 Vivaldi 通知設定</translation>
-<translation id="5302048478445481009">語言</translation>
 <translation id="5743878272102782872">工作管理員 - Vivaldi</translation>
 <translation id="6569282126279967574">糟糕！Vivaldi 當掉啦，要立即重新啟動嗎？</translation>
-<translation id="694714344624446243">Vivaldi 安裝程式</translation>
-<translation id="7658239707568436148">放棄</translation>
 <translation id="8031581238030785388">Vivaldi應用程式</translation>
-<translation id="8773751185824654197">注意：如果要更新執行中的 Vivaldi 瀏覽器，該實例將會被關閉並重新啟動</translation>
-<translation id="933060950687965486">安裝類型</translation>
 </translationbundle>

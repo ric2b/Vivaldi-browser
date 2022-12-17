@@ -29,7 +29,6 @@ import {
   ScanFactory,
   ScanHandler,
 } from './scan.js';
-import {SquareFactory} from './square.js';
 import {
   VideoFactory,
   VideoHandler,
@@ -131,7 +130,7 @@ export class Modes {
     async function prepareDeviceForPhoto(
         constraints: StreamConstraints, resolution: Resolution,
         captureIntent: CaptureIntent): Promise<void> {
-      const deviceOperator = await DeviceOperator.getInstance();
+      const deviceOperator = DeviceOperator.getInstance();
       if (deviceOperator === null) {
         return;
       }
@@ -151,13 +150,16 @@ export class Modes {
         isSupported: async () => true,
         isSupportPTZ: () => true,
         prepareDevice: async (constraints) => {
-          const deviceOperator = await DeviceOperator.getInstance();
+          const deviceOperator = DeviceOperator.getInstance();
           if (deviceOperator === null) {
             return;
           }
           const deviceId = constraints.deviceId;
           await deviceOperator.setCaptureIntent(
               deviceId, CaptureIntent.VIDEO_RECORD);
+          await deviceOperator.setMultipleStreamsEnabled(
+              deviceId, state.get(state.State.ENABLE_MULTISTREAM_RECORDING));
+
           if (await deviceOperator.isBlobVideoSnapshotEnabled(deviceId)) {
             await deviceOperator.setStillCaptureResolution(
                 deviceId,
@@ -198,20 +200,7 @@ export class Modes {
         isSupportPTZ: checkSupportPTZForPhotoMode,
         prepareDevice: async (constraints, resolution) => prepareDeviceForPhoto(
             constraints, resolution, CaptureIntent.STILL_CAPTURE),
-        fallbackMode: Mode.SQUARE,
-      },
-      [Mode.SQUARE]: {
-        getCaptureFactory: () => {
-          const params = this.getCaptureParams();
-          return new SquareFactory(
-              params.constraints, params.captureResolution,
-              assertExists(this.handler));
-        },
-        isSupported: async () => true,
-        isSupportPTZ: checkSupportPTZForPhotoMode,
-        prepareDevice: async (constraints, resolution) => prepareDeviceForPhoto(
-            constraints, resolution, CaptureIntent.STILL_CAPTURE),
-        fallbackMode: Mode.PHOTO,
+        fallbackMode: Mode.SCAN,
       },
       [Mode.PORTRAIT]: {
         getCaptureFactory: () => {
@@ -224,7 +213,7 @@ export class Modes {
           if (deviceId === null) {
             return false;
           }
-          const deviceOperator = await DeviceOperator.getInstance();
+          const deviceOperator = DeviceOperator.getInstance();
           if (deviceOperator === null) {
             return false;
           }

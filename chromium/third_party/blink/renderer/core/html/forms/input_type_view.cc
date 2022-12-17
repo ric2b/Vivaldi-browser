@@ -79,7 +79,7 @@ void InputTypeView::DispatchSimulatedClickIfActive(KeyboardEvent& event) const {
 }
 
 void InputTypeView::AccessKeyAction(SimulatedClickCreationScope) {
-  GetElement().focus(FocusParams(SelectionBehaviorOnFocus::kReset,
+  GetElement().Focus(FocusParams(SelectionBehaviorOnFocus::kReset,
                                  mojom::blink::FocusType::kNone, nullptr));
 }
 
@@ -99,6 +99,10 @@ LayoutObject* InputTypeView::CreateLayoutObject(const ComputedStyle& style,
 }
 
 void InputTypeView::CustomStyleForLayoutObject(ComputedStyle&) {}
+
+ControlPart InputTypeView::AutoAppearance() const {
+  return kNoControlPart;
+}
 
 TextDirection InputTypeView::ComputedTextDirection() {
   return GetElement().ComputedStyleRef().Direction();
@@ -192,14 +196,14 @@ AXObject* InputTypeView::PopupRootAXObject() {
 }
 
 FormControlState InputTypeView::SaveFormControlState() const {
-  String current_value = GetElement().value();
+  String current_value = GetElement().Value();
   if (current_value == GetElement().DefaultValue())
     return FormControlState();
   return FormControlState(current_value);
 }
 
 void InputTypeView::RestoreFormControlState(const FormControlState& state) {
-  GetElement().setValue(state[0]);
+  GetElement().SetValue(state[0]);
 }
 
 bool InputTypeView::IsDraggedSlider() const {

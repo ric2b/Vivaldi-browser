@@ -56,6 +56,8 @@ class URLRequestContext;
 // See mock_host_resolver.h for test implementations.
 class NET_EXPORT HostResolver {
  public:
+  using Host = absl::variant<url::SchemeHostPort, HostPortPair>;
+
   // Handler for an individual host resolution request. Created by
   // HostResolver::CreateRequest().
   class ResolveHostRequest {
@@ -393,6 +395,8 @@ class NET_EXPORT HostResolver {
 
   virtual HostResolverManager* GetManagerForTesting();
   virtual const URLRequestContext* GetContextForTesting() const;
+  virtual NetworkChangeNotifier::NetworkHandle GetTargetNetworkForTesting()
+      const;
 
   // Creates a new HostResolver. |manager| must outlive the returned resolver.
   //
@@ -424,6 +428,8 @@ class NET_EXPORT HostResolver {
   // performed exclusively for `target_network`, lookups will fail if
   // `target_network` disconnects. This can only be used by network-bound
   // URLRequestContexts.
+  // Due to the current implementation, if `options` is specified, its
+  // DnsConfigOverrides parameter must be empty.
   // Only implemented for Android starting from Marshmallow.
   static std::unique_ptr<HostResolver> CreateStandaloneNetworkBoundResolver(
       NetLog* net_log,

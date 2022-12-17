@@ -285,6 +285,10 @@ bool Menubar::IsItemChecked(int id) const {
   return params_->delegate->IsItemChecked(id);
 }
 
+bool Menubar::IsCommandEnabled(int id) const {
+  return params_->delegate->IsItemEnabled(id);
+}
+
 bool Menubar::GetAccelerator(int id, ui::Accelerator* accelerator) const {
   return params_->delegate->GetAccelerator(id, accelerator);
 }

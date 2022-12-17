@@ -1329,6 +1329,10 @@ TEST_F(NetworkContextTest, CertReporting) {
   const char kReportHost[] = "report-uri.preloaded.test";
   const char kReportPath[] = "/pkp";
 
+  base::test::ScopedFeatureList scoped_feature_list_;
+  scoped_feature_list_.InitAndEnableFeature(
+      net::features::kStaticKeyPinningEnforcement);
+
   for (bool reporting_enabled : {false, true}) {
     // Server that PKP reports are sent to.
     net::test_server::EmbeddedTestServer report_test_server;
@@ -2266,7 +2270,7 @@ TEST_F(NetworkContextTest, ClearReportingCacheReports) {
   GURL domain("http://google.com");
   network_context->url_request_context()->reporting_service()->QueueReport(
       domain, absl::nullopt, net::NetworkIsolationKey(), "Mozilla/1.0", "group",
-      "type", nullptr, 0);
+      "type", base::Value::Dict(), 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2295,11 +2299,11 @@ TEST_F(NetworkContextTest, ClearReportingCacheReportsWithFilter) {
   GURL url1("http://google.com");
   reporting_service->QueueReport(url1, absl::nullopt,
                                  net::NetworkIsolationKey(), "Mozilla/1.0",
-                                 "group", "type", nullptr, 0);
+                                 "group", "type", base::Value::Dict(), 0);
   GURL url2("http://chromium.org");
   reporting_service->QueueReport(url2, absl::nullopt,
                                  net::NetworkIsolationKey(), "Mozilla/1.0",
-                                 "group", "type", nullptr, 0);
+                                 "group", "type", base::Value::Dict(), 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2334,11 +2338,11 @@ TEST_F(NetworkContextTest,
   GURL url1("http://192.168.0.1");
   reporting_service->QueueReport(url1, absl::nullopt,
                                  net::NetworkIsolationKey(), "Mozilla/1.0",
-                                 "group", "type", nullptr, 0);
+                                 "group", "type", base::Value::Dict(), 0);
   GURL url2("http://192.168.0.2");
   reporting_service->QueueReport(url2, absl::nullopt,
                                  net::NetworkIsolationKey(), "Mozilla/1.0",
-                                 "group", "type", nullptr, 0);
+                                 "group", "type", base::Value::Dict(), 0);
 
   std::vector<const net::ReportingReport*> reports;
   reporting_cache->GetReports(&reports);
@@ -2624,7 +2628,7 @@ bool SetCookieHelper(NetworkContext* network_context,
   cookie_manager->SetCanonicalCookie(
       *net::CanonicalCookie::CreateUnsafeCookieForTesting(
           key, value, url.host(), "/", base::Time(), base::Time(), base::Time(),
-          true, false, net::CookieSameSite::NO_RESTRICTION,
+          base::Time(), true, false, net::CookieSameSite::NO_RESTRICTION,
           net::COOKIE_PRIORITY_LOW, false),
       url, net::CookieOptions::MakeAllInclusive(),
       base::BindOnce(&SetCookieCallback, &run_loop, &result));
@@ -2645,7 +2649,7 @@ TEST_F(NetworkContextTest, CookieManager) {
   bool result = false;
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "TestCookie", "1", "www.test.com", "/", base::Time(), base::Time(),
-      base::Time(), false, false, net::CookieSameSite::LAX_MODE,
+      base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
       net::COOKIE_PRIORITY_LOW, false);
   cookie_manager_remote->SetCanonicalCookie(
       *cookie, net::cookie_util::SimulatedCookieSource(*cookie, "https"),
@@ -3164,10 +3168,10 @@ TEST_F(NetworkContextTest, CreateNetLogExporter) {
                       base::File::FLAG_CREATE | base::File::FLAG_WRITE);
   ASSERT_TRUE(out_file.IsValid());
 
-  base::Value dict_start(base::Value::Type::DICTIONARY);
+  base::Value::Dict dict_start;
   const char kKeyEarly[] = "early";
   const char kValEarly[] = "morning";
-  dict_start.SetKey(kKeyEarly, base::Value(kValEarly));
+  dict_start.Set(kKeyEarly, kValEarly);
 
   net::TestCompletionCallback start_callback;
   net_log_exporter->Start(std::move(out_file), std::move(dict_start),
@@ -3175,10 +3179,10 @@ TEST_F(NetworkContextTest, CreateNetLogExporter) {
                           start_callback.callback());
   EXPECT_EQ(net::OK, start_callback.WaitForResult());
 
-  base::Value dict_late(base::Value::Type::DICTIONARY);
+  base::Value::Dict dict_late;
   const char kKeyLate[] = "late";
   const char kValLate[] = "snowval";
-  dict_late.SetKey(kKeyLate, base::Value(kValLate));
+  dict_late.Set(kKeyLate, kValLate);
 
   net::TestCompletionCallback stop_callback;
   net_log_exporter->Stop(std::move(dict_late), stop_callback.callback());
@@ -3215,15 +3219,14 @@ TEST_F(NetworkContextTest, CreateNetLogExporterUnbounded) {
   ASSERT_TRUE(out_file.IsValid());
 
   net::TestCompletionCallback start_callback;
-  net_log_exporter->Start(
-      std::move(out_file), base::Value(base::Value::Type::DICTIONARY),
-      net::NetLogCaptureMode::kDefault,
-      mojom::NetLogExporter::kUnlimitedFileSize, start_callback.callback());
+  net_log_exporter->Start(std::move(out_file), base::Value::Dict(),
+                          net::NetLogCaptureMode::kDefault,
+                          mojom::NetLogExporter::kUnlimitedFileSize,
+                          start_callback.callback());
   EXPECT_EQ(net::OK, start_callback.WaitForResult());
 
   net::TestCompletionCallback stop_callback;
-  net_log_exporter->Stop(base::Value(base::Value::Type::DICTIONARY),
-                         stop_callback.callback());
+  net_log_exporter->Stop(base::Value::Dict(), stop_callback.callback());
   EXPECT_EQ(net::OK, stop_callback.WaitForResult());
 
   // Check that file got written.
@@ -3247,8 +3250,7 @@ TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
       net_log_exporter.BindNewPipeAndPassReceiver());
 
   net::TestCompletionCallback stop_callback;
-  net_log_exporter->Stop(base::Value(base::Value::Type::DICTIONARY),
-                         stop_callback.callback());
+  net_log_exporter->Stop(base::Value::Dict(), stop_callback.callback());
   EXPECT_EQ(net::ERR_UNEXPECTED, stop_callback.WaitForResult());
 
   base::FilePath temp_path;
@@ -3258,9 +3260,9 @@ TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
   ASSERT_TRUE(temp_file.IsValid());
 
   net::TestCompletionCallback start_callback;
-  net_log_exporter->Start(
-      std::move(temp_file), base::Value(base::Value::Type::DICTIONARY),
-      net::NetLogCaptureMode::kDefault, 100 * 1024, start_callback.callback());
+  net_log_exporter->Start(std::move(temp_file), base::Value::Dict(),
+                          net::NetLogCaptureMode::kDefault, 100 * 1024,
+                          start_callback.callback());
   EXPECT_EQ(net::OK, start_callback.WaitForResult());
 
   // Can't start twice.
@@ -3271,9 +3273,9 @@ TEST_F(NetworkContextTest, CreateNetLogExporterErrors) {
   ASSERT_TRUE(temp_file2.IsValid());
 
   net::TestCompletionCallback start_callback2;
-  net_log_exporter->Start(
-      std::move(temp_file2), base::Value(base::Value::Type::DICTIONARY),
-      net::NetLogCaptureMode::kDefault, 100 * 1024, start_callback2.callback());
+  net_log_exporter->Start(std::move(temp_file2), base::Value::Dict(),
+                          net::NetLogCaptureMode::kDefault, 100 * 1024,
+                          start_callback2.callback());
   EXPECT_EQ(net::ERR_UNEXPECTED, start_callback2.WaitForResult());
 
   base::DeleteFile(temp_path);
@@ -3315,9 +3317,9 @@ TEST_F(NetworkContextTest, DestroyNetLogExporterWhileCreatingScratchDir) {
                        base::File::FLAG_CREATE_ALWAYS | base::File::FLAG_WRITE);
   ASSERT_TRUE(temp_file.IsValid());
 
-  net_log_exporter->Start(
-      std::move(temp_file), base::Value(base::Value::Type::DICTIONARY),
-      net::NetLogCaptureMode::kDefault, 100, base::BindOnce([](int) {}));
+  net_log_exporter->Start(std::move(temp_file), base::Value::Dict(),
+                          net::NetLogCaptureMode::kDefault, 100,
+                          base::BindOnce([](int) {}));
   net_log_exporter = nullptr;
   block_mktemp.Signal();
 
@@ -4166,7 +4168,7 @@ TEST_F(NetworkContextTest, CanSetCookieFalseIfCookiesBlocked) {
                              nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "TestCookie", "1", "www.test.com", "/", base::Time(), base::Time(),
-      base::Time(), false, false, net::CookieSameSite::LAX_MODE,
+      base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
       net::COOKIE_PRIORITY_LOW, false);
   EXPECT_TRUE(
       network_context->url_request_context()->network_delegate()->CanSetCookie(
@@ -4186,7 +4188,7 @@ TEST_F(NetworkContextTest, CanSetCookieTrueIfCookiesAllowed) {
                              nullptr, TRAFFIC_ANNOTATION_FOR_TESTS);
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "TestCookie", "1", "www.test.com", "/", base::Time(), base::Time(),
-      base::Time(), false, false, net::CookieSameSite::LAX_MODE,
+      base::Time(), base::Time(), false, false, net::CookieSameSite::LAX_MODE,
       net::COOKIE_PRIORITY_LOW, false);
 
   SetDefaultContentSetting(CONTENT_SETTING_ALLOW, network_context.get());
@@ -4856,10 +4858,9 @@ TEST_F(NetworkContextTest, ExpectCT) {
     run_loop.Run();
     EXPECT_TRUE(state.is_dict());
 
-    const base::Value* result =
-        state.FindKeyOfType("result", base::Value::Type::BOOLEAN);
-    ASSERT_TRUE(result != nullptr);
-    EXPECT_FALSE(result->GetBool());
+    absl::optional<bool> result = state.GetDict().FindBool("result");
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(false, *result);
   }
 
   // Add the host data.
@@ -4883,25 +4884,24 @@ TEST_F(NetworkContextTest, ExpectCT) {
     run_loop.Run();
     EXPECT_TRUE(state.is_dict());
 
-    const base::Value* value = state.FindKeyOfType("dynamic_expect_ct_domain",
-                                                   base::Value::Type::STRING);
-    ASSERT_TRUE(value != nullptr);
-    EXPECT_EQ(kTestDomain, value->GetString());
+    const base::Value::Dict& dict = state.GetDict();
+    const std::string* dynamic_expect_ct_domain =
+        dict.FindString("dynamic_expect_ct_domain");
+    ASSERT_TRUE(dynamic_expect_ct_domain);
+    EXPECT_EQ(kTestDomain, *dynamic_expect_ct_domain);
 
-    value = state.FindKeyOfType("dynamic_expect_ct_expiry",
-                                base::Value::Type::DOUBLE);
-    ASSERT_TRUE(value != nullptr);
-    EXPECT_EQ(expiry.ToDoubleT(), value->GetDouble());
+    absl::optional<double> dynamic_expect_ct_expiry =
+        dict.FindDouble("dynamic_expect_ct_expiry");
+    EXPECT_EQ(expiry.ToDoubleT(), dynamic_expect_ct_expiry);
 
-    value = state.FindKeyOfType("dynamic_expect_ct_enforce",
-                                base::Value::Type::BOOLEAN);
-    ASSERT_TRUE(value != nullptr);
-    EXPECT_EQ(enforce, value->GetBool());
+    absl::optional<bool> dynamic_expect_ct_enforce =
+        dict.FindBool("dynamic_expect_ct_enforce");
+    EXPECT_EQ(enforce, *dynamic_expect_ct_enforce);
 
-    value = state.FindKeyOfType("dynamic_expect_ct_report_uri",
-                                base::Value::Type::STRING);
-    ASSERT_TRUE(value != nullptr);
-    EXPECT_EQ(report_uri, value->GetString());
+    const std::string* dynamic_expect_ct_report_uri =
+        dict.FindString("dynamic_expect_ct_report_uri");
+    ASSERT_TRUE(dynamic_expect_ct_report_uri);
+    EXPECT_EQ(report_uri, *dynamic_expect_ct_report_uri);
   }
 
   // Using a different NetworkIsolationKey should return no result.
@@ -4914,10 +4914,9 @@ TEST_F(NetworkContextTest, ExpectCT) {
     run_loop.Run();
     EXPECT_TRUE(state.is_dict());
 
-    const base::Value* result =
-        state.FindKeyOfType("result", base::Value::Type::BOOLEAN);
-    ASSERT_TRUE(result != nullptr);
-    EXPECT_FALSE(result->GetBool());
+    absl::optional<bool> result = state.GetDict().FindBool("result");
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(false, *result);
   }
 
   // Delete host data.
@@ -4941,10 +4940,9 @@ TEST_F(NetworkContextTest, ExpectCT) {
     run_loop.Run();
     EXPECT_TRUE(state.is_dict());
 
-    const base::Value* result =
-        state.FindKeyOfType("result", base::Value::Type::BOOLEAN);
-    ASSERT_TRUE(result != nullptr);
-    EXPECT_FALSE(result->GetBool());
+    absl::optional<bool> result = state.GetDict().FindBool("result");
+    EXPECT_TRUE(result.has_value());
+    EXPECT_EQ(false, *result);
   }
 }
 
@@ -5078,11 +5076,11 @@ TEST_F(NetworkContextTest, ForceReloadProxyConfig) {
       start_param = result;
       run_loop.Quit();
     });
-    net_log_exporter->Start(
-        std::move(net_log_file),
-        /*extra_constants=*/base::Value(base::Value::Type::DICTIONARY),
-        net::NetLogCaptureMode::kDefault,
-        network::mojom::NetLogExporter::kUnlimitedFileSize, start_callback);
+    net_log_exporter->Start(std::move(net_log_file),
+                            /*extra_constants=*/base::Value::Dict(),
+                            net::NetLogCaptureMode::kDefault,
+                            network::mojom::NetLogExporter::kUnlimitedFileSize,
+                            start_callback);
     run_loop.Run();
     EXPECT_EQ(net::OK, start_param);
   }
@@ -5101,8 +5099,7 @@ TEST_F(NetworkContextTest, ForceReloadProxyConfig) {
       run_loop.Quit();
     });
     net_log_exporter->Stop(
-        /*polled_data=*/base::Value(base::Value::Type::DICTIONARY),
-        stop_callback);
+        /*polled_data=*/base::Value::Dict(), stop_callback);
     run_loop.Run();
     EXPECT_EQ(net::OK, stop_param);
   }

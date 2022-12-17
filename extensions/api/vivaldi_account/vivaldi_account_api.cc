@@ -267,7 +267,7 @@ VivaldiAccountGetPendingRegistrationFunction::Run() {
           *prefs->Get(vivaldiprefs::kVivaldiAccountPendingRegistration));
 
   if (!pending_registration) {
-    return RespondNow(ArgumentList(nullptr));
+    return RespondNow(ArgumentList({}));
   }
   std::string encrypted_password;
   if (!base::Base64Decode(pending_registration->password,

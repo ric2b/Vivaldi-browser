@@ -5,6 +5,7 @@
 #ifndef COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_ACCOUNT_CAPABILITIES_TEST_MUTATOR_H_
 #define COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_ACCOUNT_CAPABILITIES_TEST_MUTATOR_H_
 
+#include "base/memory/raw_ptr.h"
 #include "components/signin/public/identity_manager/account_capabilities.h"
 
 // Support class that allows callers to modify internal capability state
@@ -21,12 +22,13 @@ class AccountCapabilitiesTestMutator {
   void set_can_run_chrome_privacy_sandbox_trials(bool value);
   void set_can_stop_parental_supervision(bool value);
   void set_is_subject_to_parental_controls(bool value);
+  void set_can_toggle_auto_updates(bool value);
 
   // Modifies all supported capabilities at once.
   void SetAllSupportedCapabilities(bool value);
 
  private:
-  AccountCapabilities* capabilities_;
+  raw_ptr<AccountCapabilities> capabilities_;
 };
 
 #endif  // COMPONENTS_SIGNIN_PUBLIC_IDENTITY_MANAGER_ACCOUNT_CAPABILITIES_TEST_MUTATOR_H_

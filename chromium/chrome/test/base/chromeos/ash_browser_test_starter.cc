@@ -6,6 +6,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
+#include "base/command_line.h"
 #include "base/environment.h"
 #include "base/files/file_util.h"
 #include "base/task/thread_pool.h"
@@ -25,7 +26,7 @@ namespace test {
 AshBrowserTestStarter::AshBrowserTestStarter() = default;
 AshBrowserTestStarter::~AshBrowserTestStarter() = default;
 
-bool AshBrowserTestStarter::HasLacrosArgument() {
+bool AshBrowserTestStarter::HasLacrosArgument() const {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       ash::switches::kLacrosChromePath);
 }

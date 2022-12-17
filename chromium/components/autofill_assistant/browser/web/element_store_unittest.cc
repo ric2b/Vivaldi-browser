@@ -8,7 +8,7 @@
 #include "base/test/mock_callback.h"
 #include "components/autofill_assistant/browser/actions/action_test_utils.h"
 #include "components/autofill_assistant/browser/client_status.h"
-#include "components/autofill_assistant/browser/web/element_finder.h"
+#include "components/autofill_assistant/browser/web/element_finder_result.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/test_browser_context.h"
 #include "content/public/test/test_renderer_host.h"
@@ -17,6 +17,9 @@
 
 namespace autofill_assistant {
 namespace {
+
+using ::testing::IsEmpty;
+using ::testing::Not;
 
 class ElementStoreTest : public testing::Test {
  public:
@@ -31,8 +34,9 @@ class ElementStoreTest : public testing::Test {
       const std::string& object_id) {
     auto element = std::make_unique<ElementFinderResult>();
     element->SetObjectId(object_id);
-    element->SetNodeFrameId(
-        web_contents_->GetMainFrame()->GetDevToolsFrameToken().ToString());
+    element->SetNodeFrameId(web_contents_->GetPrimaryMainFrame()
+                                ->GetDevToolsFrameToken()
+                                .ToString());
     return element;
   }
 
@@ -60,12 +64,15 @@ TEST_F(ElementStoreTest, AddElementToStore) {
 
 TEST_F(ElementStoreTest, GetElementFromStore) {
   auto element = CreateElement("1");
+  element->SetBackendNodeId(1);
   AddElement("1", std::move(element));
 
   ElementFinderResult result;
   EXPECT_EQ(ACTION_APPLIED,
             element_store_->GetElement("1", &result).proto_status());
   EXPECT_EQ("1", result.object_id());
+  EXPECT_EQ(1, *result.backend_node_id());
+  EXPECT_THAT(result.node_frame_id(), Not(IsEmpty()));
 }
 
 TEST_F(ElementStoreTest, GetElementFromStoreWithBadFrameHost) {
@@ -87,7 +94,7 @@ TEST_F(ElementStoreTest, GetElementFromStoreWithNoFrameId) {
   ElementFinderResult result;
   EXPECT_EQ(ACTION_APPLIED,
             element_store_->GetElement("1", &result).proto_status());
-  EXPECT_EQ(web_contents_->GetMainFrame(), result.render_frame_host());
+  EXPECT_EQ(web_contents_->GetPrimaryMainFrame(), result.render_frame_host());
 }
 
 TEST_F(ElementStoreTest, AddElementToStoreOverwrites) {

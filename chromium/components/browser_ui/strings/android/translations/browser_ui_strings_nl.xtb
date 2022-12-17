@@ -101,7 +101,8 @@
 <translation id="3295602654194328831">Informatie verbergen</translation>
 <translation id="3328801116991980348">Site-informatie</translation>
 <translation id="3333961966071413176">Alle contacten</translation>
-<translation id="3386292677130313581">Vragen of je sites toegang wilt verlenen tot je locatie (aanbevolen)</translation>
+<translation id="3362437373201486687">Scannen naar bluetooth-apparaten</translation>
+<translation id="3386292677130313581">Eerst vragen voordat sites toegang krijgen tot je locatie (aanbevolen)</translation>
 <translation id="3538390592868664640">Voorkomen dat sites een 3D-kaart van je omgeving maken of de camerapositie volgen</translation>
 <translation id="3551268116566418498">Incognitomodus verlaten?</translation>
 <translation id="3586500876634962664">Camera- en microfoongebruik</translation>
@@ -122,11 +123,13 @@
 <translation id="3967822245660637423">Downloaden voltooid</translation>
 <translation id="3987993985790029246">Link kop.</translation>
 <translation id="3991845972263764475"><ph name="BYTES_DOWNLOADED_WITH_UNITS" /> van ?</translation>
+<translation id="3992684624889376114">Over deze pagina</translation>
 <translation id="4002066346123236978">Titel</translation>
 <translation id="4008040567710660924">Cookies voor een specifieke site toestaan.</translation>
 <translation id="4046123991198612571">Volgend nummer</translation>
 <translation id="4149994727733219643">Vereenvoudigde weergave voor webpagina's</translation>
 <translation id="4165986682804962316">Site-instellingen</translation>
+<translation id="4169549551965910670">Verbonden met een USB-apparaat</translation>
 <translation id="4194328954146351878">Vragen voordat sites informatie op NFC-apparaten mogen zien en wijzigen (aanbevolen)</translation>
 <translation id="4200726100658658164">Locatie-instellingen openen</translation>
 <translation id="4226663524361240545">Het apparaat kan trillen bij meldingen</translation>
@@ -271,6 +274,7 @@
 <translation id="7561196759112975576">Altijd</translation>
 <translation id="757524316907819857">Blokkeren dat sites beschermde content kunnen afspelen</translation>
 <translation id="7577900504646297215">Interesses beheren</translation>
+<translation id="7594634374516752650">Verbonden met een bluetooth-apparaat</translation>
 <translation id="7649070708921625228">Hulp</translation>
 <translation id="7658239707568436148">Annuleren</translation>
 <translation id="7781829728241885113">Gisteren</translation>

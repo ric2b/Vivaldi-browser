@@ -15,7 +15,6 @@
 #include "base/path_service.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
-#include "base/task/post_task.h"
 #include "base/values.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -233,8 +232,8 @@ void OnLoad(const base::FilePath& profile_file,
     }
   }
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindRepeating(&MenuStorage::OnLoadFinished, storage,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindRepeating(&MenuStorage::OnLoadFinished, storage,
                                      base::Passed(&details)));
 }
 

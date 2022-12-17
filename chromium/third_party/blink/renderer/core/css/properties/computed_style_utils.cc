@@ -1399,6 +1399,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
     const LayoutObject* layout_object,
     const ComputedStyle& style) {
   const bool is_for_columns = direction == kForColumns;
+  const bool is_layout_ng = RuntimeEnabledFeatures::LayoutNGEnabled();
   const ComputedGridTrackList& computed_grid_track_list =
       is_for_columns ? style.GridTemplateColumns() : style.GridTemplateRows();
   const Vector<GridTrackSize, 1>& legacy_track_sizes =
@@ -1411,7 +1412,9 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
 
   // Handle the 'none' case.
   bool is_track_list_empty =
-      legacy_track_sizes.IsEmpty() && auto_repeat_track_sizes.IsEmpty();
+      is_layout_ng
+          ? !computed_grid_track_list.TrackList().RepeaterCount()
+          : (legacy_track_sizes.IsEmpty() && auto_repeat_track_sizes.IsEmpty());
   if (is_layout_grid && is_track_list_empty) {
     // For grids we should consider every listed track, whether implicitly or
     // explicitly created. Empty grids have a sole grid line per axis.
@@ -1463,7 +1466,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
   };
 
   if (auto_repeat_track_sizes.IsEmpty()) {
-    if (!RuntimeEnabledFeatures::LayoutNGEnabled()) {
+    if (!is_layout_ng) {
       // If it's legacy grid or there's no repeat(), just add all the line names
       // and track sizes.
       PopulateGridTrackList(list, collector, legacy_track_sizes, getTrackSize);
@@ -1472,7 +1475,6 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
 
     // TODO(ansollan): Add support for track lists with auto and integer
     // repeaters.
-    const NGGridTrackList& ng_track_list = computed_grid_track_list.TrackList();
     wtf_size_t track_index = 0;
     auto AppendValues = [&](CSSValueList* list, const GridTrackSize& track_size,
                             GridTrackListSerializationType named_line_type) {
@@ -1482,6 +1484,7 @@ CSSValue* ComputedStyleUtils::ValueForGridTrackList(
       ++track_index;
     };
 
+    const NGGridTrackList& ng_track_list = computed_grid_track_list.TrackList();
     for (wtf_size_t i = 0; i < ng_track_list.RepeaterCount(); ++i) {
       const auto repeat_type = ng_track_list.RepeatType(i);
 
@@ -1567,7 +1570,8 @@ CSSValue* ComputedStyleUtils::ValueForGridPosition(
 
 static bool IsSVGObjectWithWidthAndHeight(const LayoutObject& layout_object) {
   DCHECK(layout_object.IsSVGChild());
-  return layout_object.IsSVGImage() || layout_object.IsSVGForeignObject() ||
+  return layout_object.IsSVGImage() ||
+         layout_object.IsSVGForeignObjectIncludingNG() ||
          (layout_object.IsSVGShape() &&
           IsA<SVGRectElement>(layout_object.GetNode()));
 }
@@ -2156,10 +2160,10 @@ CSSValue* ComputedStyleUtils::ResolvedTransform(
   gfx::RectF reference_box = ReferenceBoxForTransform(*layout_object);
 
   TransformationMatrix transform;
-  style.ApplyTransform(transform, reference_box,
-                       ComputedStyle::kExcludeTransformOrigin,
-                       ComputedStyle::kExcludeMotionPath,
-                       ComputedStyle::kExcludeIndependentTransformProperties);
+  style.ApplyTransform(
+      transform, reference_box, ComputedStyle::kIncludeTransformOperations,
+      ComputedStyle::kExcludeTransformOrigin, ComputedStyle::kExcludeMotionPath,
+      ComputedStyle::kExcludeIndependentTransformProperties);
 
   // FIXME: Need to print out individual functions
   // (https://bugs.webkit.org/show_bug.cgi?id=23924)
@@ -3074,7 +3078,7 @@ ComputedStyleUtils::CrossThreadStyleValueFromCSSStyleValue(
   switch (style_value->GetType()) {
     case CSSStyleValue::StyleValueType::kKeywordType:
       return std::make_unique<CrossThreadKeywordValue>(
-          To<CSSKeywordValue>(style_value)->value().IsolatedCopy());
+          To<CSSKeywordValue>(style_value)->value());
     case CSSStyleValue::StyleValueType::kUnitType:
       return std::make_unique<CrossThreadUnitValue>(
           To<CSSUnitValue>(style_value)->value(),
@@ -3084,11 +3088,10 @@ ComputedStyleUtils::CrossThreadStyleValueFromCSSStyleValue(
           To<CSSUnsupportedColor>(style_value)->Value());
     case CSSStyleValue::StyleValueType::kUnparsedType:
       return std::make_unique<CrossThreadUnparsedValue>(
-          To<CSSUnparsedValue>(style_value)->ToString().IsolatedCopy());
+          To<CSSUnparsedValue>(style_value)->ToString());
     default:
-      // Make an isolated copy to ensure that it is safe to pass cross thread.
       return std::make_unique<CrossThreadUnsupportedValue>(
-          style_value->toString().IsolatedCopy());
+          style_value->toString());
   }
 }
 

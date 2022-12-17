@@ -27,6 +27,7 @@ import com.google.android.material.tabs.TabLayout;
 
 import org.chromium.chrome.browser.feed.FeedUma;
 import org.chromium.chrome.browser.feed.R;
+import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.user_education.IPHCommandBuilder;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.components.browser_ui.widget.highlight.PulseDrawable;
@@ -143,16 +144,21 @@ public class SectionHeaderView extends LinearLayout {
     public void updateDrawable(int index, boolean isVisible) {
         if (mTabLayout == null || mTabLayout.getTabCount() <= index) return;
 
-        ImageView optionsIndicatorView =
-                mTabLayout.getTabAt(index).view.findViewById(R.id.options_indicator);
+        TabLayout.Tab tab = mTabLayout.getTabAt(index);
+
+        ImageView optionsIndicatorView = tab.view.findViewById(R.id.options_indicator);
         if (optionsIndicatorView == null) return;
 
         if (isVisible) {
             optionsIndicatorView.setImageDrawable(ResourcesCompat.getDrawable(
                     getResources(), R.drawable.mtrl_ic_arrow_drop_up, getContext().getTheme()));
+            tab.setContentDescription(getTabState(tab).text
+                    + getResources().getString(R.string.feed_options_dropdown_description_close));
         } else {
             optionsIndicatorView.setImageDrawable(ResourcesCompat.getDrawable(
                     getResources(), R.drawable.mtrl_ic_arrow_drop_down, getContext().getTheme()));
+            tab.setContentDescription(getTabState(tab).text
+                    + getResources().getString(R.string.feed_options_dropdown_description));
         }
     }
 
@@ -404,6 +410,13 @@ public class SectionHeaderView extends LinearLayout {
                         .build());
     }
 
+    public boolean shouldUseWebFeedAwarenessIPH() {
+        return ChromeFeatureList
+                .getFieldTrialParamByFeature(
+                        ChromeFeatureList.WEB_FEED_AWARENESS, "awareness_style")
+                .equals("IPH");
+    }
+
     /** Shows an IPH on the feed section header title. */
     public void showHeaderIph(UserEducationHelper helper) {
         helper.requestShowIPH(new IPHCommandBuilder(mTitleView.getContext().getResources(),
@@ -411,6 +424,17 @@ public class SectionHeaderView extends LinearLayout {
                 R.string.feature_notification_guide_tooltip_message_ntp_suggestion_card,
                 R.string.feature_notification_guide_tooltip_message_ntp_suggestion_card)
                                       .setAnchorView(mTitleView)
+                                      .build());
+    }
+
+    /** Shows an IPH on the web feed tab in the section header. */
+    public void showWebFeedAwarenessIph(
+            UserEducationHelper helper, int tabIndex, Runnable scroller) {
+        helper.requestShowIPH(new IPHCommandBuilder(mTitleView.getContext().getResources(),
+                FeatureConstants.WEB_FEED_AWARENESS_FEATURE, R.string.web_feed_awareness,
+                R.string.web_feed_awareness)
+                                      .setAnchorView(getTabAt(tabIndex).view)
+                                      .setOnShowCallback(scroller)
                                       .build());
     }
 

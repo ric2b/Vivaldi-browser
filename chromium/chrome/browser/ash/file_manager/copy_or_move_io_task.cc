@@ -24,6 +24,7 @@
 #include "chrome/browser/ash/file_manager/fileapi_util.h"
 #include "chrome/browser/ash/file_manager/filesystem_api_util.h"
 #include "chrome/browser/ash/file_manager/io_task.h"
+#include "chrome/browser/ash/file_manager/io_task_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -41,17 +42,6 @@ namespace file_manager {
 namespace io_task {
 
 namespace {
-
-// Obtains metadata of a URL. Used to get the filesize of the transferred files.
-void GetFileMetadataOnIOThread(
-    scoped_refptr<storage::FileSystemContext> file_system_context,
-    const storage::FileSystemURL& url,
-    int fields,
-    storage::FileSystemOperation::GetMetadataCallback callback) {
-  DCHECK_CURRENTLY_ON(content::BrowserThread::IO);
-  file_system_context->operation_runner()->GetMetadata(url, fields,
-                                                       std::move(callback));
-}
 
 // Starts the copy operation via FileSystemOperationRunner.
 storage::FileSystemOperationRunner::OperationID StartCopyOnIOThread(

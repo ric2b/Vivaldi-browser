@@ -131,8 +131,8 @@ ui::WindowShowState VivaldiNativeAppWindowViewsAura::GetRestoredState() const {
   if (IsMaximized())
     return ui::SHOW_STATE_MAXIMIZED;
 
-  // Use kPreMinimizedShowStateKey in case a window is minimized/hidden.
+  // Use kRestoreShowStateKey in case a window is minimized/hidden.
   ui::WindowShowState restore_state = widget()->GetNativeWindow()->GetProperty(
-      aura::client::kPreMinimizedShowStateKey);
+      aura::client::kRestoreShowStateKey);
   return GetRestorableState(restore_state);
 }

@@ -86,28 +86,17 @@ void NavigationBodyLoader::OnReceiveCachedMetadata(mojo_base::BigBuffer data) {
   // TODO(horo, kinuko): Make a test to cover this function.
   // TODO(https://crbug.com/930000): Add support for inline script code caching
   // with the service worker service.
+  base::UmaHistogramBoolean(
+      base::StrCat({"V8.InlineCodeCache.",
+                    is_main_frame_ ? "MainFrame" : "Subframe",
+                    ".CacheTimesMatch"}),
+      true);
   client_->BodyCodeCacheReceived(std::move(data));
 }
 
 void NavigationBodyLoader::OnTransferSizeUpdated(int32_t transfer_size_diff) {
   resource_load_info_notifier_wrapper_->NotifyResourceTransferSizeUpdated(
       transfer_size_diff);
-}
-
-void NavigationBodyLoader::OnStartLoadingResponseBody(
-    mojo::ScopedDataPipeConsumerHandle handle) {
-  TRACE_EVENT1("loading", "NavigationBodyLoader::OnStartLoadingResponseBody",
-               "url", original_url_.GetString().Utf8());
-  DCHECK(!has_received_body_handle_);
-  DCHECK(!has_received_completion_);
-  has_received_body_handle_ = true;
-  has_seen_end_of_data_ = false;
-  handle_ = std::move(handle);
-  DCHECK(handle_.is_valid());
-  handle_watcher_.Watch(handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
-                        base::BindRepeating(&NavigationBodyLoader::OnReadable,
-                                            base::Unretained(this)));
-  OnReadable(MOJO_RESULT_OK);
 }
 
 void NavigationBodyLoader::OnComplete(
@@ -198,7 +187,14 @@ void NavigationBodyLoader::ContinueWithCodeCache(
 
   // Check that the times match to ensure that the code cache data is for this
   // response. See https://crbug.com/1099587.
-  if (response_head_response_time != code_cache_response_time_)
+  const bool is_cache_usable =
+      (response_head_response_time == code_cache_response_time_);
+  base::UmaHistogramBoolean(
+      base::StrCat({"V8.InlineCodeCache.",
+                    is_main_frame_ ? "MainFrame" : "Subframe",
+                    ".CacheTimesMatch"}),
+      is_cache_usable);
+  if (!is_cache_usable)
     code_cache_data_ = mojo_base::BigBuffer();
 
   auto weak_self = weak_factory_.GetWeakPtr();
@@ -333,14 +329,24 @@ void NavigationBodyLoader::
   // to read from the data pipe immediately which may potentially postpone the
   // method calls from the remote. That causes the flakiness of some layout
   // tests.
-  // TODO(minggang): The binding was executed after OnStartLoadingResponseBody
+  // TODO(minggang): The binding was executed after OnReceiveResponse
   // originally (prior to passing the response body from the browser process
   // during navigation), we should try to put it back if all the
   // webkit_layout_tests can pass in that way.
   BindURLLoaderAndContinue();
 
   DCHECK(response_body_.is_valid());
-  OnStartLoadingResponseBody(std::move(response_body_));
+
+  DCHECK(!has_received_body_handle_);
+  DCHECK(!has_received_completion_);
+  has_received_body_handle_ = true;
+  has_seen_end_of_data_ = false;
+  handle_ = std::move(response_body_);
+  DCHECK(handle_.is_valid());
+  handle_watcher_.Watch(handle_.get(), MOJO_HANDLE_SIGNAL_READABLE,
+                        base::BindRepeating(&NavigationBodyLoader::OnReadable,
+                                            base::Unretained(this)));
+  OnReadable(MOJO_RESULT_OK);
   // Don't use |this| here as it might have been destroyed.
 }
 
@@ -364,7 +370,7 @@ void WebNavigationBodyLoader::FillNavigationParamsResponseAndBodyLoader(
                                 : KURL(common_params->url);
   KURL url = original_url;
   resource_load_info_notifier_wrapper->NotifyResourceLoadInitiated(
-      request_id, url,
+      request_id, GURL(url),
       !commit_params->original_method.empty() ? commit_params->original_method
                                               : common_params->method,
       common_params->referrer->url, common_params->request_destination,

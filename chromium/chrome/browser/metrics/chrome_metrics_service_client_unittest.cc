@@ -155,7 +155,7 @@ TEST_F(ChromeMetricsServiceClientTest, TestRegisterMetricsServiceProviders) {
   size_t expected_providers = 2;
 
   // This is the number of metrics providers that are outside any #if macros.
-  expected_providers += 22;
+  expected_providers += 23;
 
   int sample_rate;
   if (ChromeMetricsServicesManagerClient::GetSamplingRatePerMille(
@@ -172,6 +172,9 @@ TEST_F(ChromeMetricsServiceClientTest, TestRegisterMetricsServiceProviders) {
   // AndroidMetricsProvider, ChromeAndroidMetricsProvider,
   // FamilyLinkUserMetricsProvider, and PageLoadMetricsProvider.
   expected_providers += 4;
+#else
+  // performance_manager::MetricsProvider
+  expected_providers += 1;
 #endif  // BUILDFLAG(IS_ANDROID)
 
 #if BUILDFLAG(IS_WIN)

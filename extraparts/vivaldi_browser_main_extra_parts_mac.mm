@@ -44,10 +44,6 @@ void VivaldiBrowserMainExtraPartsMac::PreProfileInit() {
   VivaldiBrowserMainExtraParts::PreProfileInit();
   vivaldi::VivaldiAppObserver::GetFactoryInstance();
 
-#if defined(MAC_OS_X_VERSION_10_12)
-  if (base::mac::IsAtLeastOS10_12()) {
-    #pragma clang diagnostic ignored "-Wunguarded-availability"
-    [NSWindow setAllowsAutomaticWindowTabbing: NO];
-  }
-#endif
+  #pragma clang diagnostic ignored "-Wunguarded-availability"
+  [NSWindow setAllowsAutomaticWindowTabbing: NO];
 }

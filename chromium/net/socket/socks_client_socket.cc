@@ -68,11 +68,6 @@ SOCKSClientSocket::SOCKSClientSocket(
     SecureDnsPolicy secure_dns_policy,
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : transport_socket_(std::move(transport_socket)),
-      next_state_(STATE_NONE),
-      completed_handshake_(false),
-      bytes_sent_(0),
-      bytes_received_(0),
-      was_ever_used_(false),
       host_resolver_(host_resolver),
       secure_dns_policy_(secure_dns_policy),
       destination_(destination),
@@ -153,10 +148,6 @@ bool SOCKSClientSocket::GetSSLInfo(SSLInfo* ssl_info) {
     return transport_socket_->GetSSLInfo(ssl_info);
   NOTREACHED();
   return false;
-}
-
-void SOCKSClientSocket::GetConnectionAttempts(ConnectionAttempts* out) const {
-  out->clear();
 }
 
 int64_t SOCKSClientSocket::GetTotalReceivedBytes() const {

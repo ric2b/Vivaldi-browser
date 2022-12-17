@@ -10,6 +10,7 @@
 #include <string>
 
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/observer_list.h"
 #include "base/task/sequenced_task_runner.h"
@@ -102,7 +103,7 @@ class DownloadUIModel {
     ui::ColorId secondary_color = ui::kColorSecondaryForeground;
 
     // Override icon
-    const gfx::VectorIcon* icon_model_override = nullptr;
+    raw_ptr<const gfx::VectorIcon> icon_model_override = nullptr;
 
     // Subpage summary of the download warning
     bool has_subpage = false;
@@ -242,11 +243,6 @@ class DownloadUIModel {
   // Implies IsDangerous() and !IsMalicious().
   virtual bool IsMixedContent() const;
 
-  // Returns true if the item is downloaded in incognito and user has not
-  // accepted the warning yet. Return false if the item is downloaded in regular
-  // mode or user has accepted the warning.
-  virtual bool ShouldShowIncognitoWarning() const;
-
   // Is safe browsing download feedback feature available for this download?
   virtual bool ShouldAllowDownloadFeedback() const;
 
@@ -292,6 +288,14 @@ class DownloadUIModel {
 
   // Change what's returned by WasUINotified().
   virtual void SetWasUINotified(bool should_notify);
+
+  // Returns |true| if the Download Bubble UI has shown this download warning.
+  // By default, this value is |false| and should be changed explicitly using
+  // SetWasUIWarningShown().
+  virtual bool WasUIWarningShown() const;
+
+  // Change what's returned by WasUIWarningShown().
+  virtual void SetWasUIWarningShown(bool was_ui_warning_shown);
 
   // Returns |true| if opening in the browser is preferred for this download. If
   // |false|, the download should be opened with the system default application.
@@ -453,7 +457,7 @@ class DownloadUIModel {
   BubbleUIInfo GetBubbleUIInfo() const;
   BubbleUIInfo GetBubbleUIInfoForInterrupted(
       offline_items_collection::FailState fail_state) const;
-  BubbleUIInfo GetBubbleUIInfoForWarning() const;
+  BubbleUIInfo GetBubbleUIInfoForInProgressOrComplete() const;
 #endif
 
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -484,7 +488,7 @@ class DownloadUIModel {
   void set_status_text_builder_for_testing(bool for_bubble);
 
   // Unowned Clock to override the time of "Now".
-  base::Clock* clock_ = base::DefaultClock::GetInstance();
+  raw_ptr<base::Clock> clock_ = base::DefaultClock::GetInstance();
 
   std::unique_ptr<StatusTextBuilderBase> status_text_builder_;
 

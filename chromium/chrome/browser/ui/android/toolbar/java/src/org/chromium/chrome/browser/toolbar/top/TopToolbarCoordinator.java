@@ -8,9 +8,9 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.view.View;
 import android.view.View.OnClickListener;
-import android.view.View.OnLongClickListener;
 import android.view.ViewStub;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -45,6 +45,7 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
 import org.chromium.chrome.browser.toolbar.top.NavigationPopup.HistoryDelegate;
 import org.chromium.chrome.browser.toolbar.top.ToolbarTablet.OfflineDownloader;
 import org.chromium.chrome.browser.ui.appmenu.AppMenuButtonHelper;
+import org.chromium.chrome.browser.ui.appmenu.AppMenuDelegate;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.features.start_surface.StartSurfaceState;
 import org.chromium.content_public.browser.LoadUrlParams;
@@ -207,6 +208,16 @@ public class TopToolbarCoordinator implements Toolbar {
         mToolbarLayout.setInvalidatorCallback(invalidatorCallback);
     }
 
+    /**
+     * Set fullscreen GTS toolbar stub
+     * @param toolbarStub stub to set.
+     */
+    public void setFullScreenToolbarStub(ViewStub toolbarStub) {
+        if (mTabSwitcherModeCoordinator != null) {
+            mTabSwitcherModeCoordinator.setFullScreenToolbarStub(toolbarStub);
+        }
+    }
+
     private boolean isTabletGridTabSwitcherEnabled() {
         return CachedFeatureFlags.isEnabled(ChromeFeatureList.GRID_TAB_SWITCHER_FOR_TABLETS);
     }
@@ -225,10 +236,10 @@ public class TopToolbarCoordinator implements Toolbar {
      *
      * @param layoutUpdater A {@link Runnable} used to request layout update upon scene change.
      * @param tabSwitcherClickHandler The click handler for the tab switcher button.
-     * @param tabSwitcherLongClickHandler The long click handler for the tab switcher button.
      * @param newTabClickHandler The click handler for the new tab button.
      * @param bookmarkClickHandler The click handler for the bookmarks button.
      * @param customTabsBackClickHandler The click handler for the custom tabs back button.
+     * @param appMenuDelegate Allows interacting with the app menu.
      * @param layoutManager A {@link LayoutManager} used to watch for scene changes.
      * @param tabSupplier Supplier of the activity tab.
      * @param browserControlsStateProvider {@link BrowserControlsStateProvider} to access browser
@@ -236,13 +247,15 @@ public class TopToolbarCoordinator implements Toolbar {
      * @param topUiThemeColorProvider {@link ThemeColorProvider} for top UI.
      */
     public void initializeWithNative(Runnable layoutUpdater,
-            OnClickListener tabSwitcherClickHandler,
-            OnLongClickListener tabSwitcherLongClickHandler, OnClickListener newTabClickHandler,
+            OnClickListener tabSwitcherClickHandler, OnClickListener newTabClickHandler,
             OnClickListener bookmarkClickHandler, OnClickListener customTabsBackClickHandler,
-            LayoutManager layoutManager, ObservableSupplier<Tab> tabSupplier,
+            AppMenuDelegate appMenuDelegate, LayoutManager layoutManager,
+            ObservableSupplier<Tab> tabSupplier,
             BrowserControlsStateProvider browserControlsStateProvider,
             TopUiThemeColorProvider topUiThemeColorProvider) {
         assert mTabModelSelectorSupplier.get() != null;
+        Callback<Integer> tabSwitcherLongClickCallback =
+                menuItemId -> appMenuDelegate.onOptionsItemSelected(menuItemId, null);
         if (mTabSwitcherModeCoordinator != null) {
             mTabSwitcherModeCoordinator.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
             mTabSwitcherModeCoordinator.setOnNewTabClickHandler(newTabClickHandler);
@@ -252,14 +265,17 @@ public class TopToolbarCoordinator implements Toolbar {
             mStartSurfaceToolbarCoordinator.setTabModelSelector(mTabModelSelectorSupplier.get());
             mStartSurfaceToolbarCoordinator.setTabSwitcherListener(tabSwitcherClickHandler);
             mStartSurfaceToolbarCoordinator.setOnTabSwitcherLongClickHandler(
-                    tabSwitcherLongClickHandler);
+                    StartSurfaceTabSwitcherActionMenuCoordinator.createOnLongClickListener(
+                            tabSwitcherLongClickCallback));
             mStartSurfaceToolbarCoordinator.onDefaultSearchEngineChanged();
         }
 
         mToolbarLayout.setTabModelSelector(mTabModelSelectorSupplier.get());
         getLocationBar().updateVisualsForState();
         mToolbarLayout.setOnTabSwitcherClickHandler(tabSwitcherClickHandler);
-        mToolbarLayout.setOnTabSwitcherLongClickHandler(tabSwitcherLongClickHandler);
+        mToolbarLayout.setOnTabSwitcherLongClickHandler(
+                TabSwitcherActionMenuCoordinator.createOnLongClickListener(
+                        tabSwitcherLongClickCallback));
         mToolbarLayout.setBookmarkClickHandler(bookmarkClickHandler);
         mToolbarLayout.setCustomTabCloseClickHandler(customTabsBackClickHandler);
         mToolbarLayout.setLayoutUpdater(layoutUpdater);
@@ -518,7 +534,7 @@ public class TopToolbarCoordinator implements Toolbar {
     }
 
     @Override
-    public boolean isReadyForTextureCapture() {
+    public CaptureReadinessResult isReadyForTextureCapture() {
         return mToolbarLayout.isReadyForTextureCapture();
     }
 
@@ -706,6 +722,16 @@ public class TopToolbarCoordinator implements Toolbar {
         } else if (mStartSurfaceToolbarCoordinator != null) {
             mStartSurfaceToolbarCoordinator.setNewTabButtonHighlight(highlight);
         }
+    }
+
+    /**
+     * @return A {@link TopToolbarInteractabilityManager} which allows non toolbar clients to toggle
+     *         the interactability of elements present in the top toolbar.
+     */
+    public @NonNull TopToolbarInteractabilityManager getTopToolbarInteractabilityManager() {
+        return mStartSurfaceToolbarCoordinator != null
+                ? mStartSurfaceToolbarCoordinator.getTopToolbarInteractabilityManager()
+                : mTabSwitcherModeCoordinator.getTopToolbarInteractabilityManager();
     }
 
     /** Returns the {@link OptionalBrowsingModeButtonController}. */

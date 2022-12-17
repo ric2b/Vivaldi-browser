@@ -162,15 +162,17 @@
             "type": "integer",
             "description": "bottom"
           },
-          "path": {
-            "type": "string",
-            "description": "Element path to uniquely identify element."
-          },
           "href": {
             "type": "string",
             "description": "Url of focused element in case it's a link."
           }
         }
+      },
+      {
+        "id": "NavigationDirection",
+        "type": "string",
+        "description": "Which direction to move the current spatnav rect.",
+        "enum": ["left", "right", "up", "down"]
       },
       {
         "id": "LanguageDetectionDetails",
@@ -316,9 +318,9 @@
         }
       },
       {
-        "name": "getSpatialNavigationRects",
+        "name": "getCurrentSpatnavRect",
         "type": "function",
-        "description": "Get rectangles for spatially navigable elements.",
+        "description": "Get the currently focused spatnav rect",
         "parameters": [
           {
             "name": "tabId",
@@ -328,21 +330,19 @@
         ],
         "returns_async": {
           "name": "callback",
-          "optional": true,
+          "optional": "true",
           "parameters": [
             {
-              "name": "navigationRectList",
-              "type": "array",
-              "items": { "$ref": "NavigationRect" },
-              "description": "All navigable rects on the page."
+              "name": "currentRect",
+              "$ref": "NavigationRect"
             }
           ]
         }
       },
       {
-        "name": "getScrollPosition",
+        "name": "moveSpatnavRect",
         "type": "function",
-        "description": "Get scroll position of webview. Corresponds to window.scrollX and window.scrollY.",
+        "description": "Move current spatnav rect in |direction|",
         "parameters": [
           {
             "name": "tabId",
@@ -350,44 +350,42 @@
             "minimum": 0
           },
           {
-            "type": "function",
-            "name": "callback",
-            "parameters": [
-              {
-                "name": "scrollX",
-                "type": "integer",
-                "description": "Horizontal scroll coordinate"
-              },
-              {
-                "name": "scrollY",
-                "type": "integer",
-                "description": "Vertical scroll coordinate"
-              }
-            ]
+            "name": "direction",
+            "$ref": "NavigationDirection"
+          }
+        ],
+        "returns_async": {
+          "name": "callback",
+          "optional": "true",
+          "parameters": [
+            {
+              "name": "currentRect",
+              "$ref": "NavigationRect"
+            }
+          ]
+        }
+      },
+      {
+        "name": "updateSpatnavRects",
+        "type": "function",
+        "description": "Update Rectangles for Spatial Navigation. Used when switching tabs while spatnav is active, for example.",
+        "parameters": [
+          {
+            "name": "tabId",
+            "type": "integer",
+            "minimum": 0
           }
         ]
       },
       {
-        "name": "activateElementFromPoint",
+        "name": "activateSpatnavElement",
         "type": "function",
-        "description": "Find element from given coordinates and activate it.",
+        "description": "Activate currently focused spatnav element",
         "parameters": [
           {
             "name": "tabId",
             "type": "integer",
-            "minimum": 0
-          },
-          {
-            "name": "x",
-            "type": "integer",
-            "minimum": 0,
-            "description": "Horizontal co-ordinate from the left"
-          },
-          {
-            "name": "y",
-            "type": "integer",
-            "minimum": 0,
-            "description": "Vertical co-ordinate from the top"
+            "minimum":0
           },
           {
             "name": "modifiers",
@@ -679,6 +677,11 @@
             "type": "boolean",
             "name": "autoRepeat",
             "description": "True if the shortcut is generated as a result of automatic keyboard repeat"
+          },
+          {
+            "type": "boolean",
+            "name": "fromDevtools",
+            "description": "True if the shortcut comes from a devtools window"
           }
         ]
       },

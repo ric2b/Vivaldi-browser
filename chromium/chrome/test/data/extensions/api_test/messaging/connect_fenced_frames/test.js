@@ -12,6 +12,7 @@ function compareSenders(expected, actual) {
   // documentId is a unique ID so we can't assume anything about it, just
   // that it is provided.
   chrome.test.assertTrue(actual.documentId != undefined);
+  chrome.test.assertEq('active', actual.documentLifecycle);
   chrome.test.assertEq(expected.frameId, actual.frameId);
   chrome.test.assertEq(expected.url, actual.url);
   chrome.test.assertEq(serverOrigin, actual.origin);
@@ -78,7 +79,7 @@ var tests = [
 
 chrome.test.getConfig(async (config) => {
   mparchEnabled = config.customArg == 'MPArch';
-  serverOrigin = `https://a.test:${config.testServer.port}`;
+  serverOrigin = `http://localhost:${config.testServer.port}`;
   serverURL = serverOrigin + '/extensions/api_test/messaging/'
                            + 'connect_fenced_frames/';
   chrome.test.runTests(tests);

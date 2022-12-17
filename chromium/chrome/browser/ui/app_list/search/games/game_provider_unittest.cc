@@ -4,11 +4,12 @@
 
 #include "chrome/browser/ui/app_list/search/games/game_provider.h"
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
-#include "base/strings/utf_string_conversions.h"
+#include "base/files/file_path.h"
+#include "base/test/scoped_feature_list.h"
 #include "base/test/task_environment.h"
-#include "chrome/browser/apps/app_discovery_service/app_discovery_service.h"
-#include "chrome/browser/apps/app_discovery_service/app_discovery_service_factory.h"
+#include "chrome/browser/apps/app_discovery_service/app_discovery_util.h"
 #include "chrome/browser/apps/app_discovery_service/game_extras.h"
 #include "chrome/browser/apps/app_discovery_service/result.h"
 #include "chrome/browser/ui/app_list/search/test/test_search_controller.h"
@@ -26,7 +27,7 @@ using ::testing::ElementsAre;
 using ::testing::UnorderedElementsAre;
 
 MATCHER_P(Title, title, "") {
-  return base::UTF16ToUTF8(arg->title()) == title;
+  return arg->title() == title;
 }
 
 apps::Result MakeAppsResult(const std::u16string& title) {
@@ -34,21 +35,31 @@ apps::Result MakeAppsResult(const std::u16string& title) {
       apps::AppSource::kGames, "12345", title,
       std::make_unique<apps::GameExtras>(
           absl::make_optional(std::vector<std::u16string>({u"A", u"B", u"C"})),
-          apps::GameExtras::Source::kTestSource,
-          GURL("https://icon-url.com/")));
+          u"SourceName", u"TestGamePublisher",
+          base::FilePath("/icons/test.png"), /*is_icon_masking_allowed=*/false,
+          GURL("https://game.com/game")));
 }
 
 }  // namespace
 
-class GameProviderTest : public testing::Test {
+// Parameterized by feature ProductivityLauncher.
+class GameProviderTest : public testing::Test,
+                         public testing::WithParamInterface<bool> {
+ public:
+  GameProviderTest() {
+    feature_list_.InitWithFeatureState(ash::features::kProductivityLauncher,
+                                       GetParam());
+  }
+
  protected:
   void SetUp() override {
     profile_ = std::make_unique<TestingProfile>();
-    provider_ =
+    auto provider =
         std::make_unique<GameProvider>(profile_.get(), &list_controller_);
+    provider_ = provider.get();
 
     search_controller_ = std::make_unique<TestSearchController>();
-    provider_->set_controller(search_controller_.get());
+    search_controller_->AddProvider(0, std::move(provider));
   }
 
   const SearchProvider::Results& LastResults() {
@@ -69,28 +80,35 @@ class GameProviderTest : public testing::Test {
 
   void Wait() { task_environment_.RunUntilIdle(); }
 
+  void StartSearch(const std::u16string& query) {
+    search_controller_->StartSearch(query);
+  }
+
+  base::test::ScopedFeatureList feature_list_;
   content::BrowserTaskEnvironment task_environment_;
   ::test::TestAppListControllerDelegate list_controller_;
   std::unique_ptr<TestSearchController> search_controller_;
   std::unique_ptr<Profile> profile_;
 
-  std::unique_ptr<GameProvider> provider_;
+  GameProvider* provider_ = nullptr;
 };
 
-// TODO(crbug.com/1305880): Enable this test once the app discovery service
-// backend has been implemented.
-TEST_F(GameProviderTest, DISABLED_SearchResultsMatchQuery) {
+INSTANTIATE_TEST_SUITE_P(ProductivityLauncher,
+                         GameProviderTest,
+                         testing::Bool());
+
+TEST_P(GameProviderTest, SearchResultsMatchQuery) {
   SetUpTestingIndex();
 
-  provider_->Start(u"first");
+  StartSearch(u"first");
   Wait();
-  EXPECT_THAT(LastResults(), ElementsAre(Title("First Title")));
+  EXPECT_THAT(LastResults(), ElementsAre(Title(u"First Title")));
 
-  provider_->Start(u"title");
+  StartSearch(u"title");
   Wait();
-  EXPECT_THAT(LastResults(),
-              UnorderedElementsAre(Title("First Title"), Title("Second Title"),
-                                   Title("Third Title")));
+  EXPECT_THAT(LastResults(), UnorderedElementsAre(Title(u"First Title"),
+                                                  Title(u"Second Title"),
+                                                  Title(u"Third Title")));
 }
 
 }  // namespace app_list

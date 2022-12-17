@@ -7,6 +7,7 @@
 
 #include <iosfwd>
 
+#include "ash/public/cpp/style/color_mode_observer.h"
 #include "base/files/file.h"
 #include "base/files/file_path.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
@@ -24,7 +25,7 @@ namespace app_list {
 
 // TODO(crbug.com/1258415): We should split this into four subclasses:
 // {drive,local} {zero-state,search}.
-class FileResult : public ChromeSearchResult {
+class FileResult : public ChromeSearchResult, public ash::ColorModeObserver {
  public:
   enum class Type { kFile, kDirectory, kSharedDirectory };
 
@@ -50,7 +51,8 @@ class FileResult : public ChromeSearchResult {
   // query is missing or the filename is empty.
   static double CalculateRelevance(
       const absl::optional<chromeos::string_matching::TokenizedString>& query,
-      const base::FilePath& filepath);
+      const base::FilePath& filepath,
+      const absl::optional<base::Time>& last_accessed);
 
   // Depending on the file type and display type, request a thumbnail for this
   // result. If the request is successful, the current icon will be replaced by
@@ -61,15 +63,14 @@ class FileResult : public ChromeSearchResult {
   // justification string, eg. "You opened yesterday".
   void SetDetailsToJustificationString();
 
-  // Applies a penalty to this result's relevance score based on its last
-  // accessed time. The resultant score will be in [0, previous relevance].
-  void PenalizeRelevanceByAccessTime();
-
   void set_drive_id(const absl::optional<std::string>& drive_id) {
     drive_id_ = drive_id;
   }
 
  private:
+  // ash::ColorModeObserver:
+  void OnColorModeChanged(bool dark_mode_enabled) override;
+
   // Callback for the result of RequestThumbnail's call to the ThumbnailLoader.
   void OnThumbnailLoaded(const SkBitmap* bitmap, base::File::Error error);
 
@@ -78,8 +79,7 @@ class FileResult : public ChromeSearchResult {
   void OnJustificationStringReturned(
       absl::optional<std::u16string> justification);
 
-  // Callback for PenalizeRelevanceByAccesstime.
-  void OnFileInfoReturned(const absl::optional<base::File::Info>& info);
+  void UpdateIcon();
 
   const base::FilePath filepath_;
   const Type type_;

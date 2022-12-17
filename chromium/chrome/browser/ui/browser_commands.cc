@@ -13,6 +13,7 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/escape.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/trace_event/trace_event.h"
 #include "build/build_config.h"
@@ -79,9 +80,8 @@
 #include "chrome/browser/ui/tab_dialogs.h"
 #include "chrome/browser/ui/tabs/tab_group.h"
 #include "chrome/browser/ui/tabs/tab_group_model.h"
-#include "chrome/browser/ui/translate/translate_bubble_view_state_transition.h"
+#include "chrome/browser/ui/translate/translate_bubble_ui_action_logger.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_education/feature_promo_controller.h"
 #include "chrome/browser/ui/user_education/reopen_tab_in_product_help.h"
 #include "chrome/browser/ui/user_education/reopen_tab_in_product_help_factory.h"
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
@@ -120,6 +120,7 @@
 #include "components/tab_groups/tab_group_id.h"
 #include "components/tab_groups/tab_group_visual_data.h"
 #include "components/translate/core/browser/language_state.h"
+#include "components/user_education/common/feature_promo_controller.h"
 #include "components/web_modal/web_contents_modal_dialog_manager.h"
 #include "components/zoom/page_zoom.h"
 #include "components/zoom/zoom_controller.h"
@@ -136,7 +137,6 @@
 #include "content/public/common/url_utils.h"
 #include "content/public/common/user_agent.h"
 #include "extensions/buildflags/buildflags.h"
-#include "net/base/escape.h"
 #include "printing/buildflags/buildflags.h"
 #include "rlz/buildflags/buildflags.h"
 #include "ui/base/clipboard/clipboard_buffer.h"
@@ -176,11 +176,6 @@
 #include "chromeos/lacros/lacros_service.h"
 #endif
 
-#if BUILDFLAG(IS_LINUX)
-#include "ui/accessibility/ax_action_data.h"
-#include "ui/accessibility/ax_enums.mojom.h"
-#endif
-
 #include "app/vivaldi_constants.h"
 #include "chrome/browser/resource_coordinator/tab_lifecycle_unit_external.h"
 #include "vivaldi/prefs/vivaldi_gen_prefs.h"
@@ -198,18 +193,9 @@ translate::TranslateBubbleUiEvent TranslateBubbleResultToUiEvent(
       [[fallthrough]];
     case ShowTranslateBubbleResult::SUCCESS:
       return translate::TranslateBubbleUiEvent::BUBBLE_SHOWN;
-    case ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_VALID:
-      return translate::TranslateBubbleUiEvent::
-          BUBBLE_NOT_SHOWN_WINDOW_NOT_VALID;
     case ShowTranslateBubbleResult::BROWSER_WINDOW_MINIMIZED:
       return translate::TranslateBubbleUiEvent::
           BUBBLE_NOT_SHOWN_WINDOW_MINIMIZED;
-    case ShowTranslateBubbleResult::BROWSER_WINDOW_NOT_ACTIVE:
-      return translate::TranslateBubbleUiEvent::
-          BUBBLE_NOT_SHOWN_WINDOW_NOT_ACTIVE;
-    case ShowTranslateBubbleResult::WEB_CONTENTS_NOT_ACTIVE:
-      return translate::TranslateBubbleUiEvent::
-          BUBBLE_NOT_SHOWN_WEB_CONTENTS_NOT_ACTIVE;
     case ShowTranslateBubbleResult::EDITABLE_FIELD_IS_ACTIVE:
       return translate::TranslateBubbleUiEvent::
           BUBBLE_NOT_SHOWN_EDITABLE_FIELD_IS_ACTIVE;
@@ -1160,8 +1146,7 @@ void BookmarkAllTabs(Browser* browser) {
   base::RecordAction(UserMetricsAction("BookmarkAllTabs"));
   RecordBookmarkAllTabsWithTabsCount(browser->profile(),
                                      browser->tab_strip_model()->count());
-  // We record the profile that invoked this option.
-  RecordBookmarksAdded(browser->profile());
+
   chrome::ShowBookmarkAllTabsDialog(browser);
 }
 
@@ -1313,7 +1298,8 @@ void Translate(Browser* browser) {
       web_contents, step, source_language, target_language,
       translate::TranslateErrors::NONE, true);
   if (result != ShowTranslateBubbleResult::SUCCESS)
-    translate::ReportUiAction(TranslateBubbleResultToUiEvent(result));
+    translate::ReportTranslateBubbleUiAction(
+        TranslateBubbleResultToUiEvent(result));
 }
 
 void ManagePasswordsForPage(Browser* browser) {
@@ -1350,7 +1336,7 @@ void SharingHubFromPageAction(Browser* browser) {
   sharing_hub::SharingHubBubbleController* controller =
       sharing_hub::SharingHubBubbleController::CreateOrGetFromWebContents(
           web_contents);
-  controller->ShowBubble();
+  controller->ShowBubble(share::ShareAttempt(web_contents));
 }
 
 void ScreenshotCaptureFromPageAction(Browser* browser) {
@@ -1627,8 +1613,7 @@ void ShowAppMenu(Browser* browser) {
 
 void ShowAvatarMenu(Browser* browser) {
   browser->window()->ShowAvatarBubbleFromAvatarButton(
-      BrowserWindow::AVATAR_BUBBLE_MODE_DEFAULT,
-      signin_metrics::AccessPoint::ACCESS_POINT_AVATAR_BUBBLE_SIGN_IN, true);
+      /*is_source_accelerator=*/true);
 }
 
 void OpenUpdateChromeDialog(Browser* browser) {
@@ -1909,15 +1894,10 @@ void UnfollowSite(content::WebContents* web_contents) {
   feed::UnfollowSite(web_contents);
 }
 
-#if BUILDFLAG(IS_LINUX)
-void RunScreenAi(Browser* browser) {
-  ui::AXActionData ad;
-  ad.action = ax::mojom::Action::kRunScreenAi;
-  browser->tab_strip_model()
-      ->GetActiveWebContents()
-      ->GetMainFrame()
-      ->AccessibilityPerformAction(ad);
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+void RunScreenAIVisualAnnotation(Browser* browser) {
+  browser->RunScreenAIAnnotator();
 }
-#endif  // BUILDFLAG(IS_LINUX)
+#endif  // BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
 
 }  // namespace chrome

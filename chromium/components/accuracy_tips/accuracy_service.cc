@@ -23,7 +23,6 @@
 #include "components/pref_registry/pref_registry_syncable.h"
 #include "components/prefs/pref_service.h"
 #include "components/prefs/scoped_user_pref_update.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "components/unified_consent/pref_names.h"
 #include "content/public/browser/web_contents.h"
 #include "services/metrics/public/cpp/metrics_utils.h"
@@ -157,7 +156,8 @@ void AccuracyService::MaybeShowAccuracyTip(content::WebContents* web_contents) {
 
   if (disable_ui_) {
     return OnAccuracyTipClosed(
-        base::TimeTicks(), ukm::GetSourceIdForWebContentsDocument(web_contents),
+        base::TimeTicks(),
+        web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId(),
         AccuracyTipInteraction::kDisabledByExperiment);
   }
 
@@ -172,9 +172,10 @@ void AccuracyService::MaybeShowAccuracyTip(content::WebContents* web_contents) {
   delegate_->ShowAccuracyTip(
       web_contents, AccuracyTipStatus::kShowAccuracyTip,
       /*show_opt_out=*/show_opt_out,
-      base::BindOnce(&AccuracyService::OnAccuracyTipClosed,
-                     weak_factory_.GetWeakPtr(), base::TimeTicks::Now(),
-                     ukm::GetSourceIdForWebContentsDocument(web_contents)));
+      base::BindOnce(
+          &AccuracyService::OnAccuracyTipClosed, weak_factory_.GetWeakPtr(),
+          base::TimeTicks::Now(),
+          web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()));
   for (Observer& observer : observers_)
     observer.OnAccuracyTipShown();
 }

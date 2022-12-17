@@ -28,6 +28,7 @@ static scoped_refptr<SimpleFontData> CreateTestSimpleFontData(
     bool force_rotation = false) {
   FontPlatformData platform_data(
       SkTypeface::MakeDefault(), std::string(), 10, false, false,
+      TextRenderingMode::kAutoTextRendering,
       force_rotation ? FontOrientation::kVerticalUpright
                      : FontOrientation::kHorizontal);
   return SimpleFontData::Create(platform_data, nullptr);
@@ -342,7 +343,7 @@ TEST_F(ShapeResultBloberizerTest, CommonAccentLeftToRightFillGlyphBuffer) {
   ShapeResultBuffer buffer;
   word_shaper.FillResultBuffer(run_info, &buffer);
   ShapeResultBloberizer::FillGlyphs bloberizer(
-      font.GetFontDescription(), 1.0f, run_info, buffer,
+      font.GetFontDescription(), false, run_info, buffer,
       ShapeResultBloberizer::Type::kEmitText);
 
   Font reference_font(font_description);
@@ -352,7 +353,7 @@ TEST_F(ShapeResultBloberizerTest, CommonAccentLeftToRightFillGlyphBuffer) {
   ShapeResultBuffer reference_buffer;
   reference_word_shaper.FillResultBuffer(run_info, &reference_buffer);
   ShapeResultBloberizer::FillGlyphs reference_bloberizer(
-      reference_font.GetFontDescription(), 1.0f, run_info, reference_buffer,
+      reference_font.GetFontDescription(), false, run_info, reference_buffer,
       ShapeResultBloberizer::Type::kEmitText);
 
   const auto& glyphs =
@@ -392,7 +393,7 @@ TEST_F(ShapeResultBloberizerTest, CommonAccentRightToLeftFillGlyphBuffer) {
   ShapeResultBuffer buffer;
   word_shaper.FillResultBuffer(run_info, &buffer);
   ShapeResultBloberizer::FillGlyphs bloberizer(
-      font.GetFontDescription(), 1.0f, run_info, buffer,
+      font.GetFontDescription(), false, run_info, buffer,
       ShapeResultBloberizer::Type::kEmitText);
 
   Font reference_font(font_description);
@@ -402,7 +403,7 @@ TEST_F(ShapeResultBloberizerTest, CommonAccentRightToLeftFillGlyphBuffer) {
   ShapeResultBuffer reference_buffer;
   reference_word_shaper.FillResultBuffer(run_info, &reference_buffer);
   ShapeResultBloberizer::FillGlyphs reference_bloberizer(
-      reference_font.GetFontDescription(), 1.0f, run_info, reference_buffer,
+      reference_font.GetFontDescription(), false, run_info, reference_buffer,
       ShapeResultBloberizer::Type::kEmitText);
 
   const auto& glyphs =
@@ -432,7 +433,7 @@ TEST_F(ShapeResultBloberizerTest, CommonAccentRightToLeftFillGlyphBufferNG) {
   NGTextFragmentPaintInfo text_info{StringView(string), 1, string.length(),
                                     result_view.get()};
   ShapeResultBloberizer::FillGlyphsNG bloberizer_ng(
-      font.GetFontDescription(), 1.0f, text_info.text, text_info.from,
+      font.GetFontDescription(), false, text_info.text, text_info.from,
       text_info.to, text_info.shape_result,
       ShapeResultBloberizer::Type::kEmitText);
 
@@ -459,7 +460,7 @@ TEST_F(ShapeResultBloberizerTest, FourByteUtf8CodepointsNG) {
   NGTextFragmentPaintInfo text_info{StringView(string), 0, string.length(),
                                     result_view.get()};
   ShapeResultBloberizer::FillGlyphsNG bloberizer_ng(
-      font.GetFontDescription(), 1.0f, text_info.text, text_info.from,
+      font.GetFontDescription(), false, text_info.text, text_info.from,
       text_info.to, text_info.shape_result,
       ShapeResultBloberizer::Type::kEmitText);
 
@@ -487,7 +488,7 @@ TEST_F(ShapeResultBloberizerTest, OffsetIntoTrailingSurrogateNG) {
   NGTextFragmentPaintInfo text_info{StringView(string), 1, string.length(),
                                     result_view.get()};
   ShapeResultBloberizer::FillGlyphsNG bloberizer_ng(
-      font.GetFontDescription(), 1.0f, text_info.text, text_info.from,
+      font.GetFontDescription(), false, text_info.text, text_info.from,
       text_info.to, text_info.shape_result,
       ShapeResultBloberizer::Type::kEmitText);
 
@@ -542,7 +543,7 @@ TEST_F(ShapeResultBloberizerTest, LatinMultRunNG) {
   NGTextFragmentPaintInfo text_info{StringView(string), 1, string.length(),
                                     result_view.get()};
   ShapeResultBloberizer::FillGlyphsNG bloberizer_ng(
-      font.GetFontDescription(), 1.0f, text_info.text, text_info.from,
+      font.GetFontDescription(), false, text_info.text, text_info.from,
       text_info.to, text_info.shape_result,
       ShapeResultBloberizer::Type::kEmitText);
 
@@ -603,7 +604,7 @@ TEST_F(ShapeResultBloberizerTest, SupplementaryMultiRunNG) {
   NGTextFragmentPaintInfo text_info{StringView(string), 0, string.length(),
                                     result_view.get()};
   ShapeResultBloberizer::FillGlyphsNG bloberizer_ng(
-      font.GetFontDescription(), 1.0f, text_info.text, text_info.from,
+      font.GetFontDescription(), false, text_info.text, text_info.from,
       text_info.to, text_info.shape_result,
       ShapeResultBloberizer::Type::kEmitText);
 
@@ -642,7 +643,7 @@ TEST_F(ShapeResultBloberizerTest, SubRunWithZeroGlyphs) {
   ShapeResultBuffer buffer;
   word_shaper.FillResultBuffer(run_info, &buffer);
   ShapeResultBloberizer::FillGlyphs bloberizer(
-      font.GetFontDescription(), 1.0f, run_info, buffer,
+      font.GetFontDescription(), false, run_info, buffer,
       ShapeResultBloberizer::Type::kEmitText);
 
   shaper.GetCharacterRange(text_run, 0, 8);

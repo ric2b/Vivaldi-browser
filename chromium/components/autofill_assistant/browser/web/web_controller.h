@@ -52,6 +52,8 @@ class WebContents;
 }  // namespace content
 
 namespace autofill_assistant {
+class ElementFinderResult;
+enum class ElementFinderResultType;
 
 // Controller to interact with the web pages.
 //
@@ -106,7 +108,7 @@ class WebController {
   // |start_element|. Returns results or errors based on the |result_type|.
   virtual void RunElementFinder(const ElementFinderResult& start_element,
                                 const Selector& selector,
-                                ElementFinder::ResultType result_type,
+                                ElementFinderResultType result_type,
                                 ElementFinder::Callback callback);
 
   // Find all elements matching |selector|. If there are no matches, the status
@@ -116,9 +118,7 @@ class WebController {
 
   virtual ClientStatus ObserveSelectors(
       const std::vector<SelectorObserver::ObservableSelector>& selectors,
-      base::TimeDelta timeout_ms,
-      base::TimeDelta periodic_check_interval,
-      base::TimeDelta extra_timeout,
+      const SelectorObserver::Settings& settings,
       SelectorObserver::Callback callback);
 
   // Scroll the |element| into view. |animation| defines the transition
@@ -385,11 +385,17 @@ class WebController {
       const ElementFinderResult& element,
       base::OnceCallback<void(const ClientStatus&)> callback);
 
+  virtual void SetNativeValue(
+      const std::string& value,
+      const ElementFinderResult& element,
+      base::OnceCallback<void(const ClientStatus&)> callback);
+
   virtual base::WeakPtr<WebController> GetWeakPtr() const;
 
  private:
-  friend class WebControllerBrowserTest;
   friend class BatchElementCheckerBrowserTest;
+  friend class SemanticElementFinderBrowserTest;
+  friend class WebControllerBrowserTest;
 
   void OnJavaScriptResult(
       base::OnceCallback<void(const ClientStatus&)> callback,
@@ -463,14 +469,6 @@ class WebController {
       base::OnceCallback<void(const ClientStatus&, int)> callback,
       const DevtoolsClient::ReplyStatus& reply_status,
       std::unique_ptr<dom::DescribeNodeResult> result);
-  void OnGetBackendNodeIdForFormAndFieldData(
-      const ElementFinderResult& element,
-      base::OnceCallback<void(const ClientStatus&,
-                              autofill::ContentAutofillDriver* driver,
-                              const autofill::FormData&,
-                              const autofill::FormFieldData&)> callback,
-      const ClientStatus& node_status,
-      int backend_node_id);
   void OnGetFormAndFieldData(
       base::OnceCallback<void(const ClientStatus&,
                               autofill::ContentAutofillDriver* driver,
@@ -532,6 +530,8 @@ class WebController {
   void OnDispatchJsEvent(base::OnceCallback<void(const ClientStatus&)> callback,
                          const DevtoolsClient::ReplyStatus& reply_status,
                          std::unique_ptr<runtime::EvaluateResult> result) const;
+  void OnSetElementValue(base::OnceCallback<void(const ClientStatus&)> callback,
+                         bool success) const;
 
   // Weak pointer is fine here since it must outlive this web controller, which
   // is guaranteed by the owner of this object.

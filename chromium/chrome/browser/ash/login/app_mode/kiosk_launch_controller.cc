@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "ash/public/cpp/login_accelerators.h"
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/metrics/histogram_functions.h"
@@ -211,8 +212,7 @@ KioskLaunchController::~KioskLaunchController() {
 
 void KioskLaunchController::Start(const KioskAppId& kiosk_app_id,
                                   bool auto_launch) {
-  SYSLOG(INFO) << "Starting kiosk mode of type "
-               << static_cast<int>(kiosk_app_id.type) << "...";
+  SYSLOG(INFO) << "Starting kiosk mode for app " << kiosk_app_id;
   kiosk_app_id_ = kiosk_app_id;
   auto_launch_ = auto_launch;
   launcher_start_time_ = base::Time::Now();
@@ -255,6 +255,20 @@ void KioskLaunchController::AddKioskProfileLoadFailedObserver(
 void KioskLaunchController::RemoveKioskProfileLoadFailedObserver(
     KioskProfileLoadFailedObserver* observer) {
   profile_load_failed_observers_.RemoveObserver(observer);
+}
+
+bool KioskLaunchController::HandleAccelerator(LoginAcceleratorAction action) {
+  if (action == LoginAcceleratorAction::kAppLaunchBailout) {
+    OnCancelAppLaunch();
+    return true;
+  }
+
+  if (action == LoginAcceleratorAction::kAppLaunchNetworkConfig) {
+    OnNetworkConfigRequested();
+    return true;
+  }
+
+  return false;
 }
 
 void KioskLaunchController::OnProfileLoaded(Profile* profile) {

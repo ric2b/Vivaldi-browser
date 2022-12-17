@@ -34,6 +34,7 @@ std::unique_ptr<PolicyContainer> PolicyContainer::CreateFromWebPolicyContainer(
     return nullptr;
   mojom::blink::PolicyContainerPoliciesPtr policies =
       mojom::blink::PolicyContainerPolicies::New(
+          container->policies.cross_origin_embedder_policy,
           container->policies.referrer_policy,
           container->policies.ip_address_space,
           ConvertToMojoBlink(
@@ -56,11 +57,6 @@ void PolicyContainer::UpdateReferrerPolicy(
     network::mojom::blink::ReferrerPolicy policy) {
   policies_->referrer_policy = policy;
   policy_container_host_remote_->SetReferrerPolicy(policy);
-}
-
-void PolicyContainer::SetIPAddressSpace(
-    network::mojom::blink::IPAddressSpace ip_address_space) {
-  policies_->ip_address_space = ip_address_space;
 }
 
 const mojom::blink::PolicyContainerPolicies& PolicyContainer::GetPolicies()

@@ -243,9 +243,6 @@ class small_map {
       return !(*this == other);
     }
 
-    bool operator==(const const_iterator& other) const;
-    bool operator!=(const const_iterator& other) const;
-
    private:
     friend class small_map;
     friend class const_iterator;
@@ -490,7 +487,7 @@ class small_map {
       return iterator(map_.erase(position.map_iter_));
     }
 
-    size_t i = position.array_iter_ - array_;
+    size_t i = static_cast<size_t>(position.array_iter_ - array_);
     // TODO(crbug.com/817982): When we have a checked iterator, this CHECK might
     // not be necessary.
     CHECK_LE(i, size_);
@@ -602,24 +599,6 @@ class small_map {
     }
   }
 };
-
-template <typename NormalMap,
-          size_t kArraySize,
-          typename EqualKey,
-          typename Functor>
-inline bool small_map<NormalMap, kArraySize, EqualKey, Functor>::iterator::
-operator==(const const_iterator& other) const {
-  return other == *this;
-}
-
-template <typename NormalMap,
-          size_t kArraySize,
-          typename EqualKey,
-          typename Functor>
-inline bool small_map<NormalMap, kArraySize, EqualKey, Functor>::iterator::
-operator!=(const const_iterator& other) const {
-  return other != *this;
-}
 
 }  // namespace base
 

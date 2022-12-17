@@ -233,12 +233,36 @@ export class AboutPageBrowserProxy {
    * @return {!Promise<boolean>}
    */
   checkInternetConnection() {}
+
+  /** @return {!Promise<boolean>} */
+  isManagedAutoUpdateEnabled() {}
+
+  /** @return {!Promise<boolean>} */
+  isConsumerAutoUpdateEnabled() {}
+
+  /**
+   * @param {boolean} enable
+   */
+  setConsumerAutoUpdate(enable) {}
 }
+
+/** @type {?AboutPageBrowserProxy} */
+let instance = null;
 
 /**
  * @implements {AboutPageBrowserProxy}
  */
 export class AboutPageBrowserProxyImpl {
+  /** @return {!AboutPageBrowserProxy} */
+  static getInstance() {
+    return instance || (instance = new AboutPageBrowserProxyImpl());
+  }
+
+  /** @param {!AboutPageBrowserProxy} obj */
+  static setInstance(obj) {
+    instance = obj;
+  }
+
   /** @override */
   pageReady() {
     chrome.send('aboutPageReady');
@@ -327,16 +351,18 @@ export class AboutPageBrowserProxyImpl {
     chrome.send('refreshTPMFirmwareUpdateStatus');
   }
 
-  /** @return {!AboutPageBrowserProxy} */
-  static getInstance() {
-    return instance || (instance = new AboutPageBrowserProxyImpl());
+  /** @override */
+  isManagedAutoUpdateEnabled() {
+    return sendWithPromise('isManagedAutoUpdateEnabled');
   }
 
-  /** @param {!AboutPageBrowserProxy} obj */
-  static setInstance(obj) {
-    instance = obj;
+  /** @override */
+  isConsumerAutoUpdateEnabled() {
+    return sendWithPromise('isConsumerAutoUpdateEnabled');
+  }
+
+  /** @override */
+  setConsumerAutoUpdate(enable) {
+    chrome.send('setConsumerAutoUpdate', [enable]);
   }
 }
-
-/** @type {?AboutPageBrowserProxy} */
-let instance = null;

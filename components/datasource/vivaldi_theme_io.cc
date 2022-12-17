@@ -552,10 +552,15 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
 
   using InfoUnion = absl::variant<BoolInfo, NumberInfo, StringInfo, EnumInfo>;
 
+  enum Presence {
+    kOptional,
+    kRequired,
+  };
+
   struct Info {
-    Info(bool required, InfoUnion infoUnion)
-        : required(required), infoUnion(std::move(infoUnion)) {}
-    bool required;
+    Info(Presence presence, InfoUnion infoUnion)
+        : presence(presence), infoUnion(std::move(infoUnion)) {}
+    Presence presence;
     InfoUnion infoUnion;
   };
 
@@ -564,31 +569,32 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
   auto build_map = []() -> InfoMap {
     std::vector<std::pair<base::StringPiece, Info>> list;
 
-    auto add_bool = [&](const char* key, bool required = true) -> void {
-      list.emplace_back(key, Info(required, InfoUnion(BoolInfo())));
+    auto add_bool = [&](const char* key) -> void {
+      list.emplace_back(key, Info(kOptional, InfoUnion(BoolInfo())));
     };
     auto add_number = [&](const char* key, double min_value,
-                          absl::optional<double> max_value,
-                          bool required = true) -> void {
+                          absl::optional<double> max_value) -> void {
+      // The number is required if 0 cannot be used as the default value.
+      Presence presence = min_value <= 0.0 && (!max_value || *max_value >= 0.0)
+                              ? kOptional
+                              : kRequired;
       list.emplace_back(
-          key, Info(required, InfoUnion(NumberInfo(min_value, max_value))));
+          key, Info(presence, InfoUnion(NumberInfo(min_value, max_value))));
     };
-    auto add_string = [&](const char* key, bool can_be_empty,
-                          bool required = true) -> void {
+    auto add_string = [&](const char* key, bool can_be_empty) -> void {
       StringInfo info;
       info.can_be_empty = can_be_empty;
-      list.emplace_back(key, Info(required, InfoUnion(std::move(info))));
+      Presence presence = can_be_empty ? kOptional : kRequired;
+      list.emplace_back(key, Info(presence, InfoUnion(std::move(info))));
     };
-    auto add_color = [&](const char* key, bool not_empty,
-                         bool required = true) -> void {
-      add_string(key, not_empty, required);
+    auto add_color = [&](const char* key, bool can_be_empty) -> void {
+      add_string(key, can_be_empty);
     };
     auto add_enum = [&](const char* key,
-                        std::vector<base::StringPiece> enum_cases,
-                        bool required = true) -> void {
+                        std::vector<base::StringPiece> enum_cases) -> void {
       DCHECK(!enum_cases.empty());
       list.emplace_back(
-          key, Info(required, InfoUnion(EnumInfo(std::move(enum_cases)))));
+          key, Info(kOptional, InfoUnion(EnumInfo(std::move(enum_cases)))));
     };
 
     constexpr bool kNotEmpty = false;
@@ -646,7 +652,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       // introduce new features on the server.
       for (auto name_info : *info_map) {
         key_ = name_info.first;
-        required_ = name_info.second.required;
+        presence_ = name_info.second.presence;
         absl::visit(*this, name_info.second.infoUnion);
       }
     }
@@ -670,8 +676,9 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
 
     void operator()(const NumberInfo& info) {
       // Check that we can always use 0.0 as a default.
-      DCHECK(required_ || (info.min_value <= 0.0 &&
-                           (!info.max_value || 0.0 <= *info.max_value)));
+      DCHECK(presence_ == kRequired ||
+             (info.min_value <= 0.0 &&
+              (!info.max_value || 0.0 <= *info.max_value)));
       base::Value* value = FindValue();
       if (!value) {
         object_.SetIntKey(key_, 0);
@@ -781,7 +788,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
       if (value) {
         return value;
       }
-      if (required_) {
+      if (presence_ == kRequired) {
         AddError(base::StringPrintf("Missing %s property", KeyText().c_str()));
       }
       return nullptr;
@@ -791,7 +798,7 @@ void VerifyAndNormalizeJson(VerifyAndNormalizeFlags flags,
     std::string& error_;
     const VerifyAndNormalizeFlags flags_;
     base::StringPiece key_;
-    bool required_ = false;
+    Presence presence_ = kOptional;
   };
 
   Checker checker(object, error, flags);

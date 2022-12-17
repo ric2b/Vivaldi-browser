@@ -5,6 +5,7 @@
 #include "chrome/browser/ash/login/screens/consolidated_consent_screen.h"
 
 #include "ash/components/arc/arc_prefs.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "base/bind.h"
 #include "base/command_line.h"
@@ -118,6 +119,14 @@ void ConsolidatedConsentScreen::OnViewDestroyed(
 }
 
 bool ConsolidatedConsentScreen::MaybeSkip(WizardContext* context) {
+  if (context->skip_post_login_screens_for_tests) {
+    if (features::IsOobeConsolidatedConsentEnabled())
+      StartupUtils::MarkEulaAccepted();
+
+    exit_callback_.Run(Result::NOT_APPLICABLE);
+    return true;
+  }
+
   if (arc::IsArcDemoModeSetupFlow())
     return false;
 
@@ -238,9 +247,10 @@ void ConsolidatedConsentScreen::OnOwnershipStatusCheckDone(
 
   // If the user is not the owner and the owner disabled metrics, the user
   // is not allowed to update the usage opt-in.
-  if (!is_owner_.value_or(false) &&
-      !ash::StatsReportingController::Get()->IsEnabled()) {
-    view_->HideUsageOptin();
+  if (view_) {
+    view_->SetUsageOptinOptinHidden(
+        !is_owner_.value_or(false) &&
+        !ash::StatsReportingController::Get()->IsEnabled());
   }
 
   const bool is_demo = arc::IsArcDemoModeSetupFlow();
@@ -277,9 +287,6 @@ void ConsolidatedConsentScreen::OnOwnershipStatusCheckDone(
 
     UpdateMetricsMode(is_enabled, is_managed);
   }
-
-  if (view_)
-    view_->SetIsDeviceOwner(is_owner_.value());
 }
 
 void ConsolidatedConsentScreen::RecordConsents(
@@ -411,10 +418,7 @@ void ConsolidatedConsentScreen::ExitScreenWithAcceptedResult() {
     exit_callback_.Run(Result::ACCEPTED);
     return;
   }
-  if (demo_setup_controller->IsOfflineEnrollment())
-    exit_callback_.Run(Result::ACCEPTED_DEMO_OFFLINE);
-  else
-    exit_callback_.Run(Result::ACCEPTED_DEMO_ONLINE);
+  exit_callback_.Run(Result::ACCEPTED_DEMO_ONLINE);
 }
 
 }  // namespace ash

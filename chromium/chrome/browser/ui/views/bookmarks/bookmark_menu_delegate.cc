@@ -704,7 +704,7 @@ void BookmarkMenuDelegate::BuildMenu(const BookmarkNode* parent,
       child_menu_item->GetViewAccessibility().OverrideDescription(
           url_formatter::FormatUrl(
               node->url(), url_formatter::kFormatUrlOmitDefaults,
-              net::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
+              base::UnescapeRule::SPACES, nullptr, nullptr, nullptr));
     } else {
       DCHECK(node->is_folder());
       if (vivaldi::IsVivaldiRunning()) {

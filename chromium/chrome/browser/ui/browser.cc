@@ -181,6 +181,7 @@
 #include "components/permissions/permission_request_manager.h"
 #include "components/prefs/pref_service.h"
 #include "components/search/search.h"
+#include "components/services/screen_ai/buildflags/buildflags.h"
 #include "components/sessions/content/session_tab_helper.h"
 #include "components/sessions/core/session_types.h"
 #include "components/sessions/core/tab_restore_service.h"
@@ -231,7 +232,7 @@
 #include "third_party/blink/public/mojom/frame/blocked_navigation_types.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame.mojom.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom.h"
 #include "third_party/blink/public/mojom/window_features/window_features.mojom.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
@@ -284,6 +285,10 @@
 #if BUILDFLAG(IS_MAC)
 #include "chrome/browser/ui/color_chooser.h"
 #endif  // BUILDFLAG(IS_MAC)
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+#include "chrome/browser/accessibility/ax_screen_ai_annotator.h"
+#endif
 
 #include "app/vivaldi_apptools.h"
 #include "app/vivaldi_constants.h"
@@ -386,6 +391,8 @@ Browser::CreateParams::CreateParams(const CreateParams& other) = default;
 
 Browser::CreateParams& Browser::CreateParams::operator=(
     const CreateParams& other) = default;
+
+Browser::CreateParams::~CreateParams() = default;
 
 // static
 Browser::CreateParams Browser::CreateParams::CreateForAppBase(
@@ -511,6 +518,7 @@ Browser::Browser(const CreateParams& params)
       command_controller_(new chrome::BrowserCommandController(this)),
       window_has_shown_(false),
       user_title_(params.user_title),
+      picture_in_picture_window_title_(params.picture_in_picture_window_title),
       signin_view_controller_(this),
       breadcrumb_manager_browser_agent_(
           breadcrumbs::IsEnabled()
@@ -598,11 +606,6 @@ Browser::~Browser() {
   // calls to Browser:: should be avoided while it is being torn down.
   ThemeServiceFactory::GetForProfile(profile_)->RemoveObserver(this);
   extension_browser_window_helper_.reset();
-
-  // Like above, cancel delayed method calls into |this| to avoid re-entrancy.
-  // This is necessary because ~TestingProfile (called below for incognito
-  // |profile_|) spins a RunLoop.
-  weak_factory_.InvalidateWeakPtrs();
 
   // The tab strip should not have any tabs at this point.
   DCHECK(tab_strip_model_->empty());
@@ -731,6 +734,9 @@ std::u16string Browser::GetWindowTitleForCurrentTab(
     bool include_app_name) const {
   if (!user_title_.empty())
     return base::UTF8ToUTF16(user_title_);
+  if (!picture_in_picture_window_title_.empty()) {
+    return base::UTF8ToUTF16(picture_in_picture_window_title_);
+  }
   return GetWindowTitleFromWebContents(
       include_app_name, tab_strip_model_->GetActiveWebContents());
 }
@@ -1488,8 +1494,10 @@ std::unique_ptr<content::WebContents> Browser::SwapWebContents(
   // avoid flashing white when navigating from a site with a dark background to
   // another site with a dark background.
   if (old_contents && new_contents) {
-    RenderWidgetHostView* old_view = old_contents->GetMainFrame()->GetView();
-    RenderWidgetHostView* new_view = new_contents->GetMainFrame()->GetView();
+    RenderWidgetHostView* old_view =
+        old_contents->GetPrimaryMainFrame()->GetView();
+    RenderWidgetHostView* new_view =
+        new_contents->GetPrimaryMainFrame()->GetView();
     if (old_view && new_view)
       new_view->TakeFallbackContentFrom(old_view);
   }
@@ -1691,6 +1699,13 @@ void Browser::AddNewContents(WebContents* source,
     window_action = NavigateParams::SHOW_WINDOW_INACTIVE;
     fullscreen_controller->FullscreenTabOpeningPopup(source,
                                                      new_contents.get());
+    // Defer popup creation if the opener has a fullscreen transition in
+    // progress. This works around a defect on Mac where separate displays
+    // cannot switch their independent spaces simultaneously (crbug.com/1315749)
+    fullscreen_controller->RunOrDeferUntilTransitionIsComplete(base::BindOnce(
+        &chrome::AddWebContents, this, source, std::move(new_contents),
+        target_url, disposition, initial_rect, window_action));
+    return;
   }
 
   chrome::AddWebContents(this, source, std::move(new_contents), target_url,
@@ -1733,7 +1748,7 @@ void Browser::SetContentsBounds(WebContents* source, const gfx::Rect& bounds) {
   }
 
   page_load_metrics::MetricsWebContentsObserver::RecordFeatureUsage(
-      source->GetMainFrame(), std::move(features));
+      source->GetPrimaryMainFrame(), std::move(features));
   window_->SetBounds(bounds);
 }
 
@@ -2431,11 +2446,13 @@ void Browser::OnActiveTabChanged(WebContents* old_contents,
   // a new tab. (There is also code in RenderFrameHostManager to do something
   // similar for intra-tab navigations.)
   if (old_contents && new_contents) {
-    // While GetMainFrame() is guaranteed to return non-null, GetView() is not,
-    // e.g. between WebContents creation and creation of the
+    // While GetPrimaryMainFrame() is guaranteed to return non-null, GetView()
+    // is not, e.g. between WebContents creation and creation of the
     // RenderWidgetHostView.
-    RenderWidgetHostView* old_view = old_contents->GetMainFrame()->GetView();
-    RenderWidgetHostView* new_view = new_contents->GetMainFrame()->GetView();
+    RenderWidgetHostView* old_view =
+        old_contents->GetPrimaryMainFrame()->GetView();
+    RenderWidgetHostView* new_view =
+        new_contents->GetPrimaryMainFrame()->GetView();
     if (old_view && new_view)
       new_view->CopyBackgroundColorIfPresentFrom(*old_view);
   }
@@ -2992,6 +3009,21 @@ bool Browser::CustomTabBrowserSupportsWindowFeature(
 }
 #endif
 
+bool Browser::PictureInPictureBrowserSupportsWindowFeature(
+    WindowFeature feature,
+    bool check_can_support) const {
+  switch (feature) {
+    case FEATURE_TITLEBAR:
+      return true;
+    case FEATURE_LOCATIONBAR:
+    case FEATURE_TABSTRIP:
+    case FEATURE_TOOLBAR:
+    case FEATURE_BOOKMARKBAR:
+    case FEATURE_NONE:
+      return false;
+  }
+}
+
 bool Browser::SupportsWindowFeatureImpl(WindowFeature feature,
                                         bool check_can_support) const {
   switch (type_) {
@@ -3011,6 +3043,9 @@ bool Browser::SupportsWindowFeatureImpl(WindowFeature feature,
     case TYPE_CUSTOM_TAB:
       return CustomTabBrowserSupportsWindowFeature(feature);
 #endif
+    case TYPE_PICTURE_IN_PICTURE:
+      return PictureInPictureBrowserSupportsWindowFeature(feature,
+                                                          check_can_support);
   }
 }
 
@@ -3170,3 +3205,13 @@ BackgroundContents* Browser::CreateBackgroundContents(
 
   return contents;
 }
+
+#if BUILDFLAG(ENABLE_SCREEN_AI_SERVICE)
+void Browser::RunScreenAIAnnotator() {
+  if (!screen_ai_annotator_) {
+    screen_ai_annotator_ =
+        std::make_unique<screen_ai::AXScreenAIAnnotator>(this);
+  }
+  screen_ai_annotator_->Run();
+}
+#endif

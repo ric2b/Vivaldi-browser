@@ -31,7 +31,7 @@ bool IsNonSniffableImageMimeType(base::StringPiece mime_type) {
 
   // This function returns true for image formats that are not recognized by
   // net::SniffMimeTypeFromLocalData.  This helps to allow such images.
-  return base::LowerCaseEqualsASCII(mime_type, "image/svg+xml");
+  return base::EqualsCaseInsensitiveASCII(mime_type, "image/svg+xml");
 }
 
 bool IsAudioOrVideoMimeType(base::StringPiece mime_type) {
@@ -59,7 +59,7 @@ bool IsAudioOrVideoMimeType(base::StringPiece mime_type) {
   // (sniffing audio/video in the OpaqueResponseBlockingAnalyzer::Sniff method
   // below) because net::SniffMimeTypeFromLocalData may return
   // "application/ogg".
-  if (base::LowerCaseEqualsASCII(mime_type, "application/ogg"))
+  if (base::EqualsCaseInsensitiveASCII(mime_type, "application/ogg"))
     return true;
 
   // TODO(lukasza): Address this departure from the spec (which doesn't
@@ -69,21 +69,26 @@ bool IsAudioOrVideoMimeType(base::StringPiece mime_type) {
   // modify ORB spec to match this implementation.  If there is too much
   // web-compatibility risk, then ORB might need to fully parse DASH/HLS
   // manifests.
-  if (base::LowerCaseEqualsASCII(mime_type, "application/dash+xml"))
+  if (base::EqualsCaseInsensitiveASCII(mime_type, "application/dash+xml"))
     return true;
-  if (base::LowerCaseEqualsASCII(mime_type, "application/vnd.apple.mpegurl"))
+  if (base::EqualsCaseInsensitiveASCII(mime_type,
+                                       "application/vnd.apple.mpegurl"))
     return true;
-  if (base::LowerCaseEqualsASCII(mime_type, "text/vtt"))
+  if (base::EqualsCaseInsensitiveASCII(mime_type, "text/vtt"))
     return true;
 
   return false;
+}
+
+bool IsTextCssMimeType(base::StringPiece mime_type) {
+  return base::EqualsCaseInsensitiveASCII(mime_type, "text/css");
 }
 
 // ORB spec says that "An opaque-safelisted MIME type" is a JavaScript MIME type
 // or a MIME type whose essence is "text/css" or "image/svg+xml".
 bool IsOpaqueSafelistedMimeType(base::StringPiece mime_type) {
   // Based on the spec: Is it a MIME type whose essence is text/css [...] ?
-  if (base::LowerCaseEqualsASCII(mime_type, "text/css"))
+  if (IsTextCssMimeType(mime_type))
     return true;
 
   // Based on the spec: Is it a MIME type whose essence is [...] image/svg+xml?
@@ -338,7 +343,9 @@ Decision OpaqueResponseBlockingAnalyzer::Sniff(base::StringPiece data) {
 
   // Check if the response is HTML, XML, or JSON, in which case it is surely not
   // JavaScript.  (The sniffers account for HTML/JS polyglot cases - see
-  // https://crbug.com/839945 and https://crbug.com/839425.)
+  // https://crbug.com/839945 and https://crbug.com/839425.  OTOH, the sniffers
+  // do not account for CSS/HTML or CSS/JS-parser-breakers polyglots so CSS is
+  // explicitly excluded from the sniffing below.)
   //
   // TODO(lukasza): Departure from the spec.  This avoids having to sniff
   // Javascript in the full response as described in the "Gradual CORB -> ORB
@@ -346,7 +353,7 @@ Decision OpaqueResponseBlockingAnalyzer::Sniff(base::StringPiece data) {
   // https://docs.google.com/document/d/1qUbE2ySi6av3arUEw5DNdFJIKKBbWGRGsXz_ew3S7HQ/edit?usp=sharing
   // Diff: This is a new sniffing step for the 1st 1024 bytes.
   // Diff: This doesn't sniff for JavaScript, but for non-Html/Xml/Json.
-  {
+  if (!IsTextCssMimeType(mime_type_)) {
     if (CrossOriginReadBlocking::SniffForHTML(data) ==
         CrossOriginReadBlocking::SniffingResult::kYes) {
       blocking_decision_reason_ = BlockingDecisionReason::kSniffedAsHtml;

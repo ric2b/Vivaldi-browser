@@ -33,16 +33,23 @@ void UnzipWithFilter(mojo::PendingRemote<mojom::Unzipper> unzipper,
                      UnzipFilterCallback filter_callback,
                      UnzipCallback result_callback);
 
+using UnzipListenerCallback = base::RepeatingCallback<void(uint64_t bytes)>;
 void Unzip(mojo::PendingRemote<mojom::Unzipper> unzipper,
            const base::FilePath& zip_file,
            const base::FilePath& output_dir,
            mojom::UnzipOptionsPtr options,
+           UnzipListenerCallback listener_callback,
            UnzipCallback result_callback);
 
 using DetectEncodingCallback = base::OnceCallback<void(Encoding)>;
 void DetectEncoding(mojo::PendingRemote<mojom::Unzipper> unzipper,
                     const base::FilePath& zip_file,
                     DetectEncodingCallback result_callback);
+
+using GetExtractedInfoCallback = base::OnceCallback<void(mojom::InfoPtr)>;
+void GetExtractedInfo(mojo::PendingRemote<mojom::Unzipper> unzipper,
+                      const base::FilePath& zip_file,
+                      GetExtractedInfoCallback result_callback);
 
 }  // namespace unzip
 

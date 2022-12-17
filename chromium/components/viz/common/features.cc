@@ -37,12 +37,13 @@ namespace features {
 const base::Feature kAdpf{"Adpf", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Target duration used for power hint on Android.
+// `0` indicates use hard coded default.
 const base::FeatureParam<int> kAdpfTargetDurationMs{&kAdpf,
-                                                    "AdpfTargetDurationMs", 12};
+                                                    "AdpfTargetDurationMs", 0};
 
 const base::Feature kEnableOverlayPrioritization {
   "EnableOverlayPrioritization",
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS_ASH)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
@@ -68,10 +69,6 @@ const base::Feature kVideoDetectorIgnoreNonVideos{
 const base::Feature kSimpleFrameRateThrottling{
     "SimpleFrameRateThrottling", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Use the SkiaRenderer.
-const base::Feature kUseSkiaRenderer{"UseSkiaRenderer",
-                                     base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Kill-switch to disable de-jelly, even if flags/properties indicate it should
 // be enabled.
 const base::Feature kDisableDeJelly{"DisableDeJelly",
@@ -83,10 +80,6 @@ const base::Feature kDisableDeJelly{"DisableDeJelly",
 const base::Feature kDynamicColorGamut{"DynamicColorGamut",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 #endif
-
-// Uses glClear to composite solid color quads whenever possible.
-const base::Feature kFastSolidColorDraw{"FastSolidColorDraw",
-                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Submit CompositorFrame from SynchronousLayerTreeFrameSink directly to viz in
 // WebView.
@@ -190,15 +183,13 @@ bool IsAdpfEnabled() {
   return base::FeatureList::IsEnabled(kAdpf);
 }
 
-bool IsClipPrewalkDamageEnabled() {
-  static constexpr base::Feature kClipPrewalkDamage{
-      "ClipPrewalkDamage", base::FEATURE_ENABLED_BY_DEFAULT};
-
-  return base::FeatureList::IsEnabled(kClipPrewalkDamage);
-}
-
 bool IsOverlayPrioritizationEnabled() {
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  // DelegatedCompositing in Lacros makes this feature a no-op.
+  return false;
+#else
   return base::FeatureList::IsEnabled(kEnableOverlayPrioritization);
+#endif
 }
 
 bool IsDelegatedCompositingEnabled() {
@@ -218,11 +209,6 @@ bool IsSimpleFrameRateThrottlingEnabled() {
   return base::FeatureList::IsEnabled(kSimpleFrameRateThrottling);
 }
 
-bool IsUsingSkiaRenderer() {
-  return base::FeatureList::IsEnabled(kUseSkiaRenderer) ||
-         features::IsUsingVulkan();
-}
-
 #if BUILDFLAG(IS_ANDROID)
 bool IsDynamicColorGamutEnabled() {
   if (viz::AlwaysUseWideColorGamut())
@@ -233,10 +219,6 @@ bool IsDynamicColorGamutEnabled() {
   return base::FeatureList::IsEnabled(kDynamicColorGamut);
 }
 #endif
-
-bool IsUsingFastPathForSolidColorQuad() {
-  return base::FeatureList::IsEnabled(kFastSolidColorDraw);
-}
 
 bool IsUsingVizFrameSubmissionForWebView() {
   return base::FeatureList::IsEnabled(kVizFrameSubmissionForWebView);
@@ -290,8 +272,8 @@ bool ShouldUsePlatformDelegatedInk() {
   return base::FeatureList::IsEnabled(kUsePlatformDelegatedInk);
 }
 
-#if BUILDFLAG(IS_ANDROID)
 bool UseSurfaceLayerForVideo() {
+#if BUILDFLAG(IS_ANDROID)
   // SurfaceLayer video should work fine with new heuristic.
   if (base::FeatureList::IsEnabled(kWebViewNewInvalidateHeuristic))
     return true;
@@ -301,8 +283,12 @@ bool UseSurfaceLayerForVideo() {
     return true;
   }
   return base::FeatureList::IsEnabled(kUseSurfaceLayerForVideoDefault);
+#else
+  return true;
+#endif
 }
 
+#if BUILDFLAG(IS_ANDROID)
 bool UseRealVideoColorSpaceForDisplay() {
   // We need Android S for proper color space support in SurfaceControl.
   if (base::android::BuildInfo::GetInstance()->sdk_int() <

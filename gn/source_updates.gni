@@ -1,70 +1,77 @@
 import("//vivaldi/gn/config/version.gni")
 import("//vivaldi/gn/config/product.gni")
 
-import("//vivaldi/app/source_updates.gni")
-import("//vivaldi/base/source_updates.gni")
-import("//vivaldi/browser/source_updates.gni")
-import("//vivaldi/components/source_updates.gni")
-if (!is_android) {
-  import("//vivaldi/extensions/source_updates.gni")
-}
-import("//vivaldi/extraparts/source_updates.gni")
-import("//vivaldi/importer/source_updates.gni")
+import("//vivaldi/app/source_updates_all.gni")
+import("//vivaldi/base/source_updates_all.gni")
+import("//vivaldi/components/source_update_all.gni")
 import("//vivaldi/installer/source_updates.gni")
-import("//vivaldi/prefs/source_updates.gni")
-import("//vivaldi/renderer/source_updates.gni")
 import("//vivaldi/sync/source_updates.gni")
-import("//vivaldi/ui/source_updates.gni")
-import("//vivaldi/vivapp/source_updates.gni")
-import("//vivaldi/platform_media/source_updates.gni")
 
-if (is_android) {
-  import("//vivaldi/android/source_updates.gni")
-}
+if (!is_ios) {
+  import("//vivaldi/app/source_updates.gni")
+  import("//vivaldi/base/source_updates.gni")
+  import("//vivaldi/browser/source_updates.gni")
+  import("//vivaldi/components/source_updates.gni")
+  if (!is_android) {
+    import("//vivaldi/extensions/source_updates.gni")
+  }
+  import("//vivaldi/extraparts/source_updates.gni")
+  import("//vivaldi/importer/source_updates.gni")
+  import("//vivaldi/prefs/source_updates.gni")
+  import("//vivaldi/renderer/source_updates.gni")
+  import("//vivaldi/ui/source_updates.gni")
+  import("//vivaldi/vivapp/source_updates.gni")
+  import("//vivaldi/platform_media/source_updates.gni")
 
-_targets = [
-  "//chrome/common:version_header",
-  "//components/version_info:generate_version_info",
-]
+  if (is_android) {
+    import("//vivaldi/android/source_updates.gni")
+  }
 
-if (is_linux && !is_component_build) {
-  _targets += ["//chrome/installer/linux:save_build_info"]
-}
-
-if (is_win) {
-  _targets += [
-    "//chrome/app/version_assembly:chrome_exe_version_manifest",
-    "//chrome/app/version_assembly:version_assembly_manifest",
+  _targets = [
+    "//chrome/common:version_header",
+    "//components/version_info:generate_version_info",
   ]
-}
 
-foreach (_target, _targets) {
-  update_template_instance(_target) {
-    sources += [ vivaldi_version_path ]
-    if (!defined(extra_args)) {
-      extra_args = []
+  if (is_linux && !is_component_build) {
+    _targets += ["//chrome/installer/linux:save_build_info"]
+  }
+
+  if (is_win) {
+    _targets += [
+      "//chrome/app/version_assembly:chrome_exe_version_manifest",
+      "//chrome/app/version_assembly:version_assembly_manifest",
+    ]
+  }
+
+  foreach (_target, _targets) {
+    update_template_instance(_target) {
+      sources += [ vivaldi_version_path ]
+      if (!defined(extra_args)) {
+        extra_args = []
+      }
+      extra_args += [
+        "-e",
+        "VIVALDI_BUILD=$vivaldi_global_build_number",
+        "--vivaldi",
+      ]
     }
-    extra_args += [
-      "-e",
-      "VIVALDI_BUILD=$vivaldi_global_build_number",
-      "--vivaldi",
-    ]
-  }
-}
-
-if (is_win) {
-  update_target("//rlz:rlz_lib") {
-    sources -= [
-        "lib/financial_ping.cc",
-        "lib/rlz_lib.cc",
-    ]
   }
 
-  update_template_instance("//chrome/app/version_assembly:chrome_exe_version_manifest") {
-    template_file = "//vivaldi/app/version_assembly/vivaldi_exe_manifest.template"
+  if (is_win) {
+    update_target("//rlz:rlz_lib") {
+      sources -= [
+          "lib/financial_ping.cc",
+          "lib/rlz_lib.cc",
+      ]
+    }
+
+    update_template_instance("//chrome/app/version_assembly:chrome_exe_version_manifest") {
+      template_file = "//vivaldi/app/version_assembly/vivaldi_exe_manifest.template"
+    }
+
+    update_template_instance("//chrome/app/version_assembly:version_assembly_manifest") {
+      template_file = "//vivaldi/app/version_assembly/vivaldi_version_assembly_manifest.template"
+    }
   }
 
-  update_template_instance("//chrome/app/version_assembly:version_assembly_manifest") {
-    template_file = "//vivaldi/app/version_assembly/vivaldi_version_assembly_manifest.template"
-  }
-}
+} # !is_ios

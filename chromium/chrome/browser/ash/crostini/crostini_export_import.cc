@@ -138,8 +138,11 @@ void CrostiniExportImport::ExportContainer(ContainerId container_id,
       web_contents);
 }
 
-void CrostiniExportImport::ImportContainer(content::WebContents* web_contents) {
-  OpenFileDialog(NewOperationData(ExportImportType::IMPORT), web_contents);
+void CrostiniExportImport::ImportContainer(ContainerId container_id,
+                                           content::WebContents* web_contents) {
+  OpenFileDialog(
+      NewOperationData(ExportImportType::IMPORT, std::move(container_id)),
+      web_contents);
 }
 
 void CrostiniExportImport::ExportContainer(ContainerId container_id,
@@ -400,7 +403,7 @@ void CrostiniExportImport::OnExportComplete(
         // file is functionally the same as a successful cancel.
         base::ThreadPool::PostTask(
             FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-            base::BindOnce(base::GetDeleteFileCallback(), it->second->path()));
+            base::GetDeleteFileCallback(it->second->path()));
         RemoveTracker(it)->SetStatusCancelled();
         break;
       }
@@ -432,7 +435,7 @@ void CrostiniExportImport::OnExportComplete(
         // file needs to be cleaned up.
         base::ThreadPool::PostTask(
             FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-            base::BindOnce(base::GetDeleteFileCallback(), it->second->path()));
+            base::GetDeleteFileCallback(it->second->path()));
         RemoveTracker(it)->SetStatusCancelled();
         break;
       }
@@ -443,7 +446,7 @@ void CrostiniExportImport::OnExportComplete(
     LOG(ERROR) << "Error exporting " << int(result);
     base::ThreadPool::PostTask(
         FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-        base::BindOnce(base::GetDeleteFileCallback(), it->second->path()));
+        base::GetDeleteFileCallback(it->second->path()));
     switch (result) {
       case CrostiniResult::CONTAINER_EXPORT_IMPORT_FAILED_VM_STOPPED:
         enum_hist_result = ExportContainerResult::kFailedVmStopped;
@@ -684,8 +687,7 @@ void CrostiniExportImport::CancelOperation(ExportImportType type,
 }
 
 bool CrostiniExportImport::GetExportImportOperationStatus() const {
-  ContainerId id(kCrostiniDefaultVmName, kCrostiniDefaultContainerName);
-  return status_trackers_.find(id) != status_trackers_.end();
+  return status_trackers_.size() != 0;
 }
 
 base::WeakPtr<CrostiniExportImportNotificationController>

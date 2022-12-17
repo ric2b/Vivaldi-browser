@@ -159,7 +159,8 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
 
   EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource())).Times(0);
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel()).Times(0);
-  input_method_context_->Focus();
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TEXT_INPUT_TYPE_TEXT);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
@@ -181,7 +182,8 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
 
   EXPECT_CALL(*zwp_text_input_, Deactivate()).Times(0);
   EXPECT_CALL(*zwp_text_input_, HideInputPanel()).Times(0);
-  input_method_context_->Blur();
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TEXT_INPUT_TYPE_NONE);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
@@ -198,14 +200,16 @@ TEST_P(WaylandInputMethodContextTest, ActivateDeactivate) {
 
   EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource()));
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel());
-  input_method_context_->Focus();
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TEXT_INPUT_TYPE_TEXT);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
   EXPECT_CALL(*zwp_text_input_, Deactivate());
   EXPECT_CALL(*zwp_text_input_, HideInputPanel());
-  input_method_context_->Blur();
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TEXT_INPUT_TYPE_NONE);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
@@ -388,6 +392,7 @@ TEST_P(WaylandInputMethodContextTest, SetContentType) {
                              ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_URL))
       .Times(1);
   input_method_context_->SetContentType(TEXT_INPUT_TYPE_URL,
+                                        TEXT_INPUT_MODE_DEFAULT,
                                         TEXT_INPUT_FLAG_AUTOCOMPLETE_ON,
                                         /*should_do_learning=*/true);
   connection_->ScheduleFlush();
@@ -401,6 +406,7 @@ TEST_P(WaylandInputMethodContextTest, SetContentTypeWithoutLearning) {
                              ZWP_TEXT_INPUT_V1_CONTENT_PURPOSE_URL))
       .Times(1);
   input_method_context_->SetContentType(TEXT_INPUT_TYPE_URL,
+                                        TEXT_INPUT_MODE_DEFAULT,
                                         TEXT_INPUT_FLAG_AUTOCOMPLETE_ON,
                                         /*should_do_learning=*/false);
   connection_->ScheduleFlush();
@@ -556,14 +562,16 @@ TEST_P(WaylandInputMethodContextNoKeyboardTest, ActivateDeactivate) {
 
   EXPECT_CALL(*zwp_text_input_, Activate(surface_->resource()));
   EXPECT_CALL(*zwp_text_input_, ShowInputPanel());
-  input_method_context_->Focus();
+  input_method_context_->UpdateFocus(true, ui::TEXT_INPUT_TYPE_NONE,
+                                     ui::TEXT_INPUT_TYPE_TEXT);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);
 
   EXPECT_CALL(*zwp_text_input_, Deactivate());
   EXPECT_CALL(*zwp_text_input_, HideInputPanel());
-  input_method_context_->Blur();
+  input_method_context_->UpdateFocus(false, ui::TEXT_INPUT_TYPE_TEXT,
+                                     ui::TEXT_INPUT_TYPE_NONE);
   connection_->ScheduleFlush();
   Sync();
   Mock::VerifyAndClearExpectations(zwp_text_input_);

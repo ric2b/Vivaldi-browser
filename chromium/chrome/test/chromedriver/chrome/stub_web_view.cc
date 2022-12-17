@@ -259,10 +259,6 @@ bool StubWebView::IsNonBlocking() const {
   return false;
 }
 
-bool StubWebView::IsOOPIF(const std::string& frame_id) {
-  return false;
-}
-
 FrameTracker* StubWebView::GetFrameTracker() const {
   return nullptr;
 }
@@ -277,8 +273,8 @@ std::unique_ptr<base::Value> StubWebView::GetCastIssueMessage() {
 
 void StubWebView::SetFrame(const std::string& new_frame_id) {}
 
-Status StubWebView::GetNodeIdByElement(const std::string& frame,
-                                       const base::Value& element,
-                                       int* node_id) {
+Status StubWebView::GetBackendNodeIdByElement(const std::string& frame,
+                                              const base::Value& element,
+                                              int* node_id) {
   return Status(kOk);
 }

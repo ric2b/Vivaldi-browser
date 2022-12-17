@@ -543,6 +543,7 @@ static bool ChildRulesHaveFailedOrCanceledSubresources(
       case StyleRuleBase::kContainer:
       case StyleRuleBase::kMedia:
       case StyleRuleBase::kLayerBlock:
+      case StyleRuleBase::kScope:
         if (ChildRulesHaveFailedOrCanceledSubresources(
                 To<StyleRuleGroup>(rule)->ChildRules()))
           return true;
@@ -561,6 +562,8 @@ static bool ChildRulesHaveFailedOrCanceledSubresources(
       case StyleRuleBase::kSupports:
       case StyleRuleBase::kViewport:
       case StyleRuleBase::kFontPaletteValues:
+      case StyleRuleBase::kPositionFallback:
+      case StyleRuleBase::kTry:
         break;
       case StyleRuleBase::kCounterStyle:
         if (To<StyleRuleCounterStyle>(rule)->HasFailedOrCanceledSubresources())

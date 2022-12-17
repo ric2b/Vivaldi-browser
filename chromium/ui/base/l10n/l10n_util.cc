@@ -358,9 +358,9 @@ struct AvailableLocalesTraits
       std::replace(locale_name.begin(), locale_name.end(), '_', '-');
 
       // Map the Chinese locale names over to zh-CN and zh-TW.
-      if (base::LowerCaseEqualsASCII(locale_name, "zh-hans")) {
+      if (base::EqualsCaseInsensitiveASCII(locale_name, "zh-hans")) {
         locale_name = "zh-CN";
-      } else if (base::LowerCaseEqualsASCII(locale_name, "zh-hant")) {
+      } else if (base::EqualsCaseInsensitiveASCII(locale_name, "zh-hant")) {
         locale_name = "zh-TW";
       }
       locales->push_back(locale_name);
@@ -380,6 +380,14 @@ namespace l10n_util {
 std::string GetLanguage(const std::string& locale) {
   const std::string::size_type hyphen_pos = locale.find('-');
   return std::string(locale, 0, hyphen_pos);
+}
+
+std::string GetCountry(const std::string& locale) {
+  const std::string::size_type hyphen_pos = locale.find('-');
+  if (hyphen_pos == std::string::npos)
+    return std::string();
+
+  return std::string(locale, hyphen_pos + 1);
 }
 
 // TODO(jshin): revamp this function completely to use a more systematic
@@ -410,35 +418,35 @@ bool CheckAndResolveLocale(const std::string& locale,
     std::string tmp_locale(lang);
     // Map es-RR other than es-ES to es-419 (Chrome's Latin American
     // Spanish locale).
-    if (base::LowerCaseEqualsASCII(lang, "es") &&
-        !base::LowerCaseEqualsASCII(region, "es")) {
+    if (base::EqualsCaseInsensitiveASCII(lang, "es") &&
+        !base::EqualsCaseInsensitiveASCII(region, "es")) {
 #if BUILDFLAG(IS_IOS)
       // iOS uses a different name for es-419 (es-MX).
       tmp_locale.append("-MX");
 #else
       tmp_locale.append("-419");
 #endif
-    } else if (base::LowerCaseEqualsASCII(lang, "pt") &&
-               !base::LowerCaseEqualsASCII(region, "br")) {
+    } else if (base::EqualsCaseInsensitiveASCII(lang, "pt") &&
+               !base::EqualsCaseInsensitiveASCII(region, "br")) {
       // Map pt-RR other than pt-BR to pt-PT. Note that "pt" by itself maps to
       // pt-BR (logic below), and we need to explicitly check for pt-BR here as
       // it is unavailable on iOS.
       tmp_locale.append("-PT");
-    } else if (base::LowerCaseEqualsASCII(lang, "zh")) {
+    } else if (base::EqualsCaseInsensitiveASCII(lang, "zh")) {
       // Map zh-HK and zh-MO to zh-TW. Otherwise, zh-FOO is mapped to zh-CN.
-      if (base::LowerCaseEqualsASCII(region, "hk") ||
-          base::LowerCaseEqualsASCII(region, "mo")) {  // Macao
+      if (base::EqualsCaseInsensitiveASCII(region, "hk") ||
+          base::EqualsCaseInsensitiveASCII(region, "mo")) {  // Macao
         tmp_locale.append("-TW");
       } else {
         tmp_locale.append("-CN");
       }
-    } else if (base::LowerCaseEqualsASCII(lang, "en")) {
+    } else if (base::EqualsCaseInsensitiveASCII(lang, "en")) {
       // Map Liberian and Filipino English to US English, and everything
       // else to British English.
       // TODO(jungshik): en-CA may have to change sides once
       // we have OS locale separate from app locale (Chrome's UI language).
-      if (base::LowerCaseEqualsASCII(region, "lr") ||
-          base::LowerCaseEqualsASCII(region, "ph")) {
+      if (base::EqualsCaseInsensitiveASCII(region, "lr") ||
+          base::EqualsCaseInsensitiveASCII(region, "ph")) {
         tmp_locale.append("-US");
       } else {
         tmp_locale.append("-GB");
@@ -460,7 +468,7 @@ bool CheckAndResolveLocale(const std::string& locale,
       {"pt", "pt-BR"}, {"tl", "fil"}, {"zh", "zh-CN"},
   };
   for (const auto& alias : kAliasMap) {
-    if (base::LowerCaseEqualsASCII(lang, alias.source)) {
+    if (base::EqualsCaseInsensitiveASCII(lang, alias.source)) {
       std::string tmp_locale(alias.dest);
       if (HasStringsForLocale(tmp_locale, perform_io)) {
         resolved_locale->swap(tmp_locale);
@@ -973,13 +981,13 @@ bool IsUserFacingUILocale(const std::string& locale) {
 
   // Chinese locales (other than the ones that have strings on disk) should not
   // be shown.
-  if (base::LowerCaseEqualsASCII(language, "zh")) {
+  if (base::EqualsCaseInsensitiveASCII(language, "zh")) {
     return false;
   }
 
   // Norwegian (no) should not be shown as it does not specify a written form.
   // Users can select Norwegian Bokmål (nb) or Norwegian Nynorsk (nn) instead.
-  if (base::LowerCaseEqualsASCII(language, "no")) {
+  if (base::EqualsCaseInsensitiveASCII(language, "no")) {
     return false;
   }
 

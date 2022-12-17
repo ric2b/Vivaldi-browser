@@ -365,6 +365,19 @@ class MODULES_EXPORT ManifestParser {
   absl::optional<mojom::blink::ManifestProtocolHandlerPtr> ParseProtocolHandler(
       const JSONObject* protocol_dictionary);
 
+  // Parses the 'start_url' field of the 'lock_screen' field of a Manifest,
+  // as defined in:
+  // https://github.com/WICG/lock-screen/
+  // Returns the parsed KURL if any, or an empty KURL if parsing failed.
+  KURL ParseLockScreenStartUrl(const JSONObject* lock_screen);
+
+  // Parses the 'lock_screen' field of a Manifest, as defined in:
+  // https://github.com/WICG/lock-screen/
+  // Returns a parsed ManifestLockScreenPtr, or nullptr if not present or
+  // parsing failed.
+  mojom::blink::ManifestLockScreenPtr ParseLockScreen(
+      const JSONObject* manifest);
+
   // Parses the 'new_note_url' field of the 'note_taking' field of a Manifest,
   // as defined in:
   // https://wicg.github.io/manifest-incubations/#dfn-new_note_url
@@ -456,7 +469,7 @@ class MODULES_EXPORT ManifestParser {
       const String& preference);
 
   // Parse the 'user_preferences' field of the manifest as defined in:
-  // https://github.com/w3c/manifest/issues/975#issuecomment-960222756
+  // https://github.com/WICG/manifest-incubations/blob/gh-pages/user-preferences-explainer.md
   // Returns nullptr if parsing fails.
   mojom::blink::ManifestUserPreferencesPtr ParseUserPreferences(
       const JSONObject* object);
@@ -464,6 +477,13 @@ class MODULES_EXPORT ManifestParser {
   // Parse the `handle_links` field of the manifest as defined in:
   // https://github.com/WICG/pwa-url-handler/blob/main/handle_links/explainer.md
   mojom::blink::HandleLinks ParseHandleLinks(const JSONObject* object);
+
+  // Parses the 'tab_strip' field of the manifest as defined in:
+  // https://github.com/WICG/manifest-incubations/blob/gh-pages/tabbed-mode-explainer.md
+  mojom::blink::ManifestTabStripPtr ParseTabStrip(const JSONObject* object);
+
+  mojom::blink::TabStripMemberVisibility ParseTabStripMemberVisibility(
+      const JSONValue* json_value);
 
   void AddErrorInfo(const String& error_msg,
                     bool critical = false,

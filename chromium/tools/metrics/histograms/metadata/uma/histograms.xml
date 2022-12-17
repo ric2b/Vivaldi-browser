@@ -80,7 +80,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.ActualLogUploadInterval" units="minutes"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -103,14 +103,17 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.CleanExitBeacon.BeaconFileConsistency"
-    enum="UmaCleanExitConsistency2" expires_after="2022-10-04">
+    enum="UmaCleanExitConsistency2" expires_after="2023-05-31">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    Emitted by clients in the |kEnabledGroup| of the Extended Variations Safe
-    Mode experiment when the CleanExitBeacon is initialized. Reports the
-    combined state of distinct beacons stored the beacon file and in Local
-    State.
+    The combined state of distinct beacons stored in the beacon file and in
+    Local State. Emitted once during startup when the CleanExitBeacon is
+    initialized.
+
+    As of M102 for desktop and iOS and M103 for Android Chrome, any client may
+    emit this metric. Prior to this, the metric was emitted by only clients in
+    an enabled group that used the beacon file.
   </summary>
 </histogram>
 
@@ -130,25 +133,31 @@ chromium-metrics-reviews@google.com.
 
 <histogram name="UMA.CleanExitBeacon.MonitoringStage"
     enum="BeaconMonitoringStage" expires_after="2022-10-04">
+  <obsolete>
+    Removed in M104.
+  </obsolete>
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
     The stage during which Chrome was monitoring for browser crashes via the
-    CleanExitBeacon when Chrome failed to exit cleanly. For Extended Variations
-    Safe Mode experiment group clients, Chrome monitors earlier than for control
-    group clients. This metric allows early crashes detected due to the
-    experiment to be distinguished from crashes that the status quo code can
+    CleanExitBeacon when Chrome failed to exit cleanly. As a result of the
+    Extended Variations Safe Mode work, Chrome monitors earlier on in startup
+    for crashes. This metric allows early crashes detected due to this work to
+    be distinguished from crashes that the original Variations Safe Mode could
     detect. Emitted during startup when the CleanExitBeacon is initialized.
 
     Note that the status quo monitoring stage refers to when crash monitoring
     would start in the absence of the new Extended Variations Safe Mode
-    experiment behavior, which (a) is later on in startup and (b) depends on the
-    platform.
+    behavior, which (a) is later on in startup and (b) depends on the platform.
+
+    As of M102 for desktop and iOS and M103 for Android Chrome, any client may
+    emit this metric. Prior to this, the metric was emitted by only clients in
+    an enabled group that used the beacon file.
   </summary>
 </histogram>
 
 <histogram name="UMA.CleanExitBeaconConsistency2"
-    enum="UmaCleanExitConsistency2" expires_after="2022-10-04">
+    enum="UmaCleanExitConsistency2" expires_after="2023-05-31">
   <owner>asvitkine@chromium.org</owner>
   <owner>justincohen@chromium.org</owner>
   <owner>olivierrobin@chromium.org</owner>
@@ -166,24 +175,27 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.CleanExitBeaconConsistency3"
-    enum="UmaCleanExitConsistency3" expires_after="2022-08-01">
+    enum="UmaCleanExitConsistency3" expires_after="2023-05-31">
   <owner>caitlinfischer@google.com</owner>
   <owner>justincohen@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    Recorded when the CleanExitBeacon is initialized for clients in the Extended
-    Variations Safe Mode enabled group on Windows and iOS. Reports the combined
-    state of distinct beacons stored in the beacon file and in a
+    The combined state of distinct beacons stored in the beacon file and in a
     platform-specific location (e.g. the Windows registry or NSUserDefaults on
-    iOS). They are normally expected to be identical.
+    iOS). They are normally expected to be identical. Recorded when the
+    CleanExitBeacon is initialized on Windows and iOS.
 
     Unlike UMA.CleanExitBeaconConsistency2, this histogram excludes the Local
     State beacon.
+
+    As of M102 for desktop and iOS and M103 for Android Chrome, any client may
+    emit this metric. Prior to this, the metric was emitted by only clients in
+    an enabled group that used the beacon file.
   </summary>
 </histogram>
 
 <histogram name="UMA.ClientIdBackupRecoveredWithAge" units="hours"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -194,7 +206,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="UMA.ClientIdCleared" enum="Boolean" expires_after="2022-10-04">
+<histogram name="UMA.ClientIdCleared" enum="Boolean" expires_after="2022-12-04">
   <owner>pdyson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -204,20 +216,20 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.ClientIdSource" enum="ClientIdSource"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>pdyson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>The source of the client id when its creation is forced.</summary>
 </histogram>
 
 <histogram name="UMA.CrosPerUser.DaemonStoreWriteFailed"
-    enum="PerUserDaemonStoreFail" expires_after="2022-10-01">
+    enum="PerUserDaemonStoreFail" expires_after="2022-12-04">
   <owner>jongahn@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
-    Records the state that metrics service is in when user log store was set or
-    unset. This should be recorded once when a valid user that can use per-user
-    logs in and unsetting should be recorded once when a user logs out.
+    Records the status of writing the per-user metrics state to daemon-store (or
+    the boot state to /home/chronos/). Written on login or logout, and when a
+    user changes their consent state.
   </summary>
 </histogram>
 
@@ -296,7 +308,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.FileMetricsProvider.AccessResult"
-    enum="FileMetricsProviderAccessResult" expires_after="2022-10-04">
+    enum="FileMetricsProviderAccessResult" expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -315,7 +327,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.InitSequence" enum="UmaInitSequence"
-    expires_after="2022-10-02">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -328,7 +340,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.IsClonedInstall" enum="BooleanCloned"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -408,7 +420,7 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
-<histogram name="UMA.LogSize.OnSuccess" units="KB" expires_after="2022-10-02">
+<histogram name="UMA.LogSize.OnSuccess" units="KB" expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -432,7 +444,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.LogUpload.ResponseOrErrorCode"
-    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2022-10-02">
+    enum="CombinedHttpResponseAndNetErrorCode" expires_after="2022-12-04">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -454,7 +466,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.LowEntropySource3Value" units="units"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>mpearson@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -479,7 +491,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.MachineIdState" enum="UmaMachineIdState"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -491,7 +503,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.MetricsIDsReset" enum="BooleanHit"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -507,7 +519,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.MetricsReporting.Toggle" enum="MetricsReportingChange"
-    expires_after="2022-08-01">
+    expires_after="2022-10-23">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -517,7 +529,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.MetricsService.Initialize.Time" units="microseconds"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -579,7 +591,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.PersistentHistograms.InitResult"
-    enum="PersistentHistogramsInitResult" expires_after="2022-10-02">
+    enum="PersistentHistogramsInitResult" expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -589,7 +601,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.PrimaryUserType" enum="UserType"
-    expires_after="2022-10-02">
+    expires_after="2022-12-04">
   <owner>michaelpg@chromium.org</owner>
   <owner>yilkal@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -599,9 +611,12 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.ProfileSignInStatus" enum="ProfileSyncConsentStatus"
-    expires_after="never">
-<!-- expires-never: For the signin_status filter in dynamic table. -->
-
+    expires_after="2022-05-15">
+  <obsolete>
+    In May 2022, replaced with UMA.ProfileSignInStatusV2 and
+    UMA.ProfileSyncStatusV2, which actually monitors sign-in and sync status.
+    This earlier version actually monitored sync consent status.
+  </obsolete>
   <owner>asvitkine@chromium.org</owner>
   <owner>isherman@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -625,8 +640,75 @@ chromium-metrics-reviews@google.com.
   </summary>
 </histogram>
 
+<histogram name="UMA.ProfileSignInStatusV2" enum="ProfileSignInStatus"
+    expires_after="never">
+<!-- expires-never: powers UMA dashboard filter -->
+
+  <owner>mpearson@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    An enum representing the sign-in status of all regular profiles with open
+    browser windows at the time a UMA log record is closed (i.e., excluding
+    system and guest profiles). Recorded once in every ongoing metrics log; not
+    recorded in logs about the previous session. System, Guest and Incognito
+    profiles are ignored because the user cannot sign-in into them.
+
+    Being signed into the browser means, for example, the user sees their Google
+    account on the New Tab Page and in the toolbar at the top of the browser. It
+    does NOT mean the user has a currently-valid token; they may need to refresh
+    their credentials. As a concrete example, it means the user may not get
+    personalized results and suggestions when using google.com.
+
+    On desktop, when Chrome is running and there are no profiles with open
+    browser windows (this can happen on Mac), this histogram will report
+    &quot;Unknown sign-in status&quot;.
+
+    On Android, when Chrome is running and there are no profiles with open
+    browser windows (this can happen when Chrome is doing something in the
+    background), it will report the sign-in status as if there were an open
+    browser window.
+
+    If a profile is open during the time period covered by this log record but
+    closed before the log record is closed, the profile's status will not be
+    reflected in this histogram.
+
+    Not supported on ChromeOS Ash. (Supported on Lacros.)
+  </summary>
+</histogram>
+
+<histogram name="UMA.ProfileSyncStatusV2" enum="ProfileSyncStatus"
+    expires_after="never">
+<!-- expires-never: powers UMA dashboard filter -->
+
+  <owner>mpearson@chromium.org</owner>
+  <owner>src/base/metrics/OWNERS</owner>
+  <summary>
+    An enum representing the sync status of all regular profiles with open
+    browser windows at the time a UMA log record is closed (i.e., excluding
+    system and guest profiles). Recorded once in every ongoing metrics log; not
+    recorded in logs about the previous session. System, Guest and Incognito
+    profiles are ignored because the user cannot sign-in into them.
+
+    If a profile is open during the time period covered by this log record but
+    closed before the log record is closed, the profile's status will not be
+    reflected in this histogram.
+
+    Sync status indicates the profile has consented to sync and has a valid
+    credential for the account (i.e., is signed-in), meaning sync in principle
+    should be working. For example, if the user signs out of the web, their
+    credentials will be put into an error state; they will not be valid. The
+    profile will not be considered to be syncing. It is possible that the user
+    is technically syncing (according to this histogram and Chrome) yet not
+    syncing at that instant. Examples of this include (i) user is offline and
+    (ii) user disabled syncing for all sync data types but didn't revoke
+    consent.
+
+    Not supported on ChromeOS Ash. (Supported on Lacros.)
+  </summary>
+</histogram>
+
 <histogram name="UMA.ProtoCompressionRatio" units="%"
-    expires_after="2022-10-02">
+    expires_after="2022-12-04">
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -661,7 +743,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.SamplingRatePerMille" units="samples per mille"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>jwd@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -689,7 +771,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.Startup.LocalStateFileExistence" enum="BooleanExists"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>caitlinfischer@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -709,7 +791,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.EventRecordingState"
-    enum="StructuredMetricsEventRecordingState" expires_after="2022-04-24">
+    enum="StructuredMetricsEventRecordingState" expires_after="2022-11-01">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -721,7 +803,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.EventsRecordedBeforeInit" units="count"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>jongahn@chromium.org</owner>
   <owner>tby@chromium.org</owner>
   <summary>
@@ -741,7 +823,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.InternalError2"
-    enum="StructuredMetricsInternalError2" expires_after="2022-05-01">
+    enum="StructuredMetricsInternalError2" expires_after="2022-11-01">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -752,7 +834,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.KeyValidationState"
-    enum="StructuredMetricsKeyValidationState" expires_after="2022-04-24">
+    enum="StructuredMetricsKeyValidationState" expires_after="2022-11-01">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -764,7 +846,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.StructuredMetrics.NumEventsInUpload" units="count"
-    expires_after="2022-04-24">
+    expires_after="2022-11-01">
   <owner>tby@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -785,7 +867,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.TruncatedEvents.UserAction" units="events"
-    expires_after="2022-10-09">
+    expires_after="2022-12-04">
   <owner>rkaplow@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>
@@ -795,7 +877,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.UnsentLogs.Dropped" units="units"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>holte@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
   <owner>src/base/metrics/OWNERS</owner>
@@ -805,7 +887,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.UnsentLogs.DroppedSize" units="bytes"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>akirabaruah@chromium.org</owner>
   <owner>rkaplow@chromium.org</owner>
   <owner>asvitkine@chromium.org</owner>
@@ -897,7 +979,7 @@ chromium-metrics-reviews@google.com.
 </histogram>
 
 <histogram name="UMA.UserDemographics.Status" enum="UserDemographicsStatus"
-    expires_after="2022-10-04">
+    expires_after="2022-12-04">
   <owner>rogerm@google.com</owner>
   <owner>src/base/metrics/OWNERS</owner>
   <summary>

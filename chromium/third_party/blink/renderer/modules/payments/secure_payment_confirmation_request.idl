@@ -24,5 +24,8 @@ dictionary SecurePaymentConfirmationRequest {
 
     // The relying party, which must be the relying party of a given credential
     // ID for it to match.
-    [RuntimeEnabled=SecurePaymentConfirmationAPIV3] required USVString rpId;
+    required USVString rpId;
+
+    // Whether or not to show an opt-out flow in the SPC UX.
+    [RuntimeEnabled=SecurePaymentConfirmationOptOut, MeasureAs=SecurePaymentConfirmationOptOut] boolean showOptOut;
 };

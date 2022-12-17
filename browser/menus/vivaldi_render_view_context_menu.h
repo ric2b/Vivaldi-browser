@@ -27,6 +27,7 @@ class SpeechMenuController;
 
 class VivaldiRenderViewContextMenu : public RenderViewContextMenu {
 protected:
+  friend class VivaldiContextMenuMac;
   friend class VivaldiContextMenuViews;
   friend class ContextMenuController;
  public:

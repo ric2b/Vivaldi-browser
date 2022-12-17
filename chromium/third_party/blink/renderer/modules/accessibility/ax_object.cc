@@ -39,6 +39,7 @@
 #include "third_party/blink/public/common/input/web_menu_source_type.h"
 #include "third_party/blink/public/mojom/frame/user_activation_notification_type.mojom-blink.h"
 #include "third_party/blink/public/mojom/input/focus_type.mojom-blink.h"
+#include "third_party/blink/public/mojom/scroll/scroll_into_view_params.mojom-blink.h"
 #include "third_party/blink/renderer/core/aom/accessible_node.h"
 #include "third_party/blink/renderer/core/aom/accessible_node_list.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
@@ -87,6 +88,7 @@
 #include "third_party/blink/renderer/core/page/focus_controller.h"
 #include "third_party/blink/renderer/core/page/page.h"
 #include "third_party/blink/renderer/core/page/scrolling/top_document_root_scroller_controller.h"
+#include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/svg/svg_element.h"
 #include "third_party/blink/renderer/core/svg/svg_g_element.h"
 #include "third_party/blink/renderer/core/svg/svg_style_element.h"
@@ -641,25 +643,32 @@ void AXObject::Init(AXObject* parent) {
 
   UpdateCachedAttributeValuesIfNeeded(false);
 
-  // The recently introduced CHECK below fails for shadowDOM fenced
-  // frame, so bypass the CHECK below if it's a shadowDOM fenced frame.
-  // TODO(crbug.com/1316348): see if AXNodeObject::AddNodeChildren() needs to
-  // change for fenced frames similar to iframes and whether this change would
-  // then still be necessary.
-  bool is_shadow_dom_fenced_frame = false;
-  if (parent_ && parent_->GetNode()) {
-    is_shadow_dom_fenced_frame =
-        parent_ && blink::features::IsFencedFramesEnabled() &&
-        blink::features::IsFencedFramesShadowDOMBased() &&
-        IsA<HTMLFencedFrameElement>(*parent_->GetNode());
+#if defined(AX_FAIL_FAST_BUILD)
+  if (parent_ && parent_->RoleValue() == ax::mojom::blink::Role::kIframe &&
+      RoleValue() != ax::mojom::blink::Role::kDocument) {
+    // A frame/iframe can only have a document child.
+    // Make an exception for ShadowDOM based fenced frames. While they have
+    // the same role as a regular IFrame, they will have an inner iframe
+    // be the child of the outer iframe, rather than a document. This
+    // behavior is expected and the exception is carved out here.
+    if (!blink::features::IsFencedFramesEnabled() ||
+        !blink::features::IsFencedFramesShadowDOMBased() ||
+        !IsA<HTMLFencedFrameElement>(parent_->GetNode())) {
+      NOTREACHED() << "An iframe can only have a document child."
+                   << "\n* Child = " << ToString(true, true)
+                   << "\n* Parent =  " << parent_->ToString(true, true);
+    }
   }
 
-  SANITIZER_CHECK(!parent_ || is_shadow_dom_fenced_frame ||
-                  parent_->RoleValue() != ax::mojom::blink::Role::kIframe ||
-                  RoleValue() == ax::mojom::blink::Role::kDocument)
-      << "An iframe can only have a document child."
-      << "\n* Child = " << ToString(true, true)
-      << "\n* Parent =  " << parent_->ToString(true, true);
+  if (blink::features::IsFencedFramesEnabled() &&
+      blink::features::IsFencedFramesShadowDOMBased() && parent_ &&
+      IsA<HTMLFencedFrameElement>(parent_->GetNode()) &&
+      RoleValue() != ax::mojom::blink::Role::kIframe) {
+    NOTREACHED() << "A ShadowDOM fenced frame must have an iframe child."
+                 << "\n* Child = " << ToString(true, true)
+                 << "\n* Parent =  " << parent_->ToString(true, true);
+  }
+#endif
 }
 
 void AXObject::Detach() {
@@ -1221,6 +1230,9 @@ void AXObject::Serialize(ui::AXNodeData* node_data,
     SerializeLangAttribute(node_data);  // Propagates using all nodes' values.
   }
 
+  // Always try to serialize child tree ids.
+  SerializeChildTreeID(node_data);
+
   // Return early. The following attributes are unnecessary for ignored nodes.
   // Exception: focusable ignored nodes are fully serialized, so that reasonable
   // verbalizations can be made if they actually receive focus.
@@ -1263,6 +1275,23 @@ void AXObject::SerializeActionAttributes(ui::AXNodeData* node_data) {
   if (IsSlider()) {
     node_data->AddAction(ax::mojom::blink::Action::kDecrement);
     node_data->AddAction(ax::mojom::blink::Action::kIncrement);
+  }
+}
+
+void AXObject::SerializeChildTreeID(ui::AXNodeData* node_data) {
+  // If this is an HTMLFrameOwnerElement (such as an iframe), we may need
+  // to embed the ID of the child frame.
+  if (auto* html_frame_owner_element =
+          DynamicTo<HTMLFrameOwnerElement>(GetElement())) {
+    if (Frame* child_frame = html_frame_owner_element->ContentFrame()) {
+      absl::optional<base::UnguessableToken> child_token =
+          child_frame->GetEmbeddingToken();
+      if (child_token && !(IsDetached() || ChildCountIncludingIgnored())) {
+        ui::AXTreeID child_tree_id =
+            ui::AXTreeID::FromToken(child_token.value());
+        node_data->AddChildTreeId(child_tree_id);
+      }
+    }
   }
 }
 
@@ -1891,21 +1920,6 @@ void AXObject::SerializeUnignoredAttributes(ui::AXNodeData* node_data,
   if (GetTextIndent() != 0.0f) {
     node_data->AddFloatAttribute(ax::mojom::blink::FloatAttribute::kTextIndent,
                                  GetTextIndent());
-  }
-
-  // If this is an HTMLFrameOwnerElement (such as an iframe), we may need
-  // to embed the ID of the child frame.
-  if (auto* html_frame_owner_element =
-          DynamicTo<HTMLFrameOwnerElement>(GetElement())) {
-    if (Frame* child_frame = html_frame_owner_element->ContentFrame()) {
-      absl::optional<base::UnguessableToken> child_token =
-          child_frame->GetEmbeddingToken();
-      if (child_token && !(IsDetached() || ChildCountIncludingIgnored())) {
-        ui::AXTreeID child_tree_id =
-            ui::AXTreeID::FromToken(child_token.value());
-        node_data->AddChildTreeId(child_tree_id);
-      }
-    }
   }
 
   if (accessibility_mode.has_mode(ui::AXMode::kScreenReader) ||
@@ -2598,20 +2612,17 @@ bool AXObject::ComputeIsInertViaStyle(const ComputedStyle* style,
   if (style) {
     if (style->IsInert()) {
       if (ignored_reasons) {
-        // The 'inert' attribute sets forced inertness, which cannot be escaped
-        // by descendants (see details in computed_style_extra_fields.json5).
-        // So we only need to check InertRoot() if inertness is forced.
-        if (style->IsForcedInert()) {
-          const AXObject* inert_root_el = InertRoot();
-          if (inert_root_el == this) {
-            ignored_reasons->push_back(IgnoredReason(kAXInertElement));
-          } else {
-            ignored_reasons->push_back(
-                IgnoredReason(kAXInertSubtree, inert_root_el));
-          }
+        const AXObject* ax_inert_root = InertRoot();
+        if (ax_inert_root == this) {
+          ignored_reasons->push_back(IgnoredReason(kAXInertElement));
           return true;
         }
-        // If the inertness is overridable, it must have been set by a modal
+        if (ax_inert_root) {
+          ignored_reasons->push_back(
+              IgnoredReason(kAXInertSubtree, ax_inert_root));
+          return true;
+        }
+        // If there is no inert root, inertness must have been set by a modal
         // dialog or a fullscreen element (see AdjustStyleForInert).
         Document& document = GetNode()->GetDocument();
         if (HTMLDialogElement* dialog = document.ActiveModalDialog()) {
@@ -3880,24 +3891,6 @@ bool AXObject::IsNameFromAuthorAttribute() const {
          HasAttribute(html_names::kTitleAttr);
 }
 
-String AXObject::TextFromAriaLabelledby(AXObjectSet& visited,
-                                        AXRelatedObjectVector* related_objects,
-                                        Vector<String>& ids) const {
-  HeapVector<Member<Element>> elements;
-  AriaLabelledbyElementVector(GetElement(), elements, ids);
-  return TextFromElements(true, visited, elements, related_objects);
-}
-
-String AXObject::TextFromAriaDescribedby(AXRelatedObjectVector* related_objects,
-                                         Vector<String>& ids) const {
-  AXObjectSet visited;
-
-  HeapVector<Member<Element>> elements;
-  ElementsFromAttribute(GetElement(), elements,
-                        html_names::kAriaDescribedbyAttr, ids);
-  return TextFromElements(true, visited, elements, related_objects);
-}
-
 AccessibilityOrientation AXObject::Orientation() const {
   // In ARIA 1.1, the default value for aria-orientation changed from
   // horizontal to undefined.
@@ -4244,7 +4237,7 @@ ax::mojom::blink::Role AXObject::DetermineAriaRoleAttribute() const {
   // It also states user agents should ignore the presentational role if
   // the element has global ARIA states and properties.
   if (ui::IsPresentational(role)) {
-    if (IsA<HTMLIFrameElement>(*GetNode()) || IsA<HTMLFrameElement>(*GetNode()))
+    if (IsFrame(GetNode()))
       return ax::mojom::blink::Role::kIframePresentational;
     if ((GetElement() && GetElement()->SupportsFocus()) ||
         HasAriaAttribute(true /* does_undo_role_presentation */)) {
@@ -4342,6 +4335,13 @@ bool AXObject::IsMultiline() const {
   if (IsDetached() || !GetNode() || !IsTextField())
     return false;
 
+  // While the specs don't specify that we can't do <input aria-multiline=true>,
+  // it is in direct contradiction to the `HTMLInputElement` which is always
+  // single line. Ensure that we can't make an input report that it's multiline
+  // by returning early.
+  if (IsA<HTMLInputElement>(*GetNode()))
+    return false;
+
   bool is_multiline = false;
   if (HasAOMPropertyOrARIAAttribute(AOMBooleanProperty::kMultiline,
                                     is_multiline)) {
@@ -4356,18 +4356,8 @@ bool AXObject::IsRichlyEditable() const {
   const Node* node = GetNode();
   if (IsDetached() || !node)
     return false;
-#if DCHECK_IS_ON()  // Required in order to get Lifecycle().ToString()
-  DCHECK(GetDocument());
-  DCHECK_GE(GetDocument()->Lifecycle().GetState(),
-            DocumentLifecycle::kStyleClean)
-      << "Unclean document style at lifecycle state "
-      << GetDocument()->Lifecycle().ToString();
-#endif  // DCHECK_IS_ON()
 
-  if (HasRichlyEditableStyle(*node))
-    return true;
-
-  return false;
+  return node->IsRichlyEditableForAccessibility();
 }
 
 AXObject* AXObject::LiveRegionRoot() const {
@@ -4923,11 +4913,12 @@ void AXObject::ClearChildren() const {
   // AccessibilityExposeIgnoredNodes().
 
   // Loop through AXObject children.
+
 #if defined(AX_FAIL_FAST_BUILD)
-  CHECK(!is_adding_children_)
+  SANITIZER_CHECK(!is_adding_children_)
       << "Should not attempt to simultaneously add and clear children on: "
       << ToString(true, true);
-  CHECK(!is_computing_text_from_descendants_)
+  SANITIZER_CHECK(!is_computing_text_from_descendants_)
       << "Should not attempt to simultaneously compute text from descendants "
          "and clear children on: "
       << ToString(true, true);
@@ -5560,7 +5551,6 @@ bool AXObject::PerformAction(const ui::AXActionData& action_data) {
     case ax::mojom::blink::Action::kLoadInlineTextBoxes:
     case ax::mojom::blink::Action::kNone:
     case ax::mojom::blink::Action::kReplaceSelectedText:
-    case ax::mojom::blink::Action::kRunScreenAi:
     case ax::mojom::blink::Action::kScrollBackward:
     case ax::mojom::blink::Action::kScrollDown:
     case ax::mojom::blink::Action::kScrollForward:
@@ -5728,8 +5718,8 @@ bool AXObject::OnNativeScrollToMakeVisibleAction() const {
   if (!layout_object)
     return false;
   PhysicalRect target_rect(layout_object->AbsoluteBoundingBoxRect());
-  layout_object->ScrollRectToVisible(
-      target_rect,
+  scroll_into_view_util::ScrollRectToVisible(
+      *layout_object, target_rect,
       ScrollAlignment::CreateScrollIntoViewParams(
           ScrollAlignment::CenterIfNeeded(), ScrollAlignment::CenterIfNeeded(),
           mojom::blink::ScrollType::kProgrammatic, false,
@@ -5750,12 +5740,13 @@ bool AXObject::OnNativeScrollToMakeVisibleWithSubFocusAction(
 
   PhysicalRect target_rect =
       layout_object->LocalToAbsoluteRect(PhysicalRect(rect));
-  layout_object->ScrollRectToVisible(
-      target_rect, ScrollAlignment::CreateScrollIntoViewParams(
-                       horizontal_scroll_alignment, vertical_scroll_alignment,
-                       mojom::blink::ScrollType::kProgrammatic,
-                       false /* make_visible_in_visual_viewport */,
-                       mojom::blink::ScrollBehavior::kAuto));
+  scroll_into_view_util::ScrollRectToVisible(
+      *layout_object, target_rect,
+      ScrollAlignment::CreateScrollIntoViewParams(
+          horizontal_scroll_alignment, vertical_scroll_alignment,
+          mojom::blink::ScrollType::kProgrammatic,
+          false /* make_visible_in_visual_viewport */,
+          mojom::blink::ScrollBehavior::kAuto));
   AXObjectCache().PostNotification(
       AXObjectCache().GetOrCreate(GetDocument()->GetLayoutView()),
       ax::mojom::blink::Event::kLocationChanged);
@@ -5770,8 +5761,8 @@ bool AXObject::OnNativeScrollToGlobalPointAction(
 
   PhysicalRect target_rect(layout_object->AbsoluteBoundingBoxRect());
   target_rect.Move(-PhysicalOffset(global_point));
-  layout_object->ScrollRectToVisible(
-      target_rect,
+  scroll_into_view_util::ScrollRectToVisible(
+      *layout_object, target_rect,
       ScrollAlignment::CreateScrollIntoViewParams(
           ScrollAlignment::LeftAlways(), ScrollAlignment::TopAlways(),
           mojom::blink::ScrollType::kProgrammatic, false,
@@ -5850,6 +5841,24 @@ bool AXObject::IsARIAInput(ax::mojom::blink::Role aria_role) {
          aria_role == ax::mojom::blink::Role::kSwitch ||
          aria_role == ax::mojom::blink::Role::kSearchBox ||
          aria_role == ax::mojom::blink::Role::kTextFieldWithComboBox;
+}
+
+// static
+bool AXObject::IsFrame(const Node* node) {
+  auto* frame_owner = DynamicTo<HTMLFrameOwnerElement>(node);
+  if (!frame_owner)
+    return false;
+  switch (frame_owner->OwnerType()) {
+    case FrameOwnerElementType::kIframe:
+    case FrameOwnerElementType::kFrame:
+    case FrameOwnerElementType::kFencedframe:
+      return true;
+    case FrameOwnerElementType::kObject:
+    case FrameOwnerElementType::kEmbed:
+    case FrameOwnerElementType::kPortal:
+    case FrameOwnerElementType::kNone:
+      return false;
+  }
 }
 
 // static
@@ -6169,11 +6178,11 @@ bool AXObject::SupportsNameFromContents(bool recursive) const {
     case ax::mojom::blink::Role::kRootWebArea: {
       DCHECK(GetNode());
       const Document& document = GetNode()->GetDocument();
-      bool is_main_frame =
-          document.GetFrame() && document.GetFrame()->IsMainFrame();
-      bool is_inside_portal =
-          document.GetPage() && document.GetPage()->InsidePortal();
-      return is_inside_portal && is_main_frame;
+      bool is_portal_main_frame =
+          document.GetFrame() && document.GetFrame()->IsMainFrame() &&
+          !document.GetFrame()->IsFencedFrameRoot() && document.GetPage() &&
+          document.GetPage()->InsidePortal();
+      return is_portal_main_frame;
     }
 
     case ax::mojom::blink::Role::kCaret:

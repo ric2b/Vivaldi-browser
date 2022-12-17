@@ -225,6 +225,7 @@ class QuickUnlockPrivateUnitTest
     fake_user_manager_->AddUser(test_account);
     fake_user_manager_->UserLoggedIn(test_account, kTestUserEmailHash, false,
                                      false);
+    fake_user_manager_->SimulateUserProfileLoad(test_account);
     ash::ProfileHelper::Get()->SetUserToProfileMappingForTesting(
         fake_user_manager_->GetPrimaryUser(), profile);
 
@@ -648,7 +649,7 @@ class QuickUnlockPrivateUnitTest
     auto dispatcher = std::make_unique<ExtensionFunctionDispatcher>(profile());
     api_test_utils::RunFunction(func.get(), std::move(params),
                                 std::move(dispatcher), api_test_utils::NONE);
-    EXPECT_TRUE(func->GetResultList()->GetListDeprecated().empty());
+    EXPECT_TRUE(func->GetResultList()->empty());
     base::RunLoop().RunUntilIdle();
     return func->GetError();
   }

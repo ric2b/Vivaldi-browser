@@ -11,7 +11,7 @@
 #include "chrome/browser/permissions/quiet_permission_prompt_model_android.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/messages/android/message_dispatcher_bridge.h"
-#include "components/permissions/android/permission_prompt_android.h"
+#include "components/permissions/android/permission_prompt/permission_prompt_android.h"
 #include "components/permissions/permission_request.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_ui_selector.h"
@@ -45,9 +45,9 @@ NotificationBlockedMessageDelegate::NotificationBlockedMessageDelegate(
   message_->SetSecondaryIconResourceId(
       ResourceMapper::MapToJavaDrawableId(IDR_ANDROID_MESSAGE_SETTINGS));
 
-  message_->SetSecondaryActionCallback(
-      base::BindOnce(&NotificationBlockedMessageDelegate::HandleManageClick,
-                     base::Unretained(this)));
+  message_->SetSecondaryActionCallback(base::BindRepeating(
+      &NotificationBlockedMessageDelegate::HandleManageClick,
+      base::Unretained(this)));
   messages::MessageDispatcherBridge::Get()->EnqueueMessage(
       message_.get(), web_contents_, messages::MessageScopeType::NAVIGATION,
       messages::MessagePriority::kNormal);

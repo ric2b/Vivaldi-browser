@@ -31,6 +31,8 @@
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
+#include "base/notreached.h"
+#include "base/path_service.h"
 #include "base/posix/eintr_wrapper.h"
 #include "base/process/launch.h"
 #include "base/process/process_handle.h"
@@ -59,27 +61,38 @@
 #include "chrome/browser/ash/policy/core/user_cloud_policy_manager_ash.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part_chromeos.h"
+#include "chrome/browser/browser_process_platform_part_ash.h"
 #include "chrome/browser/component_updater/cros_component_manager.h"
 #include "chrome/browser/notifications/system_notification_helper.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
+#include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/common/channel_info.h"
+#include "chrome/common/chrome_paths.h"
 #include "chromeos/crosapi/cpp/crosapi_constants.h"
 #include "chromeos/crosapi/cpp/lacros_startup_state.h"
+#include "chromeos/crosapi/mojom/crosapi.mojom-shared.h"
 #include "chromeos/startup/startup_switches.h"
 #include "components/crash/core/app/crashpad.h"
 #include "components/nacl/common/buildflags.h"
 #include "components/nacl/common/nacl_switches.h"
+#include "components/policy/core/common/cloud/cloud_policy_core.h"
+#include "components/policy/core/common/cloud/cloud_policy_refresh_scheduler.h"
+#include "components/policy/core/common/cloud/cloud_policy_store.h"
+#include "components/policy/core/common/values_util.h"
 #include "components/policy/proto/device_management_backend.pb.h"
 #include "components/prefs/pref_service.h"
 #include "components/session_manager/core/session_manager.h"
 #include "components/user_manager/user_type.h"
 #include "components/version_info/version_info.h"
+#include "media/capture/capture_switches.h"
 #include "mojo/public/cpp/bindings/pending_remote.h"
 #include "mojo/public/cpp/platform/platform_channel.h"
 #include "ui/base/l10n/l10n_util.h"
+#include "ui/base/resource/temporary_shared_resource_path_chromeos.h"
+#include "ui/base/ui_base_features.h"
+#include "ui/base/ui_base_switches.h"
 #include "ui/message_center/public/cpp/notification_delegate.h"
 
 // TODO(crbug.com/1101667): Currently, this source has log spamming
@@ -145,6 +158,13 @@ enum class LacrosLaunchModeAndSource {
   kMaxValue = kForcedByPolicyLacrosOnly
 };
 
+// Resources file sharing mode.
+enum class ResourcesFileSharingMode {
+  kDefault = 0,
+  // Failed to handle cached shared resources properly.
+  kError = 1,
+};
+
 using LaunchParamsFromBackground = BrowserManager::LaunchParamsFromBackground;
 
 // Pointer to the global instance of BrowserManager.
@@ -186,27 +206,72 @@ bool RotateLacrosLogs() {
   return false;
 }
 
+ResourcesFileSharingMode ClearOrMoveSharedResourceFileInternal(
+    bool clear_shared_resource_file,
+    base::FilePath shared_resource_path) {
+  // If shared resource pak doesn't exit, do nothing.
+  if (!base::PathExists(shared_resource_path))
+    return ResourcesFileSharingMode::kDefault;
+
+  // Clear shared resource file cache if `clear_shared_resource_file` is true.
+  if (clear_shared_resource_file) {
+    if (!base::DeleteFile(shared_resource_path)) {
+      LOG(ERROR) << "Failed to delete cached shared resource file.";
+      return ResourcesFileSharingMode::kError;
+    }
+    return ResourcesFileSharingMode::kDefault;
+  }
+
+  base::FilePath renamed_shared_resource_path =
+      ui::GetPathForTemporarySharedResourceFile(shared_resource_path);
+
+  // Move shared resource pak to `renamed_shared_resource_path`.
+  if (!base::Move(shared_resource_path, renamed_shared_resource_path)) {
+    LOG(ERROR) << "Failed to move cached shared resource file to temporary "
+               << "location.";
+    return ResourcesFileSharingMode::kError;
+  }
+  return ResourcesFileSharingMode::kDefault;
+}
+
+ResourcesFileSharingMode ClearOrMoveSharedResourceFile(
+    bool clear_shared_resource_file) {
+  // Check 3 resource paks, resources.pak, chrome_100_percent.pak and
+  // chrome_200_percent.pak.
+  ResourcesFileSharingMode resources_file_sharing_mode =
+      ResourcesFileSharingMode::kDefault;
+  // Return kError if any of the resources failed to clear or move.
+  // Make sure that ClearOrMoveSharedResourceFileInternal() runs for all
+  // resources even if it already fails for some resource.
+  if (ClearOrMoveSharedResourceFileInternal(
+          clear_shared_resource_file, browser_util::GetUserDataDir().Append(
+                                          crosapi::kSharedResourcesPackName)) ==
+      ResourcesFileSharingMode::kError) {
+    resources_file_sharing_mode = ResourcesFileSharingMode::kError;
+  }
+  if (ClearOrMoveSharedResourceFileInternal(
+          clear_shared_resource_file,
+          browser_util::GetUserDataDir().Append(
+              crosapi::kSharedChrome100PercentPackName)) ==
+      ResourcesFileSharingMode::kError) {
+    resources_file_sharing_mode = ResourcesFileSharingMode::kError;
+  }
+  if (ClearOrMoveSharedResourceFileInternal(
+          clear_shared_resource_file,
+          browser_util::GetUserDataDir().Append(
+              crosapi::kSharedChrome200PercentPackName)) ==
+      ResourcesFileSharingMode::kError) {
+    resources_file_sharing_mode = ResourcesFileSharingMode::kError;
+  }
+  return resources_file_sharing_mode;
+}
+
 // This method runs some work on a background thread prior to launching lacros.
 // The returns struct is used by the main thread as parameters to launch Lacros.
 LaunchParamsFromBackground DoLacrosBackgroundWorkPreLaunch(
     base::FilePath lacros_dir,
-    bool cleared_user_data_dir) {
+    bool clear_shared_resource_file) {
   LaunchParamsFromBackground params;
-
-  // TODO(crbug/1198528): remove use_new_account_manager parameter.
-  // This code wipes the Lacros --user-data-dir exactly once due to an
-  // incompatible account_manager change. This code can be removed when ash is
-  // newer than M92, as we can then assume that all relevant users have been
-  // migrated.
-  //
-  // If we want to use the new account manager, and we haven't yet cleared the
-  // user data dir, do so.
-  if (!cleared_user_data_dir) {
-    params.use_new_account_manager =
-        base::DeletePathRecursively(browser_util::GetUserDataDir());
-  } else {
-    params.use_new_account_manager = true;
-  }
 
   if (!RotateLacrosLogs()) {
     // If log file does not exist, most likely the user directory does not
@@ -230,6 +295,21 @@ LaunchParamsFromBackground DoLacrosBackgroundWorkPreLaunch(
   }
 
   params.logfd = base::ScopedFD(fd);
+
+  params.enable_resource_file_sharing =
+      base::FeatureList::IsEnabled(features::kLacrosResourcesFileSharing);
+  // If resource file sharing feature is disabled, clear the cached shared
+  // resource file anyway.
+  if (!params.enable_resource_file_sharing)
+    clear_shared_resource_file = true;
+
+  // Clear shared resource file cache if it's initial lacros launch after ash
+  // reboot. If not, rename shared resource file cache to temporal name on
+  // Lacros launch.
+  if (ClearOrMoveSharedResourceFile(clear_shared_resource_file) ==
+      ResourcesFileSharingMode::kError)
+    params.enable_resource_file_sharing = false;
+
   return params;
 }
 
@@ -275,6 +355,11 @@ bool GetLaunchOnLoginPref() {
 // 1. Lacros-chrome is initialized in the web Kiosk session
 // 2. Full restore is responsible for restoring/launching Lacros.
 browser_util::InitialBrowserAction GetInitialBrowserAction() {
+  if (user_manager::UserManager::Get()->IsLoggedInAsGuest()) {
+    return browser_util::InitialBrowserAction(
+        mojom::InitialBrowserAction::kOpenNewTabPageWindow);
+  }
+
   return browser_util::InitialBrowserAction(
       user_manager::UserManager::Get()->IsLoggedInAsWebKioskApp() ||
               ash::full_restore::MaybeCreateFullRestoreServiceForLacros()
@@ -309,6 +394,16 @@ ui::mojom::WindowShowState ConvertWindowShowState(ui::WindowShowState state) {
     case ui::SHOW_STATE_END:
       NOTREACHED();
       return ui::mojom::WindowShowState::SHOW_STATE_DEFAULT;
+  }
+}
+
+crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior ConvertPathBehavior(
+    NavigateParams::PathBehavior path_behavior) {
+  switch (path_behavior) {
+    case NavigateParams::RESPECT:
+      return crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior::kRespect;
+    case NavigateParams::IGNORE_AND_NAVIGATE:
+      return crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior::kIgnore;
   }
 }
 
@@ -549,17 +644,19 @@ void BrowserManager::NewGuestWindow() {
   browser_service_->service->NewGuestWindow(base::DoNothing());
 }
 
-void BrowserManager::NewTab() {
+void BrowserManager::NewTab(bool should_trigger_session_restore) {
   auto result = MaybeStart(browser_util::InitialBrowserAction(
-      mojom::InitialBrowserAction::kOpenNewTabPageWindow));
+      should_trigger_session_restore
+          ? mojom::InitialBrowserAction::kUseStartupPreference
+          : mojom::InitialBrowserAction::kOpenNewTabPageWindow));
   if (result != MaybeStartResult::kRunning)
     return;
-
   if (!browser_service_.has_value()) {
     LOG(ERROR) << "BrowserService was disconnected";
     return;
   }
-  browser_service_->service->NewTab(base::DoNothing());
+  browser_service_->service->NewTab(should_trigger_session_restore,
+                                    base::DoNothing());
 }
 
 void BrowserManager::OpenUrl(const GURL& url,
@@ -567,13 +664,14 @@ void BrowserManager::OpenUrl(const GURL& url,
   OpenUrlImpl(
       url,
       crosapi::mojom::OpenUrlParams::WindowOpenDisposition::kNewForegroundTab,
-      from);
+      from, NavigateParams::RESPECT);
 }
 
-void BrowserManager::SwitchToTab(const GURL& url) {
+void BrowserManager::SwitchToTab(const GURL& url,
+                                 NavigateParams::PathBehavior path_behavior) {
   OpenUrlImpl(
       url, crosapi::mojom::OpenUrlParams::WindowOpenDisposition::kSwitchToTab,
-      crosapi::mojom::OpenUrlFrom::kUnspecified);
+      crosapi::mojom::OpenUrlFrom::kUnspecified, path_behavior);
 }
 
 void BrowserManager::RestoreTab() {
@@ -662,7 +760,8 @@ void BrowserManager::InitializeAndStart() {
   // Post `DryRunToCollectUMA()` to send UMA stats about sizes of files/dirs
   // inside the profile data directory.
   base::ThreadPool::PostTask(
-      FROM_HERE, {base::MayBlock()},
+      FROM_HERE,
+      {base::MayBlock(), base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
       base::BindOnce(&ash::browser_data_migrator_util::DryRunToCollectUMA,
                      ProfileManager::GetPrimaryUserProfile()->GetPath()));
 }
@@ -802,7 +901,8 @@ BrowserManager::MaybeStartResult BrowserManager::MaybeStart(
             /* display_source= */ std::u16string(), GURL(),
             message_center::NotifierId(
                 message_center::NotifierType::SYSTEM_COMPONENT,
-                kLacrosLauncherNotifierID),
+                kLacrosLauncherNotifierID,
+                ash::NotificationCatalogName::kLacrosCannotLaunch),
             message_center::RichNotificationData(),
             base::MakeRefCounted<
                 message_center::HandleNotificationClickDelegate>(
@@ -878,17 +978,17 @@ void BrowserManager::Start(
   // the data wipe check logic from `BrowserDataMigrator` to browser_util.
   const std::string user_id_hash = ash::ProfileHelper::GetUserIdHashFromProfile(
       ProfileManager::GetPrimaryUserProfile());
-  // Check if user data directory needs to be wiped for a backward incompatible
-  // update.
-  bool cleared_user_data_dir = !browser_util::IsDataWipeRequired(user_id_hash);
 
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock()},
       base::BindOnce(&DoLacrosBackgroundWorkPreLaunch, lacros_path_,
-                     cleared_user_data_dir),
+                     is_initial_lacros_launch_after_reboot_),
       base::BindOnce(&BrowserManager::StartWithLogFile,
                      weak_factory_.GetWeakPtr(),
                      std::move(initial_browser_action)));
+
+  // Set false to prepare for the next Lacros launch.
+  is_initial_lacros_launch_after_reboot_ = false;
 }
 
 void BrowserManager::StartWithLogFile(
@@ -901,14 +1001,6 @@ void BrowserManager::StartWithLogFile(
     // signalled by the system. Ensure that we do not start lacros-chrome in
     // this case.
     LOG(ERROR) << "Start attempted after Shutdown() called.";
-    SetState(State::STOPPED);
-    return;
-  }
-
-  if (!params.use_new_account_manager) {
-    // If `use_new_account_manager` is false, that means deleting old lacros
-    // data directory failed. In such a case, do not launch lacros.
-    LOG(ERROR) << "Failed to delete old user data dir.";
     SetState(State::STOPPED);
     return;
   }
@@ -1002,6 +1094,12 @@ void BrowserManager::StartWithLogFile(
   for (const auto& flag : delimited_flags)
     argv.emplace_back(flag);
 
+  // Forward flag for zero copy video capture to Lacros if it is enabled.
+  if (switches::IsVideoCaptureUseGpuMemoryBufferEnabled()) {
+    argv.emplace_back(
+        base::StringPrintf("--%s", switches::kVideoCaptureUseGpuMemoryBuffer));
+  }
+
   // If logfd is valid, enable logging and redirect stdout/stderr to logfd.
   if (params.logfd.is_valid()) {
     // The next flag will make chrome log only via stderr. See
@@ -1031,8 +1129,6 @@ void BrowserManager::StartWithLogFile(
 
   // Set up Mojo channel.
   base::CommandLine command_line(argv);
-  LOG(WARNING) << "Launching lacros with command: "
-               << command_line.GetCommandLineString();
 
   // Lacros-chrome starts with NORMAL priority
   LacrosThreadPriorityDelegate thread_priority_delegate;
@@ -1060,6 +1156,17 @@ void BrowserManager::StartWithLogFile(
   if (crash_reporter::IsCrashpadEnabled()) {
     command_line.AppendSwitch(switches::kEnableCrashpad);
   }
+
+  if (params.enable_resource_file_sharing) {
+    // Pass a flag to enable resources file sharing to Lacros.
+    // To use resources file sharing feature on Lacros, it's required for ash to
+    // run with enabling the feature as well since the feature is based on some
+    // ash behavior(clear or move cached shared resource file at lacros launch).
+    command_line.AppendSwitch(switches::kEnableResourcesFileSharing);
+  }
+
+  LOG(WARNING) << "Launching lacros with command: "
+               << command_line.GetCommandLineString();
 
   // Create the lacros-chrome subprocess.
   base::RecordAction(base::UserMetricsAction("Lacros.Launch"));
@@ -1129,6 +1236,18 @@ void BrowserManager::OnBrowserRelaunchRequested(CrosapiId id) {
   relaunch_requested_ = true;
 }
 
+void BrowserManager::OnCoreConnected(policy::CloudPolicyCore* core) {}
+
+void BrowserManager::OnRefreshSchedulerStarted(policy::CloudPolicyCore* core) {
+  core->refresh_scheduler()->AddObserver(this);
+}
+
+void BrowserManager::OnCoreDisconnecting(policy::CloudPolicyCore* core) {}
+
+void BrowserManager::OnCoreDestruction(policy::CloudPolicyCore* core) {
+  core->RemoveObserver(this);
+}
+
 void BrowserManager::OnMojoDisconnected() {
   DCHECK(state_ == State::STARTING || state_ == State::RUNNING);
   DCHECK(lacros_process_.IsValid());
@@ -1190,12 +1309,16 @@ void BrowserManager::OnSessionStateChanged() {
 }
 
 void BrowserManager::OnStoreLoaded(policy::CloudPolicyStore* store) {
+  DCHECK(store);
+
   // A new policy got installed for the current user, so we need to pass it to
   // the Lacros browser.
   std::string policy_blob;
-  bool success =
-      store->policy_fetch_response()->SerializeToString(&policy_blob);
-  DCHECK(success);
+  if (store->policy_fetch_response()) {
+    const bool success =
+        store->policy_fetch_response()->SerializeToString(&policy_blob);
+    DCHECK(success);
+  }
   SetDeviceAccountPolicy(policy_blob);
 }
 
@@ -1208,16 +1331,31 @@ void BrowserManager::OnStoreDestruction(policy::CloudPolicyStore* store) {
 }
 
 void BrowserManager::OnComponentPolicyUpdated(
-    const policy::ComponentCloudPolicyServiceObserver::ComponentPolicyMap&
-        serialized_policy) {
-  environment_provider_->SetDeviceAccountComponentPolicy(serialized_policy);
-  if (browser_service_.has_value())
-    browser_service_->service->UpdateComponentPolicy(serialized_policy);
+    const policy::ComponentPolicyMap& component_policy) {
+  environment_provider_->SetDeviceAccountComponentPolicy(
+      policy::CopyComponentPolicyMap(component_policy));
+  if (browser_service_.has_value()) {
+    browser_service_->service->UpdateComponentPolicy(
+        policy::CopyComponentPolicyMap(component_policy));
+  }
 }
 
 void BrowserManager::OnComponentPolicyServiceDestruction(
     policy::ComponentCloudPolicyService* service) {
   service->RemoveObserver(this);
+}
+
+void BrowserManager::OnFetchAttempt(
+    policy::CloudPolicyRefreshScheduler* scheduler) {
+  environment_provider_->SetLastPolicyFetchAttemptTimestamp(
+      scheduler->last_refresh());
+  if (browser_service_.has_value())
+    browser_service_->service->NotifyPolicyFetchAttempt();
+}
+
+void BrowserManager::OnRefreshSchedulerDestruction(
+    policy::CloudPolicyRefreshScheduler* scheduler) {
+  scheduler->RemoveObserver(this);
 }
 
 void BrowserManager::OnEvent(Events event, const std::string& id) {
@@ -1253,7 +1391,7 @@ void BrowserManager::OnLoadComplete(
   if (state_ == State::STOPPED && !shutdown_requested_ &&
       (GetLaunchOnLoginPref() || (browser_util::IsLacrosPrimaryBrowser() &&
                                   !IsLoginLacrosOpeningDisabledForTesting()))) {
-    Start(std::move(initial_browser_action));
+    MaybeStart(std::move(initial_browser_action));
   }
 }
 
@@ -1261,7 +1399,7 @@ void BrowserManager::PrepareLacrosPolicies() {
   const user_manager::User* user =
       user_manager::UserManager::Get()->GetPrimaryUser();
 
-  policy::CloudPolicyStore* store = nullptr;
+  policy::CloudPolicyCore* core = nullptr;
   policy::ComponentCloudPolicyService* component_policy_service = nullptr;
   switch (user->GetType()) {
     case user_manager::USER_TYPE_REGULAR:
@@ -1271,7 +1409,7 @@ void BrowserManager::PrepareLacrosPolicies() {
       policy::CloudPolicyManager* user_cloud_policy_manager =
           profile->GetUserCloudPolicyManagerAsh();
       if (user_cloud_policy_manager) {
-        store = user_cloud_policy_manager->core()->store();
+        core = user_cloud_policy_manager->core();
         component_policy_service =
             user_cloud_policy_manager->component_policy_service();
       }
@@ -1285,7 +1423,7 @@ void BrowserManager::PrepareLacrosPolicies() {
               ->GetDeviceLocalAccountPolicyService()
               ->GetBrokerForUser(user->GetAccountId().GetUserEmail());
       if (broker) {
-        store = broker->core()->store();
+        core = broker->core();
         component_policy_service = broker->component_policy_service();
       }
       break;
@@ -1294,21 +1432,26 @@ void BrowserManager::PrepareLacrosPolicies() {
       break;
   }
 
-  if (store && store->policy_fetch_response()) {
-    const std::string policy_blob =
-        store->policy_fetch_response()->SerializeAsString();
-    SetDeviceAccountPolicy(policy_blob);
-    // The lifetime of `BrowserManager` is longer than lifetime of policy store.
-    // That is why `CloudPolicyStore::RemoveObserver()` is called during
-    // `CloudPolicyStore::Observer::OnStoreDestruction()`.
-    store->AddObserver(this);
+  // The lifetime of `BrowserManager` is longer than lifetime of various
+  // classes, for which we register as an observer below. The RemoveObserver
+  // function is therefore called in various handlers invoked by those classes
+  // and not in the destructor.
+  if (core) {
+    core->AddObserver(this);
+    if (core->refresh_scheduler())
+      core->refresh_scheduler()->AddObserver(this);
+
+    policy::CloudPolicyStore* store = core->store();
+    if (store && store->policy_fetch_response()) {
+      const std::string policy_blob =
+          store->policy_fetch_response()->SerializeAsString();
+      SetDeviceAccountPolicy(policy_blob);
+      store->AddObserver(this);
+    }
   }
 
-  if (component_policy_service) {
-    // Same as above, the RemoveObserver function is called during
-    // `ComponentCloudPolicyService::Observer::OnComponentStoreDestruction()`.
+  if (component_policy_service)
     component_policy_service->AddObserver(this);
-  }
 }
 
 void BrowserManager::SetDeviceAccountPolicy(const std::string& policy_blob) {
@@ -1346,6 +1489,10 @@ void BrowserManager::StopKeepAlive(Feature feature) {
     UpdateKeepAliveInBrowserIfNecessary(false);
 }
 
+bool BrowserManager::IsKeepAliveEnabled() const {
+  return !keep_alive_features_.empty();
+}
+
 void BrowserManager::LaunchForKeepAliveIfNecessary() {
   // KeepAlive should not start lacros in a windowless state if a relaunch has
   // been requested. Lacros restart will instead be handled in
@@ -1353,7 +1500,6 @@ void BrowserManager::LaunchForKeepAliveIfNecessary() {
   if (state_ == State::STOPPED && !shutdown_requested_ &&
       !keep_alive_features_.empty() && !relaunch_requested_) {
     CHECK(browser_util::IsLacrosEnabled());
-    CHECK(browser_util::IsLacrosAllowedToLaunch());
     MaybeStart(browser_util::InitialBrowserAction(
         mojom::InitialBrowserAction::kDoNotOpenWindow));
   }
@@ -1436,7 +1582,8 @@ void BrowserManager::RecordLacrosLaunchMode() {
 void BrowserManager::OpenUrlImpl(
     const GURL& url,
     crosapi::mojom::OpenUrlParams::WindowOpenDisposition disposition,
-    crosapi::mojom::OpenUrlFrom from) {
+    crosapi::mojom::OpenUrlFrom from,
+    NavigateParams::PathBehavior path_behavior) {
   auto result = MaybeStart(browser_util::InitialBrowserAction(
       mojom::InitialBrowserAction::kOpenWindowWithUrls, {url}, from));
   if (result != MaybeStartResult::kRunning)
@@ -1456,6 +1603,7 @@ void BrowserManager::OpenUrlImpl(
   auto params = OpenUrlParams::New();
   params->disposition = disposition;
   params->from = from;
+  params->path_behavior = ConvertPathBehavior(path_behavior);
   browser_service_->service->OpenUrl(url, std::move(params), base::DoNothing());
 }
 

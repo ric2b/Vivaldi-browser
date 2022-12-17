@@ -11,18 +11,17 @@ from chrome_telemetry_build import android_browser_types as abt
 
 
 class GpuBuilders(builders.Builders):
-  def __init__(self, include_internal_builders):
-    super().__init__(include_internal_builders)
+  def __init__(self, suite, include_internal_builders):
+    super().__init__(suite, include_internal_builders)
     self._isolate_names = None
-    self._fake_ci_builders = None
     self._non_chromium_builders = None
 
-  def _BuilderRunsTestOfInterest(self, test_map, suite):
+  def _BuilderRunsTestOfInterest(self, test_map):
     tests = test_map.get('isolated_scripts', [])
     for t in tests:
       if t.get('isolate_name') not in self.GetIsolateNames():
         continue
-      if suite in t.get('args', []):
+      if self._suite in t.get('args', []):
         return True
     return False
 
@@ -39,47 +38,7 @@ class GpuBuilders(builders.Builders):
     return self._isolate_names
 
   def GetFakeCiBuilders(self):
-    if self._fake_ci_builders is None:
-      # Go from try -> CI then reverse the mapping so that there's less of a
-      # chance of typos being introduced in the repeated trybot names.
-      fake_try_builders = {
-          # chromium.gpu.fyi
-          'android_angle_rel_ng': [
-              'ANGLE GPU Android Release (Nexus 5X)',
-          ],
-          'android_optional_gpu_tests_rel': [
-              'Optional Android Release (Nexus 5X)',
-              'Optional Android Release (Pixel 4)',
-          ],
-          'linux-angle-rel': [
-              'ANGLE GPU Linux Release (Intel HD 630)',
-              'ANGLE GPU Linux Release (NVIDIA)',
-          ],
-          'linux_optional_gpu_tests_rel': [
-              'Optional Linux Release (Intel HD 630)',
-              'Optional Linux Release (NVIDIA)',
-          ],
-          'mac_optional_gpu_tests_rel': [
-              'Optional Mac Release (Intel)',
-              'Optional Mac Retina Release (AMD)',
-              'Optional Mac Retina Release (NVIDIA)',
-          ],
-          'win_optional_gpu_tests_rel': [
-              'Optional Win10 x64 Release (Intel HD 630)',
-              'Optional Win10 x64 Release (NVIDIA)',
-          ],
-      }
-
-      self._fake_ci_builders = {}
-      for try_builder, ci_builder_list in fake_try_builders.items():
-        for ci in ci_builder_list:
-          self._fake_ci_builders.setdefault(
-              data_types.BuilderEntry(ci, constants.BuilderTypes.CI, False),
-              set()).add(
-                  data_types.BuilderEntry(try_builder,
-                                          constants.BuilderTypes.TRY, False))
-
-    return self._fake_ci_builders
+    return {}
 
   def GetNonChromiumBuilders(self):
     if self._non_chromium_builders is None:

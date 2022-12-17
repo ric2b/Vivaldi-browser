@@ -14,15 +14,15 @@
 
 #include "base/allocator/partition_allocator/oom.h"
 #include "base/allocator/partition_allocator/page_allocator.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/debug/debugging_buildflags.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/posix/eintr_wrapper.h"
 #include "base/allocator/partition_allocator/partition_alloc_check.h"
-#include "base/dcheck_is_on.h"
-#include "base/posix/eintr_wrapper.h"
 #include "build/build_config.h"
 
 #if BUILDFLAG(IS_APPLE)
-#include "base/mac/foundation_util.h"
-#include "base/mac/mac_util.h"
-#include "base/mac/scoped_cftyperef.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/mac/foundation_util.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/mac/mac_util.h"
+#include "base/allocator/partition_allocator/partition_alloc_base/mac/scoped_cftyperef.h"
 
 #include <Availability.h>
 #include <Security/Security.h>
@@ -46,13 +46,7 @@
 // on the system since macOS 10.12.
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wavailability"
-uint32_t SecTaskGetCodeSignStatus(SecTaskRef task)
-#if __MAC_OS_X_VERSION_MIN_REQUIRED < __MAC_10_12
-    // When redeclaring something previously declared as unavailable, the
-    // weak_import attribute won’t be applied unless manually set.
-    __attribute__((weak_import))
-#endif  // DT < 10.12
-    API_AVAILABLE(macos(10.12));
+uint32_t SecTaskGetCodeSignStatus(SecTaskRef task) API_AVAILABLE(macos(10.12));
 #pragma clang diagnostic pop
 
 #endif  // BUILDFLAG(IS_MAC)
@@ -197,8 +191,8 @@ bool TrySetSystemPagesAccessInternal(
     uintptr_t address,
     size_t length,
     PageAccessibilityConfiguration accessibility) {
-  return 0 == HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
-                                    GetAccessFlags(accessibility)));
+  return 0 == PA_HANDLE_EINTR(mprotect(reinterpret_cast<void*>(address), length,
+                                       GetAccessFlags(accessibility)));
 }
 
 void SetSystemPagesAccessInternal(
@@ -206,7 +200,7 @@ void SetSystemPagesAccessInternal(
     size_t length,
     PageAccessibilityConfiguration accessibility) {
   int access_flags = GetAccessFlags(accessibility);
-  const int ret = HANDLE_EINTR(
+  const int ret = PA_HANDLE_EINTR(
       mprotect(reinterpret_cast<void*>(address), length, access_flags));
 
   // On Linux, man mprotect(2) states that ENOMEM is returned when (1) internal
@@ -262,13 +256,14 @@ void DecommitSystemPagesInternal(
 
   bool change_permissions =
       accessibility_disposition == PageAccessibilityDisposition::kRequireUpdate;
-#if DCHECK_IS_ON()
+#if BUILDFLAG(PA_DCHECK_IS_ON)
   // This is not guaranteed, show that we're serious.
   //
   // More specifically, several callers have had issues with assuming that
   // memory is zeroed, this would hopefully make these bugs more visible.  We
   // don't memset() everything, because ranges can be very large, and doing it
-  // over the entire range could make Chrome unusable with DCHECK_IS_ON().
+  // over the entire range could make Chrome unusable with
+  // BUILDFLAG(PA_DCHECK_IS_ON).
   //
   // Only do it when we are about to change the permissions, since we don't know
   // the previous permissions, and cannot restore them.

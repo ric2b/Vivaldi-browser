@@ -20,6 +20,7 @@
 #include "components/autofill/content/browser/content_autofill_driver_factory.h"
 #include "components/autofill/core/browser/autocomplete_history_manager.h"
 #include "components/autofill/core/browser/autofill_test_utils.h"
+#include "components/autofill/core/browser/suggestions_context.h"
 #include "components/autofill/core/browser/test_autofill_async_observer.h"
 #include "components/autofill/core/browser/test_autofill_clock.h"
 #include "components/autofill/core/browser/ui/suggestion.h"
@@ -92,8 +93,8 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
     content::WebContents* web_contents =
         active_browser_->tab_strip_model()->GetActiveWebContents();
     ContentAutofillDriverFactory::FromWebContents(web_contents)
-        ->DriverForFrame(web_contents->GetMainFrame())
-        ->browser_autofill_manager()
+        ->DriverForFrame(web_contents->GetPrimaryMainFrame())
+        ->autofill_manager()
         ->client()
         ->HideAutofillPopup(PopupHidingReason::kTabGone);
     test::ReenableSystemServices();
@@ -159,9 +160,11 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
     MockSuggestionsHandler handler;
     GetAutocompleteSuggestions(kDefaultAutocompleteInputId, prefix, handler);
 
-    EXPECT_THAT(
-        handler.last_suggestions(),
-        ElementsAre(Field(&Suggestion::value, ASCIIToUTF16(expected_value))));
+    EXPECT_THAT(handler.last_suggestions(),
+                ElementsAre(Field(
+                    &Suggestion::main_text,
+                    Suggestion::Text(ASCIIToUTF16(expected_value),
+                                     Suggestion::Text::IsPrimary(true)))));
   }
 
   void ValidateNoValue() {
@@ -200,10 +203,10 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
  private:
   void GetAutocompleteSuggestions(const std::string& input_name,
                                   const std::string& prefix,
-                                  autofill::MockSuggestionsHandler& handler) {
+                                  MockSuggestionsHandler& handler) {
     autocomplete_history_manager()->OnGetSingleFieldSuggestions(
         1, true, false, ASCIIToUTF16(input_name), ASCIIToUTF16(prefix), "input",
-        handler.GetWeakPtr());
+        handler.GetWeakPtr(), SuggestionsContext());
 
     // Make sure the DB task gets executed.
     WaitForDBTasks();
@@ -217,7 +220,7 @@ class AutofillAutocompleteTest : public InProcessBrowserTest {
     return active_browser_->tab_strip_model()->GetActiveWebContents();
   }
 
-  scoped_refptr<autofill::AutofillWebDataService> GetWebDataService() {
+  scoped_refptr<AutofillWebDataService> GetWebDataService() {
     return WebDataServiceFactory::GetAutofillWebDataForProfile(
         current_profile(), ServiceAccessType::EXPLICIT_ACCESS);
   }

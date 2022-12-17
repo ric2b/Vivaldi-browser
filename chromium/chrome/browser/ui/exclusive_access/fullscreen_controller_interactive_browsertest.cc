@@ -86,7 +86,7 @@ class FullscreenControllerInteractiveTest : public ExclusiveAccessTest {
     EXPECT_TRUE(browser()->IsMouseLocked() == browser()
                                                   ->tab_strip_model()
                                                   ->GetActiveWebContents()
-                                                  ->GetMainFrame()
+                                                  ->GetPrimaryMainFrame()
                                                   ->GetRenderViewHost()
                                                   ->GetWidget()
                                                   ->GetView()
@@ -146,7 +146,7 @@ void FullscreenControllerInteractiveTest::ToggleTabFullscreen_Internal(
   do {
     FullscreenNotificationObserver fullscreen_observer(browser());
     if (enter_fullscreen)
-      browser()->EnterFullscreenModeForTab(tab->GetMainFrame(), {});
+      browser()->EnterFullscreenModeForTab(tab->GetPrimaryMainFrame(), {});
     else
       browser()->ExitFullscreenModeForTab(tab);
     fullscreen_observer.Wait();
@@ -198,6 +198,31 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 
   ASSERT_NO_FATAL_FAILURE(ToggleTabFullscreen(true));
   ASSERT_NO_FATAL_FAILURE(ToggleTabFullscreen(false));
+}
+
+// Tests that the closure provided to RunOrDeferUntilTransitionIsComplete is
+// run. Some platforms may be synchronous (lambda is executed immediately) and
+// others (e.g. Mac) will run it asynchronously (after the transition).
+IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
+                       RunOrDeferClosureDuringTransition) {
+  WebContents* tab = browser()->tab_strip_model()->GetActiveWebContents();
+  GetFullscreenController()->EnterFullscreenModeForTab(
+      tab->GetPrimaryMainFrame(), {});
+  ASSERT_TRUE(IsWindowFullscreenForTabOrPending());
+
+  base::RunLoop run_loop;
+  bool lambda_called = false;
+  ASSERT_NO_FATAL_FAILURE(
+      GetFullscreenController()->RunOrDeferUntilTransitionIsComplete(
+          base::BindLambdaForTesting([&lambda_called, &run_loop]() {
+            lambda_called = true;
+            run_loop.Quit();
+          })));
+  // Lambda may run synchronously on some platforms. If it did not already run,
+  // block until it has.
+  if (!lambda_called)
+    run_loop.Run();
+  EXPECT_TRUE(lambda_called);
 }
 
 // Test is flaky on Lacros: https://crbug.com/1250091
@@ -406,8 +431,14 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 }
 
 // Tests mouse lock then fullscreen.
+// TODO(crbug.com/1318638): Re-enable this test
+#if BUILDFLAG(IS_MAC)
+#define MAYBE_MouseLockThenFullscreen DISABLED_MouseLockThenFullscreen
+#else
+#define MAYBE_MouseLockThenFullscreen MouseLockThenFullscreen
+#endif
 IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
-                       MouseLockThenFullscreen) {
+                       MAYBE_MouseLockThenFullscreen) {
   auto test_server_handle = embedded_test_server()->StartAndReturnHandle();
   ASSERT_TRUE(test_server_handle);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
@@ -653,6 +684,22 @@ IN_PROC_BROWSER_TEST_F(FullscreenControllerInteractiveTest,
 class MultiScreenFullscreenControllerInteractiveTest
     : public FullscreenControllerInteractiveTest {
  public:
+  void SetUp() override {
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+    screen_.display_list().AddDisplay({1, gfx::Rect(100, 100, 801, 802)},
+                                      display::DisplayList::Type::PRIMARY);
+    display::Screen::SetScreenInstance(&screen_);
+#endif
+    FullscreenControllerInteractiveTest::SetUp();
+  }
+
+  void TearDown() override {
+    FullscreenControllerInteractiveTest::TearDown();
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+    display::Screen::SetScreenInstance(nullptr);
+#endif
+  }
+
   // Perform common setup operations for multi-screen fullscreen testing:
   // Mock a screen with two displays, move the browser onto the first display,
   // and auto-grant the Window Placement permission on its active tab.
@@ -662,12 +709,8 @@ class MultiScreenFullscreenControllerInteractiveTest
     display::test::DisplayManagerTestApi(ash::Shell::Get()->display_manager())
         .UpdateDisplay("0+0-800x800,800+0-800x800");
 #else
-    original_screen_ = display::Screen::GetScreen();
-    screen_.display_list().AddDisplay({1, gfx::Rect(0, 0, 800, 800)},
-                                      display::DisplayList::Type::PRIMARY);
     screen_.display_list().AddDisplay({2, gfx::Rect(800, 0, 800, 800)},
                                       display::DisplayList::Type::NOT_PRIMARY);
-    display::Screen::SetScreenInstance(&screen_);
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     EXPECT_EQ(2, display::Screen::GetScreen()->GetNumDisplays());
 
@@ -688,14 +731,6 @@ class MultiScreenFullscreenControllerInteractiveTest
         permissions::PermissionRequestManager::ACCEPT_ALL);
 
     return tab;
-  }
-
-  void TearDown() override {
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
-    if (original_screen_)
-      display::Screen::SetScreenInstance(original_screen_);
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-    FullscreenControllerInteractiveTest::TearDown();
   }
 
   // Wait for a JS content fullscreen change with the given script and options.
@@ -771,14 +806,12 @@ class MultiScreenFullscreenControllerInteractiveTest
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
   display::DisplayList& display_list() { return screen_.display_list(); }
 #endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
-
  private:
   base::test::ScopedFeatureList feature_list_{
       blink::features::kWindowPlacement};
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
-  raw_ptr<display::Screen> original_screen_ = nullptr;
   display::ScreenBase screen_;
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif
 };
 
 // TODO(crbug.com/1034772): Disabled on Windows, where views::FullscreenHandler

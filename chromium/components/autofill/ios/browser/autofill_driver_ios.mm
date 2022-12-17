@@ -28,8 +28,7 @@ void AutofillDriverIOS::PrepareForWebStateWebFrameAndDelegate(
     AutofillClient* client,
     id<AutofillDriverIOSBridge> bridge,
     const std::string& app_locale,
-    BrowserAutofillManager::AutofillDownloadManagerState
-        enable_download_manager) {
+    AutofillManager::EnableDownloadManager enable_download_manager) {
   // By the time this method is called, no web_frame is available. This method
   // only prepares the factory and the AutofillDriverIOS will be created in the
   // first call to FromWebStateAndWebFrame.
@@ -52,8 +51,7 @@ AutofillDriverIOS::AutofillDriverIOS(
     AutofillClient* client,
     id<AutofillDriverIOSBridge> bridge,
     const std::string& app_locale,
-    BrowserAutofillManager::AutofillDownloadManagerState
-        enable_download_manager)
+    AutofillManager::EnableDownloadManager enable_download_manager)
     : web_state_(web_state),
       bridge_(bridge),
       browser_autofill_manager_(this,
@@ -63,7 +61,7 @@ AutofillDriverIOS::AutofillDriverIOS(
   web_frame_id_ = web::GetWebFrameId(web_frame);
 }
 
-AutofillDriverIOS::~AutofillDriverIOS() {}
+AutofillDriverIOS::~AutofillDriverIOS() = default;
 
 bool AutofillDriverIOS::IsIncognito() const {
   return web_state_->GetBrowserState()->IsOffTheRecord();
@@ -111,12 +109,6 @@ std::vector<FieldGlobalId> AutofillDriverIOS::FillOrPreviewForm(
   for (const auto& field : data.fields)
     safe_fields.push_back(field.global_id());
   return safe_fields;
-}
-
-void AutofillDriverIOS::PropagateAutofillPredictions(
-    const std::vector<autofill::FormStructure*>& forms) {
-  browser_autofill_manager_.client()->PropagateAutofillPredictions(nullptr,
-                                                                   forms);
 }
 
 void AutofillDriverIOS::HandleParsedForms(

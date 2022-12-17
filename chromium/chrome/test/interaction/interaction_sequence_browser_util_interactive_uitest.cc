@@ -2,9 +2,9 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-#include "chrome/browser/ui/views/bubble/webui_bubble_dialog_view.h"
 #include "chrome/test/interaction/interaction_sequence_browser_util.h"
 
+#include "base/memory/raw_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/gtest_util.h"
 #include "chrome/browser/ui/browser.h"
@@ -100,6 +100,7 @@ IN_PROC_BROWSER_TEST_F(
           .AddStep(ui::InteractionSequence::StepBuilder()
                        .SetType(ui::InteractionSequence::StepType::kShown)
                        .SetElementID(AppMenuModel::kDownloadsMenuItem)
+                       .SetMustRemainVisible(false)
                        .SetStartCallback(base::BindLambdaForTesting(
                            [&](ui::InteractionSequence*,
                                ui::TrackedElement* element) {
@@ -176,25 +177,23 @@ IN_PROC_BROWSER_TEST_F(InteractionSequenceBrowserUtilInteractiveUiTest,
                              test_util->PressButton(element);
                            }))
                        .Build())
-          .AddStep(ui::InteractionSequence::StepBuilder()
-                       .SetType(ui::InteractionSequence::StepType::kShown)
-                       .SetElementID(kTabSearchBubbleElementId)
-                       .SetStartCallback(base::BindLambdaForTesting(
-                           [&](ui::InteractionSequence*,
-                               ui::TrackedElement* element) {
-                             auto* const contents =
-                                 views::AsViewClass<WebUIBubbleDialogView>(
-                                     element->AsA<views::TrackedElementViews>()
-                                         ->view())
-                                     ->web_view()
-                                     ->web_contents();
-                             DCHECK(contents);
-                             tab_search_page =
-                                 InteractionSequenceBrowserUtil::ForWebContents(
-                                     contents, kTabSearchPageElementId,
-                                     browser());
-                           }))
-                       .Build())
+          .AddStep(
+              ui::InteractionSequence::StepBuilder()
+                  .SetType(ui::InteractionSequence::StepType::kShown)
+                  .SetElementID(kTabSearchBubbleElementId)
+                  .SetStartCallback(base::BindLambdaForTesting(
+                      [&](ui::InteractionSequence*,
+                          ui::TrackedElement* element) {
+                        auto* const web_view =
+                            views::AsViewClass<WebUIBubbleDialogView>(
+                                element->AsA<views::TrackedElementViews>()
+                                    ->view())
+                                ->web_view();
+                        tab_search_page =
+                            InteractionSequenceBrowserUtil::ForNonTabWebView(
+                                web_view, kTabSearchPageElementId);
+                      }))
+                  .Build())
           .AddStep(ui::InteractionSequence::StepBuilder()
                        .SetType(ui::InteractionSequence::StepType::kShown)
                        .SetElementID(kTabSearchPageElementId)
@@ -207,6 +206,139 @@ IN_PROC_BROWSER_TEST_F(InteractionSequenceBrowserUtilInteractiveUiTest,
                                  << "Not found: " << not_found;
                            }))
                        .Build())
+          .Build();
+
+  EXPECT_CALL_IN_SCOPE(completed, Run, sequence->RunSynchronouslyForTesting());
+}
+
+// This test checks that when a WebUI is hidden, its element goes away.
+IN_PROC_BROWSER_TEST_F(InteractionSequenceBrowserUtilInteractiveUiTest,
+                       OpenTabSearchMenuAndTestVisibility) {
+  UNCALLED_MOCK_CALLBACK(ui::InteractionSequence::CompletedCallback, completed);
+  UNCALLED_MOCK_CALLBACK(ui::InteractionSequence::AbortedCallback, aborted);
+
+  std::unique_ptr<InteractionSequenceBrowserUtil> tab_search_page;
+  auto test_util = CreateInteractionTestUtil();
+  const ui::ElementContext context = browser()->window()->GetElementContext();
+  base::raw_ptr<WebUIBubbleDialogView> bubble_view = nullptr;
+
+  auto sequence =
+      ui::InteractionSequence::Builder()
+          .SetCompletedCallback(completed.Get())
+          .SetAbortedCallback(aborted.Get())
+          .SetContext(context)
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(kTabSearchButtonElementId)
+                       .SetStartCallback(base::BindLambdaForTesting(
+                           [&](ui::InteractionSequence*,
+                               ui::TrackedElement* element) {
+                             test_util->PressButton(element);
+                           }))
+                       .Build())
+          .AddStep(
+              ui::InteractionSequence::StepBuilder()
+                  .SetType(ui::InteractionSequence::StepType::kShown)
+                  .SetElementID(kTabSearchBubbleElementId)
+                  .SetStartCallback(base::BindLambdaForTesting(
+                      [&](ui::InteractionSequence*,
+                          ui::TrackedElement* element) {
+                        bubble_view = views::AsViewClass<WebUIBubbleDialogView>(
+                            element->AsA<views::TrackedElementViews>()->view());
+                        tab_search_page =
+                            InteractionSequenceBrowserUtil::ForNonTabWebView(
+                                bubble_view->web_view(),
+                                kTabSearchPageElementId);
+                      }))
+                  .Build())
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(kTabSearchPageElementId)
+                       .SetStartCallback(base::BindLambdaForTesting(
+                           [&](ui::InteractionSequence* sequence,
+                               ui::TrackedElement* element) {
+                             // Hide the ancestor view. This should hide the
+                             // whole chain and cause the element to be
+                             // destroyed.
+                             bubble_view->SetVisible(false);
+                           }))
+                       .Build())
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kHidden)
+                       .SetElementID(kTabSearchPageElementId)
+                       .SetStartCallback(base::BindLambdaForTesting(
+                           [&](ui::InteractionSequence* sequence,
+                               ui::TrackedElement* element) {
+                             // Verify we've also disposed of the element
+                             // itself:
+                             EXPECT_EQ(nullptr,
+                                       tab_search_page->current_element_);
+                             // Show the ancestor view. This should recreate the
+                             // WebUI element.
+                             bubble_view->SetVisible(true);
+                           }))
+                       .Build())
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(kTabSearchPageElementId)
+                       .Build())
+          .Build();
+
+  EXPECT_CALL_IN_SCOPE(completed, Run, sequence->RunSynchronouslyForTesting());
+}
+
+// This test checks that we can attach to a WebUI that is embedded in a tab.
+IN_PROC_BROWSER_TEST_F(InteractionSequenceBrowserUtilInteractiveUiTest,
+                       CompareScreenshot_TabWebUI) {
+  UNCALLED_MOCK_CALLBACK(ui::InteractionSequence::CompletedCallback, completed);
+  UNCALLED_MOCK_CALLBACK(ui::InteractionSequence::AbortedCallback, aborted);
+
+  auto download_page = InteractionSequenceBrowserUtil::ForExistingTabInBrowser(
+      browser(), kPrimaryTabPageElementId);
+  auto test_util = CreateInteractionTestUtil();
+  const ui::ElementContext context = browser()->window()->GetElementContext();
+
+  auto sequence =
+      ui::InteractionSequence::Builder()
+          .SetCompletedCallback(completed.Get())
+          .SetAbortedCallback(aborted.Get())
+          .SetContext(context)
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(kPrimaryTabPageElementId)
+                       .Build())
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(kAppMenuButtonElementId)
+                       .SetStartCallback(base::BindLambdaForTesting(
+                           [&](ui::InteractionSequence*,
+                               ui::TrackedElement* element) {
+                             test_util->PressButton(element);
+                           }))
+                       .Build())
+          .AddStep(ui::InteractionSequence::StepBuilder()
+                       .SetType(ui::InteractionSequence::StepType::kShown)
+                       .SetElementID(AppMenuModel::kDownloadsMenuItem)
+                       .SetMustRemainVisible(false)
+                       .SetStartCallback(base::BindLambdaForTesting(
+                           [&](ui::InteractionSequence*,
+                               ui::TrackedElement* element) {
+                             test_util->SelectMenuItem(element);
+                           }))
+                       .Build())
+          .AddStep(
+              ui::InteractionSequence::StepBuilder()
+                  .SetType(ui::InteractionSequence::StepType::kShown)
+                  .SetElementID(kPrimaryTabPageElementId)
+                  .SetTransitionOnlyOnEvent(true)
+                  .SetStartCallback(base::BindLambdaForTesting(
+                      [&](ui::InteractionSequence*,
+                          ui::TrackedElement* element) {
+                        EXPECT_TRUE(
+                            InteractionSequenceBrowserUtil::CompareScreenshot(
+                                element, std::string(), "3654539"));
+                      }))
+                  .Build())
           .Build();
 
   EXPECT_CALL_IN_SCOPE(completed, Run, sequence->RunSynchronouslyForTesting());

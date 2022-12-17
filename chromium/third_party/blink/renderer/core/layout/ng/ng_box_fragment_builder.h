@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BOX_FRAGMENT_BUILDER_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_BOX_FRAGMENT_BUILDER_H_
 
+#include "base/check_op.h"
 #include "base/dcheck_is_on.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/core/core_export.h"
@@ -37,7 +38,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
  public:
   NGBoxFragmentBuilder(NGLayoutInputNode node,
                        scoped_refptr<const ComputedStyle> style,
-                       const NGConstraintSpace* space,
+                       const NGConstraintSpace& space,
                        WritingDirectionMode writing_direction)
       : NGContainerFragmentBuilder(node,
                                    std::move(style),
@@ -50,10 +51,11 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // has NGInlineItem but does not have corresponding NGLayoutInputNode.
   NGBoxFragmentBuilder(LayoutObject* layout_object,
                        scoped_refptr<const ComputedStyle> style,
+                       const NGConstraintSpace& space,
                        WritingDirectionMode writing_direction)
       : NGContainerFragmentBuilder(/* node */ nullptr,
                                    std::move(style),
-                                   /* space */ nullptr,
+                                   space,
                                    writing_direction),
         box_type_(NGPhysicalFragment::NGBoxType::kNormalBox),
         is_inline_formatting_context_(true) {
@@ -72,9 +74,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final
         border_padding_ + initial_fragment_geometry.scrollbar;
     original_border_scrollbar_padding_block_start_ =
         border_scrollbar_padding_.block_start;
-    if (space_) {
+    if (node_) {
       child_available_size_ = CalculateChildAvailableSize(
-          *space_, To<NGBlockNode>(node_), size_, border_scrollbar_padding_);
+          space_, To<NGBlockNode>(node_), size_, border_scrollbar_padding_);
     }
   }
 
@@ -178,7 +180,6 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // its non-anonymous parent (similar to percentages).
   const LogicalSize& ChildAvailableSize() const {
     DCHECK(initial_fragment_geometry_);
-    DCHECK(space_);
     return child_available_size_;
   }
   const NGBlockNode& Node() {
@@ -370,8 +371,9 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // Report space shortage, i.e. how much more space would have been sufficient
   // to prevent some piece of content from breaking. This information may be
   // used by the column balancer to stretch columns.
-  void PropagateSpaceShortage(LayoutUnit space_shortage) {
-    DCHECK_GT(space_shortage, LayoutUnit());
+  void PropagateSpaceShortage(absl::optional<LayoutUnit> space_shortage) {
+    if (!space_shortage || *space_shortage <= LayoutUnit())
+      return;
 
     // Space shortage should only be reported when we already have a tentative
     // fragmentainer block-size. It's meaningless to talk about space shortage
@@ -379,11 +381,18 @@ class CORE_EXPORT NGBoxFragmentBuilder final
     // fragmentainer block-size at all, so who's to tell what's too short or
     // not?
     DCHECK(!IsInitialColumnBalancingPass());
-
-    if (minimal_space_shortage_ > space_shortage)
-      minimal_space_shortage_ = space_shortage;
+    if (minimal_space_shortage_ == kIndefiniteSize) {
+      minimal_space_shortage_ = *space_shortage;
+    } else {
+      minimal_space_shortage_ =
+          std::min(minimal_space_shortage_, *space_shortage);
+    }
   }
-  LayoutUnit MinimalSpaceShortage() const { return minimal_space_shortage_; }
+  absl::optional<LayoutUnit> MinimalSpaceShortage() const {
+    if (minimal_space_shortage_ == kIndefiniteSize)
+      return absl::nullopt;
+    return minimal_space_shortage_;
+  }
 
   void PropagateTallestUnbreakableBlockSize(LayoutUnit unbreakable_block_size) {
     // We should only calculate the block-size of the tallest piece of
@@ -443,6 +452,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   void SetDisableOOFDescendantsPropagation() {
     disable_oof_descendants_propagation_ = true;
   }
+
+  void SetDisableSimplifiedLayout() { disable_simplified_layout = true; }
 
   // See |NGPhysicalBoxFragment::InflowBounds|.
   void SetInflowBounds(const LogicalRect& inflow_bounds) {
@@ -558,7 +569,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   // Sets the last baseline for this fragment.
   void SetLastBaseline(LayoutUnit baseline) {
-    DCHECK_EQ(space_->BaselineAlgorithmType(),
+    DCHECK_EQ(space_.BaselineAlgorithmType(),
               NGBaselineAlgorithmType::kInlineBlock);
     last_baseline_ = baseline;
   }
@@ -568,7 +579,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   // circumstances. This function updates |LastBaseline| in such cases.
   void SetLastBaselineToBlockEndMarginEdgeIfNeeded();
 
-  void SetTableGridRect(const PhysicalRect& table_grid_rect) {
+  void SetTableGridRect(const LogicalRect& table_grid_rect) {
     table_grid_rect_ = table_grid_rect;
   }
 
@@ -594,6 +605,13 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   void SetTableCellColumnIndex(wtf_size_t table_cell_column_index) {
     table_cell_column_index_ = table_cell_column_index;
+  }
+
+  void SetTableSectionCollapsedBordersGeometry(
+      wtf_size_t start_row_index,
+      Vector<LayoutUnit>&& row_offsets) {
+    table_section_start_row_index_ = start_row_index;
+    table_section_row_offsets_ = std::move(row_offsets);
   }
 
   void TransferGridLayoutData(
@@ -671,7 +689,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   void SetHasForcedBreak() {
     has_forced_break_ = true;
-    minimal_space_shortage_ = LayoutUnit::Max();
+    minimal_space_shortage_ = kIndefiniteSize;
   }
 
   bool HasForcedBreak() const { return has_forced_break_; }
@@ -733,9 +751,10 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   bool is_math_operator_ = false;
   bool is_at_block_end_ = false;
   bool disable_oof_descendants_propagation_ = false;
+  bool disable_simplified_layout = false;
   LayoutUnit block_offset_for_additional_columns_;
 
-  LayoutUnit minimal_space_shortage_ = LayoutUnit::Max();
+  LayoutUnit minimal_space_shortage_ = kIndefiniteSize;
   LayoutUnit tallest_unbreakable_block_size_ = LayoutUnit::Min();
   LayoutUnit block_size_for_fragmentation_;
 
@@ -754,7 +773,7 @@ class CORE_EXPORT NGBoxFragmentBuilder final
   LayoutUnit math_italic_correction_;
 
   // Table specific types.
-  absl::optional<PhysicalRect> table_grid_rect_;
+  absl::optional<LogicalRect> table_grid_rect_;
   NGTableFragmentData::ColumnGeometries table_column_geometries_;
   scoped_refptr<const NGTableBorders> table_collapsed_borders_;
   std::unique_ptr<NGTableFragmentData::CollapsedBordersGeometry>
@@ -763,6 +782,8 @@ class CORE_EXPORT NGBoxFragmentBuilder final
 
   // Table cell specific types.
   absl::optional<wtf_size_t> table_cell_column_index_;
+  wtf_size_t table_section_start_row_index_;
+  Vector<LayoutUnit> table_section_row_offsets_;
 
   NGBlockBreakTokenData* break_token_data_ = nullptr;
 

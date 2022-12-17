@@ -125,8 +125,9 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
 
 - (NSString*)displayedURL {
   return base::SysUTF16ToNSString(
-      url_formatter::FormatUrlForDisplayOmitSchemePathAndTrivialSubdomains(
-          self.URL.gurl));
+      url_formatter::
+          FormatUrlForDisplayOmitSchemePathTrivialSubdomainsAndMobilePrefix(
+              self.URL.gurl));
 }
 
 @end
@@ -135,8 +136,8 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
 
 @interface TableViewURLCell ()
 // If the cell's accessibility label has not been manually set via
-// |-setAccessibilityLabel:|, this property will be YES, and
-// |-accessibilityLabel| will return a lazily created label based on the
+// `-setAccessibilityLabel:`, this property will be YES, and
+// `-accessibilityLabel` will return a lazily created label based on the
 // text values of the UILabel subviews.
 @property(nonatomic, assign) BOOL shouldGenerateAccessibilityLabel;
 // Horizontal StackView that holds url, title, and metadata labels.
@@ -357,7 +358,7 @@ const char kDefaultSupplementalURLTextDelimiter[] = "•";
         constraintEqualToAnchor:self.faviconContainerView.centerYAnchor],
   ]];
   [activityView startAnimating];
-  activityView.backgroundColor = [UIColor whiteColor];
+  activityView.backgroundColor = self.faviconContainerView.backgroundColor;
 }
 
 - (void)stopAnimatingActivityIndicator {

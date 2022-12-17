@@ -112,10 +112,6 @@ std::unique_ptr<GaiaAuthFetcher> TestSigninClient::CreateGaiaAuthFetcher(
                                            GetURLLoaderFactory());
 }
 
-bool TestSigninClient::IsNonEnterpriseUser(const std::string& email) {
-  return gaia::ExtractDomainName(email) == "gmail.com";
-}
-
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 absl::optional<account_manager::Account>
 TestSigninClient::GetInitialPrimaryAccount() {
@@ -133,6 +129,8 @@ void TestSigninClient::SetInitialPrimaryAccountForTests(
   is_initial_primary_account_child_ = is_child;
 }
 
+void TestSigninClient::RemoveAccount(
+    const account_manager::AccountKey& account_key) {}
 void TestSigninClient::RemoveAllAccounts() {}
 
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)

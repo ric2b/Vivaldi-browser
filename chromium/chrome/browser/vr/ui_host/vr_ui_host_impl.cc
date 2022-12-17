@@ -175,34 +175,47 @@ void VRUiHostImpl::WebXRWebContentsChanged(content::WebContents* contents) {
     return;
   }
 
+  if (web_contents_ == contents) {
+    // Nothing to do. This includes the case where both the old and new contents
+    // are null.
+    return;
+  }
+
   // Eventually the contents will be used to poll for permissions, or determine
   // what overlays should show.
 
-  // permission_request_manager_ is an unowned pointer; it's owned by
-  // WebContents. If the WebContents change, make sure we unregister any
-  // pre-existing observers. We only have a non-null permission_request_manager_
-  // if we successfully added an observer.
-  if (permission_request_manager_) {
-    permission_request_manager_->RemoveObserver(this);
-    permission_request_manager_ = nullptr;
-  }
+  if (web_contents_) {
+    // If the WebContents change, make sure we unregister pre-existing
+    // observers, if any. It's safe to try to remove a nonexistent observer.
 
-  if (web_contents_ != contents) {
-    if (web_contents_) {
-      DesktopMediaPickerManager::Get()->RemoveObserver(this);
-    }
-    if (contents) {
-      DesktopMediaPickerManager::Get()->AddObserver(this);
-    }
-  }
+    DesktopMediaPickerManager::Get()->RemoveObserver(this);
 
-  if (web_contents_)
     VrTabHelper::SetIsContentDisplayedInHeadset(web_contents_, false);
-  if (contents)
-    VrTabHelper::SetIsContentDisplayedInHeadset(contents, true);
+
+    // Don't save the permission request manager for future use to avoid a race
+    // condition when destroying the WebContents, see https://crbug.com/1203146
+    raw_ptr<permissions::PermissionRequestManager> old_manager =
+        permissions::PermissionRequestManager::FromWebContents(web_contents_);
+    if (old_manager) {
+      old_manager->RemoveObserver(this);
+    }
+
+    if (!contents) {
+      poll_capturing_state_task_.Cancel();
+
+      if (ui_rendering_thread_)
+        ui_rendering_thread_->SetWebXrPresenting(false);
+      StopUiRendering();
+    }
+  }
 
   web_contents_ = contents;
+
   if (contents) {
+    DesktopMediaPickerManager::Get()->AddObserver(this);
+
+    VrTabHelper::SetIsContentDisplayedInHeadset(contents, true);
+
     StartUiRendering();
     InitCapturingStates();
     ui_rendering_thread_->SetWebXrPresenting(true);
@@ -211,28 +224,21 @@ void VRUiHostImpl::WebXRWebContentsChanged(content::WebContents* contents) {
     PollCapturingState();
 
     permissions::PermissionRequestManager::CreateForWebContents(contents);
-    permission_request_manager_ =
+    raw_ptr<permissions::PermissionRequestManager> permission_request_manager =
         permissions::PermissionRequestManager::FromWebContents(contents);
     // Attaching a permission request manager to WebContents can fail, so a
     // DCHECK would be inappropriate here. If it fails, the user won't get
     // notified about permission prompts, but other than that the session would
     // work normally.
-    if (permission_request_manager_) {
-      permission_request_manager_->AddObserver(this);
+    if (permission_request_manager) {
+      permission_request_manager->AddObserver(this);
 
       // There might already be a visible permission bubble from before
       // we registered the observer, show the HMD message now in that case.
-      if (permission_request_manager_->IsRequestInProgress())
+      if (permission_request_manager->IsRequestInProgress()) {
         OnBubbleAdded();
-    } else {
-      DVLOG(1) << __func__ << ": No PermissionRequestManager";
+      }
     }
-  } else {
-    poll_capturing_state_task_.Cancel();
-
-    if (ui_rendering_thread_)
-      ui_rendering_thread_->SetWebXrPresenting(false);
-    StopUiRendering();
   }
 }
 
@@ -362,23 +368,25 @@ void VRUiHostImpl::InitCapturingStates() {
       permission_manager
           ->GetPermissionStatusForCurrentDocument(
               ContentSettingsType::MEDIASTREAM_MIC,
-              web_contents_->GetMainFrame())
+              web_contents_->GetPrimaryMainFrame())
           .content_setting == CONTENT_SETTING_ALLOW;
   potential_capturing_.video_capture_enabled =
       permission_manager
           ->GetPermissionStatusForCurrentDocument(
               ContentSettingsType::MEDIASTREAM_CAMERA,
-              web_contents_->GetMainFrame())
+              web_contents_->GetPrimaryMainFrame())
           .content_setting == CONTENT_SETTING_ALLOW;
   potential_capturing_.location_access_enabled =
       permission_manager
           ->GetPermissionStatusForCurrentDocument(
-              ContentSettingsType::GEOLOCATION, web_contents_->GetMainFrame())
+              ContentSettingsType::GEOLOCATION,
+              web_contents_->GetPrimaryMainFrame())
           .content_setting == CONTENT_SETTING_ALLOW;
   potential_capturing_.midi_connected =
       permission_manager
           ->GetPermissionStatusForCurrentDocument(
-              ContentSettingsType::MIDI_SYSEX, web_contents_->GetMainFrame())
+              ContentSettingsType::MIDI_SYSEX,
+              web_contents_->GetPrimaryMainFrame())
           .content_setting == CONTENT_SETTING_ALLOW;
 
   indicators_shown_start_time_ = base::Time::Now();
@@ -400,7 +408,7 @@ void VRUiHostImpl::PollCapturingState() {
   // should get a RFH from VRServiceImpl instead of WebContents)
   content_settings::PageSpecificContentSettings* settings =
       content_settings::PageSpecificContentSettings::GetForFrame(
-          web_contents_->GetMainFrame());
+          web_contents_->GetPrimaryMainFrame());
 
   if (settings) {
     active_capturing.location_access_enabled =

@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Próbálkozz a Windows hálózati diagnosztika futtatásával<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">A webhely ártalmas programokat tartalmaz</translation>
 <translation id="1916770123977586577">A frissített beállításoknak a webhelyen történő alkalmazásához töltsd be újra az oldalt</translation>
+<translation id="1973351931613083086">automatikus lejátszás</translation>
 <translation id="1974060860693918893">Haladó</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />A proxy és a tűzfal ellenőrzése<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Tulajdonos: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Visszalépés</translation>
 <translation id="2539524384386349900">Felismerés</translation>
 <translation id="255002559098805027">A(z) <ph name="HOST_NAME" /> érvénytelen választ küldött.</translation>
-<translation id="2609632851001447353">Változatok</translation>
 <translation id="2634124572758952069">A(z) <ph name="HOST_NAME" /> szerver IP-címe nem található.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">A hozzáférés a fájlhoz megtagadva</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">A támadók megpróbálhatják ellopni a(z) <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> webhelyen lévő adataid (például jelszavak, üzenetek és hitelkártyaadatok). <ph name="BEGIN_LEARN_MORE_LINK" />További információ<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Változást érzékeltünk a hálózatban.</translation>
 <translation id="2948083400971632585">A beállításokban a csatlakozáshoz társított bármelyik proxyt kikapcsolhatod.</translation>
+<translation id="2953943267837858202">A videók automatikus lejátszása nem engedélyezett</translation>
 <translation id="2991571918955627853">A(z) <ph name="SITE" /> webhelyet pillanatnyilag nem tudod felkeresni, mert a webhely HSTS-t használ. A hálózati hibák és támadások rendszerint átmenetiek, ezért az említett oldal működése később valószínűleg helyreáll.</translation>
 <translation id="3005723025932146533">Mentett másolat megjelenítése</translation>
 <translation id="301521992641321250">Automatikusan letiltva</translation>
@@ -59,6 +60,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Nyomd meg a frissítés gombot, az oldal betöltéséhez szükséges adatok újraküldéséhez.</translation>
 <translation id="3234666976984236645">Mindig észlelje a fontos tartalmat ezen a webhelyen</translation>
+<translation id="3291915639428159043">Automatikus lejátszás letiltva</translation>
 <translation id="3308738399950580893">Hirdetések</translation>
 <translation id="3422472998109090673">A(z) <ph name="HOST_NAME" /> jelenleg nem érhető el.</translation>
 <translation id="3427092606871434483">Engedélyezés (alapértelmezett)</translation>
@@ -69,6 +71,7 @@
 <translation id="3566021033012934673">Ez egy nem biztonságos kapcsolat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Részletek elrejtése</translation>
+<translation id="3620979700683094848">A webhelyek automatikusan lejátszhatnak videókat</translation>
 <translation id="3630155396527302611">Ha már megjelenik a hálózat elérésére engedélyezett programként, próbálkozzon
       az eltávolításával, majd a listára való ismételt felvételével.</translation>
 <translation id="3658742229777143148">Ellenőrzés</translation>
@@ -80,6 +83,7 @@
 <translation id="3973234410852337861">A(z) <ph name="HOST_NAME" /> le van tiltva</translation>
 <translation id="3987940399970879459">Kevesebb, mint 1 MB</translation>
 <translation id="4075732493274867456">A kliens és a szerver nem támogat ugyanolyan SSL-protokollverziót vagy titkosítási csomagot.</translation>
+<translation id="410351446219883937">Automatikus lejátszás</translation>
 <translation id="4116663294526079822">Mindig engedélyezze ezen az oldalon</translation>
 <translation id="4130226655945681476">A hálózati kábelek, a modem és a router ellenőrzése</translation>
 <translation id="4151403195736952345">Globális alapértelmezés használata (Észlelés)</translation>
@@ -145,6 +149,7 @@
 <translation id="6321917430147971392">Ellenőrizze a DNS-beállításokat</translation>
 <translation id="6328639280570009161">Próbálkozzon a hálózati előrejelzések kikapcsolásával</translation>
 <translation id="6328786501058569169">A webhely megtévesztő</translation>
+<translation id="6348220984832452017">Aktív változatok</translation>
 <translation id="6358450015545214790">Mit jelent ez?</translation>
 <translation id="6433595998831338502">A(z) <ph name="HOST_NAME" /> visszautasította a csatlakozást.</translation>
 <translation id="6447842834002726250">Sütik</translation>
@@ -163,6 +168,7 @@
 <translation id="7113310725918019676"><ph name="BLOCKED_TYPE" /> engedélyezése innen: <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">A(z) <ph name="HOST_NAME" /> nem felel meg a biztonsági szabványoknak.</translation>
 <translation id="7219179957768738017">A kapcsolat a következőt használja: <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Értesítéseket megjelenítése</translation>
 <translation id="7260504762447901703">Hozzáférés visszavonása</translation>
 <translation id="7353601530677266744">Parancssor</translation>
 <translation id="7364115444476960850">A meglátogatni kívánt oldalt blokkolta a Vivaldi <ph name="BLOCKER_NAME" /></translation>
@@ -181,11 +187,13 @@
 <translation id="7758069387465995638">Előfordulhat, hogy a tűzfal vagy a vírusirtó szoftver tiltotta le a kapcsolatot.</translation>
 <translation id="7800304661137206267">A kapcsolat a(z) <ph name="CIPHER" /> használatával lett kódolva, <ph name="MAC" /> algoritmussal az üzenethitelesítéshez és <ph name="KX" /> algoritmussal a kulcscserélő folyamathoz.</translation>
 <translation id="7834399512844817676">A(z) <ph name="SITE" /> webhely normál esetben titkosítást alkalmaz az adataid védelme érdekében. Amikor a Vivaldi most csatlakozni próbált, a(z) <ph name="SITE" /> webhely szokatlan és helytelen hitelesítési adatokat küldött vissza.Ez olyankor fordulhat elő, amikor egy támadó megpróbálja magát kiadni a(z) <ph name="SITE" /> webhelynek, vagy valamilyen Wi-Fi-bejelentkezési képernyő megszakította a kapcsolatot. Adataid továbbra is biztonságban vannak, mivel a Vivaldi még azt megelőzően megszakította a kapcsolatot, hogy bármiféle adatcserére sor kerülhetett volna.</translation>
+<translation id="7834693436815575883">Automatikus lejátszás engedélyezve</translation>
 <translation id="7878562273885520351">Előfordulhat, hogy jelszavad már nem biztonságos</translation>
 <translation id="7951415247503192394">(32 bites)</translation>
 <translation id="8025119109950072390">A webhely támadói megpróbálhatnak csellel rávenni, hogy például telepíts egy veszélyes szoftvert, vagy felfedd személyes adatait (jelszó, telefonszám, hitelkártyaszám stb.).</translation>
 <translation id="8037357227543935929">Kérdezzen rá (alapértelmezett)</translation>
 <translation id="8041940743680923270">Globális alapértelmezés használata (Megkérdezés)</translation>
+<translation id="8044382196220116469">A weboldalak nem játszhatják le automatikusan a videókat</translation>
 <translation id="808894953321890993">Jelszó módosítása</translation>
 <translation id="8119307142152921512">Követések és reklámok</translation>
 <translation id="8149426793427495338">Számítógéped alvó üzemmódba váltott.</translation>
@@ -203,6 +211,7 @@
 <translation id="8503813439785031346">Felhasználónév</translation>
 <translation id="8703575177326907206">A kapcsolat (<ph name="DOMAIN" />) nem titkosított.</translation>
 <translation id="8740359287975076522">A(z) <ph name="HOST_NAME" /> &lt;abbr id="dnsDefinition"&gt;DNS-címe&lt;/abbr&gt; nem található. A probléma diagnosztizálása folyamatban van.</translation>
+<translation id="8774017153185436870">A webhelyek automatikusan lejátszhatnak videókat</translation>
 <translation id="8820817407110198400">Könyvjelzők</translation>
 <translation id="8940028675168378100">Blokkolta: <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">A webhely beállításainak megnyitása</translation>
@@ -210,6 +219,7 @@
 <translation id="9008201768610948239">Mellőzés</translation>
 <translation id="9025348182339809926">(Érvénytelen)</translation>
 <translation id="9039213469156557790">Emellett az oldal más forrásokat is tartalmaz, amelyek nem biztonságosak. Ezeket a forrásokat mások is megtekinthetik átvitel közben, és megváltoztatásukkal a támadók módosíthatják az oldal viselkedését.</translation>
+<translation id="9048224371732578627">Videók automatikus lejátszásának engedélyezése</translation>
 <translation id="9062620674789239642">Előfordulhat, hogy át lett helyezve, szerkesztve vagy törlésre került.</translation>
 <translation id="9069693763241529744">Bővítmény által letiltva</translation>
 <translation id="9073799351042754113">Kikapcsoltad a biztonsági figyelmeztetéseket ezen a webhelyen.</translation>

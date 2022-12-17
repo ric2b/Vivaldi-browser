@@ -15,7 +15,7 @@ namespace {
 /** Name used by a directory created to hold symbols with no name. */
 constexpr const char kComponentSep = '>';
 constexpr const char kPathSep = '/';
-constexpr const char* kNoName = "(No path)";
+constexpr const char kNoPath[] = "(No path)";
 }  // namespace
 
 TreeBuilder::TreeBuilder(SizeInfo* size_info) {
@@ -53,9 +53,10 @@ void TreeBuilder::Build(std::unique_ptr<BaseLens> lens,
   std::unordered_map<GroupedPath, std::vector<const BaseSymbol*>>
       symbols_by_grouped_path;
   for (const BaseSymbol* sym : symbols_) {
-    GroupedPath key =
-        GroupedPath{lens_->ParentName(*sym),
-                    sym->SourcePath() ? sym->SourcePath() : sym->ObjectPath()};
+    const char* path = *sym->SourcePath()   ? sym->SourcePath()
+                       : *sym->ObjectPath() ? sym->ObjectPath()
+                                            : kNoPath;
+    GroupedPath key = GroupedPath{lens_->ParentName(*sym), path};
     if (ShouldIncludeSymbol(key, *sym)) {
       symbols_by_grouped_path[key].push_back(sym);
     }
@@ -71,8 +72,7 @@ bool CompareAbsSize(const TreeNode* const& l, const TreeNode* const& r) {
   // Sort nodes with same size in alphabetically ascending order.
   float l_size = abs(l->size);
   float r_size = abs(r->size);
-  return (l_size != r_size) ? abs(l->size) > abs(r->size)
-                            : l->id_path < r->id_path;
+  return (l_size != r_size) ? l_size > r_size : l->id_path < r->id_path;
 }
 
 bool CompareCount(const TreeNode* const& l, const TreeNode* const& r) {
@@ -175,12 +175,7 @@ void TreeBuilder::AddFileEntry(GroupedPath grouped_path,
   if (file_node == nullptr || grouped_path.path.empty()) {
     file_node = new TreeNode();
     file_node->artifact_type = ArtifactType::kFile;
-
     file_node->id_path = grouped_path;
-    if (file_node->id_path.path.empty()) {
-      file_node->id_path.path = kNoName;
-    }
-
     file_node->short_name_index =
         file_node->id_path.size() - file_node->id_path.ShortName(sep_).size();
     _parents[file_node->id_path] = file_node;
@@ -242,7 +237,7 @@ ArtifactType TreeBuilder::ArtifactTypeFromChild(GroupedPath child_path) const {
   // '/' separators for the file tree - e.g. Blink>third_party/blink/common...
   // We know that Blink is a component because its children have the form
   // Blink>third_party rather than Blink/third_party.
-  return child_path.IsTopLevelPath() ? ArtifactType::kComponent
+  return child_path.IsTopLevelPath() ? ArtifactType::kGroup
                                      : ArtifactType::kDirectory;
 }
 

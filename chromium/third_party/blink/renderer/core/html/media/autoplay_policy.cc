@@ -64,6 +64,11 @@ bool ComputeLockPendingUserGestureRequired(const Document& document) {
 // static
 AutoplayPolicy::Type AutoplayPolicy::GetAutoplayPolicyForDocument(
     const Document& document) {
+#if defined(VIVALDI_BUILD)
+  if (!IsAutoplayAllowedForDocument(document)) \
+    return Type::kUserGestureRequired;
+#endif  // VIVALDI_BUILD
+
   if (!document.GetSettings())
     return Type::kNoUserGestureRequired;
 
@@ -313,6 +318,11 @@ bool AutoplayPolicy::IsGestureNeededForPlayback() const {
   if (!IsLockedPendingUserGesture())
     return false;
 
+#if defined(VIVALDI_BUILD)
+  if (!IsAutoplayAllowedForElement(element_))                \
+    return true;
+#endif  // VIVALDI_BUILD
+
   // We want to allow muted video to autoplay if the element is allowed to
   // autoplay muted.
   return !IsEligibleForAutoplayMuted();
@@ -347,7 +357,8 @@ void AutoplayPolicy::OnIntersectionChangedForAutoplay(
         return;
 
       if (self->element_->can_autoplay_ && self->element_->Autoplay()) {
-        self->element_->PauseInternal();
+        self->element_->PauseInternal(
+            HTMLMediaElement::PlayPromiseError::kPaused_AutoplayAutoPause);
         self->element_->can_autoplay_ = true;
       }
     };

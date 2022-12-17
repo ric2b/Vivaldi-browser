@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_CONTROLLER_PAINT_TEST_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_PAINT_PAINT_CONTROLLER_PAINT_TEST_H_
 
+#include "base/check_op.h"
 #include "third_party/blink/renderer/core/editing/frame_selection.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
@@ -42,11 +43,19 @@ class PaintControllerPaintTestBase : public RenderingTest {
         ->GetScrollingBackgroundDisplayItemClient();
   }
 
-  void UpdateAllLifecyclePhasesExceptPaint() {
+  void UpdateAllLifecyclePhasesExceptPaint(bool update_cull_rects = true) {
     GetDocument().View()->UpdateAllLifecyclePhasesExceptPaint(
         DocumentUpdateReason::kTest);
-    // Run CullRectUpdater to ease testing of cull rects and repaint flags of
-    // PaintLayers on cull rect change.
+    if (update_cull_rects) {
+      // Run CullRectUpdater to ease testing of cull rects and repaint flags of
+      // PaintLayers on cull rect change.
+      UpdateCullRects();
+    }
+  }
+
+  void UpdateCullRects() {
+    DCHECK_EQ(GetDocument().Lifecycle().GetState(),
+              DocumentLifecycle::kPrePaintClean);
     CullRectUpdater(*GetLayoutView().Layer()).Update();
   }
 

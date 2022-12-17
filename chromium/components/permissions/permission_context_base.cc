@@ -123,7 +123,6 @@ PermissionContextBase::~PermissionContextBase() {
 }
 
 void PermissionContextBase::RequestPermission(
-    content::WebContents* web_contents,
     const PermissionRequestID& id,
     const GURL& requesting_frame,
     bool user_gesture,
@@ -132,6 +131,13 @@ void PermissionContextBase::RequestPermission(
 
   content::RenderFrameHost* const rfh = content::RenderFrameHost::FromID(
       id.render_process_id(), id.render_frame_id());
+
+  if (!rfh) {
+    // Permission request is not allowed without a valid RenderFrameHost.
+    std::move(callback).Run(CONTENT_SETTING_ASK);
+    return;
+  }
+
   const GURL requesting_origin = requesting_frame.DeprecatedGetOriginAsURL();
   const GURL embedding_origin =
       PermissionUtil::GetLastCommittedOriginAsURL(rfh->GetMainFrame());
@@ -242,12 +248,12 @@ void PermissionContextBase::RequestPermission(
     }
   }
   if (is_handled_in_webviewpermission_helper) {
-    PermissionContextBase::DecidePermission(web_contents, id, requesting_origin,
+    PermissionContextBase::DecidePermission(id, requesting_origin,
                                             embedding_origin, user_gesture,
                                             std::move(callback));
   } else {
-  DecidePermission(web_contents, id, requesting_origin, embedding_origin,
-                   user_gesture, std::move(callback));
+  DecidePermission(id, requesting_origin, embedding_origin, user_gesture,
+                   std::move(callback));
   }
 }
 
@@ -338,13 +344,16 @@ PermissionResult PermissionContextBase::GetPermissionStatus(
                             PermissionStatusSource::UNSPECIFIED);
   }
 
-  PermissionResult result =
+  absl::optional<PermissionResult> result =
       PermissionsClient::Get()
           ->GetPermissionDecisionAutoBlocker(browser_context_)
           ->GetEmbargoResult(requesting_origin, content_settings_type_);
-  DCHECK(result.content_setting == CONTENT_SETTING_ASK ||
-         result.content_setting == CONTENT_SETTING_BLOCK);
-  return result;
+  if (result) {
+    DCHECK(result->content_setting == CONTENT_SETTING_BLOCK);
+    return *result;
+  }
+  return PermissionResult(CONTENT_SETTING_ASK,
+                          PermissionStatusSource::UNSPECIFIED);
 }
 
 bool PermissionContextBase::IsPermissionAvailableToOrigins(
@@ -406,7 +415,6 @@ ContentSetting PermissionContextBase::GetPermissionStatusInternal(
 }
 
 void PermissionContextBase::DecidePermission(
-    content::WebContents* web_contents,
     const PermissionRequestID& id,
     const GURL& requesting_origin,
     const GURL& embedding_origin,
@@ -423,6 +431,12 @@ void PermissionContextBase::DecidePermission(
          requesting_origin == embedding_origin ||
          content_settings_type_ == ContentSettingsType::STORAGE_ACCESS);
 
+  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
+      id.render_process_id(), id.render_frame_id());
+  DCHECK(rfh);
+
+  content::WebContents* web_contents =
+      content::WebContents::FromRenderFrameHost(rfh);
   PermissionRequestManager* permission_request_manager =
       PermissionRequestManager::FromWebContents(web_contents);
   // TODO(felt): sometimes |permission_request_manager| is null. This check is
@@ -444,15 +458,6 @@ void PermissionContextBase::DecidePermission(
           .insert(std::make_pair(id.ToString(), std::move(request_ptr)))
           .second;
   DCHECK(inserted) << "Duplicate id " << id.ToString();
-
-  content::RenderFrameHost* rfh = content::RenderFrameHost::FromID(
-      id.render_process_id(), id.render_frame_id());
-
-  if (!rfh) {
-    request->Cancelled();
-    request->RequestFinished();
-    return;
-  }
 
   permission_request_manager->AddRequest(rfh, request);
 }

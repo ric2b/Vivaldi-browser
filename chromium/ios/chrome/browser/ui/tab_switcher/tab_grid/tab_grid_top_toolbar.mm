@@ -4,6 +4,7 @@
 
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_top_toolbar.h"
 
+#import "ios/chrome/browser/ui/icons/chrome_symbol.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/features.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_constants.h"
 #import "ios/chrome/browser/ui/tab_switcher/tab_grid/tab_grid_page_control.h"
@@ -22,6 +23,9 @@ namespace {
 const int kIconButtonAdditionalSpace = 20;
 const int kSelectionModeButtonSize = 17;
 const int kSearchBarTrailingSpace = 24;
+
+// The size of top toolbar search symbol image.
+NSInteger kSymbolSearchImagePointSize = 22;
 }
 
 @interface TabGridTopToolbar () <UIToolbarDelegate>
@@ -76,7 +80,7 @@ const int kSearchBarTrailingSpace = 24;
   [self setItemsForTraitCollection:self.traitCollection];
   if (mode == TabGridModeSearch) {
     // Focus the search bar, and make it a first responder once the user enter
-    // to search mode. Doing that here instead in |setItemsForTraitCollection|
+    // to search mode. Doing that here instead in `setItemsForTraitCollection`
     // makes sure it's only called once and allows the voicOver to transition
     // smoothly and to say that there is a search field opened.
     [_searchBar becomeFirstResponder];
@@ -149,7 +153,7 @@ const int kSearchBarTrailingSpace = 24;
   if (useUndo) {
     _closeAllOrUndoButton.title =
         l10n_util::GetNSString(IDS_IOS_TAB_GRID_UNDO_CLOSE_ALL_BUTTON);
-    // Setting the |accessibilityIdentifier| seems to trigger layout, which
+    // Setting the `accessibilityIdentifier` seems to trigger layout, which
     // causes an infinite loop.
     if (_closeAllOrUndoButton.accessibilityIdentifier !=
         kTabGridUndoCloseAllButtonIdentifier) {
@@ -159,7 +163,7 @@ const int kSearchBarTrailingSpace = 24;
   } else {
     _closeAllOrUndoButton.title =
         l10n_util::GetNSString(IDS_IOS_TAB_GRID_CLOSE_ALL_BUTTON);
-    // Setting the |accessibilityIdentifier| seems to trigger layout, which
+    // Setting the `accessibilityIdentifier` seems to trigger layout, which
     // causes an infinite loop.
     if (_closeAllOrUndoButton.accessibilityIdentifier !=
         kTabGridCloseAllButtonIdentifier) {
@@ -405,10 +409,21 @@ const int kSearchBarTrailingSpace = 24;
                                    forState:UIControlStateDisabled];
 
   if (IsTabsSearchEnabled()) {
-    _searchButton = [[UIBarButtonItem alloc]
-        initWithBarButtonSystemItem:UIBarButtonSystemItemSearch
-                             target:nil
-                             action:nil];
+    if (UseSymbols()) {
+      UIImage* searchImage = DefaultSymbolWithPointSize(
+          kSearchSymbol, kSymbolSearchImagePointSize);
+      _searchButton =
+          [[UIBarButtonItem alloc] initWithImage:searchImage
+                                           style:UIBarButtonItemStylePlain
+                                          target:nil
+                                          action:nil];
+    } else {
+      _searchButton = [[UIBarButtonItem alloc]
+          initWithBarButtonSystemItem:UIBarButtonSystemItemSearch
+                               target:nil
+                               action:nil];
+    }
+
     _searchButton.tintColor = UIColorFromRGB(kTabGridToolbarTextButtonColor);
     _searchButton.accessibilityIdentifier = kTabGridSearchButtonIdentifier;
 

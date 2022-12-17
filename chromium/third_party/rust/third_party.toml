@@ -37,10 +37,10 @@
 cxxbridge-cmd = "1"
 cxx = "1"
 serde = "1"
-autocxx = "0.17"
+autocxx = "0.22"
 
 [dependencies.autocxx-gen]
-version = "0.17"
+version = "0.22"
 features = [ "static" ]
 
 [dependencies.serde_json_lenient]
@@ -62,6 +62,11 @@ version = "1"
 allow-first-party-usage = false
 build-script-outputs = [ "version.rs" ]
 
+[dependencies.unicode-linebreak]
+version = "0.1"
+allow-first-party-usage = false
+build-script-outputs = [ "tables.rs" ]
+
 # Crates listed in dev-dependencies will have a :test_support GN target
 # built for them in their BUILD.gn file, which is marked testonly=true.
 # This allows them built in a configuration that can be used from Chromium
@@ -70,3 +75,7 @@ build-script-outputs = [ "version.rs" ]
 rstest = "0.12"
 small_ctor = "0.1"
 syn = {version = "1", features = ["full"]}
+
+# Used in Rust tool for BUILD.gn generation.
+cargo_metadata = "0.14"
+toml = "0.5"

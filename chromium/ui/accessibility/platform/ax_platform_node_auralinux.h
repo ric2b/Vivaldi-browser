@@ -240,7 +240,7 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
 
   // AXPlatformNodeBase overrides.
   bool IsPlatformCheckable() const override;
-  absl::optional<int> GetIndexInParent() override;
+  absl::optional<size_t> GetIndexInParent() override;
 
   bool IsNameExposed();
 
@@ -297,7 +297,7 @@ class AX_EXPORT AXPlatformNodeAuraLinux : public AXPlatformNodeBase {
   bool HasDefaultActionVerb() const;
 
   std::string accessible_name_;
-
+  
  protected:
   AXPlatformNodeAuraLinux();
 

@@ -35,12 +35,14 @@ LoadStreamFromStoreTask::LoadStreamFromStoreTask(
     const StreamType& stream_type,
     FeedStore* store,
     bool missed_last_refresh,
+    bool is_web_feed_subscriber,
     base::OnceCallback<void(Result)> callback)
     : load_type_(load_type),
       feed_stream_(*feed_stream),
       stream_type_(stream_type),
       store_(store),
       missed_last_refresh_(missed_last_refresh),
+      is_web_feed_subscriber_(is_web_feed_subscriber),
       result_callback_(std::move(callback)),
       update_request_(std::make_unique<StreamModelUpdateRequest>()) {}
 
@@ -67,16 +69,8 @@ void LoadStreamFromStoreTask::LoadStreamDone(
     return;
   }
   if (!ignore_account_) {
-    const AccountInfo& account_info = feed_stream_.GetAccountInfo();
-    if (result.stream_data.signed_in() && result.stream_data.gaia().empty()) {
-      // TODO(crbug.com/1268575): For backward compatibility, set the gaia in
-      // stream_data if it is unset. Remove this code after it's been in at
-      // least one Chrome release.
-      result.stream_data.set_gaia(account_info.gaia);
-      result.stream_data.set_email(account_info.email);
-    }
-
     if (result.stream_data.signed_in()) {
+      const AccountInfo& account_info = feed_stream_.GetAccountInfo();
       if (result.stream_data.gaia() != account_info.gaia ||
           result.stream_data.email() != account_info.email) {
         Complete(LoadStreamStatus::kDataInStoreIsForAnotherUser,
@@ -93,7 +87,8 @@ void LoadStreamFromStoreTask::LoadStreamDone(
 
     const feedstore::Metadata& metadata = feed_stream_.GetMetadata();
 
-    if (ContentInvalidFromAge(metadata, result.stream_type, content_age_)) {
+    if (ContentInvalidFromAge(metadata, result.stream_type, content_age_,
+                              is_web_feed_subscriber_)) {
       Complete(LoadStreamStatus::kDataInStoreIsExpired,
                feedwire::DiscoverCardReadCacheResult::STALE);
       return;
@@ -101,7 +96,7 @@ void LoadStreamFromStoreTask::LoadStreamDone(
     if (content_age_.is_negative()) {
       stale_reason_ = LoadStreamStatus::kDataInStoreIsStaleTimestampInFuture;
     } else if (ShouldWaitForNewContent(metadata, result.stream_type,
-                                       content_age_)) {
+                                       content_age_, is_web_feed_subscriber_)) {
       stale_reason_ = LoadStreamStatus::kDataInStoreIsStale;
     } else if (missed_last_refresh_) {
       stale_reason_ = LoadStreamStatus::kDataInStoreStaleMissedLastRefresh;

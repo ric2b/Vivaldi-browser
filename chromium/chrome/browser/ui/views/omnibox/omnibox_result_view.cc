@@ -41,6 +41,7 @@
 #include "ui/events/event.h"
 #include "ui/gfx/canvas.h"
 #include "ui/gfx/paint_vector_icon.h"
+#include "ui/views/animation/ink_drop.h"
 #include "ui/views/controls/button/image_button.h"
 #include "ui/views/controls/button/image_button_factory.h"
 #include "ui/views/controls/focus_ring.h"
@@ -63,6 +64,10 @@ class OmniboxRemoveSuggestionButton : public views::ImageButton {
   explicit OmniboxRemoveSuggestionButton(PressedCallback callback)
       : ImageButton(std::move(callback)) {
     views::ConfigureVectorImageButton(this);
+
+    SetAnimationDuration(base::TimeDelta());
+    views::InkDrop::Get(this)->GetInkDrop()->SetHoverHighlightFadeDuration(
+        base::TimeDelta());
 
     SetFocusBehavior(FocusBehavior::ACCESSIBLE_ONLY);
   }
@@ -92,7 +97,7 @@ class OmniboxResultSelectionIndicator : public views::View {
 
   explicit OmniboxResultSelectionIndicator(OmniboxResultView* result_view)
       : result_view_(result_view) {
-    SetPreferredSize({kStrokeThickness, 0});
+    SetPreferredSize(gfx::Size(kStrokeThickness, 0));
   }
 
   // views::View:
@@ -542,7 +547,7 @@ void OmniboxResultView::UpdateRemoveSuggestionVisibility() {
 
 void OmniboxResultView::SetWidths() {
   keyword_view_->SetPreferredSize(
-      {width(), keyword_view_->CalculatePreferredSize().height()});
+      gfx::Size(width(), keyword_view_->CalculatePreferredSize().height()));
 
   InvalidateLayout();
 }

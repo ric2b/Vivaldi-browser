@@ -3,8 +3,12 @@
 <script src='../../resources/testharness.js'></script>
 
 <div id=elements>
-  <popup id=popup_element>This content should be visible, if HTMLPopupElement is disabled</popup>
-  <div popup=popup id=popup_attribute>This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup=auto>This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup=hint>This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup=async>This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup=invalid>This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup="">This content should be visible, if HTMLPopupAttribute is disabled</div>
+  <div popup id=foo>This content should be visible, if HTMLPopupAttribute is disabled</div>
 </div>
 
 <script>
@@ -15,20 +19,18 @@
     return !!(popup.offsetWidth || popup.offsetHeight || popup.getClientRects().length);
   }
 
-  const elements = document.getElementById('elements');
-  const popupElement = elements.querySelector('popup');
+  const elements = document.getElementById('elements').children;
   test(() => {
-    assert_throws_dom("SyntaxError",() => {elements.matches(':popup-open')},"The :popup-open pseudo class shouldn't be available");
-    assert_true(!!popupElement);
-    assert_true(popupElement instanceof HTMLUnknownElement, '<popup> should be an instance of HTMLUnknownElement');
+    assert_throws_dom("SyntaxError",() => {elements[0].matches(':top-layer')},"The :popup-open pseudo class shouldn't be available");
   },'Basic tests');
 
-  for(let el of elements.children) {
+  for(let el of elements) {
     test(() => {
       assert_true(!!el);
       assert_true(popupVisible(el));
+      assert_equals(el.popup,undefined);
       assert_not_equals(window.getComputedStyle(el).display,'none');
-    },`${el.id} should be HTMLUnknownElement and should be stylable/visible`);
+    },`${el.outerHTML} should be stylable/visible and not display:none`);
   }
 
   function supportsPopup() {

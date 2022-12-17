@@ -442,8 +442,9 @@ MATCHER_P2(IsLetterboxedFrame, color, content_rect, "") {
 
   const VideoFrame& frame = *arg;
   const gfx::Rect kContentRect = content_rect;
-  const auto IsLetterboxedPlane = [&frame, kContentRect](int plane,
-                                                         uint8_t component) {
+
+  const auto IsLetterboxedPlane = [&frame, kContentRect, result_listener](
+                                      int plane, uint8_t component) {
     gfx::Rect content_rect_copy = kContentRect;
     if (plane != VideoFrame::kYPlane) {
       content_rect_copy = gfx::Rect(
@@ -455,10 +456,19 @@ MATCHER_P2(IsLetterboxedFrame, color, content_rect, "") {
       for (int col = 0; col < frame.row_bytes(plane); ++col) {
         if (content_rect_copy.Contains(gfx::Point(col, row))) {
           if (p[col] != component) {
+            *result_listener << " where pixel at (" << col << ", " << row
+                             << ") should be inside content rectangle and the "
+                                "component should match 0x"
+                             << std::hex << component << " but is 0x"
+                             << std::hex << static_cast<unsigned int>(p[col]);
             return false;
           }
         } else {  // Letterbox border around content.
           if (plane == VideoFrame::kYPlane && p[col] != 0x00) {
+            *result_listener << " where pixel at (" << col << ", " << row
+                             << ") should be outside content rectangle and the "
+                                "component should match 0x00 but is 0x"
+                             << std::hex << static_cast<unsigned int>(p[col]);
             return false;
           }
         }
@@ -1136,6 +1146,45 @@ TEST_F(FrameSinkVideoCapturerTest, RefreshDemandsAreProperlyHandled) {
   EXPECT_FALSE(IsRefreshRetryTimerRunning());
 
   StopCapture();
+}
+
+// Tests that the capturer honors requested refresh frames (see
+// crbug.com/1320798)
+TEST_F(FrameSinkVideoCapturerTest, HonorsRequestRefreshFrame) {
+  frame_sink_.SetCopyOutputColor(YUVColor{0x80, 0x80, 0x80});
+  ON_CALL(frame_sink_manager_, FindCapturableFrameSink(kVideoCaptureTarget))
+      .WillByDefault(Return(&frame_sink_));
+
+  capturer_->ChangeTarget(kVideoCaptureTarget, /*crop_version=*/0);
+
+  // Start off and consume the immediate refresh and copy result.
+  MockConsumer consumer;
+  StartCapture(&consumer);
+  frame_sink_.SendCopyOutputResult(0);
+  ASSERT_EQ(1, consumer.num_frames_received());
+  consumer.SendDoneNotification(0);
+
+  // Advance time to avoid being frame rate limited by the oracle.
+  // Demand a refresh frame. We should be past the minimum time to add one, so
+  // it should be done immediately.
+  AdvanceClockToNextVsync();
+  capturer_->RefreshNow();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(2, consumer.num_frames_received());
+
+  // Advance time to avoid being frame rate limited by the oracle.
+  // Request a refresh frame. The request should be serviced immediately.
+  AdvanceClockToNextVsync();
+  capturer_->RequestRefreshFrame();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(3, consumer.num_frames_received());
+
+  // Advance time to avoid being frame rate limited by the oracle.
+  // Request again and expect service.
+  AdvanceClockToNextVsync();
+  capturer_->RequestRefreshFrame();
+  base::RunLoop().RunUntilIdle();
+  ASSERT_EQ(4, consumer.num_frames_received());
 }
 
 // Tests that full capture happens on capture resolution change due to oracle,

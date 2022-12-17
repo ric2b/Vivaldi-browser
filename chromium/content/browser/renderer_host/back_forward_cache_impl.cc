@@ -101,36 +101,6 @@ bool IsContentInjectionSupported() {
   return content_injection_supported.Get();
 }
 
-enum class HeaderPresence {
-  kNotPresent,
-  kPresent,
-  kUnsure,
-};
-
-constexpr base::FeatureParam<BackForwardCacheImpl::UnloadSupportStrategy>::
-    Option kUnloadSupportStrategyOptions[] = {
-        {BackForwardCacheImpl::UnloadSupportStrategy::kAlways, "always"},
-        {BackForwardCacheImpl::UnloadSupportStrategy::kNo, "no"},
-};
-
-BackForwardCacheImpl::UnloadSupportStrategy GetUnloadSupportStrategy() {
-  constexpr auto kDefaultStrategy =
-#if BUILDFLAG(IS_ANDROID)
-      BackForwardCacheImpl::UnloadSupportStrategy::kAlways;
-#else
-      BackForwardCacheImpl::UnloadSupportStrategy::kNo;
-#endif
-
-  if (!IsBackForwardCacheEnabled())
-    return kDefaultStrategy;
-
-  static constexpr base::FeatureParam<
-      BackForwardCacheImpl::UnloadSupportStrategy>
-      unload_support(&features::kBackForwardCache, "unload_support",
-                     kDefaultStrategy, &kUnloadSupportStrategyOptions);
-  return unload_support.Get();
-}
-
 WebSchedulerTrackedFeatures SupportedFeaturesImpl() {
   WebSchedulerTrackedFeatures features;
   if (!IsBackForwardCacheEnabled())
@@ -338,7 +308,6 @@ void RequestRecordTimeToVisible(RenderFrameHostImpl* rfh,
     DCHECK(trigger);
     trigger->UpdateRequest(navigation_start, false /* destination_is_loaded */,
                            false /* show_reason_tab_switching */,
-                           false /* show_reason_unoccluded */,
                            true /* show_reason_bfcache_restore */);
   }
 }
@@ -489,7 +458,6 @@ BackForwardCacheImpl::BackForwardCacheImpl()
     : allowed_urls_(ParseCommaSeparatedURLs(GetAllowedURLList())),
       blocked_urls_(ParseCommaSeparatedURLs(GetBlockedURLList())),
       blocked_cgi_params_(ParseBlockedCgiParams(GetBlockedCgiParams())),
-      unload_strategy_(GetUnloadSupportStrategy()),
       weak_factory_(this) {}
 
 BackForwardCacheImpl::~BackForwardCacheImpl() {
@@ -542,6 +510,10 @@ base::TimeDelta BackForwardCacheImpl::GetTimeToLiveInBackForwardCache() {
 size_t BackForwardCacheImpl::GetCacheSize() {
   if (!IsBackForwardCacheEnabled())
     return 0;
+  auto cache_size = GetFieldTrialParamByFeatureAsOptionalInt(
+      kBackForwardCacheSize, "cache_size");
+  if (cache_size.has_value())
+    return cache_size.value();
   return base::GetFieldTrialParamByFeatureAsInt(
       features::kBackForwardCache, "cache_size", kDefaultBackForwardCacheSize);
 }
@@ -550,6 +522,10 @@ size_t BackForwardCacheImpl::GetCacheSize() {
 size_t BackForwardCacheImpl::GetForegroundedEntriesCacheSize() {
   if (!IsBackForwardCacheEnabled())
     return 0;
+  auto foreground_cache_size = GetFieldTrialParamByFeatureAsOptionalInt(
+      kBackForwardCacheSize, "foreground_cache_size");
+  if (foreground_cache_size.has_value())
+    return foreground_cache_size.value();
   return base::GetFieldTrialParamByFeatureAsInt(
       features::kBackForwardCache, "foreground_cache_size",
       kDefaultForegroundBackForwardCacheSize);
@@ -587,8 +563,8 @@ void BackForwardCacheImpl::UpdateCanStoreToIncludeCacheControlNoStore(
 
   auto* matching_entry = FindMatchingEntry(render_frame_host->GetPage());
   // |matching_entry| can be nullptr for tests because this can be called from
-  // |CanStorePageNow()|, at which point |rfh| may not have a matching entry
-  // yet.
+  // |GetCurrentBackForwardCacheEligibility()|, at which point |rfh| may not
+  // have a matching entry yet.
   if (!matching_entry)
     return;
 
@@ -614,51 +590,47 @@ void BackForwardCacheImpl::UpdateCanStoreToIncludeCacheControlNoStore(
 }
 
 BackForwardCacheCanStoreDocumentResultWithTree
-BackForwardCacheImpl::CanStorePageNow(RenderFrameHostImpl* rfh,
-                                      bool include_ccns) {
+BackForwardCacheImpl::GetCurrentBackForwardCacheEligibility(
+    RenderFrameHostImpl* rfh) {
   BackForwardCacheCanStoreDocumentResult flattened_result;
   std::unique_ptr<BackForwardCacheCanStoreTreeResult> tree =
       PopulateReasonsForPage(rfh, flattened_result,
-                             /*include_non_sticky=*/true,
-                             /*create_tree=*/true);
+                             /*include_non_sticky=*/true);
 
-  // TODO(https://crbug.com/1280150): Call
-  // UpdateCanStoreToIncludeCacheControlNoStore() for tree structure.
-  // Include cache-control:no-store related reasons only when requested.
-  if (include_ccns) {
-    DCHECK(AllowStoringPagesWithCacheControlNoStore());
-    UpdateCanStoreToIncludeCacheControlNoStore(flattened_result, rfh);
-  }
-  DVLOG(1) << "CanStorePageNow: " << rfh->GetLastCommittedURL() << " : "
+  DVLOG(1) << "GetCurrentBackForwardCacheEligibility: "
+           << rfh->GetLastCommittedURL() << " : "
            << flattened_result.ToString();
   TRACE_EVENT("navigation", "BackForwardCacheImpl::CanPotentiallyStorePageNow",
               ChromeTrackEvent::kBackForwardCacheCanStoreDocumentResult,
               flattened_result);
 
+  DCHECK(tree->FlattenTree() == flattened_result);
   return BackForwardCacheCanStoreDocumentResultWithTree(flattened_result,
                                                         std::move(tree));
 }
 
-BackForwardCacheCanStoreDocumentResult
-BackForwardCacheImpl::CanPotentiallyStorePageLater(RenderFrameHostImpl* rfh) {
-  BackForwardCacheCanStoreDocumentResult result;
-  PopulateReasonsForPage(rfh, result,
-                         /*include_non_sticky = */ false,
-                         /*create_tree = */ false);
-  DVLOG(1) << "CanPotentiallyStorePageLater: " << rfh->GetLastCommittedURL()
-           << " : " << result.ToString();
+BackForwardCacheCanStoreDocumentResultWithTree
+BackForwardCacheImpl::GetFutureBackForwardCacheEligibilityPotential(
+    RenderFrameHostImpl* rfh) {
+  BackForwardCacheCanStoreDocumentResult flattened;
+  auto tree = PopulateReasonsForPage(rfh, flattened,
+                                     /*include_non_sticky = */ false);
+  DVLOG(1) << "GetFutureBackForwardCacheEligibilityPotential: "
+           << rfh->GetLastCommittedURL() << " : " << flattened.ToString();
   TRACE_EVENT(
-      "navigation", "BackForwardCacheImpl::CanPotentiallyStorePageLater",
-      ChromeTrackEvent::kBackForwardCacheCanStoreDocumentResult, result);
-  return result;
+      "navigation",
+      "BackForwardCacheImpl::GetFutureBackForwardCacheEligibilityPotential",
+      ChromeTrackEvent::kBackForwardCacheCanStoreDocumentResult, flattened);
+  DCHECK(tree->FlattenTree() == flattened);
+  return BackForwardCacheCanStoreDocumentResultWithTree(flattened,
+                                                        std::move(tree));
 }
 
 std::unique_ptr<BackForwardCacheCanStoreTreeResult>
 BackForwardCacheImpl::PopulateReasonsForPage(
     RenderFrameHostImpl* rfh,
     BackForwardCacheCanStoreDocumentResult& flattened_result,
-    bool include_non_sticky,
-    bool create_tree) {
+    bool include_non_sticky) {
   // TODO(crbug.com/1275977): This function should only be called when |rfh| is
   // the primary main frame. Fix |ShouldProactivelySwapBrowsingInstance()| and
   // |UnloadOldFrame()| so that it will not check bfcache eligibility if not
@@ -689,14 +661,12 @@ BackForwardCacheImpl::PopulateReasonsForPage(
   // flattened list, and return the tree if needed.
   std::unique_ptr<BackForwardCacheCanStoreTreeResult> result_tree;
   if (rfh->IsInPrimaryMainFrame() || main_frame_in_bfcache) {
-    NotRestoredReasonBuilder builder(rfh, include_non_sticky, create_tree);
+    NotRestoredReasonBuilder builder(rfh, include_non_sticky);
     result_tree = builder.GetTreeResult();
     flattened_result.AddReasonsFrom(builder.GetFlattenedResult());
   } else {
     result_tree = BackForwardCacheCanStoreTreeResult::CreateEmptyTree(rfh);
   }
-  if (!create_tree)
-    return nullptr;
   // |result_tree| does not have main document specific reasons such as
   // "disabled via command line", and we have to manually add them.
   result_tree->AddReasonsToSubtreeRootFrom(main_document_specific_result);
@@ -749,9 +719,10 @@ void BackForwardCacheImpl::PopulateReasonsForMainDocument(
   // This check makes sure the old and new document aren't sharing the same
   // BrowsingInstance. Note that the existence of related active contents might
   // change in the future, but we are checking this in
-  // CanPotentiallyStorePageLater instead of CanStorePageNow because it's needed
-  // to determine whether to do a proactive BrowsingInstance swap or not, which
-  // should not be done if the page has related active contents.
+  // GetFutureBackForwardCacheEligibilityPotential instead of
+  // GetCurrentBackForwardCacheEligibility because it's needed to determine
+  // whether to do a proactive BrowsingInstance swap or not, which should not be
+  // done if the page has related active contents.
   unsigned expected_related_active_contents_count = is_active_rfh ? 1 : 0;
   // We should never have fewer than expected.
   DCHECK_GE(rfh->GetSiteInstance()->GetRelatedActiveContentsCount(),
@@ -798,9 +769,9 @@ void BackForwardCacheImpl::PopulateReasonsForMainDocument(
 
   // We should not cache pages with Cache-control: no-store. Note that
   // even though this is categorized as a "feature", we will check this within
-  // CanPotentiallyStorePageLater as it's not possible to change the HTTP
-  // headers, so if it's not possible to cache this page now due to this, it's
-  // impossible to cache this page later.
+  // GetFutureBackForwardCacheEligibilityPotential as it's not possible to
+  // change the HTTP headers, so if it's not possible to cache this page now due
+  // to this, it's impossible to cache this page later.
   // TODO(rakina): Once we move cache-control tracking to RenderFrameHostImpl,
   // change this part to use the information stored in RenderFrameHostImpl
   // instead.
@@ -845,22 +816,16 @@ void BackForwardCacheImpl::PopulateStickyReasonsForDocument(
     result.No(BackForwardCacheMetrics::NotRestoredReason::kHaveInnerContents);
   }
 
+#if !BUILDFLAG(IS_ANDROID)
   const bool has_unload_handler = rfh->has_unload_handler();
-  DCHECK(!has_unload_handler || !rfh->IsNestedWithinFencedFrame());
-  switch (unload_strategy_) {
-    case BackForwardCacheImpl::UnloadSupportStrategy::kAlways:
-      break;
-    case BackForwardCacheImpl::UnloadSupportStrategy::kOptInHeaderRequired:
-    case BackForwardCacheImpl::UnloadSupportStrategy::kNo:
-      if (has_unload_handler) {
-        result.No(rfh->GetParent()
-                      ? BackForwardCacheMetrics::NotRestoredReason::
-                            kUnloadHandlerExistsInSubFrame
-                      : BackForwardCacheMetrics::NotRestoredReason::
-                            kUnloadHandlerExistsInMainFrame);
-      }
-      break;
+  if (has_unload_handler) {
+    // Note that pages with unload handlers are cached on android.
+    result.No(rfh->GetParent() ? BackForwardCacheMetrics::NotRestoredReason::
+                                     kUnloadHandlerExistsInSubFrame
+                               : BackForwardCacheMetrics::NotRestoredReason::
+                                     kUnloadHandlerExistsInMainFrame);
   }
+#endif
 
   // When it's not the final decision for putting a page in the back-forward
   // cache, we should only consider "sticky" features here - features that
@@ -919,32 +884,32 @@ void BackForwardCacheImpl::PopulateReasonsForDocument(
   }
 }
 
-std::unique_ptr<BackForwardCacheCanStoreTreeResult>
+BackForwardCacheCanStoreDocumentResultWithTree
 BackForwardCacheImpl::CreateEvictionBackForwardCacheCanStoreTreeResult(
     RenderFrameHostImpl& rfh,
     BackForwardCacheCanStoreDocumentResult& eviction_reason) {
+  // At this point the page already has some NotRestoredReasons for eviction, so
+  // we should always record cache_control:no-store related reasons.
   BackForwardCacheImpl::NotRestoredReasonBuilder builder(
       rfh.GetMainFrame(),
       /* include_non_sticky = */ false,
-      /* create_tree = */ true,
       BackForwardCacheImpl::NotRestoredReasonBuilder::EvictionInfo(
           rfh, &eviction_reason));
-  return builder.GetTreeResult();
+
+  return BackForwardCacheCanStoreDocumentResultWithTree(
+      builder.GetFlattenedResult(), builder.GetTreeResult());
 }
 
 BackForwardCacheImpl::NotRestoredReasonBuilder::NotRestoredReasonBuilder(
     RenderFrameHostImpl* root_rfh,
-    bool include_non_sticky,
-    bool create_tree)
+    bool include_non_sticky)
     : NotRestoredReasonBuilder(root_rfh,
                                include_non_sticky,
-                               create_tree,
                                /* eviction_info = */ absl::nullopt) {}
 
 BackForwardCacheImpl::NotRestoredReasonBuilder::NotRestoredReasonBuilder(
     RenderFrameHostImpl* root_rfh,
     bool include_non_sticky,
-    bool create_tree,
     absl::optional<EvictionInfo> eviction_info)
     : root_rfh_(root_rfh),
       bfcache_(root_rfh_->frame_tree_node()
@@ -952,25 +917,21 @@ BackForwardCacheImpl::NotRestoredReasonBuilder::NotRestoredReasonBuilder(
                    .controller()
                    .GetBackForwardCache()),
       include_non_sticky_(include_non_sticky),
-      create_tree_(create_tree),
       eviction_info_(eviction_info) {
   // |root_rfh_| should be either primary main frame or back/forward cached
   // page's main frame.
   DCHECK(root_rfh_->IsInPrimaryMainFrame() ||
          (root_rfh_->IsInBackForwardCache() && root_rfh_->is_main_frame()));
-  // Populate the reasons and build the tree if needed.
-  tree_result_ = PopulateReasonsAndReturnSubtreeIfNeededFor(root_rfh_);
+  // Populate the reasons and build the tree.
+  tree_result_ = PopulateReasonsAndReturnSubtree(root_rfh_);
 }
 
 BackForwardCacheImpl::NotRestoredReasonBuilder::~NotRestoredReasonBuilder() =
     default;
 
-std::unique_ptr<BackForwardCacheCanStoreTreeResult> BackForwardCacheImpl::
-    NotRestoredReasonBuilder::PopulateReasonsAndReturnSubtreeIfNeededFor(
-        RenderFrameHostImpl* rfh) {
-  // TODO(https://crbug.com/1280150): Add cache-control:no-store reasons to the
-  // tree.
-
+std::unique_ptr<BackForwardCacheCanStoreTreeResult>
+BackForwardCacheImpl::NotRestoredReasonBuilder::PopulateReasonsAndReturnSubtree(
+    RenderFrameHostImpl* rfh) {
   BackForwardCacheCanStoreDocumentResult result_for_rfh;
   if (eviction_info_.has_value()) {
     // When |eviction_info_| is set, that means that we are populating the
@@ -985,6 +946,7 @@ std::unique_ptr<BackForwardCacheCanStoreTreeResult> BackForwardCacheImpl::
     bfcache_.PopulateReasonsForDocument(result_for_rfh, rfh,
                                         include_non_sticky_);
   }
+  bfcache_.UpdateCanStoreToIncludeCacheControlNoStore(result_for_rfh, rfh);
   flattened_result_.AddReasonsFrom(result_for_rfh);
 
   // Finds the reasons recursively and create the reason subtree for the
@@ -992,15 +954,9 @@ std::unique_ptr<BackForwardCacheCanStoreTreeResult> BackForwardCacheImpl::
   BackForwardCacheCanStoreTreeResult::ChildrenVector children_result;
   for (size_t i = 0; i < rfh->child_count(); i++) {
     std::unique_ptr<BackForwardCacheCanStoreTreeResult> child =
-        PopulateReasonsAndReturnSubtreeIfNeededFor(
-            rfh->child_at(i)->current_frame_host());
-    if (create_tree_) {
-      children_result.emplace_back(std::move(child));
-    }
+        PopulateReasonsAndReturnSubtree(rfh->child_at(i)->current_frame_host());
+    children_result.emplace_back(std::move(child));
   }
-
-  if (!create_tree_)
-    return nullptr;
 
   std::unique_ptr<BackForwardCacheCanStoreTreeResult> tree(
       new BackForwardCacheCanStoreTreeResult(
@@ -1012,9 +968,8 @@ std::unique_ptr<BackForwardCacheCanStoreTreeResult> BackForwardCacheImpl::
 void BackForwardCacheImpl::StoreEntry(
     std::unique_ptr<BackForwardCacheImpl::Entry> entry) {
   TRACE_EVENT("navigation", "BackForwardCache::StoreEntry", "entry", entry);
-  BackForwardCacheCanStoreDocumentResultWithTree result =
-      CanStorePageNow(entry->render_frame_host());
-  DCHECK(result);
+  DCHECK(GetCurrentBackForwardCacheEligibility(entry->render_frame_host())
+             .CanStore());
 
 #if BUILDFLAG(IS_ANDROID)
   if (!IsProcessBindingEnabled()) {
@@ -1240,29 +1195,21 @@ BackForwardCacheImpl::Entry* BackForwardCacheImpl::GetEntry(
   if (matching_entry == entries_.end())
     return nullptr;
 
-  if (AllowStoringPagesWithCacheControlNoStore() &&
-      (*matching_entry)
-          ->render_frame_host()
-          ->GetBackForwardCacheDisablingFeatures()
-          .Has(WebSchedulerTrackedFeature::
-                   kMainResourceHasCacheControlNoStore)) {
-    auto* render_frame_host = (*matching_entry)->render_frame_host();
-    // If we are in the experiments to allow pages with cache-control:no-store
-    // in back/forward cache and the page has cache-control:no-store, we should
-    // record them as reasons.
-    BackForwardCacheCanStoreDocumentResultWithTree can_store =
-        CanStorePageNow(render_frame_host, /* include_ccns = */ true);
-    if (!can_store) {
-      (*matching_entry)
-          ->render_frame_host()
-          ->EvictFromBackForwardCacheWithFlattenedAndTreeReasons(can_store);
-    }
+  auto* render_frame_host = (*matching_entry)->render_frame_host();
+  // If we are in the experiments to allow pages with cache-control:no-store
+  // in back/forward cache and the page has cache-control:no-store, we should
+  // record them as reasons. It might not be possible to restore the entry even
+  // if it hasn't been evicted up until this point, e.g. due to cache-control:
+  // no-store preventing restoration but not storage
+  BackForwardCacheCanStoreDocumentResultWithTree bfcache_eligibility =
+      GetCurrentBackForwardCacheEligibility(render_frame_host);
+  if (!bfcache_eligibility.CanRestore()) {
+    render_frame_host->EvictFromBackForwardCacheWithFlattenedAndTreeReasons(
+        bfcache_eligibility);
   }
 
   // Don't return the frame if it is evicted.
-  if ((*matching_entry)
-          ->render_frame_host()
-          ->is_evicted_from_back_forward_cache())
+  if (render_frame_host->is_evicted_from_back_forward_cache())
     return nullptr;
 
   return (*matching_entry).get();
@@ -1300,17 +1247,6 @@ void BackForwardCacheImpl::DestroyEvictedFrames() {
 
   base::EraseIf(entries_, [this](std::unique_ptr<Entry>& entry) {
     if (entry->render_frame_host()->is_evicted_from_back_forward_cache()) {
-      // We need to update the not restored reasons to include cache-control:
-      // no-store related reasons before evicting. Because at this point, we
-      // have not recorded cache-control:no-store related reasons so that the
-      // page can temporarily enter bfcache.
-      BackForwardCacheCanStoreDocumentResult can_store;
-      UpdateCanStoreToIncludeCacheControlNoStore(can_store,
-                                                 entry->render_frame_host());
-      if (auto* metrics =
-              entry->render_frame_host()->GetBackForwardCacheMetrics()) {
-        metrics->MarkNotRestoredWithReason(can_store);
-      }
       RemoveProcessesForEntry(*entry);
       return true;
     }
@@ -1416,11 +1352,6 @@ bool BackForwardCacheImpl::IsProxyInBackForwardCacheForDebugging(
   return false;
 }
 
-bool BackForwardCacheImpl::IsMediaSessionPlaybackStateChangedAllowed() {
-  return base::FeatureList::IsEnabled(
-      kBackForwardCacheMediaSessionPlaybackStateChange);
-}
-
 bool BackForwardCacheImpl::IsMediaSessionServiceAllowed() {
   return base::FeatureList::IsEnabled(
       features::kBackForwardCacheMediaSessionService);
@@ -1461,6 +1392,21 @@ BackForwardCacheCanStoreTreeResult::~BackForwardCacheCanStoreTreeResult() =
 void BackForwardCacheCanStoreTreeResult::AddReasonsToSubtreeRootFrom(
     const BackForwardCacheCanStoreDocumentResult& result) {
   document_result_.AddReasonsFrom(result);
+}
+
+const BackForwardCacheCanStoreDocumentResult
+BackForwardCacheCanStoreTreeResult::FlattenTree() {
+  BackForwardCacheCanStoreDocumentResult document_result;
+  FlattenTreeHelper(&document_result);
+  return document_result;
+}
+
+void BackForwardCacheCanStoreTreeResult::FlattenTreeHelper(
+    BackForwardCacheCanStoreDocumentResult* document_result) {
+  document_result->AddReasonsFrom(document_result_);
+  for (const auto& subtree : GetChildren()) {
+    subtree->FlattenTreeHelper(document_result);
+  }
 }
 
 std::unique_ptr<BackForwardCacheCanStoreTreeResult>

@@ -128,7 +128,7 @@ class AppMenuItemViewBinder {
                 checkbox.setChecked(checked);
                 ApiCompatibilityUtils.setImageTintList(checkbox,
                         AppCompatResources.getColorStateList(
-                                checkbox.getContext(), R.color.selection_control_button_tint));
+                                checkbox.getContext(), R.color.selection_control_button_tint_list));
                 setupMenuButton(checkbox, buttonModel, appMenuClickHandler);
             } else if (subIcon != null) {
                 // Display an icon alongside the MenuItem.
@@ -181,8 +181,9 @@ class AppMenuItemViewBinder {
                 setupImageButton(buttons[i], iconList.get(i).model, appMenuClickHandler);
             }
 
-            view.setTag(
-                    R.id.menu_item_enter_anim_id, AppMenuUtil.buildIconItemEnterAnimator(buttons));
+            boolean isMenuIconAtStart = model.get(AppMenuItemProperties.MENU_ICON_AT_START);
+            view.setTag(R.id.menu_item_enter_anim_id,
+                    AppMenuUtil.buildIconItemEnterAnimator(buttons, isMenuIconAtStart));
 
             // Tint action bar's background.
             view.setBackgroundResource(R.drawable.menu_action_bar_bg);

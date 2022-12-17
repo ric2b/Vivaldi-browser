@@ -58,7 +58,7 @@ const int kVerticalClockLeftPadding = 9;
 
 // Padding between the left/right edge of the shelf and the left edge of the
 // vertical clock with date.
-const int kVerticalDateClockHorizontalPadding = 4;
+const int kVerticalDateClockHorizontalPadding = 8;
 
 // Padding on top/bottom of the vertical clock date view.
 const int kVerticalDateVerticalPadding = 2;
@@ -108,9 +108,7 @@ void VerticalDateView::OnThemeChanged() {
 
 void VerticalDateView::UpdateText() {
   const std::u16string new_text = calendar_utils::GetDayIntOfMonth(
-      base::Time::Now() +
-      base::Minutes(
-          calendar_utils::GetTimeDifferenceInMinutes(base::Time::Now())));
+      base::Time::Now() + calendar_utils::GetTimeDifference(base::Time::Now()));
   if (text_label_->GetText() == new_text)
     return;
   text_label_->SetText(new_text);

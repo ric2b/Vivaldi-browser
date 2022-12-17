@@ -397,9 +397,12 @@ void InputMethodController::DispatchBeforeInputFromComposition(
     return;
   // TODO(editing-dev): Pass appropriate |ranges| after it's defined on spec.
   // http://w3c.github.io/editing/input-events.html#dom-inputevent-inputtype
+  const StaticRangeVector* ranges = nullptr;
+  if (auto* node = target->ToNode())
+    ranges = TargetRangesForInputEvent(*node);
   InputEvent* before_input_event = InputEvent::CreateBeforeInput(
       input_type, data, InputTypeIsCancelable(input_type),
-      InputEvent::EventIsComposing::kIsComposing, nullptr);
+      InputEvent::EventIsComposing::kIsComposing, ranges);
   target->DispatchEvent(*before_input_event);
 }
 
@@ -1581,7 +1584,8 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
 
   // TODO(editing-dev): The use of UpdateStyleAndLayout
   // needs to be audited.  see http://crbug.com/590369 for more details.
-  GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kEditing);
+  const EphemeralRange& first_range = FirstEphemeralRangeOf(
+      GetFrame().Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
 
   DocumentLifecycle::DisallowTransitionScope disallow_transition(
       GetDocument().Lifecycle());
@@ -1594,8 +1598,6 @@ WebTextInputInfo InputMethodController::TextInputInfo() const {
   if (info.value.IsEmpty())
     return info;
 
-  const EphemeralRange& first_range = FirstEphemeralRangeOf(
-      GetFrame().Selection().ComputeVisibleSelectionInDOMTreeDeprecated());
   const PlainTextRange& selection_plain_text_range =
       cached_text_input_info_.GetSelection(first_range);
   if (selection_plain_text_range.IsNotNull()) {

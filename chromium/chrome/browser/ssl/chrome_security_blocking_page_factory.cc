@@ -85,7 +85,7 @@ bool IsEnterpriseManaged() {
   }
 
 #if BUILDFLAG(IS_WIN)
-  if (base::IsMachineExternallyManaged()) {
+  if (base::IsManagedOrEnterpriseDevice()) {
     return true;
   }
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
@@ -325,7 +325,7 @@ void ChromeSecurityBlockingPageFactory::DoChromeSpecificSetup(
         report->AddChromeChannel(chrome::GetChannel());
 
 #if BUILDFLAG(IS_WIN)
-        report->SetIsEnterpriseManaged(base::IsMachineExternallyManaged());
+        report->SetIsEnterpriseManaged(IsEnterpriseManaged());
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
         report->SetIsEnterpriseManaged(g_browser_process->platform_part()
                                            ->browser_policy_connector_ash()

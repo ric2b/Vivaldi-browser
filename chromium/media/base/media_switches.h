@@ -55,6 +55,7 @@ MEDIA_EXPORT extern const char kEnableProtectedVideoBuffers[];
 MEDIA_EXPORT extern const char kForceProtectedVideoOutputBuffers[];
 MEDIA_EXPORT extern const char kDisableAudioInput[];
 MEDIA_EXPORT extern const char kUseOverlaysForVideo[];
+MEDIA_EXPORT extern const char kAudioCapturerWithEchoCancellation[];
 #endif
 
 #if defined(USE_CRAS)
@@ -87,12 +88,7 @@ MEDIA_EXPORT extern const char kOverrideEnabledCdmInterfaceVersion[];
 MEDIA_EXPORT extern const char kOverrideHardwareSecureCodecsForTesting[];
 MEDIA_EXPORT extern const char kEnableLiveCaptionPrefForTesting[];
 
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-MEDIA_EXPORT extern const char kEnableClearHevcForTesting[];
-#endif
-
 #if BUILDFLAG(IS_CHROMEOS)
-MEDIA_EXPORT extern const char kLacrosEnablePlatformEncryptedHevc[];
 MEDIA_EXPORT extern const char kLacrosEnablePlatformHevc[];
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedMedia[];
 MEDIA_EXPORT extern const char kLacrosUseChromeosProtectedAv1[];
@@ -131,6 +127,10 @@ MEDIA_EXPORT extern const base::FeatureParam<int>
     kChromeWideEchoCancellationProcessingFifoSize;
 MEDIA_EXPORT extern const base::FeatureParam<bool>
     kChromeWideEchoCancellationMinimizeResampling;
+MEDIA_EXPORT extern const base::FeatureParam<double>
+    kChromeWideEchoCancellationDynamicMixingTimeout;
+MEDIA_EXPORT extern const base::FeatureParam<bool>
+    kChromeWideEchoCancellationAllowAllSampleRates;
 #endif
 MEDIA_EXPORT extern const base::Feature kD3D11VideoDecoderUseSharedHandle;
 MEDIA_EXPORT extern const base::Feature kEnableTabMuting;
@@ -170,8 +170,13 @@ MEDIA_EXPORT extern const base::Feature kMediaPowerExperiment;
 MEDIA_EXPORT extern const base::Feature kMediaSessionWebRTC;
 MEDIA_EXPORT extern const base::Feature kMemoryPressureBasedSourceBufferGC;
 MEDIA_EXPORT extern const base::Feature kMultiPlaneVideoCaptureSharedImages;
+MEDIA_EXPORT extern const base::Feature kOpenscreenCastStreamingSession;
 MEDIA_EXPORT extern const base::Feature kOverlayFullscreenVideo;
 MEDIA_EXPORT extern const base::Feature kPictureInPicture;
+MEDIA_EXPORT extern const base::Feature kPlatformAudioEncoder;
+#if BUILDFLAG(ENABLE_PLATFORM_HEVC)
+MEDIA_EXPORT extern const base::Feature kPlatformHEVCDecoderSupport;
+#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC)
 MEDIA_EXPORT extern const base::Feature kPlaybackSpeedButton;
 MEDIA_EXPORT extern const base::Feature kPreloadMediaEngagementData;
 MEDIA_EXPORT extern const base::Feature kPreloadMetadataLazyLoad;
@@ -179,7 +184,6 @@ MEDIA_EXPORT extern const base::Feature kPreloadMetadataSuspend;
 MEDIA_EXPORT extern const base::Feature kRecordMediaEngagementScores;
 MEDIA_EXPORT extern const base::Feature kRecordWebAudioEngagement;
 MEDIA_EXPORT extern const base::Feature kResumeBackgroundVideo;
-MEDIA_EXPORT extern const base::Feature kReuseMediaPlayer;
 MEDIA_EXPORT extern const base::Feature kRevokeMediaSourceObjectURLOnAttach;
 MEDIA_EXPORT extern const base::Feature
     kShareThisTabInsteadButtonGetDisplayMedia;
@@ -187,7 +191,6 @@ MEDIA_EXPORT extern const base::Feature
     kShareThisTabInsteadButtonGetDisplayMediaAudio;
 MEDIA_EXPORT extern const base::Feature kSpeakerChangeDetection;
 MEDIA_EXPORT extern const base::Feature kSpecCompliantCanPlayThrough;
-MEDIA_EXPORT extern const base::Feature kSurfaceLayerForMediaStreams;
 MEDIA_EXPORT extern const base::Feature kSuspendMutedAudio;
 MEDIA_EXPORT extern const base::Feature kUnifiedAutoplay;
 MEDIA_EXPORT extern const base::Feature kUseAndroidOverlayForSecureOnly;
@@ -198,6 +201,7 @@ MEDIA_EXPORT extern const base::Feature kUseR16Texture;
 #if BUILDFLAG(IS_LINUX)
 MEDIA_EXPORT extern const base::Feature kVaapiVideoDecodeLinux;
 MEDIA_EXPORT extern const base::Feature kVaapiVideoEncodeLinux;
+MEDIA_EXPORT extern const base::Feature kVaapiIgnoreDriverChecks;
 #endif  // BUILDFLAG(IS_LINUX)
 MEDIA_EXPORT extern const base::Feature kVaapiAV1Decoder;
 MEDIA_EXPORT extern const base::Feature kVaapiLowPowerEncoderGen9x;
@@ -214,6 +218,7 @@ MEDIA_EXPORT extern const base::Feature kVaapiVp9kSVCHWEncoding;
 MEDIA_EXPORT extern const base::Feature kVideoBlitColorAccuracy;
 MEDIA_EXPORT extern const base::Feature kVp9kSVCHWDecoding;
 MEDIA_EXPORT extern const base::Feature kWakeLockOptimisationHiddenMuted;
+MEDIA_EXPORT extern const base::Feature kWebContentsCaptureHiDpi;
 MEDIA_EXPORT extern const base::Feature kWebrtcMediaCapabilitiesParameters;
 MEDIA_EXPORT extern const base::Feature kResolutionBasedDecoderPriority;
 MEDIA_EXPORT extern const base::Feature kForceHardwareVideoDecoders;
@@ -236,6 +241,7 @@ MEDIA_EXPORT extern const base::Feature kUseRealColorSpaceForAndroidVideo;
 
 #if BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 MEDIA_EXPORT extern const base::Feature kUseChromeOSDirectVideoDecoder;
+MEDIA_EXPORT extern const base::Feature kLimitConcurrentDecoderInstances;
 #if defined(ARCH_CPU_ARM_FAMILY)
 MEDIA_EXPORT extern const base::Feature kPreferLibYuvImageProcessor;
 #endif  // defined(ARCH_CPU_ARM_FAMILY)
@@ -245,9 +251,6 @@ MEDIA_EXPORT extern const base::Feature kUseAlternateVideoDecoderImplementation;
 #endif  // BUILDFLAG(USE_CHROMEOS_MEDIA_ACCELERATION)
 
 #if BUILDFLAG(IS_MAC)
-#if BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
-MEDIA_EXPORT extern const base::Feature kVideoToolboxHEVCDecoding;
-#endif  // BUILDFLAG(ENABLE_PLATFORM_HEVC_DECODING)
 MEDIA_EXPORT extern const base::Feature kMultiPlaneVideoToolboxSharedImages;
 #endif  // BUILDFLAG(IS_MAC)
 
@@ -261,6 +264,8 @@ MEDIA_EXPORT extern const base::Feature kMediaFoundationAV1Encoding;
 // please use IsMediaFoundationH264CbpEncodingEnabled() instead.
 MEDIA_EXPORT extern const base::Feature kMediaFoundationH264CbpEncoding;
 
+MEDIA_EXPORT extern const base::Feature kMediaFoundationVP9Encoding;
+
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVideoCapture;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationVP8Decoding;
 
@@ -269,9 +274,30 @@ MEDIA_EXPORT extern const base::Feature kMediaFoundationVP8Decoding;
 MEDIA_EXPORT extern const base::Feature kMediaFoundationD3D11VideoCapture;
 
 MEDIA_EXPORT extern const base::Feature kMediaFoundationClearPlayback;
+MEDIA_EXPORT extern const base::Feature kAllowMediaFoundationFrameServerMode;
 MEDIA_EXPORT extern const base::Feature kWasapiRawAudioCapture;
-MEDIA_EXPORT extern const base::Feature kD3D11HEVCDecoding;
 MEDIA_EXPORT extern const base::Feature kD3D11Vp9kSVCHWDecoding;
+
+// Strategy affecting how Media Foundation Renderer determines its rendering
+// mode when used with clear video media. This strategy does not impact
+// protected media which must always use Direct Composition mode.
+enum class MediaFoundationClearRenderingStrategy {
+  // The renderer will operate in Direct Composition mode (e.g. windowless
+  // swapchain).
+  kDirectComposition,
+  // The renderer will operate in Frame Server mode.
+  kFrameServer,
+  // The renderer is allowed to switch between Direct Composition & Frame Server
+  // mode at its discretion.
+  kDynamic,
+};
+
+// Under this feature, a given MediaFoundationClearRenderingStrategy param is
+// used by the Media Foundation Renderer for Clear content scenarios.
+MEDIA_EXPORT extern const base::Feature kMediaFoundationClearRendering;
+MEDIA_EXPORT extern const base::FeatureParam<
+    MediaFoundationClearRenderingStrategy>
+    kMediaFoundationClearRenderingStrategyParam;
 #endif  // BUILDFLAG(IS_WIN)
 
 #if BUILDFLAG(IS_CHROMEOS)

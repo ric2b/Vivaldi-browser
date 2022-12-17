@@ -54,6 +54,7 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/boot_times_recorder.h"
 #include "chrome/browser/ash/settings/cros_settings.h"
+#include "chrome/browser/lifetime/application_lifetime_chromeos.h"
 #include "chromeos/dbus/power/power_policy_controller.h"
 #include "third_party/cros_system_api/dbus/service_constants.h"
 #include "ui/aura/env.h"
@@ -177,7 +178,7 @@ void AttemptRestartInternal(IgnoreUnloadHandlers ignore_unload_handlers) {
   // If an update is pending NotifyAndTerminate() will trigger a system reboot,
   // which in turn will send SIGTERM to Chrome, and that ends up processing
   // unload handlers.
-  if (browser_shutdown::UpdatePending()) {
+  if (UpdatePending()) {
     browser_shutdown::NotifyAndTerminate(true);
     return;
   }
@@ -337,25 +338,18 @@ void AttemptRestart() {
 }
 #endif  // !BUILDFLAG(IS_ANDROID)
 
+// The ChromeOS implementation is in application_lifetime_chromeos.cc
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 void AttemptRelaunch() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::PowerManagerClient::Get()->RequestRestart(
-      power_manager::REQUEST_RESTART_OTHER, "Chrome relaunch");
-  // If running the Chrome OS build, but we're not on the device, fall through.
-#endif
   AttemptRestart();
 }
 
 #if !BUILDFLAG(IS_ANDROID)
 void RelaunchIgnoreUnloadHandlers() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  chromeos::PowerManagerClient::Get()->RequestRestart(
-      power_manager::REQUEST_RESTART_OTHER, "Chrome relaunch");
-  // If running the Chrome OS build, but we're not on the device, fall through.
-#endif
   AttemptRestartInternal(IgnoreUnloadHandlers(true));
 }
-#endif
+#endif  // !BUILDFLAG(IS_ANDROID)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
 
 void AttemptExit() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -436,16 +430,16 @@ void SessionEnding() {
   // the same time or they would interfere with each other.
   absl::optional<ShutdownWatcherHelper> shutdown_watcher;
   absl::optional<base::WatchHangsInScope> watch_hangs_scope;
-  constexpr base::TimeDelta kShutdownHangDelay{base::Seconds(90)};
   if (base::HangWatcher::IsCrashReportingEnabled()) {
-    // Use ShutdownWatcherHelper logic to choose delay to get identical
-    // behavior.
-    watch_hangs_scope.emplace(
-        ShutdownWatcherHelper::GetPerChannelTimeout(kShutdownHangDelay));
+    // TODO(crbug.com/1327000): Migrate away from ShutdownWatcher and its old
+    // timing.
+    constexpr base::TimeDelta kShutdownHangDelay{base::Seconds(30)};
+    watch_hangs_scope.emplace(kShutdownHangDelay);
   } else {
     // Start watching for hang during shutdown, and crash it if takes too long.
     // We disarm when |shutdown_watcher| object is destroyed, which is when we
     // exit this function.
+    constexpr base::TimeDelta kShutdownHangDelay{base::Seconds(90)};
     shutdown_watcher.emplace();
     shutdown_watcher->Arm(kShutdownHangDelay);
   }

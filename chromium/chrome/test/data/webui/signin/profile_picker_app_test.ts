@@ -70,14 +70,15 @@ suite('ProfilePickerAppTest', function() {
         testElement.shadowRoot!.querySelector('profile-picker-main-view')!;
     await whenCheck(mainView, () => mainView.classList.contains('active'));
     await browserProxy.whenCalled('initializeMainView');
-    const wrapper =
-        mainView.shadowRoot!.querySelector<HTMLElement>('#wrapper')!;
-    assertTrue(wrapper.hidden);
+    const profilesContainer =
+        mainView.shadowRoot!.querySelector<HTMLElement>('#wrapper')!
+            .querySelector<HTMLElement>('#profilesContainer')!;
+    assertTrue(profilesContainer.hidden);
 
     webUIListenerCallback(
         'profiles-list-changed', [browserProxy.profileSample]);
     flushTasks();
-    assertEquals(wrapper.querySelectorAll('profile-card').length, 1);
+    assertEquals(profilesContainer.querySelectorAll('profile-card').length, 1);
     mainView.$.addProfile.click();
     await waitForProfileCreationLoad();
     assertEquals(
@@ -128,7 +129,7 @@ suite('ProfilePickerAppTest', function() {
     webUIListenerCallback('available-accounts-changed', []);
     flushTasks();
     choice!.$.signInButton.click();
-    return browserProxy.whenCalled('loadSignInProfileCreationFlow');
+    return browserProxy.whenCalled('selectAccountLacros');
   });
   // </if>
 
@@ -141,7 +142,7 @@ suite('ProfilePickerAppTest', function() {
     assertTrue(choice!.$.signInButton.disabled);
     assertTrue(choice!.$.notNowButton.disabled);
     assertTrue(choice!.$.backButton.disabled);
-    return browserProxy.whenCalled('loadSignInProfileCreationFlow');
+    return browserProxy.whenCalled('selectAccountLacros');
   });
 
   test('ThemeColorConsistentInProfileCreationViews', async function() {
@@ -215,6 +216,6 @@ suite('ProfilePickerAppTest', function() {
     const mainView =
         testElement.shadowRoot!.querySelector('profile-picker-main-view')!;
     await whenCheck(mainView, () => mainView.classList.contains('active'));
-    await browserProxy.whenCalled('loadSignInProfileCreationFlow');
+    await browserProxy.whenCalled('selectAccountLacros');
   });
 });

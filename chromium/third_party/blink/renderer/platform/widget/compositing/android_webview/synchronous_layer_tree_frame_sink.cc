@@ -30,7 +30,6 @@
 #include "components/viz/service/display/output_surface_frame.h"
 #include "components/viz/service/display/overlay_processor_stub.h"
 #include "components/viz/service/display/software_output_device.h"
-#include "components/viz/service/display/texture_deleter.h"
 #include "components/viz/service/frame_sinks/compositor_frame_sink_support.h"
 #include "components/viz/service/frame_sinks/frame_sink_manager_impl.h"
 #include "gpu/command_buffer/client/context_support.h"
@@ -109,19 +108,9 @@ class SynchronousLayerTreeFrameSink::SoftwareOutputSurface
   void BindToClient(viz::OutputSurfaceClient* client) override {}
   void EnsureBackbuffer() override {}
   void DiscardBackbuffer() override {}
-  void BindFramebuffer() override {}
   void SwapBuffers(viz::OutputSurfaceFrame frame) override {}
-  void Reshape(const gfx::Size& size,
-               float scale_factor,
-               const gfx::ColorSpace& color_space,
-               gfx::BufferFormat format,
-               bool use_stencil) override {}
-  uint32_t GetFramebufferCopyTextureFormat() override { return 0; }
+  void Reshape(const ReshapeParams& params) override {}
   bool IsDisplayedAsOverlayPlane() const override { return false; }
-  unsigned GetOverlayTextureId() const override { return 0; }
-  bool HasExternalStencilTest() const override { return false; }
-  void ApplyExternalStencil() override {}
-  unsigned UpdateGpuFence() override { return 0; }
   void SetUpdateVSyncParametersCallback(
       viz::UpdateVSyncParametersCallback callback) override {}
   void SetDisplayTransformHint(gfx::OverlayTransform transform) override {}
@@ -391,6 +380,14 @@ void SynchronousLayerTreeFrameSink::SubmitCompositorFrame(
                                        /*release_fence=*/gfx::GpuFenceHandle());
     display_->DidReceivePresentationFeedback(
         gfx::PresentationFeedback::Failure());
+
+    viz::FrameTimingDetails details;
+    details.received_compositor_frame_timestamp = now;
+    details.draw_start_timestamp = now;
+    details.swap_timings = {now, now, now, now};
+    details.presentation_feedback = {now, base::TimeDelta(), 0};
+    client_->DidPresentCompositorFrame(submit_frame->metadata.frame_token,
+                                       details);
   } else {
     if (viz_frame_submission_enabled_) {
       frame.metadata.begin_frame_ack =

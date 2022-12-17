@@ -1,6 +1,8 @@
 import("//vivaldi/gn/config/features.gni")
 import("//vivaldi/gn/config/locales.gni")
 import("//build/config/locales.gni")
+import("//chrome/common/features.gni")
+import("//tools/grit/grit_args.gni")
 
 import("//vivaldi/app/resources/generate_untranslated.gni")
 
@@ -32,6 +34,11 @@ template("vivaldi_extract_untranslated") {
   if (!defined(grit_defines)) {
     grit_defines = []
   }
+  grit_defines += grit_args
+  foreach(def, chrome_grit_defines + ["is_cfm=false"]) {
+    grit_defines += ["-D", def]
+  }
+
   assert(defined(source_translations))
   if (defined(vivaldi_source)) {
     assert(defined(vivaldi_translations))

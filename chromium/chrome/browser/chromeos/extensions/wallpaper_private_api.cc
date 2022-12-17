@@ -13,6 +13,7 @@
 #include "ash/public/cpp/wallpaper/wallpaper_controller.h"
 #include "ash/webui/personalization_app/proto/backdrop_wallpaper.pb.h"
 #include "base/bind.h"
+#include "base/callback_helpers.h"
 #include "base/command_line.h"
 #include "base/containers/span.h"
 #include "base/files/file_enumerator.h"
@@ -52,6 +53,7 @@
 #include "url/gurl.h"
 
 using base::Value;
+using wallpaper_api_util::GenerateThumbnail;
 namespace wallpaper_base = extensions::api::wallpaper;
 namespace wallpaper_private = extensions::api::wallpaper_private;
 namespace set_wallpaper_if_exists = wallpaper_private::SetWallpaperIfExists;
@@ -245,11 +247,13 @@ void WallpaperPrivateGetSyncSettingFunction::CheckSyncServiceStatus() {
 
   if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     // When the sync settings categorization is on, the wallpaper sync status is
-    // stored in the kSyncOsWallpaper pref. The pref value essentially means
-    // "themes sync is on" && "apps sync is on".
+    // stored in the kSyncOsWallpaper pref.
+    syncer::SyncUserSettings* user_settings = sync_service->GetUserSettings();
+    bool all_os_types_enabled = user_settings->IsSyncAllOsTypesEnabled();
     bool os_wallpaper_sync_enabled = profile->GetPrefs()->GetBoolean(
         chromeos::settings::prefs::kSyncOsWallpaper);
-    dict->SetBoolKey(kSyncThemes, os_wallpaper_sync_enabled);
+    dict->SetBoolKey(kSyncThemes,
+                     all_os_types_enabled || os_wallpaper_sync_enabled);
     Respond(OneArgument(base::Value::FromUniquePtrValue(std::move(dict))));
     return;
   }
@@ -330,10 +334,10 @@ void WallpaperPrivateSetWallpaperIfExistsFunction::
   if (file_exists) {
     Respond(OneArgument(base::Value(true)));
   } else {
-    auto args = std::make_unique<base::ListValue>();
+    std::vector<base::Value> args;
     // TODO(crbug.com/830212): Do not send arguments when the function fails.
     // Call sites should inspect chrome.runtime.lastError instead.
-    args->Append(false);
+    args.emplace_back(false);
     Respond(ErrorWithArguments(
         std::move(args), "The wallpaper doesn't exist in local file system."));
   }
@@ -391,7 +395,7 @@ WallpaperPrivateResetWallpaperFunction::Run() {
       user_manager::UserManager::Get()->GetActiveUser()->GetAccountId();
 
   WallpaperControllerClientImpl::Get()->SetDefaultWallpaper(
-      account_id, true /* show_wallpaper */);
+      account_id, true /* show_wallpaper */, base::DoNothing());
   return RespondNow(NoArguments());
 }
 
@@ -425,7 +429,7 @@ void WallpaperPrivateSetCustomWallpaperFunction::OnWallpaperDecoded(
       base::FilePath(params->file_name).BaseName().value();
   WallpaperControllerClientImpl::Get()->SetCustomWallpaper(
       account_id_, file_name, layout, image, params->preview_mode);
-  unsafe_wallpaper_decoder_ = nullptr;
+  wallpaper_decoder_ = nullptr;
 
   if (params->generate_thumbnail) {
     image.EnsureRepsForSupportedScales();

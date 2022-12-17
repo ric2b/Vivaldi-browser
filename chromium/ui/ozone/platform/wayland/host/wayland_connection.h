@@ -49,6 +49,7 @@ class WaylandSeat;
 class WaylandShm;
 class WaylandZAuraShell;
 class WaylandZcrCursorShapes;
+class WaylandZcrTouchpadHaptics;
 class WaylandZwpPointerConstraints;
 class WaylandZwpPointerGestures;
 class WaylandZwpRelativePointerManager;
@@ -125,6 +126,11 @@ class WaylandConnection {
   xdg_wm_base* shell() const { return shell_.get(); }
   zxdg_shell_v6* shell_v6() const { return shell_v6_.get(); }
   wp_presentation* presentation() const { return presentation_.get(); }
+  zwp_keyboard_shortcuts_inhibit_manager_v1*
+  keyboard_shortcuts_inhibit_manager_v1() const {
+    return keyboard_shortcuts_inhibit_manager_v1_.get();
+  }
+  zcr_stylus_v2* stylus_v2() const { return zcr_stylus_v2_.get(); }
   zwp_text_input_manager_v1* text_input_manager_v1() const {
     return text_input_manager_v1_.get();
   }
@@ -177,6 +183,10 @@ class WaylandConnection {
 
   WaylandZcrCursorShapes* zcr_cursor_shapes() const {
     return zcr_cursor_shapes_.get();
+  }
+
+  WaylandZcrTouchpadHaptics* zcr_touchpad_haptics() const {
+    return zcr_touchpad_haptics_.get();
   }
 
   WaylandZwpLinuxDmabuf* zwp_dmabuf() const { return zwp_dmabuf_.get(); }
@@ -286,6 +296,9 @@ class WaylandConnection {
            tablet_layout_state_ == display::TabletState::kEnteringTabletMode;
   }
 
+  const gfx::PointF MaybeConvertLocation(const gfx::PointF& location,
+                                         const WaylandWindow* window) const;
+
  private:
   friend class WaylandConnectionTestApi;
 
@@ -306,6 +319,7 @@ class WaylandConnection {
   friend class WaylandSeat;
   friend class WaylandShm;
   friend class WaylandZAuraShell;
+  friend class WaylandZcrTouchpadHaptics;
   friend class WaylandZwpLinuxDmabuf;
   friend class WaylandZwpPointerConstraints;
   friend class WaylandZwpPointerGestures;
@@ -359,6 +373,9 @@ class WaylandConnection {
   wl::Object<wp_viewporter> viewporter_;
   wl::Object<zcr_alpha_compositing_v1> alpha_compositing_;
   wl::Object<zcr_keyboard_extension_v1> keyboard_extension_v1_;
+  wl::Object<zwp_keyboard_shortcuts_inhibit_manager_v1>
+      keyboard_shortcuts_inhibit_manager_v1_;
+  wl::Object<zcr_stylus_v2> zcr_stylus_v2_;
   wl::Object<zwp_text_input_manager_v1> text_input_manager_v1_;
   wl::Object<zcr_text_input_extension_v1> text_input_extension_v1_;
   wl::Object<zwp_linux_explicit_synchronization_v1>
@@ -368,7 +385,7 @@ class WaylandConnection {
   wl::Object<zxdg_output_manager_v1> xdg_output_manager_;
 
   // Manages Wayland windows.
-  WaylandWindowManager wayland_window_manager_;
+  WaylandWindowManager wayland_window_manager_{this};
 
   // Event source instance. Must be declared before input objects so it
   // outlives them so thus being able to properly handle their destruction.
@@ -380,6 +397,7 @@ class WaylandConnection {
   std::unique_ptr<WaylandCursorPosition> wayland_cursor_position_;
   std::unique_ptr<WaylandZAuraShell> zaura_shell_;
   std::unique_ptr<WaylandZcrCursorShapes> zcr_cursor_shapes_;
+  std::unique_ptr<WaylandZcrTouchpadHaptics> zcr_touchpad_haptics_;
   std::unique_ptr<WaylandZwpPointerConstraints>
       wayland_zwp_pointer_constraints_;
   std::unique_ptr<WaylandZwpRelativePointerManager>

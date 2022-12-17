@@ -4,7 +4,6 @@
 
 #include "content/browser/quota/quota_internals_ui.h"
 
-#include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/grit/quota_internals_resources.h"
 #include "content/grit/quota_internals_resources_map.h"
 #include "content/public/browser/render_frame_host.h"
@@ -12,6 +11,7 @@
 #include "content/public/browser/web_ui.h"
 #include "content/public/browser/web_ui_data_source.h"
 #include "content/public/common/bindings_policy.h"
+#include "content/public/common/url_constants.h"
 #include "storage/browser/quota/quota_internals.mojom.h"
 
 namespace content {
@@ -29,6 +29,10 @@ QuotaInternalsUI::QuotaInternalsUI(WebUI* web_ui) : WebUIController(web_ui) {
   source->OverrideContentSecurityPolicy(
       network::mojom::CSPDirectiveName::ScriptSrc,
       "script-src chrome://resources 'self';");
+
+  source->OverrideContentSecurityPolicy(
+      network::mojom::CSPDirectiveName::TrustedTypes,
+      "trusted-types static-types;");
 }
 
 WEB_UI_CONTROLLER_TYPE_IMPL(QuotaInternalsUI)

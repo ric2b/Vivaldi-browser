@@ -22,15 +22,17 @@ const base::Feature kConfirmSuggestionRemovals{
 const base::Feature kCacheOneGoogleBar{"CacheOneGoogleBar",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
 
+// Enables the removal of the NTP background scrim and forced dark foreground
+// colors for a specific subset of Chrome Web Store themes (see
+// crbug.com/1329552). This is enabled by default to allow finch to disable this
+// NTP treatment in the case of unexpected regressions.
+const base::Feature kCwsScrimRemoval{"CwsScrimRemoval",
+                                     base::FEATURE_ENABLED_BY_DEFAULT};
+
 // If enabled, "middle slot" promos on the bottom of the NTP will show a dismiss
 // UI that allows users to close them and not see them again.
 const base::Feature kDismissPromos{"DismissNtpPromos",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, queries that are frequently repeated by the user (and are
-// expected to be issued again) are shown as most visited tiles.
-const base::Feature kNtpRepeatableQueries{"NtpRepeatableQueries",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
 
 // If enabled, the NTP "realbox" will be themed like the omnibox
 // (same background/text/selected/hover colors).
@@ -70,12 +72,17 @@ const base::Feature kNtpShortcuts{"NtpShortcuts",
 const base::Feature kNtpMiddleSlotPromo{"NtpMiddleSlotPromo",
                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
-// If enabled, modules will be shown.
-const base::Feature kModules{"NtpModules", base::FEATURE_DISABLED_BY_DEFAULT};
+// Dummy feature to set param "NtpModulesLoadTimeoutMillisecondsParam".
+const base::Feature kNtpModulesLoadTimeoutMilliseconds{
+    "NtpModulesLoadTimeoutMilliseconds", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// If enabled, modules will be loaded even if kModules is disabled. This is
-// useful to determine if a user would have seen modules in order to
-// counterfactually log or trigger.
+// Dummy feature to set param "NtpModulesOrderParam".
+const base::Feature kNtpModulesOrder{"NtpModulesOrder",
+                                     base::FEATURE_DISABLED_BY_DEFAULT};
+
+// If enabled, modules will be loaded but not shown. This is useful to determine
+// if a user would have seen modules in order to counterfactually log or
+// trigger.
 const base::Feature kNtpModulesLoad{"NtpModulesLoad",
                                     base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -120,6 +127,12 @@ const base::Feature kNtpPhotosModuleCustomizedOptInArtWork{
 // If enabled, Google Photos opt-in card will show a button to soft opt-out.
 const base::Feature kNtpPhotosModuleSoftOptOut(
     "NtpPhotosModuleSoftOptOut",
+    base::FEATURE_DISABLED_BY_DEFAULT);
+
+// If enabled, the single svg image show in Photos opt-in screen will be
+// replaced by constituent images to support i18n.
+const base::Feature kNtpPhotosModuleSplitSvgOptInArtWork(
+    "NtpPhotosModuleSplitSvgOptInArtWork",
     base::FEATURE_DISABLED_BY_DEFAULT);
 
 // If enabled, SafeBrowsing module will be shown to a target user.
@@ -172,7 +185,8 @@ const char kRealboxMatchSearchboxThemeParam[] =
 
 base::TimeDelta GetModulesLoadTimeout() {
   std::string param_value = base::GetFieldTrialParamValueByFeature(
-      kModules, kNtpModulesLoadTimeoutMillisecondsParam);
+      kNtpModulesLoadTimeoutMilliseconds,
+      kNtpModulesLoadTimeoutMillisecondsParam);
   // If the field trial param is not found or cannot be parsed to an unsigned
   // integer, return the default value.
   unsigned int param_value_as_int = 0;
@@ -183,10 +197,10 @@ base::TimeDelta GetModulesLoadTimeout() {
 }
 
 std::vector<std::string> GetModulesOrder() {
-  return base::SplitString(
-      base::GetFieldTrialParamValueByFeature(kModules, kNtpModulesOrderParam),
-      ",:;", base::WhitespaceHandling::TRIM_WHITESPACE,
-      base::SplitResult::SPLIT_WANT_NONEMPTY);
+  return base::SplitString(base::GetFieldTrialParamValueByFeature(
+                               kNtpModulesOrder, kNtpModulesOrderParam),
+                           ",:;", base::WhitespaceHandling::TRIM_WHITESPACE,
+                           base::SplitResult::SPLIT_WANT_NONEMPTY);
 }
 
 }  // namespace ntp_features

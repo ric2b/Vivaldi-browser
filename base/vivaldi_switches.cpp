@@ -14,9 +14,14 @@ const char kDebugVivaldi[] = "debug-vivaldi";
 const char kDisableVivaldi[] = "disable-vivaldi";
 const char kRunningVivaldi[] = "running-vivaldi";
 
-// Disable platform media IPC demuxer and rely instead on FmpegDemuxer and
-// individual codecs to work together.
-const char kVivaldiDisableIPCDemuxer[] = "disable-ipc-demuxer";
+// Enable platform media IPC demuxer that was used previously to play mpeg4
+// media. Nowadays individual platform audio and video decoders should work and
+// support more cases, but for testing the older code can be enabled.
+const char kVivaldiEnableIPCDemuxer[] = "enable-ipc-demuxer";
+
+// Enable older platform audio decoders implemented via Chromium AudioDecoder
+// API to replace decoders integrated with FFmpeg.
+const char kVivaldiOldPlatformAudio[] = "old-platform-audio";
 
 // Use this on Mac to force a particular media pipeline implementation. The
 // alloweed values are player to force older AVPlayer based code and reader to

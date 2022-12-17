@@ -37,6 +37,7 @@
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node.h"
+#include "third_party/blink/renderer/core/dom/tree_scope.h"
 #include "third_party/blink/renderer/core/frame/local_dom_window.h"
 #include "third_party/blink/renderer/core/html/html_link_element.h"
 #include "third_party/blink/renderer/core/html/html_style_element.h"
@@ -165,19 +166,15 @@ CSSStyleSheet::CSSStyleSheet(StyleSheetContents* contents,
   ClearOwnerNode();
   ClearOwnerRule();
   Contents()->RegisterClient(this);
-  scoped_refptr<MediaQuerySet> media_query_set;
   switch (options->media()->GetContentType()) {
     case V8UnionMediaListOrString::ContentType::kMediaList:
-      media_query_set = options->media()->GetAsMediaList()->Queries()->Copy();
+      media_queries_ = options->media()->GetAsMediaList()->Queries();
       break;
     case V8UnionMediaListOrString::ContentType::kString:
-      media_query_set = MediaQuerySet::Create(options->media()->GetAsString(),
-                                              document.GetExecutionContext());
+      media_queries_ = MediaQuerySet::Create(options->media()->GetAsString(),
+                                             document.GetExecutionContext());
       break;
   }
-  auto* media_list = MakeGarbageCollected<MediaList>(
-      media_query_set, const_cast<CSSStyleSheet*>(this));
-  SetMedia(media_list);
   if (options->alternate())
     SetAlternateFromConstructor(true);
   if (options->disabled())
@@ -291,13 +288,6 @@ void CSSStyleSheet::setDisabled(bool disabled) {
   DidMutate(Mutation::kSheet);
 }
 
-void CSSStyleSheet::SetMediaQueries(
-    scoped_refptr<MediaQuerySet> media_queries) {
-  media_queries_ = std::move(media_queries);
-  if (media_cssom_wrapper_ && media_queries_)
-    media_cssom_wrapper_->Reattach(media_queries_.get());
-}
-
 bool CSSStyleSheet::MatchesMediaQueries(const MediaQueryEvaluator& evaluator) {
   viewport_dependent_media_query_results_.clear();
   device_dependent_media_query_results_.clear();
@@ -310,6 +300,14 @@ bool CSSStyleSheet::MatchesMediaQueries(const MediaQueryEvaluator& evaluator) {
       MediaQueryEvaluator::Results{&viewport_dependent_media_query_results_,
                                    &device_dependent_media_query_results_,
                                    &media_query_unit_flags_});
+}
+
+void CSSStyleSheet::AddedAdoptedToTreeScope(TreeScope& tree_scope) {
+  adopted_tree_scopes_.insert(&tree_scope);
+}
+
+void CSSStyleSheet::RemovedAdoptedFromTreeScope(TreeScope& tree_scope) {
+  adopted_tree_scopes_.erase(&tree_scope);
 }
 
 bool CSSStyleSheet::HasDynamicViewportDependentMediaQueries() const {
@@ -522,16 +520,9 @@ bool CSSStyleSheet::IsLoading() const {
 MediaList* CSSStyleSheet::media() {
   if (!media_queries_)
     media_queries_ = MediaQuerySet::Create();
-
-  if (!media_cssom_wrapper_) {
-    media_cssom_wrapper_ = MakeGarbageCollected<MediaList>(
-        media_queries_.get(), const_cast<CSSStyleSheet*>(this));
-  }
+  if (!media_cssom_wrapper_)
+    media_cssom_wrapper_ = MakeGarbageCollected<MediaList>(this);
   return media_cssom_wrapper_.Get();
-}
-
-void CSSStyleSheet::SetMedia(MediaList* media_list) {
-  media_cssom_wrapper_ = media_list;
 }
 
 CSSStyleSheet* CSSStyleSheet::parentStyleSheet() const {
@@ -631,6 +622,9 @@ bool CSSStyleSheet::CanBeActivated(
 
 void CSSStyleSheet::Trace(Visitor* visitor) const {
   visitor->Trace(contents_);
+  visitor->Trace(media_queries_);
+  visitor->Trace(viewport_dependent_media_query_results_);
+  visitor->Trace(device_dependent_media_query_results_);
   visitor->Trace(owner_node_);
   visitor->Trace(owner_rule_);
   visitor->Trace(media_cssom_wrapper_);

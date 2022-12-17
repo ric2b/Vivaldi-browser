@@ -1,29 +1,5 @@
 
-update_template_instance("//base:base") {
-  if (!defined(sources)) {
-    sources = []
-  }
-  sources += [
-    "//vivaldi/base/vivaldi_running.cpp",
-    "//vivaldi/base/vivaldi_user_agent.cc",
-    "//vivaldi/base/vivaldi_user_agent.h",
-    "//vivaldi/base/vivaldi_user_agent_white_list.inc",
-  ]
-}
-
-update_target("//base:base_static") {
-  sources += [
-    "//vivaldi/base/vivaldi_switches.cpp",
-    "//vivaldi/base/vivaldi_switches.h",
-  ]
-  if (is_linux) {
-    configs += [
-      "//base:base_implementation",
-    ]
-  }
-}
-
-if (!is_android && !(is_linux && (target_cpu == "x86" || target_cpu == "arm" || target_cpu == "arm64")) &&
+if (!is_ios && !is_android && !(is_linux && (target_cpu == "x86" || target_cpu == "arm" || target_cpu == "arm64")) &&
     !(is_mac && target_cpu == "arm64")) {
   update_target("//base/test:test_support") {
     sources += [

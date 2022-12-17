@@ -16,6 +16,7 @@
 #include "base/gtest_prod_util.h"
 #include "base/observer_list.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chromeos/ui/base/window_state_type.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/aura/window_observer.h"
@@ -134,6 +135,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool IsPinned() const;
   bool IsTrustedPinned() const;
   bool IsPip() const;
+  bool IsFloated() const;
 
   // True if the window's state type is chromeos::WindowStateType::kMaximized,
   // chromeos::WindowStateType::kFullscreen or
@@ -234,8 +236,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // by this object and the returned object will be owned by the caller.
   std::unique_ptr<State> SetStateObject(std::unique_ptr<State> new_state);
 
-  // Updates |snap_ratio_| based on |event|.
-  void UpdateSnapRatio(const WMEvent* event);
+  // Updates |snap_ratio_| iff |event| is a snapping event or bounds event.
+  void MaybeUpdateSnapRatio(const WMEvent* event);
   absl::optional<float> snap_ratio() const { return snap_ratio_; }
 
   // True if the window should be unminimized to the restore bounds, as
@@ -374,6 +376,10 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Returns the window state to restore to from the current window state.
   chromeos::WindowStateType GetRestoreWindowState() const;
 
+  // Called when `window_` is dragged to maximized to track if it's a
+  // mis-triggered drag to maximize behavior.
+  void TrackDragToMaximizeBehavior();
+
   // Returns a pointer to DragDetails during drag operations.
   const DragDetails* drag_details() const { return drag_details_.get(); }
   DragDetails* drag_details() { return drag_details_.get(); }
@@ -401,6 +407,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   friend class LockWindowState;
   friend class TabletModeWindowState;
   friend class ScopedBoundsChangeAnimation;
+  friend class WorkspaceWindowResizerTest;
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest, CrossFadeToBounds);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest, CrossFadeHistograms);
   FRIEND_TEST_ALL_PREFIXES(WindowAnimationsTest,
@@ -454,7 +461,7 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   // Adjusts the |bounds| so that they are flush with the edge of the
   // workspace in clamshell mode if the window represented by |window_state|
   // is side snapped. It is called for workspace events.
-  void AdjustSnappedBounds(gfx::Rect* bounds);
+  void AdjustSnappedBoundsForDisplayWorkspaceChange(gfx::Rect* bounds);
 
   // Updates the window properties(show state, pin type) according to the
   // current window state type.
@@ -523,10 +530,27 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
       chromeos::WindowStateType current_type,
       chromeos::WindowStateType new_type);
 
+  // Gets called by the `drag_to_maximize_mis_trigger_timer_` to check the drag
+  // to maximize behavior's validity and record the number of mis-triggers.
+  void CheckAndRecordDragMaximizedBehavior();
+
   // Read out the window cycle snap action through ChromeVox. It can be snap a
   // window to the left, right or unsnapped window. `message_id` provides the
   // text will be read out.
   void ReadOutWindowCycleSnapAction(int message_id);
+
+  // Counter used to track the number of mis-triggers of drag to maximize
+  // behavior for `window_`.
+  int num_of_drag_to_maximize_mis_triggers_ = 0;
+
+  // Started when `window_` is dragged to maximized. Runs
+  // `CheckAndRecordDragToMaximizeMisTriggers` to record number of mis-triggers.
+  base::OneShotTimer drag_to_maximize_mis_trigger_timer_;
+
+  // Will be set to true if `window_` has been dragged to maximized. Only when
+  // it's true, we will record the number of mis-triggers of drag to maximize
+  // behavior for `window_` while `this` is being destroyed.
+  bool has_ever_been_dragged_to_maximized_ = false;
 
   // The owner of this window settings.
   aura::Window* window_;
@@ -544,9 +568,8 @@ class ASH_EXPORT WindowState : public aura::WindowObserver {
   bool allow_set_bounds_direct_ = false;
 
   // A property to save the ratio between snapped window width (or height
-  // for vertical layout) and display workarea width (or height). It is used
-  // to update snapped window width (or height) on AdjustSnappedBounds() when
-  // handling workspace events.
+  // for vertical layout) and display workarea width (or height). The ratio
+  // should be preserved when the display or workspace size changes.
   absl::optional<float> snap_ratio_;
 
   // A property to remember the window position which was set before the

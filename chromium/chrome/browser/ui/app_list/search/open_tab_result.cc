@@ -5,6 +5,7 @@
 #include "chrome/browser/ui/app_list/search/open_tab_result.h"
 
 #include "ash/public/cpp/app_list/vector_icons/vector_icons.h"
+#include "ash/public/cpp/style/color_provider.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
@@ -61,14 +62,23 @@ OpenTabResult::OpenTabResult(Profile* profile,
   SetMetricsType(ash::OPEN_TAB);
   SetCategory(Category::kWeb);
 
-  // Derive relevance from omnibox relevance and normalize it to [0, 1].
-  set_relevance(match_.relevance / kMaxOmniboxScore);
+  // Ignore `match_.relevance` and manually calculate a relevance score for this
+  // result.
+  TokenizedStringMatch string_match;
+  TokenizedString title(match_.description);
+  string_match.Calculate(query, title);
+  set_relevance(string_match.relevance());
 
   UpdateText();
   UpdateIcon();
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->AddObserver(this);
 }
 
-OpenTabResult::~OpenTabResult() = default;
+OpenTabResult::~OpenTabResult() {
+  if (ash::ColorProvider::Get())
+    ash::ColorProvider::Get()->RemoveObserver(this);
+}
 
 void OpenTabResult::Open(int event_flags) {
   list_controller_->OpenURL(
@@ -81,6 +91,11 @@ absl::optional<std::string> OpenTabResult::DriveId() const {
   return drive_id_;
 }
 
+void OpenTabResult::OnColorModeChanged(bool dark_mode_enabled) {
+  if (uses_generic_icon_)
+    SetGenericIcon();
+}
+
 void OpenTabResult::UpdateText() {
   // URL results from the Omnibox have the page title stored in
   // `match.description`.
@@ -89,13 +104,15 @@ void OpenTabResult::UpdateText() {
   std::u16string url = base::UTF8ToUTF16(match_.destination_url.spec());
   SetDetailsTextVector(
       {CreateStringTextItem(url).SetTextTags({Tag(Tag::URL, 0, url.length())}),
-       CreateStringTextItem(kUrlDelimiter),
-       CreateStringTextItem(IDS_APP_LIST_OPEN_TAB_HINT).SetElidable(false)});
+       CreateStringTextItem(l10n_util::GetStringFUTF16(
+                                IDS_APP_LIST_OPEN_TAB_HINT, kUrlDelimiter))
+           .SetOverflowBehavior(
+               ash::SearchResultTextItem::OverflowBehavior::kNoElide)});
 
-  SetAccessibleName(
-      base::JoinString({match_.description, url,
-                        l10n_util::GetStringUTF16(IDS_APP_LIST_OPEN_TAB_HINT)},
-                       kA11yDelimiter));
+  SetAccessibleName(base::JoinString(
+      {match_.description, url,
+       l10n_util::GetStringFUTF16(IDS_APP_LIST_OPEN_TAB_HINT, u"")},
+      kA11yDelimiter));
 }
 
 void OpenTabResult::UpdateIcon() {
@@ -112,6 +129,11 @@ void OpenTabResult::UpdateIcon() {
 
   // Otherwise, fall back to using a generic icon.
   // TODO(crbug.com/1293702): WIP. Decide on the right generic icon here.
+  SetGenericIcon();
+}
+
+void OpenTabResult::SetGenericIcon() {
+  uses_generic_icon_ = true;
   SetIcon(
       IconInfo(gfx::CreateVectorIcon(omnibox::kSwitchIcon, kSystemIconDimension,
                                      GetGenericIconColor()),

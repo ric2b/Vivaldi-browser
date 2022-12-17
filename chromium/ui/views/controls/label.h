@@ -325,6 +325,11 @@ class VIEWS_EXPORT Label : public View,
   // which may exceed the local bounds of the label.
   gfx::Rect GetTextBounds() const;
 
+  // Returns the Y coordinate the font_list() will actually be drawn at, in
+  // local coordinates.  This may differ from GetTextBounds().y() since the font
+  // is positioned inside the display rect.
+  int GetFontListY() const;
+
   void PaintText(gfx::Canvas* canvas);
 
   // View:
@@ -334,7 +339,7 @@ class VIEWS_EXPORT Label : public View,
   void OnDeviceScaleFactorChanged(float old_device_scale_factor,
                                   float new_device_scale_factor) override;
   void OnThemeChanged() override;
-  gfx::NativeCursor GetCursor(const ui::MouseEvent& event) override;
+  ui::Cursor GetCursor(const ui::MouseEvent& event) override;
   void OnFocus() override;
   void OnBlur() override;
   bool OnMousePressed(const ui::MouseEvent& event) override;

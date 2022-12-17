@@ -13,7 +13,6 @@ import android.app.Activity;
 import android.content.Intent;
 import android.util.Pair;
 import android.view.KeyEvent;
-import android.view.ViewGroup.LayoutParams;
 
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
@@ -24,7 +23,6 @@ import org.chromium.chrome.R;
 import org.chromium.chrome.browser.ChromeApplicationImpl;
 import org.chromium.chrome.browser.KeyboardShortcuts;
 import org.chromium.chrome.browser.app.ChromeActivity;
-import org.chromium.chrome.browser.app.omnibox.OmniboxPedalDelegateImpl;
 import org.chromium.chrome.browser.app.tabmodel.TabModelOrchestrator;
 import org.chromium.chrome.browser.browserservices.intents.BrowserServicesIntentDataProvider;
 import org.chromium.chrome.browser.browserservices.intents.WebappExtras;
@@ -43,8 +41,6 @@ import org.chromium.chrome.browser.customtabs.features.toolbar.CustomTabToolbarC
 import org.chromium.chrome.browser.dependency_injection.ChromeActivityCommonsModule;
 import org.chromium.chrome.browser.dependency_injection.ModuleFactoryOverrides;
 import org.chromium.chrome.browser.flags.ActivityType;
-import org.chromium.chrome.browser.flags.CachedFeatureFlags;
-import org.chromium.chrome.browser.flags.ChromeFeatureList;
 import org.chromium.chrome.browser.metrics.UmaSessionStats;
 import org.chromium.chrome.browser.night_mode.NightModeStateProvider;
 import org.chromium.chrome.browser.night_mode.PowerSavingModeMonitor;
@@ -107,7 +103,6 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     /**
      * @return The {@link BrowserServicesIntentDataProvider} for this {@link CustomTabActivity}.
      */
-    @VisibleForTesting
     public BrowserServicesIntentDataProvider getIntentDataProvider() {
         return mIntentDataProvider;
     }
@@ -152,8 +147,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     protected RootUiCoordinator createRootUiCoordinator() {
         // clang-format off
         mBaseCustomTabRootUiCoordinator = new BaseCustomTabRootUiCoordinator(this,
-                getShareDelegateSupplier(),
-                getActivityTabProvider(), mTabModelProfileSupplier, mBookmarkBridgeSupplier,
+                getShareDelegateSupplier(), getActivityTabProvider(), mTabModelProfileSupplier,
+                mBookmarkBridgeSupplier, mTabBookmarkerSupplier,
                 getContextualSearchManagerSupplier(), getTabModelSelectorSupplier(),
                 getBrowserControlsManager(), getWindowAndroid(), getLifecycleDispatcher(),
                 getLayoutManagerSupplier(),
@@ -161,11 +156,11 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                 getModalDialogManagerSupplier(), /* appMenuBlocker= */ this, this::supportsAppMenu,
                 this::supportsFindInPage, getTabCreatorManagerSupplier(), getFullscreenManager(),
                 getCompositorViewHolderSupplier(), getTabContentManagerSupplier(),
-                getOverviewModeBehaviorSupplier(), this::getSnackbarManager, getActivityType(),
+                this::getSnackbarManager, getActivityType(),
                 this::isInOverviewMode, this::isWarmOnResume, /* appMenuDelegate= */ this,
                 /* statusBarColorProvider= */ this, getIntentRequestTracker(),
                 () -> mToolbarCoordinator, () -> mNavigationController, () -> mIntentDataProvider,
-                getMultiWindowModeStateDispatcher(), new OmniboxPedalDelegateImpl(this));
+                () -> mDelegateFactory.getEphemeralTabCoordinator());
         // clang-format on
         return mBaseCustomTabRootUiCoordinator;
     }
@@ -187,12 +182,11 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
 
         BaseCustomTabActivityModule baseCustomTabsModule = overridenBaseCustomTabFactory != null
                 ? overridenBaseCustomTabFactory.create(mIntentDataProvider,
-                        getStartupTabPreloader(), mNightModeStateController,
-                        intentIgnoringCriterion, getTopUiThemeColorProvider(),
-                        new DefaultBrowserProviderImpl())
-                : new BaseCustomTabActivityModule(mIntentDataProvider, getStartupTabPreloader(),
                         mNightModeStateController, intentIgnoringCriterion,
-                        getTopUiThemeColorProvider(), new DefaultBrowserProviderImpl());
+                        getTopUiThemeColorProvider(), new DefaultBrowserProviderImpl())
+                : new BaseCustomTabActivityModule(mIntentDataProvider, mNightModeStateController,
+                        intentIgnoringCriterion, getTopUiThemeColorProvider(),
+                        new DefaultBrowserProviderImpl());
         BaseCustomTabActivityComponent component =
                 ChromeApplicationImpl.getComponent().createBaseCustomTabActivityComponent(
                         commonsModule, baseCustomTabsModule);
@@ -369,6 +363,10 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
 
     @Override
     public AppMenuPropertiesDelegate createAppMenuPropertiesDelegate() {
+        // Menu icon is at the other side of the toolbar relative to the close button, so it will be
+        // at the start when the close button is at the end.
+        boolean isMenuIconAtStart = mIntentDataProvider.getCloseButtonPosition()
+                == BrowserServicesIntentDataProvider.CLOSE_BUTTON_POSITION_END;
         return new CustomTabAppMenuPropertiesDelegate(this, getActivityTabProvider(),
                 getMultiWindowModeStateDispatcher(), getTabModelSelector(), getToolbarManager(),
                 getWindow().getDecorView(), mBookmarkBridgeSupplier, mVerifier,
@@ -376,7 +374,8 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                 mIntentDataProvider.isOpenedByChrome(),
                 mIntentDataProvider.shouldShowShareMenuItem(),
                 mIntentDataProvider.shouldShowStarButton(),
-                mIntentDataProvider.shouldShowDownloadButton(), mIntentDataProvider.isIncognito());
+                mIntentDataProvider.shouldShowDownloadButton(), mIntentDataProvider.isIncognito(),
+                isMenuIconAtStart);
     }
 
     @Override
@@ -392,18 +391,6 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
     @Override
     public int getControlContainerHeightResource() {
         return R.dimen.custom_tabs_control_container_height;
-    }
-
-    @Override
-    protected int getToolbarShadowResource() {
-        final boolean themeRefactorEnabled =
-                CachedFeatureFlags.isEnabled(ChromeFeatureList.THEME_REFACTOR_ANDROID);
-        return themeRefactorEnabled ? R.drawable.toolbar_hairline : R.drawable.toolbar_shadow;
-    }
-
-    @Override
-    protected int getToolbarShadowLayoutHeight() {
-        return LayoutParams.WRAP_CONTENT;
     }
 
     @Override
@@ -464,6 +451,11 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
             // CustomTabActivityNavigationController#FinishHandler. Pass the mode enum into
             // CustomTabActivityModule, so that it can provide the correct implementation.
             getComponent().resolveTwaFinishHandler().onFinish(defaultBehavior);
+        } else if (intentDataProvider.isPartialHeightCustomTab()
+                && intentDataProvider.shouldAnimateOnFinish()) {
+            // WebContents is missing during the close animation due to android:windowIsTranslucent.
+            // We let partial CCT handle the animation.
+            mBaseCustomTabRootUiCoordinator.handleCloseAnimation(defaultBehavior);
         } else {
             defaultBehavior.run();
         }
@@ -559,6 +551,15 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
         return mTwaCoordinator == null ? false : mTwaCoordinator.shouldUseAppModeUi();
     }
 
+    /**
+     * @return The package name of the Trusted Web Activity, if the activity is a TWA; null
+     * otherwise.
+     */
+    @Nullable
+    public String getTwaPackage() {
+        return mTwaCoordinator == null ? null : mTwaCoordinator.getTwaPackage();
+    }
+
     @Override
     public void maybePreconnect() {
         // The ids need to be set early on, this way prewarming will pick them up.
@@ -570,5 +571,12 @@ public abstract class BaseCustomTabActivity extends ChromeActivity<BaseCustomTab
                     GSA_FALLBACK_STUDY_NAME, experimentIds, override);
         }
         super.maybePreconnect();
+    }
+
+    @Override
+    public boolean supportsAppMenu() {
+        if (mIntentDataProvider.shouldSuppressAppMenu()) return false;
+
+        return super.supportsAppMenu();
     }
 }

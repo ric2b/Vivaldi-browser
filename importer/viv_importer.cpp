@@ -60,7 +60,7 @@ void OperaImporter::StartImport(const importer::SourceProfile& source_profile,
   if (source_profile.importer_type == importer::TYPE_OPERA_BOOKMARK_FILE) {
     bookmarkfilename_ = file.value();
   } else {
-    if (base::LowerCaseEqualsASCII(file.BaseName().MaybeAsASCII(),
+    if (base::EqualsCaseInsensitiveASCII(file.BaseName().MaybeAsASCII(),
                                    OPERA_PREFS_NAME)) {
       profile_dir_ = profile_dir_.DirName();
       file = profile_dir_;

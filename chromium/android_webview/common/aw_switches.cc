@@ -74,4 +74,18 @@ const char kWebViewDisablePackageAllowlistThrottling[] =
 const char kWebViewSelectiveImageInversionDarkening[] =
     "webview-selective-image-inversion-darkening";
 
+// Enables MPArch-based FencedFrames. This also implies
+// PrivacySandboxAdsAPIsOverride and SharedStorageAPI.
+const char kWebViewMPArchFencedFrames[] = "webview-mparch-fenced-frames";
+
+// Enables ShadowDOM-based FencedFrames. This also implies
+// PrivacySandboxAdsAPIsOverride and SharedStorageAPI.
+const char kWebViewShadowDOMFencedFrames[] = "webview-shadow-dom-fenced-frames";
+
+// Disables WebView from checking for app recovery mitigations.
+const char kWebViewDisableAppRecovery[] = "webview-disable-app-recovery";
+
+// Enables WebView to check for app recovery mitigations.
+const char kWebViewEnableAppRecovery[] = "webview-enable-app-recovery";
+
 }  // namespace switches

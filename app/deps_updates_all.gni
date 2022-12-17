@@ -1,0 +1,9 @@
+
+update_target("//components/bookmarks/browser:browser") {
+  deps += [
+    #"//chrome:strings",
+    "//vivaldi/app:vivaldi_native_strings",
+    "//vivaldi/app:vivaldi_native_resources",
+    "//vivaldi/app:vivaldi_unscaled_native_resources",
+  ]
+}

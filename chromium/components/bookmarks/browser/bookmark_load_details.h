@@ -13,6 +13,10 @@
 #include "components/bookmarks/browser/bookmark_client.h"
 #include "components/bookmarks/browser/bookmark_node.h"
 
+namespace base {
+class TimeTicks;
+}
+
 namespace bookmarks {
 
 class BookmarkPermanentNode;
@@ -91,6 +95,8 @@ class BookmarkLoadDetails {
   void CreateUrlIndex();
   UrlIndex* url_index() { return url_index_.get(); }
 
+  base::TimeTicks load_start() { return load_start_; }
+
 
   BookmarkPermanentNode* trash_folder_node() { return trash_folder_node_; }
 
@@ -111,6 +117,7 @@ class BookmarkLoadDetails {
   scoped_refptr<UrlIndex> url_index_;
   // A string blob represetning the sync metadata stored in the json file.
   std::string sync_metadata_str_;
+  base::TimeTicks load_start_;
 
   BookmarkPermanentNode* trash_folder_node_ = nullptr;
 };

@@ -323,6 +323,16 @@ class WebContentsObserverProxy extends WebContentsObserver {
 
     @Override
     @CalledByNative
+    public void frameReceivedUserActivation() {
+        handleObserverCall();
+        for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {
+            mObserversIterator.next().frameReceivedUserActivation();
+        }
+        finishObserverCall();
+    }
+
+    @Override
+    @CalledByNative
     public void didChangeThemeColor() {
         handleObserverCall();
         for (mObserversIterator.rewind(); mObserversIterator.hasNext();) {

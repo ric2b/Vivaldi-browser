@@ -124,7 +124,7 @@ struct CORE_EXPORT PaintLayerRareData final
 // PaintLayer is an old object that handles lots of unrelated operations.
 //
 // We want it to die at some point and be replaced by more focused objects,
-// which would remove (or at least compartimentalize) a lot of complexity.
+// which would remove (or at least compartmentalize) a lot of complexity.
 // See the STATUS OF PAINTLAYER section below.
 //
 // The class is central to painting and hit-testing. That's because it handles
@@ -309,10 +309,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   // |ancestor| and |skippedAncestor| should be nullptr, or none of them should.
   PaintLayer* ContainingLayer(const PaintLayer* ancestor = nullptr,
                               bool* skipped_ancestor = nullptr) const;
-
-  // Not for LayoutNGBlockFragmentation.
-  const PaintLayer* EnclosingCompositedScrollingLayerUnderPagination(
-      IncludeSelfOrNot) const;
 
   bool HasAncestorWithFilterThatMovesPixels() const;
 
@@ -579,6 +575,9 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   bool DescendantNeedsCullRectUpdate() const {
     return descendant_needs_cull_rect_update_;
   }
+  bool SelfOrDescendantNeedsCullRectUpdate() const {
+    return needs_cull_rect_update_ || descendant_needs_cull_rect_update_;
+  }
   void SetNeedsCullRectUpdate();
   void SetForcesChildrenCullRectUpdate();
   void MarkCompositingContainerChainForNeedsCullRectUpdate();
@@ -624,14 +623,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
     return has3d_transformed_descendant_;
   }
 
-  // Returns true if this PaintLayer should be fragmented, relative
-  // to the given |compositing_layer| backing. In SPv1 mode, fragmentation
-  // may not cross compositing boundaries, so this wil return false
-  // if EnclosingPaginationLayer() is above |compositing_layer|.
-  // If |compositing_layer| is not provided, it will be computed if necessary.
-  bool ShouldFragmentCompositedBounds(
-      const PaintLayer* compositing_layer = nullptr) const;
-
   // See
   // https://chromium.googlesource.com/chromium/src.git/+/master/third_party/blink/renderer/core/paint/README.md
   // for the definition of a replaced normal-flow stacking element.
@@ -658,7 +649,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
 
   // Bounding box in the coordinates of this layer.
   PhysicalRect LocalBoundingBox() const;
-  PhysicalRect ClippedLocalBoundingBox(const PaintLayer& ancestor_layer) const;
 
   void UpdateLayerPositionRecursive(const PaintLayer* enclosing_scroller);
 
@@ -778,7 +768,6 @@ class CORE_EXPORT PaintLayer : public GarbageCollected<PaintLayer>,
   void UpdatePaginationRecursive(bool needs_pagination_update = false);
   void ClearPaginationRecursive();
 
-  void SetSelfNeedsRepaint();
   void MarkCompositingContainerChainForNeedsRepaint();
 
   PaintLayerRareData& EnsureRareData() {

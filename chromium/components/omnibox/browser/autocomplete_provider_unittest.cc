@@ -14,7 +14,7 @@
 #include "base/location.h"
 #include "base/test/scoped_feature_list.h"
 
-#include "base/base64.h"
+#include "base/base64url.h"
 #include "base/memory/ptr_util.h"
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
@@ -109,7 +109,6 @@ class TestProvider : public AutocompleteProvider {
                const std::u16string& match_keyword,
                AutocompleteProviderClient* client)
       : AutocompleteProvider(AutocompleteProvider::TYPE_SEARCH),
-        listener_(nullptr),
         relevance_(relevance),
         prefix_(prefix),
         match_keyword_(match_keyword),
@@ -118,12 +117,6 @@ class TestProvider : public AutocompleteProvider {
   TestProvider& operator=(const TestProvider&) = delete;
 
   void Start(const AutocompleteInput& input, bool minimal_changes) override;
-
-  void set_listener(AutocompleteProviderListener* listener) {
-    listener_ = listener;
-  }
-
-  virtual AutocompleteProviderListener* listener() { return listener_; }
 
  protected:
   ~TestProvider() override = default;
@@ -137,7 +130,6 @@ class TestProvider : public AutocompleteProvider {
       AutocompleteMatch::Type type,
       const TemplateURLRef::SearchTermsArgs& search_terms_args);
 
-  raw_ptr<AutocompleteProviderListener> listener_;
   int relevance_;
   const std::u16string prefix_;
   const std::u16string match_keyword_;
@@ -173,7 +165,7 @@ void TestProvider::Start(const AutocompleteInput& input, bool minimal_changes) {
 void TestProvider::Run() {
   AddResults(1, kResultsPerProvider);
   done_ = true;
-  listener()->OnProviderUpdate(true);
+  NotifyListeners(true);
 }
 
 void TestProvider::AddResults(int start_at, int num) {
@@ -244,7 +236,7 @@ class AutocompleteProviderListenerWithClosure
   }
 
  private:
-  AutocompleteController* controller_;
+  raw_ptr<AutocompleteController> controller_;
   base::RepeatingClosure closure_;
 };
 
@@ -260,22 +252,13 @@ class TestPrefetchProvider : public TestProvider {
   TestPrefetchProvider(const TestPrefetchProvider&) = delete;
   TestPrefetchProvider& operator=(const TestPrefetchProvider&) = delete;
 
-  // TestProvider:
-  AutocompleteProviderListener* listener() override { return listener_; }
-
   // AutocompleteProvider:
   void StartPrefetch(const AutocompleteInput& input) override;
-
-  void set_listener(AutocompleteProviderListenerWithClosure* listener) {
-    listener_ = listener;
-  }
 
  private:
   ~TestPrefetchProvider() override = default;
 
   void RunPrefetch();
-
-  raw_ptr<AutocompleteProviderListenerWithClosure> listener_;
 };
 
 void TestPrefetchProvider::StartPrefetch(const AutocompleteInput& input) {
@@ -293,7 +276,8 @@ void TestPrefetchProvider::StartPrefetch(const AutocompleteInput& input) {
 void TestPrefetchProvider::RunPrefetch() {
   AddResults(0, kResultsPerProvider);
   done_ = true;
-  listener_->OnProviderFinishedPrefetch();
+  static_cast<AutocompleteProviderListenerWithClosure*>(listeners_[0])
+      ->OnProviderFinishedPrefetch();
 }
 
 // Helper class to make running tests of ClassifyAllMatchesInString() more
@@ -509,8 +493,8 @@ void AutocompleteProviderTest::ResetControllerWithTestProviders(
   // empty so no elements need to be freed at this point.
   EXPECT_TRUE(controller_->providers_.empty());
   controller_->providers_.swap(providers);
-  provider1->set_listener(controller_.get());
-  provider2->set_listener(controller_.get());
+  provider1->AddListener(controller_.get());
+  provider2->AddListener(controller_.get());
 
   if (provider1_ptr)
     *provider1_ptr = provider1;
@@ -610,7 +594,7 @@ void AutocompleteProviderTest::RunKeywordTest(const std::u16string& input,
   autocomplete_input.set_prefer_keyword(true);
   controller_->input_ = autocomplete_input;
   AutocompleteResult result;
-  result.AppendMatches(controller_->input_, matches);
+  result.AppendMatches(matches);
   controller_->UpdateAssociatedKeywords(&result);
   for (size_t j = 0; j < result.size(); ++j) {
     EXPECT_EQ(match_data[j].expected_associated_keyword,
@@ -635,7 +619,7 @@ void AutocompleteProviderTest::UpdateResultsWithHeaderTestData(
   add_zero_suggest_provider_headers_map(headers_data.headers_map);
 
   result_.Reset();
-  result_.AppendMatches(AutocompleteInput(), matches);
+  result_.AppendMatches(matches);
 
   // Update the result with the header information.
   controller_->UpdateHeaderInfoFromZeroSuggestProvider(&result_);
@@ -660,7 +644,7 @@ void AutocompleteProviderTest::RunAssistedQueryStatsTest(
     matches.push_back(match);
   }
   result_.Reset();
-  result_.AppendMatches(AutocompleteInput(), matches);
+  result_.AppendMatches(matches);
 
   // Update AQS.
   controller_->UpdateAssistedQueryStats(&result_);
@@ -674,13 +658,17 @@ void AutocompleteProviderTest::RunAssistedQueryStatsTest(
     result_.match_at(i)->search_terms_args->searchbox_stats.SerializeToString(
         &serialized_searchbox_stats);
     std::string encoded_searchbox_stats;
-    base::Base64Encode(serialized_searchbox_stats, &encoded_searchbox_stats);
+    base::Base64UrlEncode(serialized_searchbox_stats,
+                          base::Base64UrlEncodePolicy::OMIT_PADDING,
+                          &encoded_searchbox_stats);
     std::string expected_serialized_searchbox_stats;
     aqs_test_data[i].expected_searchbox_stats.SerializeToString(
         &expected_serialized_searchbox_stats);
     std::string expected_encoded_searchbox_stats;
-    base::Base64Encode(expected_serialized_searchbox_stats,
-                       &expected_encoded_searchbox_stats);
+    base::Base64UrlEncode(expected_serialized_searchbox_stats,
+                          base::Base64UrlEncodePolicy::OMIT_PADDING,
+
+                          &expected_encoded_searchbox_stats);
     EXPECT_EQ(expected_encoded_searchbox_stats, encoded_searchbox_stats);
   }
 }
@@ -1332,11 +1320,13 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
       "chrome.0.69i57j69i58j5l2j0l3j69i59";
   match.search_terms_args->searchbox_stats.set_client_name("chrome");
   url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajBqMA==&", url.path());
+  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajBqMA&", url.path());
   // Make sure searchbox_stats is serialized and encoded correctly.
   {
     std::string serialized_proto;
-    base::Base64Decode("EgZjaHJvbWXSAQgyNDU2ajBqMA==", &serialized_proto);
+    EXPECT_TRUE(base::Base64UrlDecode(
+        "EgZjaHJvbWXSAQgyNDU2ajBqMA",
+        base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
     metrics::ChromeSearchboxStats expected;
     expected.ParseFromString(serialized_proto);
     EXPECT_EQ("chrome", expected.client_name());
@@ -1345,11 +1335,13 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
   // Test field trial triggered bit set.
   set_search_provider_field_trial_triggered_in_session(true);
   url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqMA==&", url.path());
+  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqMA&", url.path());
   // Make sure searchbox_stats is serialized and encoded correctly.
   {
     std::string serialized_proto;
-    base::Base64Decode("EgZjaHJvbWXSAQgyNDU2ajFqMA==", &serialized_proto);
+    EXPECT_TRUE(base::Base64UrlDecode(
+        "EgZjaHJvbWXSAQgyNDU2ajFqMA",
+        base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
     metrics::ChromeSearchboxStats expected;
     expected.ParseFromString(serialized_proto);
     EXPECT_EQ("2456j1j0", expected.experiment_stats());
@@ -1359,11 +1351,13 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
   set_search_provider_field_trial_triggered_in_session(false);
   set_current_page_classification(metrics::OmniboxEventProto::OTHER);
   url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajBqNA==&", url.path());
+  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajBqNA&", url.path());
   // Make sure searchbox_stats is serialized and encoded correctly.
   {
     std::string serialized_proto;
-    base::Base64Decode("EgZjaHJvbWXSAQgyNDU2ajBqNA==", &serialized_proto);
+    EXPECT_TRUE(base::Base64UrlDecode(
+        "EgZjaHJvbWXSAQgyNDU2ajBqNA",
+        base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
     metrics::ChromeSearchboxStats expected;
     expected.ParseFromString(serialized_proto);
     EXPECT_EQ("2456j0j4", expected.experiment_stats());
@@ -1373,11 +1367,13 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
   set_search_provider_field_trial_triggered_in_session(true);
   set_current_page_classification(metrics::OmniboxEventProto::OTHER);
   url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqNA==&", url.path());
+  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqNA&", url.path());
   // Make sure searchbox_stats is serialized and encoded correctly.
   {
     std::string serialized_proto;
-    base::Base64Decode("EgZjaHJvbWXSAQgyNDU2ajFqNA==", &serialized_proto);
+    EXPECT_TRUE(base::Base64UrlDecode(
+        "EgZjaHJvbWXSAQgyNDU2ajFqNA",
+        base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
     metrics::ChromeSearchboxStats expected;
     expected.ParseFromString(serialized_proto);
     EXPECT_EQ("2456j1j4", expected.experiment_stats());
@@ -1387,13 +1383,14 @@ TEST_F(AutocompleteProviderTest, GetDestinationURL_SearchboxStatsOnly) {
   add_zero_suggest_provider_experiment_stat(
       base::test::ParseJson(R"json({"2":"0:67","4":10001})json"));
   url = GetDestinationURL(match, base::Milliseconds(2456));
-  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqNOIDCRIEMCw2NyCRTg==&",
+  EXPECT_EQ("//gs_lcrp=EgZjaHJvbWXSAQgyNDU2ajFqNOIDCRIEMCw2NyCRTg&",
             url.path());
   // Make sure searchbox_stats is serialized and encoded correctly.
   {
     std::string serialized_proto;
-    base::Base64Decode("EgZjaHJvbWXSAQgyNDU2ajFqNOIDCRIEMCw2NyCRTg==",
-                       &serialized_proto);
+    EXPECT_TRUE(base::Base64UrlDecode(
+        "EgZjaHJvbWXSAQgyNDU2ajFqNOIDCRIEMCw2NyCRTg",
+        base::Base64UrlDecodePolicy::DISALLOW_PADDING, &serialized_proto));
     metrics::ChromeSearchboxStats expected;
     expected.ParseFromString(serialized_proto);
     EXPECT_EQ(1, expected.experiment_stats_v2_size());
@@ -1453,7 +1450,7 @@ TEST_F(AutocompleteProviderTest,
   EXPECT_EQ(
       "//"
       "aqs=chrome.0.69i57j69i58j5l2j0l3j69i59.2456j0j0&gs_lcrp="
-      "EgZjaHJvbWXSAQgyNDU2ajBqMA==&",
+      "EgZjaHJvbWXSAQgyNDU2ajBqMA&",
       url.path());
 }
 
@@ -1661,7 +1658,7 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_NonPrefetch) {
 
   base::RunLoop run_loop;
   provider_listener_->set_closure(run_loop.QuitClosure());
-  provider->set_listener(provider_listener_.get());
+  provider->AddListener(provider_listener_.get());
 
   AutocompleteInput input(u"foo", metrics::OmniboxEventProto::OTHER,
                           TestingSchemeClassifier());
@@ -1689,7 +1686,7 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_Prefetch) {
 
   base::RunLoop run_loop;
   provider_listener_->set_closure(run_loop.QuitClosure());
-  provider->set_listener(provider_listener_.get());
+  provider->AddListener(provider_listener_.get());
 
   AutocompleteInput input(u"", metrics::OmniboxEventProto::OTHER,
                           TestingSchemeClassifier());
@@ -1717,7 +1714,7 @@ TEST_F(AutocompleteProviderPrefetchTest, SupportedProvider_OngoingNonPrefetch) {
 
   base::RunLoop run_loop;
   provider_listener_->set_closure(run_loop.QuitClosure());
-  provider->set_listener(provider_listener_.get());
+  provider->AddListener(provider_listener_.get());
 
   AutocompleteInput input(u"bar", metrics::OmniboxEventProto::OTHER,
                           TestingSchemeClassifier());

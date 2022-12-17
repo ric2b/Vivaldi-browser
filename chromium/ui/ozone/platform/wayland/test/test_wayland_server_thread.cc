@@ -93,11 +93,14 @@ bool TestWaylandServerThread::Start(const ServerConfig& config) {
     if (!xdg_shell_.Initialize(display_.get()))
       return false;
   }
+  if (!zcr_stylus_.Initialize(display_.get()))
+    return false;
   if (!zcr_text_input_extension_v1_.Initialize(display_.get()))
     return false;
   if (!zwp_text_input_manager_v1_.Initialize(display_.get()))
     return false;
-  if (!zwp_linux_explicit_synchronization_v1_.Initialize(display_.get()))
+  if (!SetupExplicitSynchronizationProtocol(
+          config.use_explicit_synchronization))
     return false;
   if (!zwp_linux_dmabuf_v1_.Initialize(display_.get()))
     return false;
@@ -172,6 +175,18 @@ bool TestWaylandServerThread::SetupPrimarySelectionManager(
       break;
   }
   return primary_selection_device_manager_->Initialize(display_.get());
+}
+
+bool TestWaylandServerThread::SetupExplicitSynchronizationProtocol(
+    ShouldUseExplicitSynchronizationProtocol usage) {
+  switch (usage) {
+    case ShouldUseExplicitSynchronizationProtocol::kNone:
+      return true;
+    case ShouldUseExplicitSynchronizationProtocol::kUse:
+      return zwp_linux_explicit_synchronization_v1_.Initialize(display_.get());
+  }
+  NOTREACHED();
+  return false;
 }
 
 void TestWaylandServerThread::DoPause() {

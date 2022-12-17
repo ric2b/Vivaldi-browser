@@ -503,6 +503,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, OpenDirectory_DenyAccess) {
       .WillOnce(testing::Return(base::FilePath()));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(PathInfo()));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -581,6 +583,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(base::FilePath()));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(PathInfo()));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -666,6 +670,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(base::FilePath()));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(PathInfo()));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -759,6 +765,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(base::FilePath()));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(PathInfo()));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
 
   EXPECT_CALL(permission_context,
               ConfirmSensitiveDirectoryAccess_(
@@ -822,6 +830,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(base::FilePath()));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(PathInfo()));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
 
   EXPECT_CALL(permission_context,
               ConfirmSensitiveDirectoryAccess_(
@@ -956,6 +966,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
 
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(good_dir_info));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -1046,10 +1058,11 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(default_dir));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(bad_dir_info));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
-
   EXPECT_CALL(permission_context,
               ConfirmSensitiveDirectoryAccess_(
                   origin, PathType::kLocal, test_dir,
@@ -1130,6 +1143,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
 
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(good_dir_info));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -1222,6 +1237,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       .WillOnce(testing::Return(default_dir));
   EXPECT_CALL(permission_context, GetLastPickedDirectory(origin, std::string()))
       .WillOnce(testing::Return(bad_dir_info));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -1313,6 +1330,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest,
       permission_context,
       GetWellKnownDirectoryPath(blink::mojom::WellKnownDirectory::kDirDesktop))
       .WillOnce(testing::Return(desktop_dir));
+  EXPECT_CALL(permission_context, GetPickerTitle(testing::_))
+      .WillOnce(testing::Return(std::u16string()));
   EXPECT_CALL(permission_context,
               SetLastPickedDirectory(origin, std::string(), test_dir,
                                      PathType::kLocal));
@@ -1556,12 +1575,20 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SuggestedName) {
   name_infos.push_back({"not_matching.jpg", ListValueOf(".txt"), false,
                         "not_matching.jpg", false});
 
-  // ".lnk", ".local", and ".scf" extensions should be sanitized.
-  name_infos.push_back({"dangerous_extension.local", ListValueOf(".local"),
-                        true, "dangerous_extension.download", false});
+  // ".lnk", ".local", ".scf", and ".url" extensions should be sanitized.
   name_infos.push_back({"dangerous_extension.lnk", ListValueOf(".lnk"), true,
                         "dangerous_extension.download", false});
+  name_infos.push_back({"dangerous_extension.lnk", ListValueOf(".LNK"), true,
+                        "dangerous_extension.download", false});
+  name_infos.push_back({"dangerous_extension.LNK", ListValueOf(".lnk"), true,
+                        "dangerous_extension.download", false});
+  name_infos.push_back({"dangerous_extension.LNK", ListValueOf(".LNK"), true,
+                        "dangerous_extension.download", false});
+  name_infos.push_back({"dangerous_extension.local", ListValueOf(".local"),
+                        true, "dangerous_extension.download", false});
   name_infos.push_back({"dangerous_extension.scf", ListValueOf(".scf"), true,
+                        "dangerous_extension.download", false});
+  name_infos.push_back({"dangerous_extension.url", ListValueOf(".url"), true,
                         "dangerous_extension.download", false});
   // Compound extensions ending in a dangerous extension should be sanitized.
   name_infos.push_back({"dangerous_extension.png.local", ListValueOf(".local"),
@@ -1569,6 +1596,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SuggestedName) {
   name_infos.push_back({"dangerous_extension.png.lnk", ListValueOf(".lnk"),
                         true, "dangerous_extension.png.download", false});
   name_infos.push_back({"dangerous_extension.png.scf", ListValueOf(".scf"),
+                        true, "dangerous_extension.png.download", false});
+  name_infos.push_back({"dangerous_extension.png.url", ListValueOf(".url"),
                         true, "dangerous_extension.png.download", false});
   // Compound extensions not ending in a dangerous extension should not be
   // sanitized.
@@ -1578,6 +1607,8 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, SuggestedName) {
                         true, "dangerous_extension.lnk.png", true});
   name_infos.push_back({"dangerous_extension.scf.png", ListValueOf(".png"),
                         true, "dangerous_extension.scf.png", true});
+  name_infos.push_back({"dangerous_extension.url.png", ListValueOf(".png"),
+                        true, "dangerous_extension.url.png", true});
   // Invalid characters should be sanitized.
   name_infos.push_back({R"(inv*l:d\\ch%rבאמת!a<ters🤓.txt)",
                         ListValueOf(".txt"), true,
@@ -1834,6 +1865,35 @@ IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, StartIn_Priority) {
                                 id)));
   EXPECT_EQ(ui::SelectFileDialog::SELECT_FOLDER, dialog_params.type);
   EXPECT_EQ(dir_handle, dialog_params.default_path);
+}
+
+IN_PROC_BROWSER_TEST_F(FileSystemChooserBrowserTest, PickerTitle) {
+  base::FilePath test_dir = CreateTestDir();
+
+  FakeFileSystemAccessPermissionContext permission_context;
+  static_cast<FileSystemAccessManagerImpl*>(
+      shell()
+          ->web_contents()
+          ->GetBrowserContext()
+          ->GetStoragePartition(shell()->web_contents()->GetSiteInstance())
+          ->GetFileSystemAccessEntryFactory())
+      ->SetPermissionContextForTesting(&permission_context);
+
+  SelectFileDialogParams dialog_params;
+  ui::SelectFileDialog::SetFactory(
+      new FakeSelectFileDialogFactory({test_dir}, &dialog_params));
+  ASSERT_TRUE(
+      NavigateToURL(shell(), embedded_test_server()->GetURL("/title1.html")));
+  EXPECT_EQ(test_dir.BaseName().AsUTF8Unsafe(),
+            EvalJs(shell(),
+                   "(async () => {"
+                   "  let e = await self.showDirectoryPicker();"
+                   "  self.selected_entry = e;"
+                   "  return e.name; })()"));
+  EXPECT_EQ(ui::SelectFileDialog::SELECT_FOLDER, dialog_params.type);
+  // Check that the title of the file picker was plumbed through correctly.
+  EXPECT_EQ(FakeFileSystemAccessPermissionContext::kPickerTitle,
+            dialog_params.title);
 }
 
 }  // namespace content

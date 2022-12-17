@@ -15,6 +15,7 @@
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
 #include "base/time/time_override.h"
+#include "ui/events/keycodes/keyboard_codes_posix.h"
 
 namespace ash {
 
@@ -90,9 +91,10 @@ TEST_F(DateTrayTest, ShowCalendarBubble) {
   // Clicking on the `DateTray` -> show the calendar bubble.
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
-
   EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
   EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
 
   histogram_tester.ExpectTotalCount("Ash.Calendar.ShowSource.TimeView", 1);
 
@@ -100,13 +102,16 @@ TEST_F(DateTrayTest, ShowCalendarBubble) {
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
 
   // Tapping on the `DateTray` again -> open the calendar bubble.
   GestureTapOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
-
   EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
   EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
 
   histogram_tester.ExpectTotalCount("Ash.Calendar.ShowSource.TimeView", 2);
 
@@ -115,6 +120,8 @@ TEST_F(DateTrayTest, ShowCalendarBubble) {
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
   EXPECT_FALSE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
 }
 
 // Tests the behavior when clicking on different areas.
@@ -123,22 +130,30 @@ TEST_F(DateTrayTest, ClickingArea) {
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
 
   // Clicking on the bubble area -> not close the calendar bubble.
   LeftClickOn(GetUnifiedSystemTray()->bubble()->GetBubbleView());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
 
-  // Clicking on the `UnifiedSystemTray` -> close the calendar bubble.
+  // Clicking on the `UnifiedSystemTray` -> switch to QS bubble.
   LeftClickOn(GetUnifiedSystemTray());
   base::RunLoop().RunUntilIdle();
-  EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
   EXPECT_FALSE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_TRUE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
 
-  // Clicking on the `DateTray` -> show the calendar bubble.
+  // Clicking on the `DateTray` -> switch to the calendar bubble.
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
   EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
 
   // Clicking on the gap between `DateTray` and `UnifiedSystemTray`-> close the
   // bubble.
@@ -152,6 +167,28 @@ TEST_F(DateTrayTest, ClickingArea) {
   LeftClickOn(GetDateTray());
   base::RunLoop().RunUntilIdle();
   EXPECT_FALSE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
+}
+
+TEST_F(DateTrayTest, EscapeKeyForClose) {
+  base::HistogramTester histogram_tester;
+  // Clicking on the `DateTray` -> show the calendar bubble.
+  LeftClickOn(GetDateTray());
+  base::RunLoop().RunUntilIdle();
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsBubbleShown());
+  EXPECT_TRUE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_TRUE(GetDateTray()->is_active());
+
+  histogram_tester.ExpectTotalCount("Ash.Calendar.ShowSource.TimeView", 1);
+
+  // Hitting escape key -> close and deactivate the calendar bubble.
+  PressAndReleaseKey(ui::KeyboardCode::VKEY_ESCAPE);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_FALSE(GetUnifiedSystemTray()->IsShowingCalendarView());
+  EXPECT_FALSE(GetUnifiedSystemTray()->is_active());
+  EXPECT_FALSE(GetDateTray()->is_active());
 }
 
 }  // namespace ash

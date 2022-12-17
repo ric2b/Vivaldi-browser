@@ -32,6 +32,8 @@
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
 #include "base/system/sys_info.h"
+#include "base/time/time.h"
+#include "base/timer/elapsed_timer.h"
 #include "base/trace_event/trace_event.h"
 #include "base/win/iat_patch_function.h"
 #include "base/win/scoped_handle.h"
@@ -533,16 +535,12 @@ bool IsAppContainerEnabled() {
   return base::FeatureList::IsEnabled(features::kRendererAppContainer);
 }
 
-ResultCode SetJobMemoryLimit(const base::CommandLine& cmd_line,
-                             TargetPolicy* policy) {
+ResultCode SetJobMemoryLimit(Sandbox sandbox_type, TargetPolicy* policy) {
   DCHECK_NE(policy->GetJobLevel(), JobLevel::kNone);
 
 #ifdef _WIN64
   size_t memory_limit = static_cast<size_t>(kDataSizeLimit);
 
-  // Note that this command line flag hasn't been fetched by all
-  // callers of SetJobLevel, only those in this file.
-  Sandbox sandbox_type = SandboxTypeFromCommandLine(cmd_line);
   if (sandbox_type == Sandbox::kGpu || sandbox_type == Sandbox::kRenderer) {
     int64_t GB = 1024 * 1024 * 1024;
     // Allow the GPU/RENDERER process's sandbox to access more physical memory
@@ -607,9 +605,9 @@ std::wstring GetAppContainerProfileName(const std::string& appcontainer_id,
 ResultCode SetupAppContainerProfile(AppContainer* container,
                                     const base::CommandLine& command_line,
                                     Sandbox sandbox_type) {
-  if (sandbox_type != Sandbox::kMediaFoundationCdm &&
-      sandbox_type != Sandbox::kGpu &&
+  if (sandbox_type != Sandbox::kGpu &&
       sandbox_type != Sandbox::kXrCompositing &&
+      sandbox_type != Sandbox::kMediaFoundationCdm &&
       sandbox_type != Sandbox::kNetwork &&
       sandbox_type != Sandbox::kWindowsSystemProxyResolver) {
     return SBOX_ERROR_UNSUPPORTED;
@@ -658,9 +656,25 @@ ResultCode SetupAppContainerProfile(AppContainer* container,
         !container->AddCapability(L"lpacInstrumentation") ||
         !container->AddCapability(L"lpacCryptoServices") ||
         !container->AddCapability(L"lpacEnterprisePolicyChangeNotifications") ||
-        !container->AddCapability(L"mediaFoundationCdmFiles")) {
+        !container->AddCapability(kMediaFoundationCdmFiles) ||
+        !container->AddCapability(kMediaFoundationCdmData)) {
       DLOG(ERROR) << "AppContainer::AddCapability() - "
                   << "Sandbox::kMediaFoundationCdm lpac capabilities failed";
+      return sandbox::SBOX_ERROR_CREATE_APPCONTAINER_CAPABILITY;
+    }
+  }
+
+  if (sandbox_type == Sandbox::kNetwork) {
+    if (!container->AddCapability(
+            base::win::WellKnownCapability::kPrivateNetworkClientServer) ||
+        !container->AddCapability(
+            base::win::WellKnownCapability::kInternetClient) ||
+        !container->AddCapability(
+            base::win::WellKnownCapability::kEnterpriseAuthentication) ||
+        !container->AddCapability(L"lpacIdentityServices") ||
+        !container->AddCapability(L"lpacCryptoServices")) {
+      DLOG(ERROR) << "AppContainer::AddCapability() - "
+                  << "Sandbox::kNetwork lpac capabilities failed";
       return sandbox::SBOX_ERROR_CREATE_APPCONTAINER_CAPABILITY;
     }
   }
@@ -709,30 +723,13 @@ ResultCode SetupAppContainerProfile(AppContainer* container,
     }
   }
 
-  // Enable LPAC for GPU process, but not for XRCompositor service.
-  if (sandbox_type == Sandbox::kGpu &&
-      base::FeatureList::IsEnabled(features::kGpuLPAC)) {
-    container->SetEnableLowPrivilegeAppContainer(true);
-  }
-
-  // Enable LPAC for Network service.
-  if (sandbox_type == Sandbox::kNetwork) {
-    container->AddCapability(
-        base::win::WellKnownCapability::kPrivateNetworkClientServer);
-    container->AddCapability(base::win::WellKnownCapability::kInternetClient);
-    container->AddCapability(
-        base::win::WellKnownCapability::kEnterpriseAuthentication);
-    container->AddCapability(L"lpacIdentityServices");
-    container->AddCapability(L"lpacCryptoServices");
-    container->SetEnableLowPrivilegeAppContainer(true);
-  }
-
-  if (sandbox_type == Sandbox::kMediaFoundationCdm) {
-    container->AddCapability(kMediaFoundationCdmData);
-    container->SetEnableLowPrivilegeAppContainer(true);
-  }
-
-  if (sandbox_type == Sandbox::kWindowsSystemProxyResolver) {
+  // Enable LPAC for the following processes. Notably not for the kXrCompositing
+  // service.
+  if ((sandbox_type == Sandbox::kGpu &&
+       base::FeatureList::IsEnabled(features::kGpuLPAC)) ||
+      sandbox_type == Sandbox::kMediaFoundationCdm ||
+      sandbox_type == Sandbox::kNetwork ||
+      sandbox_type == Sandbox::kWindowsSystemProxyResolver) {
     container->SetEnableLowPrivilegeAppContainer(true);
   }
 
@@ -805,7 +802,7 @@ bool IsUnsandboxedProcess(
 }  // namespace
 
 // static
-ResultCode SandboxWin::SetJobLevel(const base::CommandLine& cmd_line,
+ResultCode SandboxWin::SetJobLevel(Sandbox sandbox_type,
                                    JobLevel job_level,
                                    uint32_t ui_exceptions,
                                    TargetPolicy* policy) {
@@ -816,7 +813,7 @@ ResultCode SandboxWin::SetJobLevel(const base::CommandLine& cmd_line,
   if (ret != SBOX_ALL_OK)
     return ret;
 
-  return SetJobMemoryLimit(cmd_line, policy);
+  return SetJobMemoryLimit(sandbox_type, policy);
 }
 
 // TODO(jschuh): Need get these restrictions applied to NaCl and Pepper.
@@ -1049,7 +1046,7 @@ ResultCode SandboxWin::GeneratePolicyForSandboxedProcess(
   if (result != SBOX_ALL_OK)
     return result;
 
-  result = SetJobLevel(cmd_line, JobLevel::kLockdown, 0, policy);
+  result = SetJobLevel(sandbox_type, JobLevel::kLockdown, 0, policy);
   if (result != SBOX_ALL_OK)
     return result;
 
@@ -1134,9 +1131,13 @@ ResultCode SandboxWin::StartSandboxedProcess(
     const base::HandlesToInheritVector& handles_to_inherit,
     SandboxDelegate* delegate,
     base::Process* process) {
+  const base::ElapsedTimer timer;
   auto policy = g_broker_services->CreatePolicy();
+  auto time_policy_created = timer.Elapsed();
+
   ResultCode result = GeneratePolicyForSandboxedProcess(
       cmd_line, process_type, handles_to_inherit, delegate, policy.get());
+  auto time_policy_generated = timer.Elapsed();
 
   if (ResultCode::SBOX_ERROR_UNSANDBOXED_PROCESS == result) {
     return LaunchWithoutSandbox(cmd_line, handles_to_inherit, delegate,
@@ -1154,6 +1155,7 @@ ResultCode SandboxWin::StartSandboxedProcess(
       cmd_line.GetProgram().value().c_str(),
       cmd_line.GetCommandLineString().c_str(), std::move(policy), &last_warning,
       &last_error, &temp_process_info);
+  auto time_process_spawned = timer.Elapsed();
 
   base::win::ScopedProcessInformation target(temp_process_info);
 
@@ -1180,6 +1182,33 @@ ResultCode SandboxWin::StartSandboxedProcess(
 
   delegate->PostSpawnTarget(target.process_handle());
   CHECK(ResumeThread(target.thread_handle()) != static_cast<DWORD>(-1));
+  auto time_process_resumed = timer.Elapsed();
+
+  // Record timing histogram on sandboxed & launched success.
+  // We're interested in the happy fast case so have a low maximum.
+  if (SBOX_ALL_OK == result) {
+    const auto kLowBound = base::Microseconds(5);
+    const auto kHighBound = base::Microseconds(100000);
+    const int kBuckets = 50;
+    base::UmaHistogramCustomMicrosecondsTimes(
+        "Process.Sandbox.StartSandboxedWin.CreatePolicyDuration",
+        time_policy_created, kLowBound, kHighBound, kBuckets);
+    base::UmaHistogramCustomMicrosecondsTimes(
+        "Process.Sandbox.StartSandboxedWin.GeneratePolicyDuration",
+        time_policy_generated - time_policy_created, kLowBound, kHighBound,
+        kBuckets);
+    base::UmaHistogramCustomMicrosecondsTimes(
+        "Process.Sandbox.StartSandboxedWin.SpawnTargetDuration",
+        time_process_spawned - time_policy_generated, kLowBound, kHighBound,
+        kBuckets);
+    base::UmaHistogramCustomMicrosecondsTimes(
+        "Process.Sandbox.StartSandboxedWin.PostSpawnTargetDuration",
+        time_process_resumed - time_process_spawned, kLowBound, kHighBound,
+        kBuckets);
+    base::UmaHistogramCustomMicrosecondsTimes(
+        "Process.Sandbox.StartSandboxedWin.TotalDuration", time_process_resumed,
+        kLowBound, kHighBound, kBuckets);
+  }
 
   *process = base::Process(target.TakeProcessHandle());
   return SBOX_ALL_OK;

@@ -181,13 +181,15 @@ template("chrome_bundle") {
                              "lint_suppressions_dep",
                              "min_sdk_version",
                              "proguard_android_sdk_dep",
+                             "rotation_config",
                              "static_library_provider",
                              "static_library_synchronized_proguard",
                              "version_code",
                            ])
     command_line_flags_file = "chrome-command-line"
     proguard_enabled = !is_java_debug
-    enable_language_splits = true
+    # Vivaldi
+    enable_language_splits = false
     extra_modules = _extra_modules
     system_image_locale_allowlist = platform_pak_locales - extended_locales
     is_multi_abi = _is_multi_abi

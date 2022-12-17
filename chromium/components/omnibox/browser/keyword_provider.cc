@@ -11,6 +11,7 @@
 #include "base/containers/cxx20_erase.h"
 #include "base/i18n/case_conversion.h"
 #include "base/memory/raw_ptr.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_piece.h"
 #include "base/strings/string_util.h"
 #include "base/strings/utf_string_conversions.h"
@@ -26,7 +27,6 @@
 #include "components/search_engines/template_url_service.h"
 #include "components/strings/grit/components_strings.h"
 #include "components/url_formatter/url_formatter.h"
-#include "net/base/escape.h"
 #include "third_party/metrics_proto/omnibox_input_type.pb.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "url/url_constants.h"
@@ -86,9 +86,10 @@ void ScopedEndExtensionKeywordMode::StayInKeywordMode() {
 KeywordProvider::KeywordProvider(AutocompleteProviderClient* client,
                                  AutocompleteProviderListener* listener)
     : AutocompleteProvider(AutocompleteProvider::TYPE_KEYWORD),
-      listener_(listener),
       model_(client->GetTemplateURLService()),
-      extensions_delegate_(client->GetKeywordExtensionsDelegate(this)) {}
+      extensions_delegate_(client->GetKeywordExtensionsDelegate(this)) {
+  AddListener(listener);
+}
 
 // static
 std::u16string KeywordProvider::SplitKeywordFromInput(
@@ -177,6 +178,27 @@ const TemplateURL* KeywordProvider::GetSubstitutingTemplateURLForInput(
   return nullptr;
 }
 
+// static
+AutocompleteInput KeywordProvider::AdjustInputForStarterPackEngines(
+    const AutocompleteInput& input,
+    TemplateURLService* model) {
+  DCHECK(model);
+
+  // If we're in a starter pack scope, we want to run the provider with only
+  // the user text AFTER the keyword.  i.e. if the input is "@history text",
+  // set the autocomplete input to just "text".
+  AutocompleteInput keyword_input = input;
+  const TemplateURL* keyword_provider =
+      KeywordProvider::GetSubstitutingTemplateURLForInput(model,
+                                                          &keyword_input);
+  if (OmniboxFieldTrial::IsSiteSearchStarterPackEnabled() &&
+      input.prefer_keyword() && keyword_provider &&
+      keyword_provider->starter_pack_id() > 0) {
+    return keyword_input;
+  }
+  return input;
+}
+
 std::u16string KeywordProvider::GetKeywordForText(
     const std::u16string& text) const {
   TemplateURLService* url_service = GetTemplateURLService();
@@ -214,6 +236,13 @@ std::u16string KeywordProvider::GetKeywordForText(
       template_url->type() != TemplateURL::OMNIBOX_API_EXTENSION &&
       template_url->prepopulate_id() == 0 &&
       template_url->is_active() != TemplateURLData::ActiveStatus::kTrue) {
+    return std::u16string();
+  }
+
+  // Don't provide a keyword if it's a starter pack engine and the starter pack
+  // feature flag is not enabled.
+  if (!OmniboxFieldTrial::IsSiteSearchStarterPackEnabled() &&
+      template_url->starter_pack_id() != 0) {
     return std::u16string();
   }
 

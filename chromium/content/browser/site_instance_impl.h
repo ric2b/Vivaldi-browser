@@ -8,21 +8,27 @@
 #include <stddef.h>
 #include <stdint.h>
 
-#include "base/memory/raw_ptr.h"
+#include "base/check.h"
+#include "base/memory/scoped_refptr.h"
 #include "content/browser/isolation_context.h"
 #include "content/browser/site_info.h"
-#include "content/browser/site_instance_group.h"
 #include "content/browser/web_exposed_isolation_info.h"
 #include "content/common/content_export.h"
+#include "content/public/browser/browsing_instance_id.h"
 #include "content/public/browser/site_instance.h"
-#include "content/public/browser/storage_partition_config.h"
+#include "content/public/browser/site_instance_process_assignment.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_proto.h"
 #include "third_party/perfetto/include/perfetto/tracing/traced_value_forward.h"
 #include "url/gurl.h"
-#include "url/origin.h"
+
+namespace url {
+class Origin;
+}
 
 namespace content {
 
+class AgentSchedulingGroupHost;
+class BrowserContext;
 class BrowsingInstance;
 class SiteInstanceGroup;
 class StoragePartitionConfig;
@@ -42,6 +48,8 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   static scoped_refptr<SiteInstanceImpl> CreateForGuest(
       BrowserContext* browser_context,
       const StoragePartitionConfig& partition_config);
+  static scoped_refptr<SiteInstanceImpl> CreateForFencedFrame(
+      SiteInstanceImpl* embedder_site_instance);
 
   // Similar to above, but creates an appropriate SiteInstance in a new
   // BrowsingInstance for a particular `url_info`. This is a more generic
@@ -112,6 +120,11 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // Returns an AgentSchedulingGroupHost, or creates one if
   // `site_instance_group_` doesn't have one.
   AgentSchedulingGroupHost& GetOrCreateAgentSchedulingGroup();
+
+  // Resets the `site_instance_group_` refptr, and must be called when its
+  // RenderProcessHost goes away. `site_instance_group_` can be reassigned later
+  // as needed.
+  void ResetSiteInstanceGroup();
 
   // SiteInstance implementation.
   SiteInstanceId GetId() override;
@@ -205,13 +218,14 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // SiteInstance to preserve scripting relationships. |dest_url_info| carries
   // additional state, e.g. if the destination url requests origin isolation.
   //
-  // |for_main_frame| is set to true if the caller is interested in an
-  // answer for a main frame. This is set to false for subframe navigations.
-  // Note: In some circumstances, like hosted apps, different answers can be
-  // returned if we are navigating a main frame instead of a subframe.
+  // |for_outermost_main_frame| is set to true if the caller is interested in an
+  // answer for a outermost main frame. This is set to false for subframe or
+  // embedded main frame (eg fenced frame) navigations.  Note: In some
+  // circumstances, like hosted apps, different answers can be returned if we
+  // are navigating an outermost main frame instead of an embedded frame.
   bool IsNavigationSameSite(const GURL& last_successful_url,
-                            const url::Origin last_committed_origin,
-                            bool for_main_frame,
+                            const url::Origin& last_committed_origin,
+                            bool for_outermost_main_frame,
                             const UrlInfo& dest_url_info);
 
   // Returns true if a navigation to |dest_url| should be allowed to stay in
@@ -407,6 +421,9 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
 
   ~SiteInstanceImpl() override;
 
+  // Returns true when |this| has a SiteInstanceGroup.
+  bool has_group() { return group() != nullptr; }
+
   // Used to restrict a process' origin access rights. This method gets called
   // when a process gets assigned to this SiteInstance and when the
   // SiteInfo is explicitly set. If the SiteInfo hasn't been set yet and
@@ -495,6 +512,8 @@ class CONTENT_EXPORT SiteInstanceImpl final : public SiteInstance {
   // `site_instance_group_` is set when a RenderProcessHost is set for this
   // SiteInstance, and will be how `this` gets its RenderProcessHost and
   // AgentSchedulingGroup.
+  // If the RenderProcessHost goes away, `site_instance_group_` will get reset.
+  // It can be set to another group later on as needed.
   // See the class-level comment of SiteInstanceGroup for more details.
   scoped_refptr<SiteInstanceGroup> site_instance_group_;
 

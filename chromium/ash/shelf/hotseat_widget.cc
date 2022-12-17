@@ -21,7 +21,6 @@
 #include "ash/shelf/shelf_navigation_widget.h"
 #include "ash/shelf/shelf_view.h"
 #include "ash/shell.h"
-#include "ash/style/highlight_border.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/wallpaper/wallpaper_controller_impl.h"
 #include "ash/wm/overview/overview_controller.h"
@@ -39,6 +38,7 @@
 #include "ui/gfx/color_utils.h"
 #include "ui/gfx/geometry/rounded_corners_f.h"
 #include "ui/views/background.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/view_targeter_delegate.h"
 #include "ui/views/widget/widget_delegate.h"
@@ -587,9 +587,10 @@ void HotseatWidget::DelegateView::SetTranslucentBackground(
       rounded_corners) {
     translucent_background_->layer()->SetRoundedCornerRadius(rounded_corners);
     if (features::IsDarkLightModeEnabled()) {
-      translucent_background_->SetBorder(std::make_unique<HighlightBorder>(
-          radius, HighlightBorder::Type::kHighlightBorder1,
-          /*use_light_colors=*/true));
+      translucent_background_->SetBorder(
+          std::make_unique<views::HighlightBorder>(
+              radius, views::HighlightBorder::Type::kHighlightBorder1,
+              /*use_light_colors=*/!features::IsDarkLightModeEnabled()));
     }
   }
 
@@ -1266,6 +1267,28 @@ void HotseatWidget::StartNormalBoundsAnimation(double target_opacity,
                                                const gfx::Rect& target_bounds) {
   GetNativeView()->layer()->SetOpacity(target_opacity);
   SetBounds(target_bounds);
+}
+
+bool HotseatWidget::IsPointWithinGestureTouchArea(
+    const gfx::Point& screen_location) {
+  if (!features::IsShelfPalmRejectionTouchAreaEnabled())
+    return true;
+
+  const int touch_area_width = base::GetFieldTrialParamByFeatureAsInt(
+      features::kShelfPalmRejectionTouchArea, "shelf_touch_area", 100);
+
+  gfx::Rect hotseat_bounds = GetWindowBoundsInScreen();
+
+  if (hotseat_bounds.width() < touch_area_width)
+    return true;
+
+  hotseat_bounds.ClampToCenteredSize(
+      gfx::Size(touch_area_width, hotseat_bounds.height()));
+
+  const int min_x =
+      (hotseat_bounds.width() - touch_area_width) / 2 + hotseat_bounds.x();
+  const int max_x = min_x + touch_area_width;
+  return screen_location.x() >= min_x && screen_location.x() <= max_x;
 }
 
 }  // namespace ash

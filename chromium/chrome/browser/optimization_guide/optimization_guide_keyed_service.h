@@ -18,7 +18,7 @@
 #include "components/optimization_guide/proto/models.pb.h"
 
 #if BUILDFLAG(IS_ANDROID)
-#include "chrome/browser/android/bookmarks/bookmark_bridge.h"
+#include "chrome/browser/bookmarks/android/bookmark_bridge.h"
 #endif
 
 namespace content {
@@ -186,6 +186,8 @@ class OptimizationGuideKeyedService
           callback) override;
 
   download::BackgroundDownloadService* BackgroundDownloadServiceProvider();
+
+  bool ComponentUpdatesEnabledProvider() const;
 
   raw_ptr<content::BrowserContext> browser_context_;
 

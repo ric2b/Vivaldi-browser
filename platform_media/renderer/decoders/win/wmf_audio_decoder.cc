@@ -9,11 +9,6 @@
 
 namespace media {
 
-/* static */
-bool WMFAudioDecoder::IsEnabled() {
-  return true;
-}
-
 WMFAudioDecoder::WMFAudioDecoder(
     scoped_refptr<base::SequencedTaskRunner> task_runner)
     : impl_(std::move(task_runner)) {}

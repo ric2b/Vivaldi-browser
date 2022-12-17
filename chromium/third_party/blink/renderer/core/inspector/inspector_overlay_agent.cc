@@ -386,7 +386,9 @@ InspectorOverlayAgent::InspectorOverlayAgent(
       show_size_on_resize_(&agent_state_, false),
       paused_in_debugger_message_(&agent_state_, String()),
       inspect_mode_(&agent_state_, protocol::Overlay::InspectModeEnum::None),
-      inspect_mode_protocol_config_(&agent_state_, std::vector<uint8_t>()) {}
+      inspect_mode_protocol_config_(&agent_state_, std::vector<uint8_t>()) {
+  DCHECK(dom_agent);
+}
 
 InspectorOverlayAgent::~InspectorOverlayAgent() {
   DCHECK(!overlay_page_);
@@ -1214,6 +1216,8 @@ void InspectorOverlayAgent::LoadOverlayPageResource() {
       settings.GetGenericFontFamilySettings().Cursive());
   overlay_settings.GetGenericFontFamilySettings().UpdateFantasy(
       settings.GetGenericFontFamilySettings().Fantasy());
+  overlay_settings.GetGenericFontFamilySettings().UpdateMath(
+      settings.GetGenericFontFamilySettings().Math());
   overlay_settings.SetMinimumFontSize(settings.GetMinimumFontSize());
   overlay_settings.SetMinimumLogicalFontSize(
       settings.GetMinimumLogicalFontSize());
@@ -1337,7 +1341,8 @@ void InspectorOverlayAgent::EvaluateInOverlay(const String& method,
 
   v8::Local<v8::Value> v8_method;
   if (!GetV8Property(context, context->Global(), "dispatch")
-           .ToLocal(&v8_method)) {
+           .ToLocal(&v8_method) ||
+      v8_method->IsUndefined()) {
     return;
   }
 

@@ -9,7 +9,8 @@
 #include <vector>
 
 #include "base/values.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_types.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -26,8 +27,9 @@ enum class ExternalInstallSource;
 
 struct ExternalInstallOptions {
   ExternalInstallOptions(const GURL& install_url,
-                         DisplayMode user_display_mode,
+                         absl::optional<UserDisplayMode> user_display_mode,
                          ExternalInstallSource install_source);
+
   ~ExternalInstallOptions();
   ExternalInstallOptions(const ExternalInstallOptions& other);
   ExternalInstallOptions(ExternalInstallOptions&& other);
@@ -38,7 +40,9 @@ struct ExternalInstallOptions {
   base::Value AsDebugValue() const;
 
   GURL install_url;
-  DisplayMode user_display_mode;
+
+  absl::optional<UserDisplayMode> user_display_mode;
+
   ExternalInstallSource install_source;
 
   // App name to use for placeholder apps or web apps that have no name in
@@ -83,7 +87,8 @@ struct ExternalInstallOptions {
   bool is_disabled = false;
 
   // Whether the app should be reinstalled even if the user has previously
-  // uninstalled it.
+  // uninstalled it. Only applies to preinstalled apps and/or apps that can be
+  // uninstalled by the user.
   bool override_previous_user_uninstall = false;
 
   // Whether the app should only be installed if the user is using Chrome for
@@ -185,7 +190,7 @@ struct ExternalInstallOptions {
   WebAppInstallInfoFactory app_info_factory;
 
   // The type of SystemWebApp, if this app is a System Web App.
-  absl::optional<SystemAppType> system_app_type = absl::nullopt;
+  absl::optional<ash::SystemWebAppType> system_app_type = absl::nullopt;
 
   // Whether the app was installed by an OEM and should be placed in a special
   // OEM folder in the app launcher. Only used on Chrome OS.

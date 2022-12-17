@@ -6,16 +6,8 @@ package(
 )
 
 py_library(
-    name = "task_options",
-    srcs = ["task_options.py"],
-)
-
-py_library(
-    name = "task_utils",
-    srcs = ["task_utils.py"],
-    deps = [
-        ":task_options",
-        "//tensorflow_lite_support/cc/task/core/proto:base_options_py_pb2",
-        "//tensorflow_lite_support/python/task/core/proto:configuration_pb2",
+    name = "optional_dependencies",
+    srcs = [
+        "optional_dependencies.py",
     ],
 )

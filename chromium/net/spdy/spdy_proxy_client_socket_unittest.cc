@@ -219,8 +219,7 @@ class SpdyProxyClientSocketTest : public PlatformTest,
 };
 
 SpdyProxyClientSocketTest::SpdyProxyClientSocketTest()
-    : read_buf_(nullptr),
-      connect_data_(SYNCHRONOUS, OK),
+    : connect_data_(SYNCHRONOUS, OK),
       user_agent_(kUserAgent),
       url_(kRequestUrl),
       proxy_host_port_(kProxyHost, kProxyPort),
@@ -1645,6 +1644,34 @@ TEST_P(SpdyProxyClientSocketTest, SendEndStreamAfterWrite) {
   ResumeAndRun();
   AssertWriteLength(kLen1);
   AssertSyncReadEOF();
+}
+
+// Regression test for https://crbug.com/1320256
+TEST_P(SpdyProxyClientSocketTest, WriteAfterStreamEndSent) {
+  spdy::SpdySerializedFrame conn(ConstructConnectRequestFrame());
+  MockWrite writes[] = {
+      CreateMockWrite(conn, 0, SYNCHRONOUS),
+      // The following mock write blocks SpdyStream::SendData() in
+      // SpdyProxyClientSocket::MaybeSendEndStream().
+      MockWrite(SYNCHRONOUS, ERR_IO_PENDING, 5),
+  };
+
+  spdy::SpdySerializedFrame resp(ConstructConnectReplyFrame());
+  spdy::SpdySerializedFrame read_msg(
+      ConstructBodyFrame(kMsg1, kLen1, /*fin=*/true));
+  MockRead reads[] = {
+      CreateMockRead(resp, 1, ASYNC),
+      MockRead(ASYNC, ERR_IO_PENDING, 2),
+      CreateMockRead(read_msg, 3, ASYNC),
+      MockRead(SYNCHRONOUS, ERR_IO_PENDING, 4),
+  };
+
+  Initialize(reads, writes);
+
+  AssertConnectSucceeds();
+
+  AssertAsyncReadEquals(kMsg1, kLen1);
+  AssertWriteReturns(kMsg2, kLen2, ERR_CONNECTION_CLOSED);
 }
 
 }  // namespace net

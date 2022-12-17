@@ -146,20 +146,14 @@ cc::ManagedMemoryPolicy GetGpuMemoryPolicy(
   if (display_width >= kLargeDisplayThreshold)
     actual.bytes_limit_when_visible *= 2;
 #endif
-
-  // If the feature `kScaleTileMemoryLimitFactor` is not enabled,
-  // `kScaleTileMemoryLimitFactor` will default to 1.
-  actual.bytes_limit_when_visible =
-      static_cast<size_t>(actual.bytes_limit_when_visible *
-                          features::kScaleTileMemoryLimitFactor.Get());
-
   return actual;
 }
 
 // static
 cc::LayerTreeSettings GenerateLayerTreeSettings(
     bool is_threaded,
-    bool for_child_local_root_frame,
+    bool is_for_embedded_frame,
+    bool is_for_scalable_page,
     const gfx::Size& initial_screen_size,
     float initial_device_scale_factor) {
   const base::CommandLine& cmd = *base::CommandLine::ForCurrentProcess();
@@ -178,7 +172,8 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
       base::FeatureList::IsEnabled(media::kUseR16Texture);
 
   settings.commit_to_active_tree = !is_threaded;
-  settings.is_layer_tree_for_subframe = for_child_local_root_frame;
+  settings.is_for_embedded_frame = is_for_embedded_frame;
+  settings.is_for_scalable_page = is_for_scalable_page;
 
   settings.main_frame_before_activation_enabled =
       cmd.HasSwitch(cc::switches::kEnableMainFrameBeforeActivation);
@@ -367,11 +362,11 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
   settings.initial_debug_state.show_web_vital_metrics =
       base::FeatureList::IsEnabled(
           ::features::kHudDisplayForPerformanceMetrics) &&
-      !for_child_local_root_frame;
+      !is_for_embedded_frame;
   settings.initial_debug_state.show_smoothness_metrics =
       base::FeatureList::IsEnabled(
           ::features::kHudDisplayForPerformanceMetrics) &&
-      !for_child_local_root_frame;
+      !is_for_embedded_frame;
 
   settings.initial_debug_state.SetRecordRenderingStats(
       cmd.HasSwitch(cc::switches::kEnableGpuBenchmarking));
@@ -405,10 +400,10 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
   }
 
 #if BUILDFLAG(IS_ANDROID)
-  // Synchronous compositing is used only for the root frame.
+  // Synchronous compositing is used only for the outermost main frame.
   bool use_synchronous_compositor =
       platform->IsSynchronousCompositingEnabledForAndroidWebView() &&
-      !for_child_local_root_frame;
+      !is_for_embedded_frame;
   // Do not use low memory policies for Android WebView.
   bool using_low_memory_policy =
       base::SysInfo::IsLowEndDevice() && !IsSmallScreen(screen_size) &&
@@ -453,6 +448,7 @@ cc::LayerTreeSettings GenerateLayerTreeSettings(
     settings.scrollbar_thinning_duration =
         ui::kOverlayScrollbarThinningDuration;
     settings.scrollbar_flash_after_any_scroll_update = true;
+    settings.enable_fluent_scrollbar = ui::IsFluentScrollbarEnabled();
   }
 
   // If there's over 4GB of RAM, increase the working set size to 256MB for both

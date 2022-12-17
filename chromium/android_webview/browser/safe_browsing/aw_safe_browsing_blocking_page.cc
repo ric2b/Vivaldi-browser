@@ -82,10 +82,6 @@ AwSafeBrowsingBlockingPage::AwSafeBrowsingBlockingPage(
                 safe_browsing::TriggerType::SECURITY_INTERSTITIAL, web_contents,
                 unsafe_resources[0], url_loader_factory,
                 /*history_service*/ nullptr,
-                // TODO(crbug.com/1284979) If features get added that can alter
-                // user population values in android_webview, we should consider
-                // threading the user population through for client reports
-                /*get_user_population_callback*/ base::NullCallback(),
                 /*referrer_chain_provider*/ nullptr,
                 sb_error_ui()->get_error_display_options());
   }
@@ -149,7 +145,7 @@ void AwSafeBrowsingBlockingPage::CreatedPostCommitErrorPageNavigation(
   resource_request_ = std::make_unique<AwWebResourceRequest>(
       error_page_navigation_handle->GetURL().spec(),
       error_page_navigation_handle->IsPost() ? "POST" : "GET",
-      error_page_navigation_handle->IsInMainFrame(),
+      error_page_navigation_handle->IsInPrimaryMainFrame(),
       error_page_navigation_handle->HasUserGesture(),
       error_page_navigation_handle->GetRequestHeaders());
   resource_request_->is_renderer_initiated =

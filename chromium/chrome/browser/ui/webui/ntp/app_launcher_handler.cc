@@ -52,10 +52,13 @@
 #include "chrome/browser/ui/webui/extensions/extension_basic_info.h"
 #include "chrome/browser/ui/webui/extensions/extension_icon_source.h"
 #include "chrome/browser/ui/webui/ntp/new_tab_ui.h"
+#include "chrome/browser/web_applications/commands/install_from_info_command.h"
 #include "chrome/browser/web_applications/commands/run_on_os_login_command.h"
 #include "chrome/browser/web_applications/extension_status_utils.h"
 #include "chrome/browser/web_applications/extensions/bookmark_app_util.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app.h"
+#include "chrome/browser/web_applications/web_app_command_manager.h"
 #include "chrome/browser/web_applications/web_app_icon_manager.h"
 #include "chrome/browser/web_applications/web_app_install_finalizer.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
@@ -93,6 +96,7 @@
 #include "extensions/common/constants.h"
 #include "extensions/common/extension.h"
 #include "extensions/common/extension_icon_set.h"
+#include "extensions/common/extension_id.h"
 #include "extensions/common/extension_set.h"
 #include "extensions/common/manifest_handlers/icons_handler.h"
 #include "net/base/url_util.h"
@@ -171,6 +175,8 @@ bool HasMatchingOrGreaterThanIcon(const SortedSizesPx& downloaded_icon_sizes,
   return largest >= pixels;
 }
 
+// Query string for showing the deprecation dialog with deletion options.
+const char kDeprecationDialogQueryString[] = "showDeletionDialog";
 // Query string for showing the force installed apps deprecation dialog.
 // Should match with kChromeUIAppsWithForceInstalledDeprecationDialogURL.
 const char kForceInstallDialogQueryString[] = "showForceInstallDialog";
@@ -228,6 +234,9 @@ base::Value::Dict AppLauncherHandler::CreateWebAppInfo(
   dict.Set("mayCreateShortcuts", is_locally_installed);
   dict.Set("isLocallyInstalled", is_locally_installed);
 
+  const bool hide_display_mode = registrar.IsIsolated(app_id);
+  dict.Set("hideDisplayMode", hide_display_mode);
+
   absl::optional<std::string> icon_big;
   absl::optional<std::string> icon_small;
 
@@ -254,7 +263,7 @@ base::Value::Dict AppLauncherHandler::CreateWebAppInfo(
 
   extensions::LaunchContainerAndType result =
       extensions::GetLaunchContainerAndTypeFromDisplayMode(
-          registrar.GetAppUserDisplayMode(app_id));
+          registrar.GetAppEffectiveDisplayMode(app_id));
   dict.Set("launch_container", static_cast<int>(result.launch_container));
   dict.Set("launch_type", result.launch_type);
   dict.Set("is_component", false);
@@ -398,9 +407,9 @@ base::Value::Dict AppLauncherHandler::CreateExtensionInfo(
   if (!page_ordinal.IsValid()) {
     // Make sure every app has a page ordinal (some predate the page ordinal).
     // The webstore app should be on the first page.
-    page_ordinal = extension->id() == extensions::kWebStoreAppId ?
-        sorting->CreateFirstAppPageOrdinal() :
-        sorting->GetNaturalAppPageOrdinal();
+    page_ordinal = extension->id() == extensions::kWebStoreAppId
+                       ? sorting->CreateFirstAppPageOrdinal()
+                       : sorting->GetNaturalAppPageOrdinal();
     sorting->SetPageOrdinal(extension->id(), page_ordinal);
   }
   dict.Set("page_index", sorting->PageStringOrdinalAsInteger(page_ordinal));
@@ -411,9 +420,10 @@ base::Value::Dict AppLauncherHandler::CreateExtensionInfo(
     // Make sure every app has a launch ordinal (some predate the launch
     // ordinal). The webstore's app launch ordinal is always set to the first
     // position.
-    app_launch_ordinal = extension->id() == extensions::kWebStoreAppId ?
-        sorting->CreateFirstAppLaunchOrdinal(page_ordinal) :
-        sorting->CreateNextAppLaunchOrdinal(page_ordinal);
+    app_launch_ordinal =
+        extension->id() == extensions::kWebStoreAppId
+            ? sorting->CreateFirstAppLaunchOrdinal(page_ordinal)
+            : sorting->CreateNextAppLaunchOrdinal(page_ordinal);
     sorting->SetAppLaunchOrdinal(extension->id(), app_launch_ordinal);
   }
   dict.Set("app_launch_ordinal", app_launch_ordinal.ToInternalValue());
@@ -421,6 +431,8 @@ base::Value::Dict AppLauncherHandler::CreateExtensionInfo(
   // Run on OS Login is not implemented for extension/bookmark apps.
   dict.Set("mayShowRunOnOsLoginMode", false);
   dict.Set("mayToggleRunOnOsLoginMode", false);
+
+  dict.Set("hideDisplayMode", false);
   return dict;
 }
 
@@ -457,7 +469,7 @@ void AppLauncherHandler::RegisterMessages() {
   web_ui()->RegisterDeprecatedMessageCallback(
       "createAppShortcut",
       base::BindRepeating(&AppLauncherHandler::HandleCreateAppShortcut,
-                          base::Unretained(this)));
+                          base::Unretained(this), base::DoNothing()));
   web_ui()->RegisterDeprecatedMessageCallback(
       "installAppLocally",
       base::BindRepeating(&AppLauncherHandler::HandleInstallAppLocally,
@@ -725,8 +737,8 @@ void AppLauncherHandler::HandleGetApps(const base::ListValue* args) {
                             base::Unretained(this));
     extension_pref_change_registrar_.Init(
         ExtensionPrefs::Get(profile)->pref_service());
-    extension_pref_change_registrar_.Add(
-        extensions::pref_names::kExtensions, callback);
+    extension_pref_change_registrar_.Add(extensions::pref_names::kExtensions,
+                                         callback);
     extension_pref_change_registrar_.Add(prefs::kNtpAppPageNames, callback);
 
     ExtensionRegistry::Get(profile)->AddObserver(this);
@@ -736,19 +748,33 @@ void AppLauncherHandler::HandleGetApps(const base::ListValue* args) {
     install_manager_observation_.Observe(&web_app_provider_->install_manager());
 
     WebContents* web_contents = web_ui()->GetWebContents();
-    if (web_contents->GetLastCommittedURL() ==
-            GURL(chrome::kChromeUIAppsWithDeprecationDialogURL) &&
-        !deprecated_app_ids_.empty()) {
-      TabDialogs::FromWebContents(web_contents)
-          ->ShowDeprecatedAppsDialog(deprecated_app_ids_, web_contents);
-    }
     std::string app_id;
+    if (net::GetValueForKeyInQuery(web_contents->GetLastCommittedURL(),
+                                   kDeprecationDialogQueryString, &app_id)) {
+      if (extensions::IsExtensionUnsupportedDeprecatedApp(profile, app_id) &&
+          !deprecated_app_ids_.empty()) {
+        TabDialogs::FromWebContents(web_contents)
+            ->ShowDeprecatedAppsDialog(
+                app_id, deprecated_app_ids_, web_contents,
+                base::BindOnce(
+                    &AppLauncherHandler::LaunchApp,
+                    weak_ptr_factory_.GetWeakPtr(), app_id,
+                    extension_misc::AppLaunchBucket::APP_LAUNCH_CMD_LINE_APP,
+                    "", WindowOpenDisposition::CURRENT_TAB, true));
+      }
+    }
     if (net::GetValueForKeyInQuery(web_contents->GetLastCommittedURL(),
                                    kForceInstallDialogQueryString, &app_id)) {
       if (extensions::IsExtensionUnsupportedDeprecatedApp(profile, app_id) &&
           extensions::IsExtensionForceInstalled(profile, app_id, nullptr)) {
         TabDialogs::FromWebContents(web_contents)
-            ->ShowForceInstalledDeprecatedAppsDialog(app_id, web_contents);
+            ->ShowForceInstalledDeprecatedAppsDialog(
+                app_id, web_contents,
+                base::BindOnce(
+                    &AppLauncherHandler::LaunchApp,
+                    weak_ptr_factory_.GetWeakPtr(), app_id,
+                    extension_misc::AppLaunchBucket::APP_LAUNCH_CMD_LINE_APP,
+                    "", WindowOpenDisposition::CURRENT_TAB, true));
       }
     }
   }
@@ -758,28 +784,50 @@ void AppLauncherHandler::HandleGetApps(const base::ListValue* args) {
 void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
   const std::string& extension_id = args->GetListDeprecated()[0].GetString();
   double source = args->GetListDeprecated()[1].GetDouble();
-  GURL override_url;
 
   extension_misc::AppLaunchBucket launch_bucket =
-      static_cast<extension_misc::AppLaunchBucket>(
-          static_cast<int>(source));
+      static_cast<extension_misc::AppLaunchBucket>(static_cast<int>(source));
   CHECK(launch_bucket >= 0 &&
         launch_bucket < extension_misc::APP_LAUNCH_BUCKET_BOUNDARY);
 
+  WindowOpenDisposition disposition =
+      args->GetListDeprecated().size() > 3
+          ? webui::GetDispositionFromClick(args, 3)
+          : WindowOpenDisposition::CURRENT_TAB;
+  std::string source_value;
+  if (args->GetListDeprecated().size() > 2) {
+    source_value = args->GetListDeprecated()[2].GetString();
+  }
+  LaunchApp(extension_id, launch_bucket, source_value, disposition, false);
+}
+
+void AppLauncherHandler::LaunchApp(
+    std::string extension_id,
+    extension_misc::AppLaunchBucket launch_bucket,
+    const std::string& source_value,
+    WindowOpenDisposition disposition,
+    bool force_launch_deprecated_apps) {
   Profile* profile = extension_service_->profile();
 
-  if (extensions::IsExtensionUnsupportedDeprecatedApp(profile, extension_id) &&
+  if (!force_launch_deprecated_apps &&
+      extensions::IsExtensionUnsupportedDeprecatedApp(profile, extension_id) &&
       base::FeatureList::IsEnabled(features::kChromeAppsDeprecation)) {
     if (!extensions::IsExtensionForceInstalled(profile, extension_id,
                                                nullptr)) {
       TabDialogs::FromWebContents(web_ui()->GetWebContents())
-          ->ShowDeprecatedAppsDialog(deprecated_app_ids_,
-                                     web_ui()->GetWebContents());
+          ->ShowDeprecatedAppsDialog(
+              extension_id, deprecated_app_ids_, web_ui()->GetWebContents(),
+              base::BindOnce(&AppLauncherHandler::LaunchApp,
+                             weak_ptr_factory_.GetWeakPtr(), extension_id,
+                             launch_bucket, source_value, disposition, true));
       return;
     } else {
       TabDialogs::FromWebContents(web_ui()->GetWebContents())
-          ->ShowForceInstalledDeprecatedAppsDialog(extension_id,
-                                                   web_ui()->GetWebContents());
+          ->ShowForceInstalledDeprecatedAppsDialog(
+              extension_id, web_ui()->GetWebContents(),
+              base::BindOnce(&AppLauncherHandler::LaunchApp,
+                             weak_ptr_factory_.GetWeakPtr(), extension_id,
+                             launch_bucket, source_value, disposition, true));
       return;
     }
   }
@@ -811,24 +859,15 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
         extensions::GetLaunchContainer(ExtensionPrefs::Get(profile), extension);
   }
 
-  WindowOpenDisposition disposition =
-      args->GetListDeprecated().size() > 3
-          ? webui::GetDispositionFromClick(args, 3)
-          : WindowOpenDisposition::CURRENT_TAB;
+  GURL override_url;
   if (extension_id != extensions::kWebStoreAppId) {
     CHECK_NE(launch_bucket, extension_misc::APP_LAUNCH_BUCKET_INVALID);
     extensions::RecordAppLaunchType(launch_bucket, type);
   } else {
     extensions::RecordWebStoreLaunch();
-
-    if (args->GetListDeprecated().size() > 2) {
-      const std::string& source_value =
-          args->GetListDeprecated()[2].GetString();
-      if (!source_value.empty()) {
-        override_url = net::AppendQueryParameter(
-            full_launch_url, extension_urls::kWebstoreSourceField,
-            source_value);
-      }
+    if (!source_value.empty()) {
+      override_url = net::AppendQueryParameter(
+          full_launch_url, extension_urls::kWebstoreSourceField, source_value);
     }
   }
 
@@ -849,8 +888,8 @@ void AppLauncherHandler::HandleLaunchApp(const base::ListValue* args) {
   } else {
     // To give a more "launchy" experience when using the NTP launcher, we close
     // it automatically.
-    Browser* browser = chrome::FindBrowserWithWebContents(
-        web_ui()->GetWebContents());
+    Browser* browser =
+        chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
     WebContents* old_contents = nullptr;
     if (browser)
       old_contents = browser->tab_strip_model()->GetActiveWebContents();
@@ -883,15 +922,16 @@ void AppLauncherHandler::HandleSetLaunchType(const base::ListValue* args) {
   if (web_app_provider_->registrar().IsInstalled(app_id)) {
     // Don't update the page; it already knows about the launch type change.
     base::AutoReset<bool> auto_reset(&ignore_changes_, true);
-    web_app::DisplayMode display_mode = web_app::DisplayMode::kBrowser;
+    web_app::UserDisplayMode user_display_mode =
+        web_app::UserDisplayMode::kBrowser;
     switch (launch_type) {
       case extensions::LAUNCH_TYPE_FULLSCREEN:
       case extensions::LAUNCH_TYPE_WINDOW:
-        display_mode = web_app::DisplayMode::kStandalone;
+        user_display_mode = web_app::UserDisplayMode::kStandalone;
         break;
       case extensions::LAUNCH_TYPE_PINNED:
       case extensions::LAUNCH_TYPE_REGULAR:
-        display_mode = web_app::DisplayMode::kBrowser;
+        user_display_mode = web_app::UserDisplayMode::kBrowser;
         break;
       case extensions::LAUNCH_TYPE_INVALID:
       case extensions::NUM_LAUNCH_TYPES:
@@ -900,7 +940,7 @@ void AppLauncherHandler::HandleSetLaunchType(const base::ListValue* args) {
     }
 
     web_app_provider_->sync_bridge().SetAppUserDisplayMode(
-        app_id, display_mode, /*is_user_action=*/true);
+        app_id, user_display_mode, /*is_user_action=*/true);
     return;
   }
 
@@ -1007,22 +1047,24 @@ void AppLauncherHandler::HandleUninstallApp(const base::ListValue* args) {
   }
 }
 
-void AppLauncherHandler::HandleCreateAppShortcut(const base::ListValue* args) {
+void AppLauncherHandler::HandleCreateAppShortcut(base::OnceClosure done,
+                                                 const base::ListValue* args) {
   const std::string& app_id = args->GetListDeprecated()[0].GetString();
-
   if (web_app_provider_->registrar().IsInstalled(app_id) &&
       !IsYoutubeExtension(app_id)) {
     Browser* browser =
         chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
     chrome::ShowCreateChromeAppShortcutsDialog(
         browser->window()->GetNativeWindow(), browser->profile(), app_id,
-        base::BindOnce([](bool success) {
-          base::UmaHistogramBoolean(
-              "Apps.AppInfoDialog.CreateWebAppShortcutSuccess", success);
-        }));
+        base::BindOnce(
+            [](base::OnceClosure done, bool success) {
+              base::UmaHistogramBoolean(
+                  "Apps.AppInfoDialog.CreateWebAppShortcutSuccess", success);
+              std::move(done).Run();
+            },
+            std::move(done)));
     return;
   }
-
   const Extension* extension =
       extensions::ExtensionRegistry::Get(extension_service_->profile())
           ->GetExtensionById(app_id,
@@ -1032,14 +1074,17 @@ void AppLauncherHandler::HandleCreateAppShortcut(const base::ListValue* args) {
   if (!extension)
     return;
 
-  Browser* browser = chrome::FindBrowserWithWebContents(
-        web_ui()->GetWebContents());
+  Browser* browser =
+      chrome::FindBrowserWithWebContents(web_ui()->GetWebContents());
   chrome::ShowCreateChromeAppShortcutsDialog(
       browser->window()->GetNativeWindow(), browser->profile(), extension,
-      base::BindOnce([](bool success) {
-        base::UmaHistogramBoolean(
-            "Apps.AppInfoDialog.CreateExtensionShortcutSuccess", success);
-      }));
+      base::BindOnce(
+          [](base::OnceClosure done, bool success) {
+            base::UmaHistogramBoolean(
+                "Apps.AppInfoDialog.CreateExtensionShortcutSuccess", success);
+            std::move(done).Run();
+          },
+          std::move(done)));
 }
 
 void AppLauncherHandler::HandleInstallAppLocally(const base::ListValue* args) {
@@ -1219,8 +1264,8 @@ void AppLauncherHandler::HandleRunOnOsLogin(const base::ListValue* args) {
 void AppLauncherHandler::HandleLaunchDeprecatedAppDialog(
     const base::ListValue* args) {
   TabDialogs::FromWebContents(web_ui()->GetWebContents())
-      ->ShowDeprecatedAppsDialog(deprecated_app_ids_,
-                                 web_ui()->GetWebContents());
+      ->ShowDeprecatedAppsDialog(extensions::ExtensionId(), deprecated_app_ids_,
+                                 web_ui()->GetWebContents(), base::DoNothing());
 }
 
 void AppLauncherHandler::OnFaviconForAppInstallFromLink(
@@ -1259,10 +1304,12 @@ void AppLauncherHandler::OnFaviconForAppInstallFromLink(
   install_params.add_to_quick_launch_bar = false;
   install_params.add_to_applications_menu = true;
 
-  web_app_provider_->install_manager().InstallWebAppFromInfo(
-      std::move(web_app), /*overwrite_existing_manifest_fields=*/false,
-      web_app::ForInstallableSite::kUnknown, install_params,
-      webapps::WebappInstallSource::SYNC, std::move(install_complete_callback));
+  web_app_provider_->command_manager().ScheduleCommand(
+      std::make_unique<web_app::InstallFromInfoCommand>(
+          std::move(web_app), &web_app_provider_->install_finalizer(),
+          /*overwrite_existing_manifest_fields=*/false,
+          webapps::WebappInstallSource::SYNC,
+          std::move(install_complete_callback), install_params));
 }
 
 void AppLauncherHandler::OnExtensionPreferenceChanged() {

@@ -6,6 +6,7 @@
 #include "base/strings/sys_string_conversions.h"
 #include "components/policy/core/common/policy_loader_ios_constants.h"
 #include "components/policy/policy_constants.h"
+#include "components/signin/ios/browser/features.h"
 #import "ios/chrome/browser/policy/policy_app_interface.h"
 #import "ios/chrome/browser/policy/policy_earl_grey_utils.h"
 #import "ios/chrome/browser/ui/authentication/authentication_constants.h"
@@ -56,35 +57,6 @@ NSString* const kMetricsConsentCheckboxAccessibilityIdentifier =
 NSString* const kBeginBoldTag = @"BEGIN_BOLD[ \t]*";
 NSString* const kEndBoldTag = @"[ \t]*END_BOLD";
 
-// Add the field trial variation parameters to the app launch configuration.
-void SetupVariationForConfig(AppLaunchConfiguration& config,
-                             std::string position,
-                             std::string stringsSet) {
-  config.additional_args.push_back(
-      "--enable-features=" + std::string(kEnableFREUIModuleIOS.name) + "<" +
-      std::string(kFREThirdUITrialName));
-
-  config.additional_args.push_back(
-      "--force-fieldtrials=" + std::string(kFREThirdUITrialName) + "/" +
-      std::string(kIdentitySwitcherInTopAndOldStringsSetGroup));
-
-  config.additional_args.push_back(
-      "--force-fieldtrial-params=" + std::string(kFREThirdUITrialName) + "." +
-      std::string(kIdentitySwitcherInTopAndOldStringsSetGroup) + ":" +
-      std::string(kFREUIIdentitySwitcherPositionParam) + "/" + position + "/" +
-      std::string(kFREUIStringsSetParam) + "/" + stringsSet);
-}
-
-// Returns a layout constraint to compare below.
-GREYLayoutConstraint* Below() {
-  return [GREYLayoutConstraint
-      layoutConstraintWithAttribute:kGREYLayoutAttributeTop
-                          relatedBy:kGREYLayoutRelationGreaterThanOrEqual
-               toReferenceAttribute:kGREYLayoutAttributeBottom
-                         multiplier:1.0
-                           constant:0.0];
-}
-
 // Returns a matcher for the welcome screen UMA checkbox button.
 id<GREYMatcher> GetUMACheckboxButton() {
   return grey_accessibilityID(kMetricsConsentCheckboxAccessibilityIdentifier);
@@ -99,9 +71,10 @@ id<GREYMatcher> GetAcceptButton() {
 
 // Returns a matcher for the button to open the Sync settings.
 id<GREYMatcher> GetSyncSettings() {
-  return grey_allOf(grey_text(l10n_util::GetNSString(
-                        IDS_IOS_FIRST_RUN_SYNC_SCREEN_ADVANCE_SETTINGS)),
-                    grey_sufficientlyVisible(), nil);
+  id<GREYMatcher> disclaimer =
+      grey_accessibilityID(kPromoStyleDisclaimerViewAccessibilityIdentifier);
+  return grey_allOf(grey_accessibilityLabel(@"settings"),
+                    grey_ancestor(disclaimer), nil);
 }
 
 // Returns a matcher for the button to add account.
@@ -124,20 +97,6 @@ id<GREYMatcher> GetNoThanksButton() {
       grey_text(l10n_util::GetNSString(
           IDS_IOS_FIRST_RUN_DEFAULT_BROWSER_SCREEN_SECONDARY_ACTION)),
       grey_sufficientlyVisible(), nil);
-}
-
-// Returns a matcher for the button to sign-in and sync (NEW string).
-id<GREYMatcher> GetTurnSyncOnButton() {
-  return grey_allOf(grey_text(l10n_util::GetNSString(
-                        IDS_IOS_FIRST_RUN_SYNC_SCREEN_PRIMARY_ACTION)),
-                    grey_sufficientlyVisible(), nil);
-}
-
-// Returns a matcher for the button to skip sign-in and sync (NEW string).
-id<GREYMatcher> GetDontSyncButton() {
-  return grey_allOf(grey_text(l10n_util::GetNSString(
-                        IDS_IOS_FIRST_RUN_SYNC_SCREEN_SECONDARY_ACTION)),
-                    grey_sufficientlyVisible(), nil);
 }
 
 // Returns a constraint where the element is below the reference.
@@ -177,6 +136,8 @@ GREYLayoutConstraint* BelowConstraint() {
 - (AppLaunchConfiguration)appConfigurationForTestCase {
   AppLaunchConfiguration config;
   config.features_enabled.push_back(kEnableFREUIModuleIOS);
+  config.features_disabled.push_back(signin::kNewMobileIdentityConsistencyFRE);
+  config.features_disabled.push_back(kEnableFREDefaultBrowserPromoScreen);
 
   // Show the First Run UI at startup.
   config.additional_args.push_back("-FirstRunForceEnabled");
@@ -383,6 +344,11 @@ GREYLayoutConstraint* BelowConstraint() {
 
   // Validate the Secondary button text.
   [self scrollToElementAndAssertVisibility:GetNoThanksButton()];
+
+  // Validate that the sync button is not interactible.
+  [[EarlGrey selectElementWithMatcher:grey_allOf(GetSyncSettings(),
+                                                 grey_interactable(), nil)]
+      assertWithMatcher:grey_nil()];
 }
 
 // Checks that the sign-in & sync screen is displayed correctly with an account
@@ -415,135 +381,16 @@ GREYLayoutConstraint* BelowConstraint() {
 
   // Validate the Secondary button text.
   [self scrollToElementAndAssertVisibility:GetNoThanksButton()];
-}
 
-// Checks that the sign-in & sync screen is displayed correctly with an account
-// (using NEW strings set).
-- (void)testSignInSyncScreenUINewString {
-  AppLaunchConfiguration config;
-  config.relaunch_policy = ForceRelaunchByKilling;
-
-  // Show the First Run UI at startup.
-  config.additional_args.push_back("-FirstRunForceEnabled");
-  config.additional_args.push_back("true");
-
-  // Setup field trial variation: TOP position for the identity switcher and NEW
-  // strings set.
-  SetupVariationForConfig(config, "top", "new");
-
-  // Relaunch the app to take the configuration into account.
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
-
-  [self verifyWelcomeScreenIsDisplayed];
-
-  // Go to the sign-in & sync screen.
-  [self scrollToElementAndAssertVisibility:GetAcceptButton()];
-  [[EarlGrey selectElementWithMatcher:GetAcceptButton()]
-      performAction:grey_tap()];
-
-  [self verifySignInSyncScreenIsDisplayed];
-
-  // Validate the Title text.
-  id<GREYMatcher> title =
-      grey_text(l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SYNC_SCREEN_TITLE));
-  [self scrollToElementAndAssertVisibility:title];
-
-  // Validate the Subtitle text.
-  id<GREYMatcher> subtitle =
-      grey_text(l10n_util::GetNSString(IDS_IOS_FIRST_RUN_SYNC_SCREEN_SUBTITLE));
-  [self scrollToElementAndAssertVisibility:subtitle];
-
-  // Validate the Primary button text.
-  [self scrollToElementAndAssertVisibility:GetTurnSyncOnButton()];
-
-  // Validate the Secondary button text.
-  [self scrollToElementAndAssertVisibility:GetDontSyncButton()];
-}
-
-// Checks that the identity switcher in the sign-in & sync screen is displayed
-// correctly at the TOP.
-- (void)testIdentitySwitcherAtTop {
-  AppLaunchConfiguration config;
-  config.relaunch_policy = ForceRelaunchByKilling;
-
-  // Show the First Run UI at startup.
-  config.additional_args.push_back("-FirstRunForceEnabled");
-  config.additional_args.push_back("true");
-
-  // Setup field trial variation: TOP position for the identity switcher and OLD
-  // strings set.
-  SetupVariationForConfig(config, "top", "old");
-
-  // Relaunch the app to take the configuration into account.
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
-
-  [self verifyWelcomeScreenIsDisplayed];
-
-  // Go to the sign-in & sync screen.
-  [self scrollToElementAndAssertVisibility:GetAcceptButton()];
-  [[EarlGrey selectElementWithMatcher:GetAcceptButton()]
-      performAction:grey_tap()];
-
-  [self verifySignInSyncScreenIsDisplayed];
-
-  // Verify that the subtitle label is below the identity switcher .
-  id<GREYMatcher> subtitleLabel =
-      grey_accessibilityID(kPromoStyleSubtitleAccessibilityIdentifier);
-  [self scrollToElementAndAssertVisibility:subtitleLabel];
-  [[EarlGrey selectElementWithMatcher:subtitleLabel]
-      assertWithMatcher:grey_layout(@[ Below() ],
-                                    grey_accessibilityID(
-                                        kIdentityButtonControlIdentifier))];
-}
-
-// Checks that the identity switcher in the sign-in & sync screen is displayed
-// correctly at the BOTTOM.
-- (void)testIdentitySwitcherAtBottom {
-  AppLaunchConfiguration config;
-  config.relaunch_policy = ForceRelaunchByKilling;
-
-  // Show the First Run UI at startup.
-  config.additional_args.push_back("-FirstRunForceEnabled");
-  config.additional_args.push_back("true");
-
-  // Setup field trial variation: BOTTOM position for the identity switcher and
-  // OLD strings set.
-  SetupVariationForConfig(config, "bottom", "old");
-
-  // Relaunch the app to take the configuration into account.
-  [[AppLaunchManager sharedManager] ensureAppLaunchedWithConfiguration:config];
-
-  FakeChromeIdentity* fakeIdentity = [FakeChromeIdentity fakeIdentity1];
-  [SigninEarlGrey addFakeIdentity:fakeIdentity];
-
-  [self verifyWelcomeScreenIsDisplayed];
-
-  // Go to the sign-in & sync screen.
-  [self scrollToElementAndAssertVisibility:GetAcceptButton()];
-  [[EarlGrey selectElementWithMatcher:GetAcceptButton()]
-      performAction:grey_tap()];
-
-  [self verifySignInSyncScreenIsDisplayed];
-
-  // Verify that the identity switcher is below the subtitle label.
-  id<GREYMatcher> subtitleLabel =
-      grey_accessibilityID(kPromoStyleSubtitleAccessibilityIdentifier);
-  [self scrollToElementAndAssertVisibility:subtitleLabel];
-  [[EarlGrey selectElementWithMatcher:grey_accessibilityID(
-                                          kIdentityButtonControlIdentifier)]
-      assertWithMatcher:grey_layout(@[ Below() ], subtitleLabel)];
+  // Validate that the sync button is interactible.
+  [[EarlGrey selectElementWithMatcher:grey_allOf(GetSyncSettings(),
+                                                 grey_interactable(), nil)]
+      assertWithMatcher:grey_sufficientlyVisible()];
 }
 
 // Tests that the forced sign-in screen is shown when the policy is enabled.
 // If the user says no during the FRE, then they should be re-prompted at the
 // end of the FRE.
-// TODO(crbug.com/1282047): Re-enable when fixed.
 - (void)testSignInScreenUIWhenForcedByPolicy {
   AppLaunchConfiguration configToSetPolicy = self.appConfigurationForTestCase;
 
@@ -869,7 +716,6 @@ GREYLayoutConstraint* BelowConstraint() {
       performAction:grey_tap()];
 
   [self verifySignInSyncScreenIsDisplayed];
-  [self scrollToElementAndAssertVisibility:GetSyncSettings()];
   [[EarlGrey selectElementWithMatcher:GetSyncSettings()]
       performAction:grey_tap()];
 
@@ -928,7 +774,6 @@ GREYLayoutConstraint* BelowConstraint() {
       performAction:grey_tap()];
 
   [self verifySignInSyncScreenIsDisplayed];
-  [self scrollToElementAndAssertVisibility:GetSyncSettings()];
   [[EarlGrey selectElementWithMatcher:GetSyncSettings()]
       performAction:grey_tap()];
 
@@ -973,7 +818,6 @@ GREYLayoutConstraint* BelowConstraint() {
       performAction:grey_tap()];
 
   [self verifySignInSyncScreenIsDisplayed];
-  [self scrollToElementAndAssertVisibility:GetSyncSettings()];
   [[EarlGrey selectElementWithMatcher:GetSyncSettings()]
       performAction:grey_tap()];
 
@@ -1036,7 +880,6 @@ GREYLayoutConstraint* BelowConstraint() {
       performAction:grey_tap()];
 
   [self verifySignInSyncScreenIsDisplayed];
-  [self scrollToElementAndAssertVisibility:GetSyncSettings()];
   [[EarlGrey selectElementWithMatcher:GetSyncSettings()]
       performAction:grey_tap()];
 
@@ -1110,7 +953,6 @@ GREYLayoutConstraint* BelowConstraint() {
       performAction:grey_tap()];
 
   [self verifySignInSyncScreenIsDisplayed];
-  [self scrollToElementAndAssertVisibility:GetSyncSettings()];
   [[EarlGrey selectElementWithMatcher:GetSyncSettings()]
       performAction:grey_tap()];
 

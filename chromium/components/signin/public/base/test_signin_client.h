@@ -96,7 +96,6 @@ class TestSigninClient : public SigninClient {
   std::unique_ptr<GaiaAuthFetcher> CreateGaiaAuthFetcher(
       GaiaAuthConsumer* consumer,
       gaia::GaiaSource source) override;
-  bool IsNonEnterpriseUser(const std::string& email) override;
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
   absl::optional<account_manager::Account> GetInitialPrimaryAccount() override;
@@ -104,6 +103,8 @@ class TestSigninClient : public SigninClient {
 
   void SetInitialPrimaryAccountForTests(const account_manager::Account& account,
                                         const absl::optional<bool>& is_child);
+  void RemoveAccount(const account_manager::AccountKey& account_key) override;
+
   void RemoveAllAccounts() override;
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 

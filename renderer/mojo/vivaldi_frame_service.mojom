@@ -19,7 +19,6 @@ struct SpatnavRect {
   int64 width;
   int64 height;
   string href;
-  string path;
 };
 
 enum ScrollType {
@@ -35,14 +34,23 @@ enum ScrollType {
   kBottom,
 };
 
+enum SpatnavDirection {
+  kNone,
+  kUp,
+  kDown,
+  kLeft,
+  kRight,
+};
+
 interface VivaldiFrameService {
   GetAccessKeysForPage() => (array<AccessKey> access_keys);
   AccessKeyAction(string access_key);
 
-  GetScrollPosition() => (int64 x, int64 y);
+  UpdateSpatnavRects();
   ScrollPage(ScrollType scroll_type, int32 scroll_amount);
 
-  GetSpatialNavigationRects() => (array<SpatnavRect> rects);
+  GetCurrentSpatnavRect() => (SpatnavRect rect);
+  MoveSpatnavRect(SpatnavDirection dir) => (SpatnavRect rect);
   GetFocusedElementInfo() => (string tagname,
                               string type,
                               bool editable,
@@ -51,7 +59,7 @@ interface VivaldiFrameService {
   // Determine language of given text, if possible. Returns language code, if detected.
   DetermineTextLanguage(string text) => (string langCode);
 
-  ActivateElementFromPoint(int32 x, int32 y, int32 modifiers);
+  ActivateSpatnavElement(int32 modifiers);
 
   // Inserts text into input fields.
   InsertText(string text);

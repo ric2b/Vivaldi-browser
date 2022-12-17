@@ -19,6 +19,10 @@ class HTMLMediaElement;
 class IntersectionObserver;
 class IntersectionObserverEntry;
 
+#if defined(VIVALDI_BUILD)
+class LocalFrame;
+#endif  // VIVALDI_BUILD
+
 // AutoplayPolicy is the class for handles autoplay logics.
 class CORE_EXPORT AutoplayPolicy final
     : public GarbageCollected<AutoplayPolicy> {
@@ -147,6 +151,13 @@ class CORE_EXPORT AutoplayPolicy final
 
   // Sets `autoplay_initiated_` if it wasn't already set.
   void MaybeSetAutoplayInitiated();
+
+#if defined(VIVALDI_BUILD)
+  static bool IsAutoplayAllowedForFrame(LocalFrame* frame,
+                                        bool play_requested);
+  static bool IsAutoplayAllowedForDocument(const Document& document);
+  static bool IsAutoplayAllowedForElement(Member<HTMLMediaElement> element);
+#endif  // VIVALDI_BUILD
 
   bool locked_pending_user_gesture_ : 1;
 

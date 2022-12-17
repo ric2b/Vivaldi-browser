@@ -186,11 +186,6 @@ class NET_EXPORT_PRIVATE ResolveContext : public base::CheckedObserver {
   // Virtual for testing.
   virtual NetworkChangeNotifier::NetworkHandle GetTargetNetwork() const;
 
-  // Helper method to know whether this ResolveContext must be registered to
-  // receive cache and per-session data invalidations (i.e., receive
-  // InvalidateCachesAndPerSessionData type of calls) to function properly.
-  bool MustRegisterForInvalidations() const;
-
   base::SafeRef<ResolveContext> AsSafeRef() {
     return weak_ptr_factory_.GetSafeRef();
   }
@@ -211,7 +206,7 @@ class NET_EXPORT_PRIVATE ResolveContext : public base::CheckedObserver {
     ~ServerStats();
 
     // Count of consecutive failures after last success.
-    int last_failure_count;
+    int last_failure_count = 0;
 
     // True if any success has ever been recorded for this server for the
     // current connection.

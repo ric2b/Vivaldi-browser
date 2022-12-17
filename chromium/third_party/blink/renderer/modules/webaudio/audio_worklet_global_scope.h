@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_WORKLET_GLOBAL_SCOPE_H_
 #define THIRD_PARTY_BLINK_RENDERER_MODULES_WEBAUDIO_AUDIO_WORKLET_GLOBAL_SCOPE_H_
 
+#include "third_party/blink/public/common/messaging/message_port_channel.h"
 #include "third_party/blink/public/common/tokens/tokens.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_audio_param_descriptor.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
@@ -84,8 +85,8 @@ class MODULES_EXPORT AudioWorkletGlobalScope final : public WorkletGlobalScope {
   std::unique_ptr<Vector<CrossThreadAudioWorkletProcessorInfo>>
   WorkletProcessorInfoListForSynchronization();
 
-  // Gets |processor_creation_params_| for the processor construction. If there
-  // is no on-going processor construction, this MUST return nullptr.
+  // Gets `processor_creation_params_` for the processor construction. If there
+  // is no on-going processor construction, this MUST return `nullptr`.
   ProcessorCreationParams* GetProcessorCreationParams();
 
   void SetCurrentFrame(size_t current_frame);
@@ -122,12 +123,12 @@ class MODULES_EXPORT AudioWorkletGlobalScope final : public WorkletGlobalScope {
   ProcessorInstances processor_instances_;
 
   // Gets set when the processor construction is invoked, and cleared out after
-  // the construction. See the comment in |CreateProcessor()| method for the
+  // the construction. See the comment in `CreateProcessor()` method for the
   // detail.
   std::unique_ptr<ProcessorCreationParams> processor_creation_params_;
 
   size_t current_frame_ = 0;
-  float sample_rate_ = 0.0;
+  float sample_rate_ = 0.0f;
 
   // Default initialized to generate a distinct token for this worklet.
   const AudioWorkletToken token_;

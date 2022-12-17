@@ -61,7 +61,6 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kPersonalizationSectionPath,
       chromeos::settings::mojom::kChangePictureSubpagePath,
       chromeos::settings::mojom::kAmbientModeSubpagePath,
-      chromeos::settings::mojom::kDarkModeSubpagePath,
 
       // Search and Assistant section.
       chromeos::settings::mojom::kSearchAndAssistantSectionPath,
@@ -85,6 +84,8 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kCrostiniDevelopAndroidAppsSubpagePath,
       chromeos::settings::mojom::kCrostiniPortForwardingSubpagePath,
       chromeos::settings::mojom::kCrostiniExtraContainersSubpagePath,
+      chromeos::settings::mojom::kBruschettaDetailsSubpagePath,
+      chromeos::settings::mojom::kBruschettaUsbPreferencesSubpagePath,
 
       // Date and Time section.
       chromeos::settings::mojom::kDateAndTimeSectionPath,
@@ -96,6 +97,7 @@ bool IsOSSettingsSubPage(const std::string& sub_page) {
       chromeos::settings::mojom::kFingerprintSubpagePathV2,
       chromeos::settings::mojom::kManageOtherPeopleSubpagePathV2,
       chromeos::settings::mojom::kSmartPrivacySubpagePath,
+      chromeos::settings::mojom::kPrivacyHubSubpagePath,
 
       // Languages and Input section.
       chromeos::settings::mojom::kLanguagesAndInputSectionPath,

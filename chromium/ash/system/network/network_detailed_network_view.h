@@ -7,6 +7,11 @@
 
 #include "ash/ash_export.h"
 #include "ash/system/network/network_detailed_view.h"
+#include "ash/system/network/network_list_mobile_header_view_impl.h"
+#include "ash/system/network/network_list_network_header_view.h"
+#include "ash/system/network/network_list_network_item_view.h"
+#include "ash/system/network/network_list_wifi_header_view_impl.h"
+#include "ui/views/view.h"
 
 namespace ash {
 
@@ -52,14 +57,30 @@ class ASH_EXPORT NetworkDetailedNetworkView {
       delete;
   virtual ~NetworkDetailedNetworkView() = default;
 
+  // Notifies that the network list has changed and the layout is invalid.
+  virtual void NotifyNetworkListChanged() = 0;
+
   // Returns the implementation casted to views::View*. This may be |nullptr|
   // when testing, where the implementation might not inherit from views::View.
   virtual views::View* GetAsView() = 0;
 
-  // TODO(b/207089013): Add AddNetworkListItem() when NetworkListNetworkItemView
-  // is available, return NetworkListNetworkItemView*, and also add a function
-  // that creates NetworkListNetworkHeaderView and returns view when
-  // NetworkListNetworkHeaderView is available.
+  // Creates, adds and returns a new network list item. The client is
+  // expected to use the returned pointer for removing and rearranging
+  // the list item.
+  virtual NetworkListNetworkItemView* AddNetworkListItem() = 0;
+
+  // Creates, adds and returns a Wifi sticky sub-header to the end of the
+  // network list. The client is expected to use the returned pointer for
+  // removing and rearranging the sub-header.
+  virtual NetworkListWifiHeaderView* AddWifiSectionHeader() = 0;
+
+  // Creates, adds and returns a Mobile sticky sub-header to the end of the
+  // network list. The client is expected to use the returned pointer for
+  // removing and rearranging the sub-header.
+  virtual NetworkListMobileHeaderView* AddMobileSectionHeader() = 0;
+
+  // Returns the network list.
+  virtual views::View* network_list() = 0;
 
  protected:
   explicit NetworkDetailedNetworkView(Delegate* delegate);

@@ -113,7 +113,6 @@ DisplayMode ResolveNonIsolatedEffectiveDisplayMode(
 
   const absl::optional<DisplayMode> resolved_override_display_mode =
       TryResolveOverridesDisplayMode(display_mode_overrides);
-
   if (resolved_override_display_mode.has_value()) {
     return *resolved_override_display_mode;
   }
@@ -162,6 +161,18 @@ std::string RunOnOsLoginModeToString(RunOnOsLoginMode mode) {
       return "minimized";
     case RunOnOsLoginMode::kNotRun:
       return "not run";
+  }
+}
+
+apps::RunOnOsLoginMode ConvertOsLoginMode(
+    web_app::RunOnOsLoginMode login_mode) {
+  switch (login_mode) {
+    case web_app::RunOnOsLoginMode::kWindowed:
+      return apps::RunOnOsLoginMode::kWindowed;
+    case web_app::RunOnOsLoginMode::kNotRun:
+      return apps::RunOnOsLoginMode::kNotRun;
+    case web_app::RunOnOsLoginMode::kMinimized:
+      return apps::RunOnOsLoginMode::kUnknown;
   }
 }
 

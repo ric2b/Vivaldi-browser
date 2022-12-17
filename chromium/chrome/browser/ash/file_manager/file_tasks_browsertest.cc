@@ -19,10 +19,10 @@
 #include "chrome/browser/ash/file_manager/filesystem_api_util.h"
 #include "chrome/browser/ash/file_manager/path_util.h"
 #include "chrome/browser/ash/file_manager/volume_manager.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/web_applications/web_app_launch_manager.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/profile_test_helper.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_id_constants.h"
@@ -112,9 +112,8 @@ class FileTasksBrowserTestBase
  public:
   void SetUpOnMainThread() override {
     test::AddDefaultComponentExtensionsOnMainThread(browser()->profile());
-    web_app::WebAppProvider::GetForTest(browser()->profile())
-        ->system_web_app_manager()
-        .InstallSystemAppsForTesting();
+    ash::SystemWebAppManager::GetForTest(browser()->profile())
+        ->InstallSystemAppsForTesting();
   }
 
   // Tests that each of the passed expectations open by default in the expected
@@ -173,22 +172,9 @@ class FileTasksBrowserTestBase
 class FileTasksBrowserTest : public FileTasksBrowserTestBase {
  public:
   FileTasksBrowserTest() {
-    // Enable Media App Audio, but no PDF support.
-    scoped_feature_list_.InitWithFeatures(
-        {ash::features::kMediaAppHandlesAudio},
-        {ash::features::kMediaAppHandlesPdf});
-  }
-
- private:
-  base::test::ScopedFeatureList scoped_feature_list_;
-};
-
-class FileTasksBrowserTestNoAudio : public FileTasksBrowserTestBase {
- public:
-  FileTasksBrowserTestNoAudio() {
-    // Enable Media App without Audio support.
-    scoped_feature_list_.InitWithFeatures(
-        {}, {ash::features::kMediaAppHandlesAudio});
+    // Enable Media App without PDF support.
+    scoped_feature_list_.InitWithFeatures({},
+                                          {ash::features::kMediaAppHandlesPdf});
   }
 
  private:
@@ -216,18 +202,6 @@ class FileTasksBrowserTestWithPdf : public FileTasksBrowserTestBase {
 // populated via file sniffing, but tests in this file do not operate on real
 // files. We hard code MIME types that file sniffing obtained experimentally
 // from sample files.
-// The "deprecated" lists are those that use the old ChromeApps as handlers and
-// can be removed when those are gone.
-
-constexpr Expectation kAudioDeprecatedExpectations[] = {
-    {"amr", kAudioPlayerAppId, "application/octet-stream"},
-    {"flac", kAudioPlayerAppId},
-    {"m4a", kAudioPlayerAppId},
-    {"mp3", kAudioPlayerAppId},
-    {"oga", kAudioPlayerAppId},
-    {"ogg", kAudioPlayerAppId},
-    {"wav", kAudioPlayerAppId},
-};
 
 constexpr Expectation kAudioExpectations[] = {
     {"flac", kMediaAppId}, {"m4a", kMediaAppId}, {"mp3", kMediaAppId},
@@ -363,15 +337,6 @@ IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, DefaultHandlerChangeDetector) {
   TestExpectationsAgainstDefaultTasks(expectations);
 }
 
-// Tests the default handlers that are different with Audio support disabled.
-IN_PROC_BROWSER_TEST_P(FileTasksBrowserTestNoAudio,
-                       AudioHandlerChangeDetector) {
-  std::vector<Expectation> expectations(
-      std::begin(kAudioDeprecatedExpectations),
-      std::end(kAudioDeprecatedExpectations));
-  TestExpectationsAgainstDefaultTasks(expectations);
-}
-
 // Tests the default handlers that are different with PDF support enabled.
 IN_PROC_BROWSER_TEST_P(FileTasksBrowserTestWithPdf, PdfHandlerChangeDetector) {
   std::vector<Expectation> expectations(std::begin(kMediaAppPdfExpectations),
@@ -396,11 +361,8 @@ IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, MultiSelectDefaultHandler) {
 // QuickOffice is not installed.
 IN_PROC_BROWSER_TEST_P(FileTasksBrowserTest, QuickOffice) {
   std::vector<Expectation> expectations = {
-      {"doc", extension_misc::kQuickOfficeComponentExtensionId,
-       "application/msword"},
-      {"docx", extension_misc::kQuickOfficeComponentExtensionId,
-       "application/"
-       "vnd.openxmlformats-officedocument.wordprocessingml.document"},
+      {"doc", extension_misc::kQuickOfficeComponentExtensionId},
+      {"docx", extension_misc::kQuickOfficeComponentExtensionId},
       {"ppt", extension_misc::kQuickOfficeComponentExtensionId,
        "application/vnd.ms-powerpoint"},
       {"pptx", extension_misc::kQuickOfficeComponentExtensionId,
@@ -609,9 +571,6 @@ INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
     FileTasksBrowserTestWithPdf);
-
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_ALL_PROFILE_TYPES_P(
-    FileTasksBrowserTestNoAudio);
 
 }  // namespace file_tasks
 }  // namespace file_manager

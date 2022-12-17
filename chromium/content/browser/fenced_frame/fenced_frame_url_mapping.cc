@@ -10,6 +10,7 @@
 
 #include "base/check_op.h"
 #include "base/guid.h"
+#include "base/strings/strcat.h"
 #include "base/strings/string_util.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
@@ -28,7 +29,53 @@ GURL GenerateURN() {
               base::GUID::GenerateRandomV4().AsLowercaseString());
 }
 
+// Returns a new string based on input where the matching substrings have been
+// replaced with the corresponding substitutions. This function avoids repeated
+// string operations by building the output based on all substitutions, one
+// substitution at a time. This effectively performs all substitutions
+// simultaneously, with the earliest match in the input taking precedence.
+std::string SubstituteMappedStrings(
+    const std::string& input,
+    const std::vector<std::pair<std::string, std::string>>& substitutions) {
+  std::vector<std::string> output_vec;
+  size_t input_idx = 0;
+  while (input_idx < input.size()) {
+    size_t replace_idx = input.size();
+    size_t replace_end_idx = input.size();
+    std::pair<std::string, std::string> const* next_replacement = nullptr;
+    for (const auto& substitution : substitutions) {
+      size_t found_idx = input.find(substitution.first, input_idx);
+      if (found_idx < replace_idx) {
+        replace_idx = found_idx;
+        replace_end_idx = found_idx + substitution.first.size();
+        next_replacement = &substitution;
+      }
+    }
+    output_vec.push_back(input.substr(input_idx, replace_idx - input_idx));
+    if (replace_idx < input.size()) {
+      output_vec.push_back(next_replacement->second);
+    }
+    // move input index to after what we replaced (or end of string).
+    input_idx = replace_end_idx;
+  }
+  return base::StrCat(output_vec);
+}
+
 }  // namespace
+
+FencedFrameURLMapping::SharedStorageURNMappingResult::
+    SharedStorageURNMappingResult() = default;
+
+FencedFrameURLMapping::SharedStorageURNMappingResult::
+    SharedStorageURNMappingResult(GURL mapped_url,
+                                  SharedStorageBudgetMetadata budget_metadata,
+                                  SharedStorageReportingMap reporting_map)
+    : mapped_url(std::move(mapped_url)),
+      budget_metadata(std::move(budget_metadata)),
+      reporting_map(std::move(reporting_map)) {}
+
+FencedFrameURLMapping::SharedStorageURNMappingResult::
+    ~SharedStorageURNMappingResult() = default;
 
 FencedFrameURLMapping::PendingAdComponentsMap::PendingAdComponentsMap(
     PendingAdComponentsMap&&) = default;
@@ -86,9 +133,11 @@ FencedFrameURLMapping::MapInfo::MapInfo(const GURL& mapped_url)
 
 FencedFrameURLMapping::MapInfo::MapInfo(
     const GURL& mapped_url,
-    const SharedStorageBudgetMetadata& shared_storage_budget_metadata)
+    const SharedStorageBudgetMetadata& shared_storage_budget_metadata,
+    const ReportingMetadata& reporting_metadata)
     : mapped_url(mapped_url),
-      shared_storage_budget_metadata(shared_storage_budget_metadata) {}
+      shared_storage_budget_metadata(shared_storage_budget_metadata),
+      reporting_metadata(reporting_metadata) {}
 
 FencedFrameURLMapping::MapInfo::MapInfo(const MapInfo&) = default;
 FencedFrameURLMapping::MapInfo::MapInfo(MapInfo&&) = default;
@@ -196,6 +245,7 @@ void FencedFrameURLMapping::OnSharedStorageURNMappingResultDetermined(
   DCHECK(!IsMapped(urn_uuid));
 
   absl::optional<GURL> mapped_url = absl::nullopt;
+  ReportingMetadata reporting_metadata;
 
   // Only if the resolved URL is fenced-frame-compatible do we:
   //   1.) Add it to `urn_uuid_to_url_map_`
@@ -203,36 +253,66 @@ void FencedFrameURLMapping::OnSharedStorageURNMappingResultDetermined(
   // TODO(crbug.com/1318970): Simplify this by making Shared Storage only
   // capable of producing URLs that fenced frames can navigate to.
   if (blink::IsValidFencedFrameURL(mapping_result.mapped_url)) {
+    base::flat_map<blink::mojom::ReportingDestination,
+                   SharedStorageReportingMap>
+        reporting_metadata_map;
+    reporting_metadata_map
+        [blink::mojom::ReportingDestination::kSharedStorageSelectUrl] =
+            std::move(mapping_result.reporting_map);
+    reporting_metadata = ReportingMetadata(std::move(reporting_metadata_map));
+
     urn_uuid_to_url_map_.emplace(
-        urn_uuid, MapInfo(mapping_result.mapped_url, mapping_result.metadata));
+        urn_uuid, MapInfo(mapping_result.mapped_url,
+                          mapping_result.budget_metadata, reporting_metadata));
     mapped_url = mapping_result.mapped_url;
   }
 
   std::set<raw_ptr<MappingResultObserver>>& observers = it->second;
 
-  ReportingMetadata metadata;
   for (raw_ptr<MappingResultObserver> observer : observers) {
     observer->OnFencedFrameURLMappingComplete(
         mapped_url, /*ad_auction_data=*/absl::nullopt,
         /*pending_ad_components_map=*/absl::nullopt,
-        /*reporting_metadata=*/metadata);
+        /*reporting_metadata=*/reporting_metadata);
   }
 
   pending_urn_uuid_to_url_map_.erase(it);
 }
 
-absl::optional<FencedFrameURLMapping::SharedStorageBudgetMetadata>
-FencedFrameURLMapping::ReleaseSharedStorageBudgetMetadata(
-    const GURL& urn_uuid) {
+FencedFrameURLMapping::SharedStorageBudgetMetadata*
+FencedFrameURLMapping::GetSharedStorageBudgetMetadata(const GURL& urn_uuid) {
   auto it = urn_uuid_to_url_map_.find(urn_uuid);
   DCHECK(it != urn_uuid_to_url_map_.end());
 
-  absl::optional<SharedStorageBudgetMetadata> metadata =
-      it->second.shared_storage_budget_metadata;
+  if (!it->second.shared_storage_budget_metadata)
+    return nullptr;
 
-  it->second.shared_storage_budget_metadata.reset();
+  return &it->second.shared_storage_budget_metadata.value();
+}
 
-  return metadata;
+void FencedFrameURLMapping::SubstituteMappedURL(
+    const GURL& urn_uuid,
+    const std::vector<std::pair<std::string, std::string>>& substitutions) {
+  auto it = urn_uuid_to_url_map_.find(urn_uuid);
+  if (it == urn_uuid_to_url_map_.end()) {
+    return;
+  }
+  MapInfo info = it->second;
+  info.mapped_url = GURL(
+      SubstituteMappedStrings(it->second.mapped_url.spec(), substitutions));
+  if (!info.mapped_url.is_valid()) {
+    return;
+  }
+  if (info.ad_component_urls) {
+    for (auto& ad_component_url : info.ad_component_urls.value()) {
+      ad_component_url =
+          GURL(SubstituteMappedStrings(ad_component_url.spec(), substitutions));
+      if (!ad_component_url.is_valid()) {
+        return;
+      }
+    }
+  }
+  it->second = std::move(info);
 }
 
 bool FencedFrameURLMapping::HasObserverForTesting(
@@ -240,6 +320,24 @@ bool FencedFrameURLMapping::HasObserverForTesting(
     MappingResultObserver* observer) {
   return IsPendingMapped(urn_uuid) &&
          pending_urn_uuid_to_url_map_.at(urn_uuid).count(observer);
+}
+
+void FencedFrameURLMapping::GetSharedStorageReportingMapForTesting(
+    const GURL& urn_uuid,
+    SharedStorageReportingMap* out_reporting_map) {
+  DCHECK(out_reporting_map);
+
+  auto urn_it = urn_uuid_to_url_map_.find(urn_uuid);
+  DCHECK(urn_it != urn_uuid_to_url_map_.end());
+
+  if (urn_it->second.reporting_metadata.metadata.empty())
+    return;
+
+  auto data_it = urn_it->second.reporting_metadata.metadata.find(
+      blink::mojom::ReportingDestination::kSharedStorageSelectUrl);
+
+  if (data_it != urn_it->second.reporting_metadata.metadata.end())
+    *out_reporting_map = data_it->second;
 }
 
 bool FencedFrameURLMapping::IsMapped(const GURL& urn_uuid) const {

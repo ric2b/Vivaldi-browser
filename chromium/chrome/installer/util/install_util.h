@@ -88,7 +88,7 @@ class InstallUtil {
   static bool IsStartMenuShortcutWithActivatorGuidInstalled();
 
   // Returns the toast activator registry path.
-  static std::wstring GetToastActivatorRegistryPath();
+  static std::wstring GetToastActivatorRegistryPath(base::FilePath* target = nullptr);
 
   // Populates |path| with EULA sentinel file path. Returns false on error.
   static bool GetEulaSentinelFilePath(base::FilePath* path);
@@ -120,6 +120,12 @@ class InstallUtil {
 
   using ReadOnly = base::StrongAlias<class ReadOnlyTag, bool>;
   using BrowserLocation = base::StrongAlias<class BrowserLocationTag, bool>;
+
+  // Returns the path where the cloud management DMToken should be read/written.
+  // |browser_location| indicates whether the legacy browser-specific path is
+  // returned rather than the app-neutral path.
+  static std::pair<std::wstring, std::wstring> GetCloudManagementDmTokenPath(
+      BrowserLocation browser_location);
 
   // Returns the registry key and value name from/to which a cloud management DM
   // token may be read/written. |read_only| indicates whether they key is opened

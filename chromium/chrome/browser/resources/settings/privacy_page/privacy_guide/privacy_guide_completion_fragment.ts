@@ -10,22 +10,22 @@
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/cr_elements/cr_link_row/cr_link_row.js';
 import './privacy_guide_completion_link_row.js';
-import './privacy_guide_fragment_shared_css.js';
+import './privacy_guide_fragment_shared.css.js';
 
+import {I18nMixin} from 'chrome://resources/js/i18n_mixin.js';
 import {WebUIListenerMixin} from 'chrome://resources/js/web_ui_listener_mixin.js';
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
-import {UpdateSyncStateEvent} from '../../clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
+import {ClearBrowsingDataBrowserProxyImpl, UpdateSyncStateEvent} from '../../clear_browsing_data_dialog/clear_browsing_data_browser_proxy.js';
 import {loadTimeData} from '../../i18n_setup.js';
 import {MetricsBrowserProxy, MetricsBrowserProxyImpl, PrivacyGuideInteractions} from '../../metrics_browser_proxy.js';
 import {OpenWindowProxyImpl} from '../../open_window_proxy.js';
-import {SyncBrowserProxyImpl, SyncStatus} from '../../people_page/sync_browser_proxy.js';
 import {Router} from '../../router.js';
 
 import {getTemplate} from './privacy_guide_completion_fragment.html.js';
 
 const PrivacyGuideCompletionFragmentElementBase =
-    WebUIListenerMixin(PolymerElement);
+    WebUIListenerMixin(I18nMixin(PolymerElement));
 
 export class PrivacyGuideCompletionFragmentElement extends
     PrivacyGuideCompletionFragmentElementBase {
@@ -39,28 +39,62 @@ export class PrivacyGuideCompletionFragmentElement extends
 
   static get properties() {
     return {
+      isNoLinkLayout: {
+        reflectToAttribute: true,
+        type: Boolean,
+        computed:
+            'computeIsNoLinkLayout_(shouldShowWaa_, shouldShowPrivacySandbox_)',
+      },
+
+      subheader_: {
+        type: String,
+        computed: 'computeSubheader_(isNoLinkLayout)',
+      },
+
+      shouldShowPrivacySandbox_: {
+        type: Boolean,
+        value: () => !loadTimeData.getBoolean('isPrivacySandboxRestricted'),
+      },
+
       shouldShowWaa_: {
         type: Boolean,
         value: false,
       },
+
+      enablePrivacyGuide2_: {
+        type: Boolean,
+        value: () => loadTimeData.getBoolean('privacyGuide2Enabled'),
+      },
     };
   }
 
+  private shouldShowPrivacySandbox_: boolean;
   private shouldShowWaa_: boolean;
   private metricsBrowserProxy_: MetricsBrowserProxy =
       MetricsBrowserProxyImpl.getInstance();
 
   override ready() {
     super.ready();
-    SyncBrowserProxyImpl.getInstance().getSyncStatus().then(
-        (status: SyncStatus) => this.updateWaaLink_(status.signedIn!));
     this.addWebUIListener(
         'update-sync-state',
         (event: UpdateSyncStateEvent) => this.updateWaaLink_(event.signedIn));
+    ClearBrowsingDataBrowserProxyImpl.getInstance().getSyncState().then(
+        (status: UpdateSyncStateEvent) =>
+            this.updateWaaLink_(status.signedIn));
   }
 
   override focus() {
-    this.shadowRoot!.querySelector<HTMLElement>('.headline-container')!.focus();
+    this.shadowRoot!.querySelector<HTMLElement>('.headline')!.focus();
+  }
+
+  private computeIsNoLinkLayout_() {
+    return !this.shouldShowWaa_ && !this.shouldShowPrivacySandbox_;
+  }
+
+  private computeSubheader_(): string {
+    return this.computeIsNoLinkLayout_() ?
+        this.i18n('privacyGuideCompletionCardSubHeaderNoLinks') :
+        this.i18n('privacyGuideCompletionCardSubHeader');
   }
 
   /**

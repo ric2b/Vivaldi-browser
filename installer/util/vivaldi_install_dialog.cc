@@ -28,6 +28,7 @@
 #include "chrome/installer/util/shell_util.h"
 
 #include "installer/win/vivaldi_install_l10n.h"
+#include "vivaldi/app/grit/vivaldi_installer_strings.h"
 #include "vivaldi/installer/win/vivaldi_install_language_names.h"
 
 #include <Windows.h>

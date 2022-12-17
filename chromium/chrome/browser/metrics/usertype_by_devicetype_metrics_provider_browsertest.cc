@@ -4,6 +4,7 @@
 
 #include "chrome/browser/metrics/usertype_by_devicetype_metrics_provider.h"
 
+#include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/login_screen_test_api.h"
 #include "base/logging.h"
 #include "base/run_loop.h"
@@ -23,7 +24,7 @@
 #include "chrome/browser/ash/policy/core/device_local_account.h"
 #include "chrome/browser/ash/policy/core/device_policy_cros_browser_test.h"
 #include "chrome/browser/browser_process.h"
-#include "chrome/browser/browser_process_platform_part_chromeos.h"
+#include "chrome/browser/browser_process_platform_part_ash.h"
 #include "chrome/common/chrome_features.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
 #include "components/metrics/metrics_service.h"
@@ -225,6 +226,11 @@ class UserTypeByDeviceTypeMetricsProviderTest
     InitializePolicy();
   }
 
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    command_line->AppendSwitch(ash::switches::kOobeSkipPostLogin);
+    DevicePolicyCrosBrowserTest::SetUpCommandLine(command_line);
+  }
+
   void TearDownOnMainThread() override {
     settings_.reset();
     policy::DevicePolicyCrosBrowserTest::TearDownOnMainThread();
@@ -358,7 +364,6 @@ class UserTypeByDeviceTypeMetricsProviderTest
   void WaitForSessionStart() {
     if (IsSessionStarted())
       return;
-    ash::WizardController::SkipPostLoginScreensForTesting();
     ash::test::WaitForPrimaryUserSessionStart();
   }
 

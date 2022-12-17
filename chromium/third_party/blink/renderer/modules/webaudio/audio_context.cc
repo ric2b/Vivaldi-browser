@@ -47,15 +47,15 @@
 
 namespace blink {
 
+namespace {
+
 // Number of AudioContexts still alive.  It's incremented when an
 // AudioContext is created and decremented when the context is closed.
-static unsigned g_hardware_context_count = 0;
+unsigned hardware_context_count = 0;
 
 // A context ID that is incremented for each context that is created.
 // This initializes the internal id for the context.
-static unsigned g_context_id = 0;
-
-namespace {
+unsigned context_id = 0;
 
 // When the client does not have enough permission, the outputLatency property
 // is quantized by 8ms to reduce the precision for privacy concerns.
@@ -94,6 +94,22 @@ String GetAudioContextLogString(const WebAudioLatencyHint& latency_hint,
   }
   builder.Append(String(")"));
   return builder.ToString();
+}
+
+bool IsAudible(const AudioBus* rendered_data) {
+  // Compute the energy in each channel and sum up the energy in each channel
+  // for the total energy.
+  float energy = 0;
+
+  uint32_t data_size = rendered_data->length();
+  for (uint32_t k = 0; k < rendered_data->NumberOfChannels(); ++k) {
+    const float* data = rendered_data->Channel(k)->Data();
+    float channel_energy;
+    vector_math::Vsvesq(data, 1, &channel_energy, data_size);
+    energy += channel_energy;
+  }
+
+  return energy > 0;
 }
 
 }  // namespace
@@ -158,7 +174,7 @@ AudioContext* AudioContext::Create(Document& document,
   SCOPED_UMA_HISTOGRAM_TIMER("WebAudio.AudioContext.CreateTime");
   AudioContext* audio_context =
       MakeGarbageCollected<AudioContext>(document, latency_hint, sample_rate);
-  ++g_hardware_context_count;
+  ++hardware_context_count;
   audio_context->UpdateStateIfNeeded();
 
   // This starts the audio thread. The destination node's
@@ -176,7 +192,7 @@ AudioContext* AudioContext::Create(Document& document,
   }
 #if DEBUG_AUDIONODE_REFERENCES
   fprintf(stderr, "[%16p]: AudioContext::AudioContext(): %u #%u\n",
-          audio_context, audio_context->context_id_, g_hardware_context_count);
+          audio_context, audio_context->context_id_, hardware_context_count);
 #endif
 
   base::UmaHistogramSparse("WebAudio.AudioContext.MaxChannelsAvailable",
@@ -191,7 +207,7 @@ AudioContext::AudioContext(Document& document,
                            const WebAudioLatencyHint& latency_hint,
                            absl::optional<float> sample_rate)
     : BaseAudioContext(&document, kRealtimeContext),
-      context_id_(g_context_id++),
+      context_id_(context_id++),
       audio_context_manager_(document.GetExecutionContext()),
       permission_service_(document.GetExecutionContext()),
       permission_receiver_(this, document.GetExecutionContext()) {
@@ -230,7 +246,7 @@ AudioContext::AudioContext(Document& document,
   //
   // TODO(hongchan): Due to the incompatible constructor between
   // AudioDestinationNode and RealtimeAudioDestinationNode, casting directly
-  // from |destination()| is impossible. This is a temporary workaround until
+  // from `destination()` is impossible. This is a temporary workaround until
   // the refactoring is completed.
   RealtimeAudioDestinationHandler& destination_handler =
       static_cast<RealtimeAudioDestinationHandler&>(
@@ -255,9 +271,9 @@ AudioContext::AudioContext(Document& document,
 
 void AudioContext::Uninitialize() {
   DCHECK(IsMainThread());
-  DCHECK_NE(g_hardware_context_count, 0u);
+  DCHECK_NE(hardware_context_count, 0u);
   SendLogMessage(String::Format("%s", __func__));
-  --g_hardware_context_count;
+  --hardware_context_count;
   StopRendering();
   DidClose();
   RecordAutoplayMetrics();
@@ -267,7 +283,7 @@ void AudioContext::Uninitialize() {
 AudioContext::~AudioContext() {
   // TODO(crbug.com/945379) Disable this DCHECK for now.  It's not terrible if
   // the autoplay metrics aren't recorded in some odd situations.  haraken@ said
-  // that we shouldn't get here without also calling |Uninitialize()|, but it
+  // that we shouldn't get here without also calling `Uninitialize()`, but it
   // can happen.  Until that is fixed, disable this DCHECK.
 
   // DCHECK(!autoplay_status_.has_value());
@@ -285,42 +301,38 @@ void AudioContext::Trace(Visitor* visitor) const {
   BaseAudioContext::Trace(visitor);
 }
 
-ScriptPromise AudioContext::suspendContext(ScriptState* script_state) {
+ScriptPromise AudioContext::suspendContext(ScriptState* script_state,
+                                           ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  auto* resolver = MakeGarbageCollected<ScriptPromiseResolver>(script_state);
-  ScriptPromise promise = resolver->Promise();
-
   if (ContextState() == kClosed) {
-    resolver->Reject(MakeGarbageCollected<DOMException>(
-        DOMExceptionCode::kInvalidStateError,
-        "Cannot suspend a context that has been closed"));
-  } else {
-    suspended_by_user_ = true;
-
-    // Stop rendering now.
-    if (destination()) {
-      SuspendRendering();
-    }
-
-    // Since we don't have any way of knowing when the hardware actually stops,
-    // we'll just resolve the promise now.
-    resolver->Resolve();
-
-    // Probe reports the suspension only when the promise is resolved.
-    probe::DidSuspendAudioContext(GetDocument());
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Cannot suspend a closed AudioContext.");
+    return ScriptPromise();
   }
 
-  return promise;
+  suspended_by_user_ = true;
+
+  // Stop rendering now.
+  if (destination()) {
+    SuspendRendering();
+  }
+
+  // Probe reports the suspension only when the promise is resolved.
+  probe::DidSuspendAudioContext(GetDocument());
+
+  // Since we don't have any way of knowing when the hardware actually stops,
+  // we'll just resolve the promise now.
+  return ScriptPromise::CastUndefined(script_state);
 }
 
 ScriptPromise AudioContext::resumeContext(ScriptState* script_state,
                                           ExceptionState& exception_state) {
   DCHECK(IsMainThread());
 
-  if (IsContextCleared()) {
+  if (ContextState() == kClosed) {
     exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
-                                      "cannot resume a closed AudioContext");
+                                      "Cannot resume a closed AudioContext.");
     return ScriptPromise();
   }
 
@@ -414,14 +426,12 @@ AudioTimestamp* AudioContext::getOutputTimestamp(
 
 ScriptPromise AudioContext::closeContext(ScriptState* script_state,
                                          ExceptionState& exception_state) {
-  if (IsContextCleared()) {
+  if (ContextState() == kClosed) {
     // We've already closed the context previously, but it hasn't yet been
     // resolved, so just throw a DOM exception to trigger a promise rejection
     // and return an empty promise.
-    exception_state.ThrowDOMException(
-        DOMExceptionCode::kInvalidStateError,
-        "Cannot close a context that is being closed or has already been "
-        "closed.");
+    exception_state.ThrowDOMException(DOMExceptionCode::kInvalidStateError,
+                                      "Cannot close a closed AudioContext.");
     return ScriptPromise();
   }
 
@@ -749,22 +759,6 @@ void AudioContext::HandlePostRenderTasks() {
 
     unlock();
   }
-}
-
-static bool IsAudible(const AudioBus* rendered_data) {
-  // Compute the energy in each channel and sum up the energy in each channel
-  // for the total energy.
-  float energy = 0;
-
-  uint32_t data_size = rendered_data->length();
-  for (uint32_t k = 0; k < rendered_data->NumberOfChannels(); ++k) {
-    const float* data = rendered_data->Channel(k)->Data();
-    float channel_energy;
-    vector_math::Vsvesq(data, 1, &channel_energy, data_size);
-    energy += channel_energy;
-  }
-
-  return energy > 0;
 }
 
 void AudioContext::HandleAudibility(AudioBus* destination_bus) {

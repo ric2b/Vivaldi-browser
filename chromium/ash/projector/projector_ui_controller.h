@@ -9,7 +9,12 @@
 #include "ash/projector/projector_metrics.h"
 #include "ash/public/cpp/projector/projector_session.h"
 #include "base/scoped_observation.h"
+#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
+
+namespace aura {
+class Window;
+}  // namespace aura
 
 namespace ash {
 
@@ -32,16 +37,20 @@ class ASH_EXPORT ProjectorUiController : public ProjectorSessionObserver {
   ProjectorUiController& operator=(const ProjectorUiController&) = delete;
   ~ProjectorUiController() override;
 
-  // Show Projector toolbar. Virtual for testing.
-  virtual void ShowToolbar();
-  // Close Projector toolbar. Virtual for testing.
-  virtual void CloseToolbar();
+  // Show Projector annotation tray for `current_root`. Virtual for testing.
+  virtual void ShowAnnotationTray(aura::Window* current_root);
+  // Hide Projector annotation tray. Virtual for testing.
+  virtual void HideAnnotationTray();
   // Invoked when marker button is pressed. Virtual for testing.
-  virtual void OnMarkerPressed();
+  virtual void EnableAnnotatorTool();
   // Sets the annotator tool.
   virtual void SetAnnotatorTool(const AnnotatorTool& tool);
   // Resets and disables the annotator tools and clears the canvas.
   void ResetTools();
+  // Invoked when the canvas has either succeeded or failed to initialize.
+  void OnCanvasInitialized(bool success);
+
+  void OnRecordedWindowChangingRoot(aura::Window* new_root);
 
   bool is_annotator_enabled() { return annotator_enabled_; }
 
@@ -51,7 +60,17 @@ class ASH_EXPORT ProjectorUiController : public ProjectorSessionObserver {
 
   ProjectorMarkerColor GetMarkerColorForMetrics(SkColor color);
 
+  void UpdateTrayEnabledState();
+
   bool annotator_enabled_ = false;
+
+  // The current root window in which the video recording is happening.
+  aura::Window* current_root_ = nullptr;
+
+  // True if the canvas is initialized successfully, false if it failed to
+  // initialize. An absent value indicates that the initialization has not
+  // completed.
+  absl::optional<bool> canvas_initialized_state_;
 
   base::ScopedObservation<ProjectorSession, ProjectorSessionObserver>
       projector_session_observation_{this};

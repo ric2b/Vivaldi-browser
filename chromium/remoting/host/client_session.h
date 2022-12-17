@@ -6,6 +6,7 @@
 #define REMOTING_HOST_CLIENT_SESSION_H_
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <string>
 #include <vector>
@@ -26,7 +27,6 @@
 #include "remoting/host/desktop_and_cursor_composer_notifier.h"
 #include "remoting/host/desktop_and_cursor_conditional_composer.h"
 #include "remoting/host/desktop_display_info.h"
-#include "remoting/host/desktop_display_info_monitor.h"
 #include "remoting/host/host_experiment_session_plugin.h"
 #include "remoting/host/host_extension_session_manager.h"
 #include "remoting/host/mojom/chromoting_host_services.mojom.h"
@@ -46,6 +46,7 @@
 #include "remoting/protocol/mouse_input_filter.h"
 #include "remoting/protocol/pairing_registry.h"
 #include "remoting/protocol/video_stream.h"
+#include "third_party/webrtc/modules/desktop_capture/desktop_capture_metadata.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capture_types.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_geometry.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor.h"
@@ -263,6 +264,11 @@ class ClientSession : public protocol::HostStub,
 
   void CreatePerMonitorVideoStreams();
 
+#if defined(WEBRTC_USE_GIO)
+  void ExtractAndSetInputInjectorMetadata(
+      webrtc::DesktopCaptureMetadata capture_metadata);
+#endif
+
   raw_ptr<EventHandler> event_handler_;
 
   // Used to create a DesktopEnvironment instance for this session.
@@ -317,7 +323,7 @@ class ClientSession : public protocol::HostStub,
   base::OneShotTimer max_duration_timer_;
 
   // Objects responsible for sending video, audio.
-  std::vector<VideoStreamWithComposer> video_streams_;
+  std::map<webrtc::ScreenId, VideoStreamWithComposer> video_streams_;
   std::unique_ptr<protocol::AudioStream> audio_stream_;
 
   // The set of all capabilities supported by the client.
@@ -337,8 +343,6 @@ class ClientSession : public protocol::HostStub,
 
   // Contains the most recently gathered info about the desktop displays;
   DesktopDisplayInfo desktop_display_info_;
-
-  std::unique_ptr<DesktopDisplayInfoMonitor> display_info_monitor_;
 
   // Default DPI values to use if a display reports 0 for DPI.
   int default_x_dpi_;

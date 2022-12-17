@@ -53,7 +53,9 @@
 #include "content/public/browser/page_navigator.h"
 #include "content/public/browser/web_contents.h"
 #include "net/base/mime_util.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkCanvas.h"
+#include "third_party/skia/include/core/SkImage.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/l10n/time_format.h"
 #include "ui/base/resource/resource_bundle.h"
@@ -66,8 +68,9 @@
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/constants/ash_features.h"
+#include "ash/constants/notifier_catalogs.h"
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 using base::UserMetricsAction;
@@ -211,13 +214,8 @@ bool IsHoldingSpaceIncognitoProfileIntegrationEnabled() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   return true;
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto* lacros_service = chromeos::LacrosService::Get();
-  if (lacros_service) {
-    auto* init_params = lacros_service->init_params();
-    return init_params &&
-           init_params->is_holding_space_incognito_profile_integration_enabled;
-  }
-  return false;
+  return chromeos::BrowserInitParams::Get()
+      ->is_holding_space_incognito_profile_integration_enabled;
 #else
   return false;
 #endif
@@ -228,14 +226,8 @@ bool IsHoldingSpaceInProgressDownloadsNotificationSuppressionEnabled() {
   return ash::features::
       IsHoldingSpaceInProgressDownloadsNotificationSuppressionEnabled();
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto* lacros_service = chromeos::LacrosService::Get();
-  if (lacros_service) {
-    auto* init_params = lacros_service->init_params();
-    return init_params &&
-           init_params
-               ->is_holding_space_in_progress_downloads_notification_suppression_enabled;
-  }
-  return false;
+  return chromeos::BrowserInitParams::Get()
+      ->is_holding_space_in_progress_downloads_notification_suppression_enabled;
 #else
   return false;
 #endif
@@ -275,8 +267,15 @@ DownloadItemNotification::DownloadItemNotification(
       l10n_util::GetStringUTF16(
           IDS_DOWNLOAD_NOTIFICATION_DISPLAY_SOURCE),  // display_source
       GURL(kDownloadNotificationOrigin),              // origin_url
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      message_center::NotifierId(
+          message_center::NotifierType::SYSTEM_COMPONENT,
+          kDownloadNotificationNotifierId,
+          ash::NotificationCatalogName::kDownloadNotification),
+#else
       message_center::NotifierId(message_center::NotifierType::SYSTEM_COMPONENT,
                                  kDownloadNotificationNotifierId),
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
       rich_notification_data,
       base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
           weak_factory_.GetWeakPtr()));
@@ -311,10 +310,10 @@ void DownloadItemNotification::OnDownloadDestroyed() {
   // |this| will be deleted before there's a chance for Close() to be called
   // through the delegate, so preemptively call it now.
   Close(false);
+  ShutDown();
 
+  // This object may get deleted after this call.
   observer_->OnDownloadDestroyed(item_->GetContentId());
-
-  item_.reset();
 }
 
 void DownloadItemNotification::DisablePopup() {
@@ -936,18 +935,10 @@ std::u16string DownloadItemNotification::GetWarningStatusString() const {
       }
     }
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST: {
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE: {
       return l10n_util::GetStringFUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT,
                                         elided_filename);
-    }
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE: {
-      return base::FeatureList::IsEnabled(
-                 safe_browsing::kSafeBrowsingCTDownloadWarning)
-                 ? l10n_util::GetStringFUTF16(
-                       IDS_PROMPT_DANGEROUS_DOWNLOAD_ACCOUNT_COMPROMISE,
-                       elided_filename)
-                 : l10n_util::GetStringFUTF16(
-                       IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT, elided_filename);
     }
     case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
       bool requests_ap_verdicts =

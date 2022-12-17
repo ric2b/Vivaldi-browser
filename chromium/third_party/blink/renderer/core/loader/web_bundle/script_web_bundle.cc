@@ -4,7 +4,7 @@
 
 #include "third_party/blink/renderer/core/loader/web_bundle/script_web_bundle.h"
 
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/execution_context/execution_context.h"
 #include "third_party/blink/renderer/core/html/cross_origin_attribute.h"
@@ -105,7 +105,7 @@ bool ScriptWebBundle::CanHandleRequest(const KURL& url) const {
     return false;
   if (!rule_.ResourcesOrScopesMatch(url))
     return false;
-  if (url.Protocol() == "urn" || url.Protocol() == "uuid-in-package")
+  if (url.Protocol() == "uuid-in-package")
     return true;
   DCHECK(bundle_loader_);
   if (!bundle_loader_->GetSecurityOrigin()->IsSameOriginWith(

@@ -504,7 +504,7 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
     sync_pb::WalletMaskedCreditCard::WalletCardType wallet_card_type) {
   ASSERT_ENUM_BOUNDS(sync_pb::WalletMaskedCreditCard, WalletCardType, UNKNOWN,
-                     UNIONPAY);
+                     ELO);
   switch (wallet_card_type) {
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNKNOWN);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, AMEX);
@@ -516,6 +516,7 @@ const char* ProtoEnumToString(
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, SWITCH);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, VISA);
     ENUM_CASE(sync_pb::WalletMaskedCreditCard, UNIONPAY);
+    ENUM_CASE(sync_pb::WalletMaskedCreditCard, ELO);
   }
   NOTREACHED();
   return "";
@@ -743,6 +744,27 @@ const char* ProtoEnumToString(sync_pb::WorkspaceDeskSpecifics::DeskType type) {
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, UNKNOWN_TYPE);
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, TEMPLATE);
     ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, SAVE_AND_RECALL);
+  }
+  NOTREACHED();
+  return "";
+}
+
+const char* ProtoEnumToString(
+    sync_pb::WorkspaceDeskSpecifics::TabGroupColor color) {
+  ASSERT_ENUM_BOUNDS(sync_pb::WorkspaceDeskSpecifics, TabGroupColor,
+                     UNKNOWN_COLOR, ORANGE);
+
+  switch (color) {
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, UNKNOWN_COLOR);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, GREY);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, BLUE);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, RED);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, YELLOW);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, GREEN);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, PINK);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, PURPLE);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, CYAN);
+    ENUM_CASE(sync_pb::WorkspaceDeskSpecifics, ORANGE);
   }
   NOTREACHED();
   return "";

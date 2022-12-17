@@ -1000,6 +1000,10 @@ bool NGInlineNode::SetTextWithOffset(LayoutText* layout_text,
     node.ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDone, data,
                                      &previous_data->text_content,
                                      &previous_data->items);
+  } else if (previous_data->IsShapingDeferred()) {
+    node.ShapeTextIncludingFirstLine(NGInlineNodeData::kShapingDeferred, data,
+                                     &previous_data->text_content,
+                                     &previous_data->items);
   }
   node.AssociateItemsWithInlines(data);
   return true;
@@ -1590,18 +1594,12 @@ void NGInlineNode::ShapeTextIncludingFirstLine(
   // Because |ElapsedTimer| causes notable speed regression on Android and
   // ChromeOS, we don't use it. See http://crbug.com/1261519
 #else
-  struct ShapeTextTimingScope final {
-    ~ShapeTextTimingScope() {
-      FontPerformance::AddShapingTime(shaping_timer.Elapsed());
-    }
-    base::ElapsedTimer shaping_timer;
-  };
-
-  ShapeTextTimingScope shape_text_timing_scope;
+  FontPerformance::ShapeTextTimingScope shape_text_timing_scope;
 #endif
 
   ShapeText(data, previous_text, previous_items);
-  ShapeTextForFirstLineIfNeeded(data);
+  if (new_state == NGInlineNodeData::kShapingDone)
+    ShapeTextForFirstLineIfNeeded(data);
 }
 
 void NGInlineNode::AssociateItemsWithInlines(NGInlineNodeData* data) const {

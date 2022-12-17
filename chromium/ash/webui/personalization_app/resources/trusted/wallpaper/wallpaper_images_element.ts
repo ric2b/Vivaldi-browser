@@ -10,16 +10,15 @@
  */
 
 import 'chrome://resources/polymer/v3_0/iron-media-query/iron-media-query.js';
-import './styles.js';
+import './trusted_style.css.js';
 
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 
-import {ImageTile} from '../../common/constants.js';
+import {DisplayableImage, ImageTile} from '../../common/constants.js';
 import {isNonEmptyArray} from '../../common/utils.js';
 import {ImagesGrid} from '../../untrusted/images_grid.js';
 import {IFrameApi} from '../iframe_api.js';
 import {CurrentWallpaper, OnlineImageType, WallpaperCollection, WallpaperImage, WallpaperType} from '../personalization_app.mojom-webui.js';
-import {DisplayableImage} from '../personalization_reducers.js';
 import {PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {isWallpaperImage} from '../utils.js';
@@ -117,6 +116,14 @@ export class WallpaperImages extends WithPersonalizationStore {
       },
 
       /**
+       * Whether dark mode is the active preferred color scheme.
+       */
+      isDarkModeActive: {
+        type: Boolean,
+        value: false,
+      },
+
+      /**
        * The current collection id to display.
        */
       collectionId: String,
@@ -164,19 +171,12 @@ export class WallpaperImages extends WithPersonalizationStore {
         type: Boolean,
         computed: 'computeHasImages_(images_, imagesLoading_, collectionId)',
       },
-
-      /**
-       * Whether dark mode is the active preferred color scheme.
-       */
-      isDarkModeActive_: {
-        type: Boolean,
-        value: false,
-      },
     };
   }
 
   override hidden: boolean;
   collectionId: string;
+  isDarkModeActive: boolean;
   private collections_: WallpaperCollection[]|null;
   private collectionsLoading_: boolean;
   private images_: Record<string, WallpaperImage[]|null>;
@@ -185,11 +185,10 @@ export class WallpaperImages extends WithPersonalizationStore {
   private pendingSelected_: DisplayableImage|null;
   private hasError_: boolean;
   private hasImages_: boolean;
-  private isDarkModeActive_: boolean;
 
   static get observers() {
     return [
-      'onImagesUpdated_(hasImages_, hasError_, collectionId, isDarkModeActive_)',
+      'onImagesUpdated_(hasImages_, hasError_, collectionId, isDarkModeActive)',
     ];
   }
 

@@ -21,6 +21,7 @@
 #include "base/bind.h"
 #include "base/callback_helpers.h"
 #include "base/command_line.h"
+#include "base/enterprise_util.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -66,6 +67,7 @@
 
 #include "installer/util/vivaldi_install_util.h"
 #include "installer/util/vivaldi_setup_util.h"
+#include "installer/vivaldi_install_modes.h"
 
 using base::ASCIIToWide;
 using base::win::RegKey;
@@ -306,7 +308,6 @@ void AddChromeWorkItems(const InstallParams& install_params,
       ->set_best_effort(true);
 }
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Adds work items to register the Elevation Service with Windows. Only for
 // system level installs.
 void AddElevationServiceWorkItems(const base::FilePath& elevation_service_path,
@@ -329,6 +330,7 @@ void AddElevationServiceWorkItems(const base::FilePath& elevation_service_path,
   list->AddWorkItem(install_service_work_item);
 }
 
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
 // Adds work items to add the "store-dmtoken" command to Chrome's version key.
 // This method is a no-op if this is anything other than system-level Chrome.
 // The command is used when enrolling Chrome browser instances into enterprise
@@ -359,6 +361,38 @@ void AddEnterpriseEnrollmentWorkItems(const InstallerState& installer_state,
   // happening. Do not blindly copy this pattern in new code. Check with a
   // member of base/win/OWNERS if in doubt.
   AppCommand cmd(cmd_line.GetCommandLineStringWithUnsafeInsertSequences());
+
+  // TODO(rogerta): For now setting this command as web accessible is required
+  // by Google Update.  Could revisit this should Google Update change the
+  // way permissions are handled for commands.
+  cmd.set_is_web_accessible(true);
+  cmd.AddWorkItems(root_key, cmd_key, install_list);
+}
+
+// Adds work items to add the "delete-dmtoken" command to Chrome's version key.
+// This method is a no-op if this is anything other than system-level Chrome.
+// The command is used when unenrolling Chrome browser instances from enterprise
+// management.
+void AddEnterpriseUnenrollmentWorkItems(const InstallerState& installer_state,
+                                        const base::FilePath& setup_path,
+                                        const base::Version& new_version,
+                                        WorkItemList* install_list) {
+  if (!installer_state.system_install())
+    return;
+
+  const HKEY root_key = installer_state.root_key();
+  const std::wstring cmd_key(GetCommandKey(kCmdDeleteDMToken));
+
+  // Register a command to allow Chrome to request Google Update to run
+  // setup.exe --delete-dmtoken, which will delete any existing DMToken from the
+  // registry.
+  base::CommandLine cmd_line(installer_state.GetInstallerDirectory(new_version)
+                                 .Append(setup_path.BaseName()));
+  cmd_line.AppendSwitch(switches::kDeleteDMToken);
+  cmd_line.AppendSwitch(switches::kSystemLevel);
+  cmd_line.AppendSwitch(switches::kVerboseLogging);
+  InstallUtil::AppendModeAndChannelSwitches(&cmd_line);
+  AppCommand cmd(cmd_line.GetCommandLineString());
 
   // TODO(rogerta): For now setting this command as web accessible is required
   // by Google Update.  Could revisit this should Google Update change the
@@ -405,7 +439,6 @@ void AddEnterpriseDeviceTrustWorkItems(const InstallerState& installer_state,
   cmd.set_is_web_accessible(true);
   cmd.AddWorkItems(root_key, cmd_key, install_list);
 }
-
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
 
 }  // namespace
@@ -553,7 +586,7 @@ void AddVersionKeyWorkItems(const InstallParams& install_params,
     // languages is a superset of Chrome's set of translations with this one
     // exception: what Chrome calls "en-us", Omaha calls "en".  sigh.
     std::wstring language(GetCurrentTranslation());
-    if (base::LowerCaseEqualsASCII(language, "en-us"))
+    if (base::EqualsCaseInsensitiveASCII(language, "en-us"))
       language.resize(2);
     list->AddSetRegValueWorkItem(root, clients_key, KEY_WOW64_32KEY,
                                  google_update::kRegLangField, language,
@@ -576,14 +609,8 @@ void AddUpdateBrandCodeWorkItem(const InstallerState& installer_state,
   if (new_brand.empty())
     return;
 
-  // Only update if this machine is:
-  // - domain joined, or
-  // - registered with MDM and is not windows home edition
-  bool is_enterprise_version =
-      base::win::OSInfo::GetInstance()->version_type() != base::win::SUITE_HOME;
-  if (!(base::win::IsEnrolledToDomain() ||
-        (base::win::IsDeviceRegisteredWithManagement() &&
-         is_enterprise_version))) {
+  // Only update if this machine is a managed device, including domain join.
+  if (!base::IsManagedDevice()) {
     return;
   }
 
@@ -871,6 +898,8 @@ void AddInstallWorkItems(const InstallParams& install_params,
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   AddEnterpriseEnrollmentWorkItems(installer_state, setup_path, new_version,
                                    install_list);
+  AddEnterpriseUnenrollmentWorkItems(installer_state, setup_path, new_version,
+                                     install_list);
   AddEnterpriseDeviceTrustWorkItems(installer_state, setup_path, new_version,
                                     install_list);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING
@@ -883,12 +912,10 @@ void AddInstallWorkItems(const InstallParams& install_params,
       installer_state.root_key(),
       GetNotificationHelperPath(target_path, new_version), install_list);
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (installer_state.system_install()) {
     AddElevationServiceWorkItems(
         GetElevationServicePath(target_path, new_version), install_list);
   }
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING
 
   if (!vivaldi::IsInstallStandalone()) {
     // clang-format off
@@ -907,13 +934,33 @@ void AddNativeNotificationWorkItems(
     HKEY root,
     const base::FilePath& notification_helper_path,
     WorkItemList* list) {
+
   if (notification_helper_path.empty()) {
     LOG(DFATAL) << "The path to notification_helper.exe is invalid.";
     return;
   }
 
+  CLSID toast_activator_clsid;
+  // NOTE(andre@vivaldi.com) : To minimize patches navigate down from
+  // notificationhelperexe and version.
+  std::vector<base::FilePath::StringType> comps =
+      notification_helper_path.GetComponents();
+  DCHECK(!comps.empty());
+  base::FilePath target;
+  for (size_t i = 0; i < comps.size()-2; ++i) {
+    target = target.Append(comps[i]);
+  }
+
+  target = target.Append(installer::kChromeExe);
+
+  VLOG(1) << " AddNativeNotificationWorkItems using target " << target.value();
+
   std::wstring toast_activator_reg_path =
-      InstallUtil::GetToastActivatorRegistryPath();
+      InstallUtil::GetToastActivatorRegistryPath(&target);
+  toast_activator_clsid = vivaldi::GetOrGenerateToastActivatorCLSID(&target);
+
+  VLOG(1) << " AddNativeNotificationWorkItems "
+          << notification_helper_path.value();
 
   if (toast_activator_reg_path.empty()) {
     LOG(DFATAL) << "Cannot retrieve the toast activator registry path";
@@ -932,9 +979,9 @@ void AddNativeNotificationWorkItems(
   // Force COM to flush its cache containing the path to the old handler.
   WorkItem* item = list->AddCallbackWorkItem(
       base::BindOnce(&ProbeNotificationActivatorCallback,
-                     install_static::GetToastActivatorClsid()),
+                     toast_activator_clsid),
       base::BindOnce(base::IgnoreResult(&ProbeNotificationActivatorCallback),
-                     install_static::GetToastActivatorClsid()));
+                     toast_activator_clsid));
   item->set_best_effort(true);
 
   std::wstring toast_activator_server_path =

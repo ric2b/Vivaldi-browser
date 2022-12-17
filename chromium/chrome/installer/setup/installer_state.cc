@@ -24,6 +24,7 @@
 #include "chrome/installer/util/work_item.h"
 #include "chrome/installer/util/work_item_list.h"
 
+#include "chrome/installer/util/registry_util.h"
 #include "installer/util/vivaldi_setup_util.h"
 
 namespace installer {
@@ -203,6 +204,17 @@ void InstallerState::WriteInstallerResult(
 
 bool InstallerState::RequiresActiveSetup() const {
   return system_install();
+}
+
+// See vivaldi::GetOrGenerateToastActivatorCLSID
+// Delete Software\Vivaldi\ToastActivatorCLSID\<target_path().vivaldi.exe>
+void InstallerState::ClearToastActivatorTargetExe() const {
+  base::FilePath target_exe = target_path().Append(installer::kChromeExe);
+  VLOG(1) << "Deleting kVivaldiToastActivatorCLSID: " << target_exe;
+  installer::DeleteRegistryValue(HKEY_CURRENT_USER,
+                      vivaldi::constants::kVivaldiToastActivatorCLSID,
+                      WorkItem::kWow64Default,
+                      target_exe.value());
 }
 
 }  // namespace installer

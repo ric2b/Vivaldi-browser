@@ -295,7 +295,7 @@ void IPCMediaPipeline::DecodedDataReady(ReadDecodedDataCallback callback,
   DCHECK(!GetElem(ipc_decoding_buffers_, stream_type));
   DCHECK(buffer);
 
-  auto result = platform_media::mojom::DecodingResult::New();
+  platform_media::mojom::DecodingResultPtr result;
   base::ReadOnlySharedMemoryRegion region_to_send;
   switch (buffer.status()) {
     case MediaDataStatus::kMediaError:
@@ -306,7 +306,7 @@ void IPCMediaPipeline::DecodedDataReady(ReadDecodedDataCallback callback,
     case MediaDataStatus::kEOS:
       VLOG(2) << " PROPMEDIA(GPU) : " << __FUNCTION__
               << " eos stream_type=" << GetStreamTypeName(stream_type);
-      result->set_end_of_file(true);
+      result = platform_media::mojom::DecodingResult::NewEndOfFile(true);
       break;
     case MediaDataStatus::kConfigChanged:
       VLOG(3) << " PROPMEDIA(GPU) : " << __FUNCTION__
@@ -315,11 +315,13 @@ void IPCMediaPipeline::DecodedDataReady(ReadDecodedDataCallback callback,
       switch (stream_type) {
         case PlatformStreamType::kAudio:
           DCHECK(buffer.GetAudioConfig().is_valid());
-          result->set_audio_config(buffer.GetAudioConfig());
+          result = platform_media::mojom::DecodingResult::NewAudioConfig(
+              buffer.GetAudioConfig());
           break;
         case PlatformStreamType::kVideo:
           DCHECK(buffer.GetVideoConfig().is_valid());
-          result->set_video_config(buffer.GetVideoConfig());
+          result = platform_media::mojom::DecodingResult::NewVideoConfig(
+              buffer.GetVideoConfig());
           break;
       }
       break;
@@ -334,7 +336,8 @@ void IPCMediaPipeline::DecodedDataReady(ReadDecodedDataCallback callback,
       data->timestamp = buffer.timestamp();
       data->duration = buffer.duration();
       data->region = buffer.extract_region_to_send();
-      result->set_decoded_data(std::move(data));
+      result = platform_media::mojom::DecodingResult::NewDecodedData(
+          std::move(data));
       break;
   }
 

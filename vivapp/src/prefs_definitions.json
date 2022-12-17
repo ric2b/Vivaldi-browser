@@ -447,19 +447,19 @@
       },
       "extensions": {
         "show_toggle": {
-          "description": "Whether to display a toggle to show/hide extension buttons on the address bar.",
+          "description": "[DEPRECATED 2019/12]",
           "type": "boolean",
           "default": false,
           "syncable": true
         },
         "show_hidden_toggle": {
-          "description": "Whether to activate toggle hidden extension icons",
+          "description": "[DEPRECATED 2022/06] Duplicate",
           "type": "boolean",
           "default": true,
           "syncable": true
         },
         "show_all_toggle": {
-          "description": "Whether to activate toggle all extension icons",
+          "description": "Whether to toggle all extensions or none / hidden extensions only",
           "type": "boolean",
           "default": false,
           "syncable": true
@@ -573,6 +573,12 @@
           "type": "integer",
           "default": 210,
           "syncable": false
+        },
+        "show_keyword": {
+          "description": "Show search engine nickname/keyword in the search field dropdown",
+          "type": "boolean",
+          "default": true,
+          "syncable": true
         },
         "in_new_tab": {
           "description": "To always open Search field searches in a new tab",
@@ -1869,6 +1875,16 @@
           "type": "boolean",
           "default": true,
           "syncable": true
+        },
+        "right_to_left": {
+          "type": "string",
+          "default": "f8f93b48-b1ed-43c3-bd65-e7240fd76d3f",
+          "syncable": true
+        },
+        "left_to_right": {
+          "type": "string",
+          "default":  "b00e2d3c-a9ba-49b8-bce7-1faf1894a5f3",
+          "syncable": true
         }
       },
       "double_click_menu": {
@@ -2103,6 +2119,12 @@
         "default": "left",
         "syncable": true
       },
+      "show_close_button": {
+        "description": "Show close button on panel",
+        "type": "boolean",
+        "default": true,
+        "syncable": true
+      },
       "show_folder_badge": {
         "description": "Show a badge with the number of children",
         "type": "boolean",
@@ -2197,7 +2219,8 @@
               "origin": "bundle",
               "resizable": false,
               "title": "",
-              "width": -1
+              "width": -1,
+              "zoom": 1
             },
             {
               "id": "ckn7fhhqx0000hc2roo8jshm4",
@@ -2210,7 +2233,8 @@
               "origin": "bundle",
               "resizable": false,
               "title": "",
-              "width": -1
+              "width": -1,
+              "zoom": 1
             }
           ],
           "syncable": false
@@ -2248,7 +2272,11 @@
         "toolbar": {
           "description": "Web panel toolbar and navigation controls display",
           "type": "dictionary",
-          "default": { "showToolbar": true, "allControls": false },
+          "default": {
+            "showToolbar": true,
+            "allControls": false,
+            "zoomControls": false
+          },
           "syncable": false
         }
       }
@@ -3206,9 +3234,11 @@
         "syncable": false
       },
       "dim_blurred": {
-        "description": "[DEPRECATED 2021/09] Kept for migration",
+        "description": "Dim colors in windows without focus",
         "type": "boolean",
         "default": false,
+        "default_linux": true,
+        "default_mac": true,
         "syncable": false
       },
       "private_window": {
@@ -3249,10 +3279,10 @@
         }
       },
       "simple_scrollbar": {
-        "description": "[DEPRECATED 2021/11] Kept for migration",
+        "description": "Win/Linux: prefer narrow scroll bars without buttons",
         "type": "boolean",
         "default": false,
-        "syncable": true
+        "syncable": false
       },
       "schedule": {
         "enabled": {
@@ -3365,11 +3395,9 @@
             "colorBg": "#f6f6f6",
             "colorFg": "#222222",
             "colorHighlightBg": "#4c70f0",
-            "colorWindowBg": "#ef3939",
-            "contrast": 2,
-            "dimBlurred": false,
+            "colorWindowBg": "#f6f6f6",
+            "contrast": 0,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.92,
             "blur": 5,
             "transparencyTabs": false,
@@ -3391,10 +3419,8 @@
             "colorFg": "#d3d9e3",
             "colorHighlightBg": "#6590fd",
             "colorWindowBg": "#2e2f37",
-            "contrast": 2,
-            "dimBlurred": false,
+            "contrast": 0,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.75,
             "blur": 10,
             "transparencyTabs": false,
@@ -3415,11 +3441,9 @@
             "colorBg": "#41403b",
             "colorFg": "#e4e4dc",
             "colorHighlightBg": "#ed773d",
-            "colorWindowBg": "#e95421",
+            "colorWindowBg": "#41403b",
             "contrast": 0,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.75,
             "blur": 10,
             "transparencyTabs": false,
@@ -3442,9 +3466,7 @@
             "colorHighlightBg": "#579c8e",
             "colorWindowBg": "#1D1E21",
             "contrast": 2,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.75,
             "blur": 0,
             "transparencyTabs": false,
@@ -3455,7 +3477,7 @@
             "id": "Vivaldi4",
             "url": "",
             "name": "Hot Pink",
-            "accentFromPage": true,
+            "accentFromPage": false,
             "accentOnWindow": true,
             "accentSaturationLimit": 1,
             "backgroundImage": "/resources/bg_alt_1.jpg",
@@ -3465,11 +3487,9 @@
             "colorBg": "#412d38",
             "colorFg": "#f5dbef",
             "colorHighlightBg": "#ff368f",
-            "colorWindowBg": "#b63e62",
+            "colorWindowBg": "#412d38",
             "contrast": 2,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.75,
             "blur": 0,
             "transparencyTabs": false,
@@ -3492,9 +3512,7 @@
             "colorHighlightBg": "#4c70f0",
             "colorWindowBg": "#edeef2",
             "contrast": 1,
-            "dimBlurred": true,
             "preferSystemAccent": true,
-            "simpleScrollbar": true,
             "alpha": 1.0,
             "blur": 0,
             "transparencyTabs": false,
@@ -3517,9 +3535,7 @@
             "colorHighlightBg": "#ffb608",
             "colorWindowBg": "#2e3a50",
             "contrast": 5,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.75,
             "blur": 0,
             "transparencyTabs": false,
@@ -3540,11 +3556,9 @@
             "colorBg": "#f1efea",
             "colorFg": "#192419",
             "colorHighlightBg": "#e9780e",
-            "colorWindowBg": "#29b2a4",
+            "colorWindowBg": "#f1efea",
             "contrast": 5,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.80,
             "blur": 10,
             "transparencyTabs": false,
@@ -3567,9 +3581,7 @@
             "colorHighlightBg": "#7F5FEC",
             "colorWindowBg": "#7F5FEC",
             "contrast": 3,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 0.95,
             "blur": 10,
             "transparencyTabs": false,
@@ -3592,9 +3604,7 @@
             "colorHighlightBg": "#5f79fd",
             "colorWindowBg": "",
             "contrast": 2,
-            "dimBlurred": false,
             "preferSystemAccent": false,
-            "simpleScrollbar": true,
             "alpha": 1.0,
             "blur": 0,
             "transparencyTabs": false,
@@ -4166,6 +4176,10 @@
     "kExtensionURLOverrides": {
       "path": "extensions.chrome_url_overrides",
       "type": "dictionary"
+    },
+    "kHttpsOnlyModeEnabled": {
+      "path": "https_only_mode_enabled",
+      "type": "boolean"
     },
     "kPluginsAlwaysOpenPdfExternally": {
       "path": "plugins.always_open_pdf_externally",

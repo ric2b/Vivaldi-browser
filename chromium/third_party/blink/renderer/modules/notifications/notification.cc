@@ -418,6 +418,15 @@ String Notification::permission(ExecutionContext* context) {
   if (!context->IsSecureContext())
     return PermissionString(mojom::blink::PermissionStatus::DENIED);
 
+  // If the current global object's browsing context is a prerendering browsing
+  // context, then return "default".
+  // https://wicg.github.io/nav-speculation/prerendering.html#patch-notifications
+  if (auto* window = DynamicTo<LocalDOMWindow>(context)) {
+    if (Document* document = window->document(); document->IsPrerendering()) {
+      return PermissionString(mojom::blink::PermissionStatus::ASK);
+    }
+  }
+
   mojom::blink::PermissionStatus status =
       NotificationManager::From(context)->GetPermissionStatus();
 
@@ -429,7 +438,7 @@ String Notification::permission(ExecutionContext* context) {
   if (status == mojom::blink::PermissionStatus::ASK) {
     auto* window = DynamicTo<LocalDOMWindow>(context);
     LocalFrame* frame = window ? window->GetFrame() : nullptr;
-    if (!frame || frame->IsCrossOriginToMainFrame())
+    if (!frame || frame->IsCrossOriginToOutermostMainFrame())
       status = mojom::blink::PermissionStatus::DENIED;
   }
 
@@ -455,7 +464,7 @@ ScriptPromise Notification::requestPermission(
 
     // Sites cannot request notification permission from cross-origin iframes,
     // but they can use notifications if permission had already been granted.
-    if (window->GetFrame()->IsCrossOriginToMainFrame()) {
+    if (window->GetFrame()->IsCrossOriginToOutermostMainFrame()) {
       Deprecation::CountDeprecation(
           context, WebFeature::kNotificationPermissionRequestedIframe);
     }

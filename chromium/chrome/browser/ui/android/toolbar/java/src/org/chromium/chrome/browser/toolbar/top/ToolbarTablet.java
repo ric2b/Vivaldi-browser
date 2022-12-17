@@ -48,7 +48,6 @@ import org.chromium.chrome.browser.toolbar.HomeButton;
 import org.chromium.chrome.browser.toolbar.KeyboardNavigationListener;
 import org.chromium.chrome.browser.toolbar.R;
 import org.chromium.chrome.browser.toolbar.TabCountProvider;
-import org.chromium.chrome.browser.toolbar.TabCountProvider.TabCountObserver;
 import org.chromium.chrome.browser.toolbar.ToolbarDataProvider;
 import org.chromium.chrome.browser.toolbar.ToolbarTabController;
 import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
@@ -75,8 +74,8 @@ import org.vivaldi.browser.toolbar.TrackerShieldButton;
  * The Toolbar object for Tablet screens.
  */
 @SuppressLint("Instantiatable")
-public class ToolbarTablet extends ToolbarLayout
-        implements OnClickListener, View.OnLongClickListener, TabCountObserver {
+public class ToolbarTablet
+        extends ToolbarLayout implements OnClickListener, View.OnLongClickListener {
     private ObjectAnimator mTabSwitcherModeAnimation;
 
     /** Downloads page for offline access. */
@@ -171,11 +170,21 @@ public class ToolbarTablet extends ToolbarLayout
         final LevelListDrawable reloadIcon = new LevelListDrawable();
         final int reloadLevel = getResources().getInteger(R.integer.reload_button_level_reload);
         final int stopLevel = getResources().getInteger(R.integer.reload_button_level_stop);
-        final Drawable reloadLevelDrawable = UiUtils.getTintedDrawable(
+        /* Vivaldi final */ Drawable reloadLevelDrawable = UiUtils.getTintedDrawable(
                 getContext(), R.drawable.btn_toolbar_reload, R.color.default_icon_color_tint_list);
+
+        if (BuildConfig.IS_VIVALDI)
+            reloadLevelDrawable = AppCompatResources.getDrawable(
+                    getContext(), R.drawable.menu_reload_icon);
+
         reloadIcon.addLevel(reloadLevel, reloadLevel, reloadLevelDrawable);
-        final Drawable stopLevelDrawable = UiUtils.getTintedDrawable(
+        /* Vivaldi final */ Drawable stopLevelDrawable = UiUtils.getTintedDrawable(
                 getContext(), R.drawable.btn_close, R.color.default_icon_color_tint_list);
+
+        if (BuildConfig.IS_VIVALDI)
+            stopLevelDrawable = AppCompatResources.getDrawable(
+                    getContext(), R.drawable.menu_reload_cancel_icon);
+
         reloadIcon.addLevel(stopLevel, stopLevel, stopLevelDrawable);
         mReloadButton.setImageDrawable(reloadIcon);
         mShowTabStack = (ChromeAccessibilityUtil.get().isAccessibilityEnabled()
@@ -347,7 +356,7 @@ public class ToolbarTablet extends ToolbarLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
 
-        mToolbarShadow = (ImageView) getRootView().findViewById(R.id.toolbar_shadow);
+        mToolbarShadow = (ImageView) getRootView().findViewById(R.id.toolbar_hairline);
     }
 
     @Override
@@ -433,8 +442,9 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     @Override
-    boolean isReadyForTextureCapture() {
-        return !urlHasFocus();
+    CaptureReadinessResult isReadyForTextureCapture() {
+        // Don't track tablet metrics yet for capturing, just return unknown for now.
+        return CaptureReadinessResult.unknown(!urlHasFocus());
     }
 
     @Override
@@ -660,15 +670,7 @@ public class ToolbarTablet extends ToolbarLayout
     }
 
     @Override
-    public void onTabCountChanged(int numberOfTabs, boolean isIncognito) {
-        mAccessibilitySwitcherButton.setContentDescription(getResources().getQuantityString(
-                R.plurals.accessibility_toolbar_btn_tabswitcher_toggle, numberOfTabs,
-                numberOfTabs));
-    }
-
-    @Override
     void setTabCountProvider(TabCountProvider tabCountProvider) {
-        tabCountProvider.addObserver(this);
         mAccessibilitySwitcherButton.setTabCountProvider(tabCountProvider);
     }
 

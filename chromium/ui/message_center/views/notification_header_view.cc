@@ -132,6 +132,9 @@ void ExpandButton::OnThemeChanged() {
 void ExpandButton::GetAccessibleNodeData(ui::AXNodeData* node_data) {
   node_data->role = ax::mojom::Role::kButton;
   node_data->SetName(GetTooltipText(gfx::Point()));
+
+  if (GetTooltipText().empty())
+    node_data->SetNameFrom(ax::mojom::NameFrom::kAttributeExplicitlyEmpty);
 }
 
 BEGIN_METADATA(ExpandButton, views::ImageView)
@@ -375,6 +378,11 @@ void NotificationHeaderView::SetSubpixelRenderingEnabled(bool enabled) {
 
 void NotificationHeaderView::SetAppIconVisible(bool visible) {
   app_icon_view_->SetVisible(visible);
+}
+
+void NotificationHeaderView::SetTimestampVisible(bool visible) {
+  timestamp_divider_->SetVisible(visible);
+  timestamp_view_->SetVisible(visible);
 }
 
 void NotificationHeaderView::SetIsInAshNotificationView(

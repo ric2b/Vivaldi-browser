@@ -64,13 +64,6 @@
 #include "net/android/radio_activity_tracker.h"
 #endif  // BUILDFLAG(IS_ANDROID)
 
-#if BUILDFLAG(IS_APPLE) && !BUILDFLAG(CRONET_BUILD)
-// This was needed to debug crbug.com/640281.
-// TODO(zhongyi): Remove once the bug is resolved.
-#include <dlfcn.h>
-#include <pthread.h>
-#endif  // BUILDFLAG(IS_APPLE) && !BUILDFLAG(CRONET_BUILD)
-
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #endif  // BUILDFLAG(IS_MAC)
@@ -88,67 +81,29 @@ const base::TimeDelta kActivityMonitorMsThreshold = base::Milliseconds(100);
 
 #if BUILDFLAG(IS_APPLE) && !BUILDFLAG(CRONET_BUILD)
 
-// On OSX the file descriptor is guarded to detect the cause of
-// crbug.com/640281. guarded API is supported only on newer versions of OSX,
-// so the symbols need to be resolved dynamically.
-// TODO(zhongyi): Removed this code once the bug is resolved.
+// On macOS, the file descriptor is guarded to detect the cause of
+// https://crbug.com/640281. The guard mechanism is a private interface, so
+// these functions, types, and constants are not defined in any public header,
+// but with these declarations, it's possible to link against these symbols and
+// directly call into the functions that will be available at run time.
 
-typedef uint64_t guardid_t;
+// Declarations from 12.3 xnu-8020.101.4/bsd/sys/guarded.h (not in the SDK).
+extern "C" {
 
-typedef int (*GuardedCloseNpFunction)(int fd, const guardid_t* guard);
-typedef int (*ChangeFdguardNpFunction)(int fd,
-                                       const guardid_t* guard,
-                                       u_int flags,
-                                       const guardid_t* nguard,
-                                       u_int nflags,
-                                       int* fdflagsp);
-
-GuardedCloseNpFunction g_guarded_close_np = nullptr;
-ChangeFdguardNpFunction g_change_fdguard_np = nullptr;
-
-pthread_once_t g_guarded_functions_once = PTHREAD_ONCE_INIT;
-
-void InitGuardedFunctions() {
-  void* libsystem_handle =
-      dlopen("/usr/lib/libSystem.dylib", RTLD_LAZY | RTLD_LOCAL | RTLD_NOLOAD);
-  if (libsystem_handle) {
-    g_guarded_close_np = reinterpret_cast<GuardedCloseNpFunction>(
-        dlsym(libsystem_handle, "guarded_close_np"));
-    g_change_fdguard_np = reinterpret_cast<ChangeFdguardNpFunction>(
-        dlsym(libsystem_handle, "change_fdguard_np"));
-
-    // If for any reason only one of the functions is found, set both of them to
-    // nullptr.
-    if (!g_guarded_close_np || !g_change_fdguard_np) {
-      g_guarded_close_np = nullptr;
-      g_change_fdguard_np = nullptr;
-    }
-  }
-}
-
-int change_fdguard_np(int fd,
-                      const guardid_t* guard,
-                      u_int flags,
-                      const guardid_t* nguard,
-                      u_int nflags,
-                      int* fdflagsp) {
-  CHECK_EQ(pthread_once(&g_guarded_functions_once, InitGuardedFunctions), 0);
-  // Older version of OSX may not support guarded API.
-  if (!g_change_fdguard_np)
-    return 0;
-  return g_change_fdguard_np(fd, guard, flags, nguard, nflags, fdflagsp);
-}
-
-int guarded_close_np(int fd, const guardid_t* guard) {
-  // Older version of OSX may not support guarded API.
-  if (!g_guarded_close_np)
-    return close(fd);
-
-  return g_guarded_close_np(fd, guard);
-}
+using guardid_t = uint64_t;
 
 const unsigned int GUARD_CLOSE = 1u << 0;
 const unsigned int GUARD_DUP = 1u << 1;
+
+int guarded_close_np(int fd, const guardid_t* guard);
+int change_fdguard_np(int fd,
+                      const guardid_t* guard,
+                      unsigned int guardflags,
+                      const guardid_t* nguard,
+                      unsigned int nguardflags,
+                      int* fdflagsp);
+
+}  // extern "C"
 
 const guardid_t kSocketFdGuard = 0xD712BC0BC9A4EAD4;
 
@@ -178,29 +133,15 @@ UDPSocketPosix::UDPSocketPosix(DatagramSocket::BindType bind_type,
     : write_async_watcher_(std::make_unique<WriteAsyncWatcher>(this)),
       sender_(new UDPSocketPosixSender()),
       socket_(kInvalidSocket),
-      socket_hash_(0),
-      addr_family_(0),
-      is_connected_(false),
-      socket_options_(SOCKET_OPTION_MULTICAST_LOOP),
-      sendto_flags_(0),
-      multicast_interface_(0),
-      multicast_time_to_live_(1),
       bind_type_(bind_type),
       read_socket_watcher_(FROM_HERE),
       write_socket_watcher_(FROM_HERE),
       read_watcher_(this),
       write_watcher_(this),
-      last_async_result_(0),
-      write_async_timer_running_(false),
-      write_async_outstanding_(0),
-      read_buf_len_(0),
-      recv_from_address_(nullptr),
-      write_buf_len_(0),
       net_log_(NetLogWithSource::Make(net_log, NetLogSourceType::UDP_SOCKET)),
       bound_network_(NetworkChangeNotifier::kInvalidNetworkHandle),
       always_update_bytes_received_(base::FeatureList::IsEnabled(
-          features::kUdpSocketPosixAlwaysUpdateBytesReceived)),
-      experimental_recv_optimization_enabled_(false) {
+          features::kUdpSocketPosixAlwaysUpdateBytesReceived)) {
   net_log_.BeginEventReferencingSource(NetLogEventType::SOCKET_ALIVE, source);
 }
 
@@ -320,19 +261,20 @@ void UDPSocketPosix::Close() {
                           : perfetto::StaticString{"CloseSocketUDP"});
 
   // Attempt to clear errors on the socket so that they are not returned by
-  // close(). See https://crbug.com/1151048.
+  // close(). This seems to be effective at clearing some, but not all,
+  // EPROTOTYPE errors. See https://crbug.com/1151048.
   int value = 0;
   socklen_t value_len = sizeof(value);
   HANDLE_EINTR(getsockopt(socket_, SOL_SOCKET, SO_ERROR, &value, &value_len));
 
   if (IGNORE_EINTR(guarded_close_np(socket_, &kSocketFdGuard)) != 0) {
-    // There is a bug in the Mac OS kernel that it can return an
-    // ENOTCONN error. In this case we don't know whether the file
-    // descriptor is still allocated or not. We cannot safely close the
-    // file descriptor because it may have been reused by another
-    // thread in the meantime. We may leak file handles here and cause
-    // a crash indirectly later. See https://crbug.com/1151048.
-    PCHECK(errno == ENOTCONN);
+    // There is a bug in the Mac OS kernel that it can return an ENOTCONN or
+    // EPROTOTYPE error. In this case we don't know whether the file descriptor
+    // is still allocated or not. We cannot safely close the file descriptor
+    // because it may have been reused by another thread in the meantime. We may
+    // leak file handles here and cause a crash indirectly later. See
+    // https://crbug.com/1151048.
+    PCHECK(errno == ENOTCONN || errno == EPROTOTYPE);
   }
 #else
   PCHECK(IGNORE_EINTR(close(socket_)) == 0);
@@ -1121,11 +1063,11 @@ void UDPSocketPosix::ApplySocketTag(const SocketTag& tag) {
   tag_ = tag;
 }
 
-UDPSocketPosixSender::UDPSocketPosixSender() : sendmmsg_enabled_(false) {}
-UDPSocketPosixSender::~UDPSocketPosixSender() {}
+UDPSocketPosixSender::UDPSocketPosixSender() = default;
+UDPSocketPosixSender::~UDPSocketPosixSender() = default;
 
 SendResult::SendResult() : rv(0), write_count(0) {}
-SendResult::~SendResult() {}
+SendResult::~SendResult() = default;
 SendResult::SendResult(int _rv, int _write_count, DatagramBuffers _buffers)
     : rv(_rv), write_count(_write_count), buffers(std::move(_buffers)) {}
 SendResult::SendResult(SendResult&& other) = default;

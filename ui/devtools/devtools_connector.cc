@@ -21,6 +21,7 @@
 #include "extensions/browser/event_router.h"
 #include "extensions/schema/devtools_private.h"
 #include "extensions/tools/vivaldi_tools.h"
+#include "prefs/vivaldi_gen_prefs.h"
 #include "ui/events/keycodes/dom/dom_code.h"
 #include "ui/vivaldi_browser_window.h"
 #include "ui/vivaldi_ui_utils.h"
@@ -302,6 +303,44 @@ bool DevtoolsConnectorItem::HandleContextMenu(
   return false;
 }
 
+#if BUILDFLAG(IS_MAC)
+const std::vector<std::string> commands_to_fwd = {
+  "COMMAND_CLOSE_TAB",
+  "COMMAND_CLOSE_WINDOW",
+  "COMMAND_NEW_TAB",
+  "COMMAND_NEW_BACKGROUND_TAB",
+  "COMMAND_NEW_PRIVATE_WINDOW",
+  "COMMAND_NEW_WINDOW",
+  "COMMAND_QUIT_MAC_MAYBE_WARN",
+  "COMMAND_CLIPBOARD_COPY",
+  "COMMAND_CLIPBOARD_CUT",
+  "COMMAND_CLIPBOARD_PASTE",
+  "COMMAND_CLIPBOARD_PASTE_AS_PLAIN_TEXT"
+};
+
+bool ShouldForwardKeyCombo(std::string shortcut_text,
+    content::BrowserContext* browser_context) {
+  Profile* profile = Profile::FromBrowserContext(browser_context);
+  PrefService* prefs = profile->GetPrefs();
+  const base::Value* vivaldi_actions = prefs->GetList(vivaldiprefs::kActions);
+  const base::Value::Dict* dict = vivaldi_actions->GetList()[0].GetIfDict();
+
+  for (int i = 0; i < (int)commands_to_fwd.size(); i++) {
+    const base::Value::Dict* shortcut = dict->FindDict(commands_to_fwd.at(i));
+    for (const auto [name, keycombo] : *shortcut) {
+      if (name == "shortcuts") {
+        for (const base::Value& kc : keycombo.GetList()) {
+          if (shortcut_text == *kc.GetIfString()) {
+            return true;
+          }
+        }
+      }
+    }
+  }
+  return false;
+}
+#endif
+
 bool DevtoolsConnectorItem::HandleKeyboardEvent(
     content::WebContents* source,
     const content::NativeWebKeyboardEvent& event) {
@@ -316,6 +355,24 @@ bool DevtoolsConnectorItem::HandleKeyboardEvent(
       DevToolsWindow::OpenDevToolsWindow(source);
     }
   }
+
+#if BUILDFLAG(IS_MAC)
+  if ((event.GetType() == blink::WebInputEvent::Type::kRawKeyDown) &&
+      event.windows_key_code != ui::VKEY_CONTROL &&
+      event.windows_key_code != ui::VKEY_MENU &&
+      event.windows_key_code != ui::VKEY_SHIFT &&
+      event.windows_key_code != ui::VKEY_COMMAND &&
+      event.GetModifiers() > 0) {
+    std::string shortcut_text =
+        base::ToLowerASCII(::vivaldi::ShortcutTextFromEvent(event));
+    if (ShouldForwardKeyCombo(shortcut_text, browser_context_)) {
+      content::NativeWebKeyboardEvent new_event(event);
+      new_event.from_devtools = true;
+      return devtools_delegate_->HandleKeyboardEvent(source, new_event);
+    }
+  }
+#endif
+
   // Do not pass on keyboard events to the delegate, aka. our BrowserWindow,
   // so we no longer need special handling of shortcuts when devtools is running
   // docked as shortcuts entered in devtools are no longer sent to our shortcut

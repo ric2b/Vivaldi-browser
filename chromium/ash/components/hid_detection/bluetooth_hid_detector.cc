@@ -5,8 +5,26 @@
 #include "ash/components/hid_detection/bluetooth_hid_detector.h"
 #include "ash/constants/ash_features.h"
 
-namespace ash {
-namespace hid_detection {
+namespace ash::hid_detection {
+
+BluetoothHidPairingState::BluetoothHidPairingState(const std::string& code,
+                                                   uint8_t num_keys_entered)
+    : code(code), num_keys_entered(num_keys_entered) {}
+
+BluetoothHidPairingState::BluetoothHidPairingState(
+    BluetoothHidPairingState&& other) {
+  code = std::move(other.code);
+  num_keys_entered = other.num_keys_entered;
+}
+
+BluetoothHidPairingState& BluetoothHidPairingState::operator=(
+    BluetoothHidPairingState&& other) {
+  code = std::move(other.code);
+  num_keys_entered = other.num_keys_entered;
+  return *this;
+}
+
+BluetoothHidPairingState::~BluetoothHidPairingState() = default;
 
 BluetoothHidDetector::BluetoothHidMetadata::BluetoothHidMetadata(
     std::string name,
@@ -31,18 +49,22 @@ BluetoothHidDetector::BluetoothHidMetadata::~BluetoothHidMetadata() = default;
 
 BluetoothHidDetector::BluetoothHidDetectionStatus::BluetoothHidDetectionStatus(
     absl::optional<BluetoothHidDetector::BluetoothHidMetadata>
-        current_pairing_device)
-    : current_pairing_device(std::move(current_pairing_device)) {}
+        current_pairing_device,
+    absl::optional<BluetoothHidPairingState> pairing_state)
+    : current_pairing_device(std::move(current_pairing_device)),
+      pairing_state(std::move(pairing_state)) {}
 
 BluetoothHidDetector::BluetoothHidDetectionStatus::BluetoothHidDetectionStatus(
     BluetoothHidDetectionStatus&& other) {
   current_pairing_device = std::move(other.current_pairing_device);
+  pairing_state = std::move(other.pairing_state);
 }
 
 BluetoothHidDetector::BluetoothHidDetectionStatus&
 BluetoothHidDetector::BluetoothHidDetectionStatus::operator=(
     BluetoothHidDetectionStatus&& other) {
   current_pairing_device = std::move(other.current_pairing_device);
+  pairing_state = std::move(other.pairing_state);
   return *this;
 }
 
@@ -50,10 +72,30 @@ BluetoothHidDetector::BluetoothHidDetectionStatus::
     ~BluetoothHidDetectionStatus() = default;
 
 BluetoothHidDetector::BluetoothHidDetector() {
-  DCHECK(ash::features::IsBluetoothRevampEnabled());
+  DCHECK(ash::features::IsOobeHidDetectionRevampEnabled());
 }
 
-BluetoothHidDetector::~BluetoothHidDetector() = default;
+BluetoothHidDetector::~BluetoothHidDetector() {
+  DCHECK(!delegate_) << " Bluetooth HID detection must be stopped before "
+                     << "BluetoothHidDetector is destroyed.";
+}
 
-}  // namespace hid_detection
-}  // namespace ash
+void BluetoothHidDetector::StartBluetoothHidDetection(
+    Delegate* delegate,
+    InputDevicesStatus input_devices_status) {
+  DCHECK(!delegate_);
+  delegate_ = delegate;
+  PerformStartBluetoothHidDetection(input_devices_status);
+}
+
+void BluetoothHidDetector::StopBluetoothHidDetection() {
+  DCHECK(delegate_);
+  PerformStopBluetoothHidDetection();
+  delegate_ = nullptr;
+}
+
+void BluetoothHidDetector::NotifyBluetoothHidDetectionStatusChanged() {
+  delegate_->OnBluetoothHidStatusChanged();
+}
+
+}  // namespace ash::hid_detection

@@ -9,8 +9,8 @@
 
 #include "base/callback.h"
 #include "base/files/file_path.h"
-#include "chromeos/dbus/cicerone/cicerone_service.pb.h"
-#include "chromeos/dbus/concierge/concierge_service.pb.h"
+#include "chromeos/ash/components/dbus/cicerone/cicerone_service.pb.h"
+#include "chromeos/ash/components/dbus/concierge/concierge_service.pb.h"
 
 // This file contains simple C++ types. Simple isn't a precise term, but as a
 // guideline enums and PoD structs are simple while structs/classes with methods
@@ -29,6 +29,7 @@ namespace crostini {
 // If you add anything here make sure to also update enums.xml and the plx
 // scripts in
 // https://plx.corp.google.com/home2/home/collections/c16e3c1474497b821
+// and CrostiniResultString in crostini_simple_types.cc.
 enum class CrostiniResult {
   SUCCESS = 0,
   // DBUS_ERROR = 1,
@@ -98,13 +99,26 @@ enum class CrostiniResult {
   VSH_CONNECT_FAILED = 65,
   CONTAINER_STOP_FAILED = 66,
   CONTAINER_STOP_CANCELLED = 67,
-  kMaxValue = CONTAINER_STOP_CANCELLED,
+  WAYLAND_SERVER_CREATION_FAILED = 68,
+  CONFIGURE_CONTAINER_TIMED_OUT = 69,
+  // Prior to M104, RESTART_ABORTED was used for this.
+  RESTART_REQUEST_CANCELLED = 70,
+  kMaxValue = RESTART_REQUEST_CANCELLED,
   // When adding a new value, check you've followed the steps in the comment at
   // the top of this enum.
 };
 
+// Returns the string name of the CrostiniResult.
+const char* CrostiniResultString(const CrostiniResult res);
+
 using CrostiniSuccessCallback =
     base::OnceCallback<void(bool success, const std::string& failure_reason)>;
+
+enum class RestartSource {
+  kOther,
+  kInstaller,
+  kMultiContainerCreation,
+};
 
 enum class InstallLinuxPackageProgressStatus {
   SUCCEEDED,

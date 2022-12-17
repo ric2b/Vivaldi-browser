@@ -3,6 +3,9 @@
 <translationbundle lang="ar">
 <translation id="2139186145475833000">الإضافة إلى الشاشة الرئيسية</translation>
 <translation id="2306442503286132111">العلامات المحفوظة في ملف <ph name="FOLDER_NAME" /></translation>
+<translation id="3060635849835183725">{BOOKMARKS_COUNT, plural,
+          =1 {<ph name="BOOKMARKS_COUNT_ONE" /> إشارة مرجعية}
+          other {<ph name="BOOKMARKS_COUNT_MANY" /> إشارةً مرجعيةً}}</translation>
 <translation id="3518985090088779359">القبول والمتابعة</translation>
 <translation id="385051799172605136">عودة</translation>
 <translation id="5118676864324397542">‏مساحة تخزين <ph name="APP_NAME" /> Vivaldi</translation>

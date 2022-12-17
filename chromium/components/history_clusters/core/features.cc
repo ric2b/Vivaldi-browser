@@ -29,6 +29,9 @@ namespace internal {
 
 const base::Feature kJourneys{"Journeys", enabled_by_default_desktop_only};
 
+const base::Feature kJourneysLabels{"JourneysLabel",
+                                    base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kOmniboxAction{"JourneysOmniboxAction",
                                    enabled_by_default_desktop_only};
 
@@ -40,7 +43,7 @@ const base::Feature kUserVisibleDebug{"JourneysUserVisibleDebug",
 
 const base::Feature kPersistContextAnnotationsInHistoryDb{
     "JourneysPersistContextAnnotationsInHistoryDb",
-    enabled_by_default_desktop_only};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kHistoryClustersInternalsPage{
     "HistoryClustersInternalsPage", base::FEATURE_DISABLED_BY_DEFAULT};

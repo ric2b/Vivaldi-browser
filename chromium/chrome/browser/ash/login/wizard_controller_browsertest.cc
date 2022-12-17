@@ -88,11 +88,11 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/grit/generated_resources.h"
 #include "chrome/test/base/testing_profile.h"
+#include "chromeos/ash/components/dbus/system_clock/system_clock_client.h"
+#include "chromeos/constants/chromeos_features.h"
 #include "chromeos/dbus/constants/dbus_switches.h"
-#include "chromeos/dbus/dbus_thread_manager.h"
 #include "chromeos/dbus/session_manager/fake_session_manager_client.h"
 #include "chromeos/dbus/shill/fake_shill_manager_client.h"
-#include "chromeos/dbus/system_clock/system_clock_client.h"
 #include "chromeos/dbus/userdataauth/fake_install_attributes_client.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
@@ -538,7 +538,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
         std::make_unique<MockDemoPreferencesScreenView>();
     mock_demo_preferences_screen_ =
         MockScreenExpectLifecycle(std::make_unique<MockDemoPreferencesScreen>(
-            mock_demo_preferences_screen_view_.get(),
+            mock_demo_preferences_screen_view_->AsWeakPtr(),
             base::BindRepeating(&WizardController::OnDemoPreferencesScreenExit,
                                 base::Unretained(wizard_controller))));
 
@@ -554,7 +554,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
     device_disabled_screen_view_ =
         std::make_unique<MockDeviceDisabledScreenView>();
     MockScreen(std::make_unique<DeviceDisabledScreen>(
-        device_disabled_screen_view_.get()));
+        device_disabled_screen_view_->AsWeakPtr()));
     EXPECT_CALL(*device_disabled_screen_view_, Show(_, _, _)).Times(0);
 
     mock_network_screen_view_ = std::make_unique<MockNetworkScreenView>();
@@ -567,7 +567,7 @@ class WizardControllerFlowTest : public WizardControllerTest {
     mock_update_view_ = std::make_unique<MockUpdateView>();
     mock_update_screen_ =
         MockScreenExpectLifecycle(std::make_unique<MockUpdateScreen>(
-            mock_update_view_.get(), GetErrorScreen(),
+            mock_update_view_.get()->AsWeakPtr(), GetErrorScreen(),
             base::BindRepeating(&WizardController::OnUpdateScreenExit,
                                 base::Unretained(wizard_controller))));
 
@@ -605,7 +605,6 @@ class WizardControllerFlowTest : public WizardControllerTest {
 
     mock_enable_adb_sideloading_screen_view_ =
         std::make_unique<MockEnableAdbSideloadingScreenView>();
-    ExpectBindUnbind(mock_enable_adb_sideloading_screen_view_.get());
     mock_enable_adb_sideloading_screen_ = MockScreenExpectLifecycle(
         std::make_unique<MockEnableAdbSideloadingScreen>(
             mock_enable_adb_sideloading_screen_view_->AsWeakPtr(),
@@ -623,19 +622,17 @@ class WizardControllerFlowTest : public WizardControllerTest {
                                 base::Unretained(wizard_controller))));
 
     mock_demo_setup_screen_view_ = std::make_unique<MockDemoSetupScreenView>();
-    ExpectBind(mock_demo_setup_screen_view_.get());
     mock_demo_setup_screen_ =
         MockScreenExpectLifecycle(std::make_unique<MockDemoSetupScreen>(
-            mock_demo_setup_screen_view_.get(),
+            mock_demo_setup_screen_view_->AsWeakPtr(),
             base::BindRepeating(&WizardController::OnDemoSetupScreenExit,
                                 base::Unretained(wizard_controller))));
 
     mock_demo_preferences_screen_view_ =
         std::make_unique<MockDemoPreferencesScreenView>();
-    ExpectBind(mock_demo_preferences_screen_view_.get());
     mock_demo_preferences_screen_ =
         MockScreenExpectLifecycle(std::make_unique<MockDemoPreferencesScreen>(
-            mock_demo_preferences_screen_view_.get(),
+            mock_demo_preferences_screen_view_->AsWeakPtr(),
             base::BindRepeating(&WizardController::OnDemoPreferencesScreenExit,
                                 base::Unretained(wizard_controller))));
 
@@ -1188,10 +1185,7 @@ class WizardControllerDeviceStateTest : public WizardControllerFlowTest {
     // call in `SetUpInProcessBrowserTestFixture`. See https://crbug.com/847422.
     // TODO(pmarko): Find a way for FakeShillManagerClient to be initialized
     // automatically (https://crbug.com/847422).
-    DBusThreadManager::Get()
-        ->GetShillManagerClient()
-        ->GetTestInterface()
-        ->SetupDefaultEnvironment();
+    ShillManagerClient::Get()->GetTestInterface()->SetupDefaultEnvironment();
   }
 
   void SetUpCommandLine(base::CommandLine* command_line) override {
@@ -1735,7 +1729,8 @@ IN_PROC_BROWSER_TEST_F(WizardControllerDeviceStateWithInitialEnrollmentTest,
   fake_statistics_provider_.SetMachineStatistic(system::kCheckEnrollmentKey,
                                                 "0");
 
-  DoInitialEnrollment(/*check_fre=*/false);
+  // TODO(igorcov): Change to /*check_fre=*/false when b/238592446 is fixed.
+  DoInitialEnrollment(/*check_fre=*/true);
 }
 
 // Tests that a server error occurs during the Initial Enrollment check.  The
@@ -2624,66 +2619,6 @@ IN_PROC_BROWSER_TEST_F(WizardControllerDemoSetupTest,
   EXPECT_FALSE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
 }
 
-IN_PROC_BROWSER_TEST_F(WizardControllerDemoSetupTest,
-                       OfflineDemoSetupFlowFinished) {
-  if (chromeos::features::IsOobeConsolidatedConsentEnabled())
-    return;
-
-  CheckCurrentScreen(WelcomeView::kScreenId);
-  EXPECT_FALSE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  EXPECT_CALL(*mock_welcome_screen_, HideImpl()).Times(1);
-  EXPECT_CALL(*mock_demo_preferences_screen_, ShowImpl()).Times(1);
-
-  WizardController::default_controller()->StartDemoModeSetup();
-
-  CheckCurrentScreen(DemoPreferencesScreenView::kScreenId);
-  EXPECT_TRUE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  EXPECT_CALL(*mock_demo_preferences_screen_, HideImpl()).Times(1);
-  EXPECT_CALL(*mock_network_screen_, ShowImpl()).Times(1);
-
-  mock_demo_preferences_screen_->ExitScreen(
-      DemoPreferencesScreen::Result::COMPLETED);
-
-  CheckCurrentScreen(NetworkScreenView::kScreenId);
-  EXPECT_TRUE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  EXPECT_CALL(*mock_network_screen_, HideImpl()).Times(1);
-  EXPECT_CALL(*mock_eula_screen_, ShowImpl()).Times(1);
-
-  mock_network_screen_->ExitScreen(NetworkScreen::Result::OFFLINE_DEMO);
-
-  CheckCurrentScreen(EulaView::kScreenId);
-  EXPECT_TRUE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  EXPECT_CALL(*mock_eula_screen_, HideImpl()).Times(1);
-  EXPECT_CALL(*mock_arc_terms_of_service_screen_, ShowImpl()).Times(1);
-
-  mock_eula_screen_->ExitScreen(
-      EulaScreen::Result::ACCEPTED_WITHOUT_USAGE_STATS_REPORTING);
-
-  CheckCurrentScreen(ArcTermsOfServiceScreenView::kScreenId);
-  EXPECT_TRUE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  EXPECT_CALL(*mock_arc_terms_of_service_screen_, HideImpl()).Times(1);
-  EXPECT_CALL(*mock_demo_setup_screen_, ShowImpl()).Times(1);
-
-  mock_arc_terms_of_service_screen_->ExitScreen(
-      ArcTermsOfServiceScreen::Result::ACCEPTED_DEMO_OFFLINE);
-
-  base::RunLoop().RunUntilIdle();
-
-  CheckCurrentScreen(DemoSetupScreenView::kScreenId);
-  EXPECT_TRUE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-
-  mock_demo_setup_screen_->ExitScreen(DemoSetupScreen::Result::COMPLETED);
-
-  EXPECT_TRUE(StartupUtils::IsOobeCompleted());
-  EXPECT_TRUE(ExistingUserController::current_controller());
-  EXPECT_FALSE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
-}
-
 IN_PROC_BROWSER_TEST_F(WizardControllerDemoSetupTest, DemoSetupCanceled) {
   CheckCurrentScreen(WelcomeView::kScreenId);
   EXPECT_FALSE(DemoSetupController::IsOobeDemoSetupFlowInProgress());
@@ -3250,8 +3185,9 @@ IN_PROC_BROWSER_TEST_F(WizardControllerRollbackFlowTest,
   mock_enrollment_screen_->ExitScreen(EnrollmentScreen::Result::COMPLETED);
 }
 
+// TODO(crbug.com/1324410): Disabled due to flakiness.
 IN_PROC_BROWSER_TEST_F(WizardControllerRollbackFlowTest,
-                       SkipEnrollmentAfterRollback) {
+                       DISABLED_SkipEnrollmentAfterRollback) {
   CheckCurrentScreen(WelcomeView::kScreenId);
   EXPECT_CALL(*mock_enrollment_screen_, ShowImpl()).Times(1);
   EXPECT_CALL(*mock_welcome_screen_, HideImpl()).Times(1);
@@ -3290,6 +3226,13 @@ IN_PROC_BROWSER_TEST_F(WizardControllerRollbackFlowTest,
 class WizardControllerThemeSelectionDefaultSettingsTest
     : public WizardControllerTest {
  public:
+  WizardControllerThemeSelectionDefaultSettingsTest() {
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{},
+        /*disabled_features=*/{features::kEnableOobeThemeSelection,
+                               chromeos::features::kDarkLightMode});
+  }
+
  protected:
   DeviceStateMixin device_state_{
       &mixin_host_, DeviceStateMixin::State::OOBE_COMPLETED_UNOWNED};
@@ -3315,7 +3258,10 @@ class WizardControllerThemeSelectionEnabledTest
     : public WizardControllerThemeSelectionDefaultSettingsTest {
  public:
   WizardControllerThemeSelectionEnabledTest() {
-    feature_list_.InitAndEnableFeature(features::kEnableOobeThemeSelection);
+    feature_list_.InitWithFeatures(
+        /*enabled_features=*/{features::kEnableOobeThemeSelection,
+                              chromeos::features::kDarkLightMode},
+        /*disabled_features=*/{});
   }
 
   base::test::ScopedFeatureList feature_list_;

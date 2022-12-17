@@ -53,11 +53,11 @@ class OperaBookmarkReader : public OperaAdrFileReader {
 
 void OperaBookmarkReader::HandleEntry(const std::string& category,
                                       const base::Value::Dict& entries) {
-  if (base::LowerCaseEqualsASCII(category, "folder")) {
+  if (base::EqualsCaseInsensitiveASCII(category, "folder")) {
     std::u16string foldername;
     AddBookmark(current_folder_, entries, true, &foldername);
     current_folder_.push_back(foldername);
-  } else if (base::LowerCaseEqualsASCII(category, "url")) {
+  } else if (base::EqualsCaseInsensitiveASCII(category, "url")) {
     AddBookmark(current_folder_, entries, false);
   } else if (category == "-") {
     current_folder_.pop_back();

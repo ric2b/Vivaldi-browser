@@ -21,6 +21,7 @@ class scoped_refptr;
 
 namespace base {
 class Clock;
+class FilePath;
 }  // namespace base
 
 namespace network {
@@ -55,9 +56,11 @@ class TestAggregationService {
                     int value,
                     AggregationMode aggregation_mode,
                     url::Origin reporting_origin,
-                    std::string privacy_budget_key,
                     std::vector<GURL> processing_urls,
-                    bool is_debug_mode_enabled);
+                    bool is_debug_mode_enabled,
+                    base::Value::Dict additional_fields,
+                    std::string api_version,
+                    std::string api_identifier);
     AssembleRequest(AssembleRequest&& other);
     AssembleRequest& operator=(AssembleRequest&& other);
     ~AssembleRequest();
@@ -78,6 +81,15 @@ class TestAggregationService {
     std::vector<GURL> processing_urls;
     // Whether debug_mode should be enabled for the report.
     bool is_debug_mode_enabled;
+
+    // Additional fields to add to shared_info.
+    base::Value::Dict additional_fields;
+
+    // Specifies the API version.
+    std::string api_version;
+
+    // Enum string identifying which API created the report request.
+    std::string api_identifier;
   };
 
   virtual ~TestAggregationService() = default;
@@ -92,20 +104,20 @@ class TestAggregationService {
   // after serialization.
   virtual void SetDisablePayloadEncryption(bool should_disable) = 0;
 
-  // Parses the keys for `url` from `json_string`, and saves the set of keys
+  // Parses the keys for `url` from `json_file`, and saves the set of keys
   // to storage. `callback` will be run once completed which takes a boolean
   // value indicating whether the keys were parsed successfully.
   virtual void SetPublicKeys(const GURL& url,
-                             const std::string& json_string,
+                             const base::FilePath& json_file,
                              base::OnceCallback<void(bool)> callback) = 0;
 
   // Construct an aggregatable report from the information in `request`.
-  // `callback` will be run once completed which takes a
-  // base::Value::DictStorage for the JSON representation of the aggregatable
-  // report. Empty base::Value::DictStorage will be returned in case of error.
+  // `callback` will be run once completed which takes a `base::Value::Dict` for
+  // the JSON representation of the aggregatable report. Empty
+  // `base::Value::Dict` will be returned in case of error.
   virtual void AssembleReport(
       AssembleRequest request,
-      base::OnceCallback<void(base::Value::DictStorage)> callback) = 0;
+      base::OnceCallback<void(base::Value::Dict)> callback) = 0;
 
   // Sends the aggregatable report to the specified reporting endpoint `url`.
   // `callback` will be run once completed which returns whether the report was

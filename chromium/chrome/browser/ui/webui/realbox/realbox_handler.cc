@@ -107,19 +107,18 @@ constexpr char kGoogleKeepNoteIconResourceName[] = "realbox/icons/note.svg";
 constexpr char kGoogleSitesIconResourceName[] = "realbox/icons/sites.svg";
 #endif
 constexpr char kIncognitoIconResourceName[] = "realbox/icons/incognito.svg";
+constexpr char kJourneysIconResourceName[] = "realbox/icons/journeys.svg";
 constexpr char kPageIconResourceName[] = "realbox/icons/page.svg";
 constexpr char kPedalsIconResourceName[] =
     "chrome://theme/current-channel-logo";
 constexpr char kTrendingUpIconResourceName[] = "realbox/icons/trending_up.svg";
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-constexpr char kCrosShareIconResourceName[] = "realbox/icons/cros_share.svg";
-#elif BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
 constexpr char kMacShareIconResourceName[] = "realbox/icons/mac_share.svg";
 #elif BUILDFLAG(IS_WIN)
 constexpr char kWinShareIconResourceName[] = "realbox/icons/win_share.svg";
 #else
-constexpr char kLinuxShareIconResourceName[] = "realbox/icons/linux_share.svg";
+constexpr char kShareIconResourceName[] = "realbox/icons/share.svg";
 #endif
 
 base::flat_map<int32_t, realbox::mojom::SuggestionGroupPtr>
@@ -434,14 +433,13 @@ std::string RealboxHandler::PedalVectorIconToResourceName(
   if (icon.name == omnibox::kIncognitoIcon.name) {
     return kIncognitoIconResourceName;
   }
+  if (icon.name == omnibox::kJourneysIcon.name) {
+    return kJourneysIconResourceName;
+  }
   if (icon.name == omnibox::kPedalIcon.name) {
     return kPedalsIconResourceName;
   }
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  if (icon.name == omnibox::kShareIcon.name) {
-    return kCrosShareIconResourceName;
-  }
-#elif BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
   if (icon.name == omnibox::kShareMacIcon.name) {
     return kMacShareIconResourceName;
   }
@@ -450,8 +448,8 @@ std::string RealboxHandler::PedalVectorIconToResourceName(
     return kWinShareIconResourceName;
   }
 #else
-  if (icon.name == omnibox::kSendIcon.name) {
-    return kLinuxShareIconResourceName;
+  if (icon.name == omnibox::kShareIcon.name) {
+    return kShareIconResourceName;
   }
 #endif
   NOTREACHED() << "Every vector icon returned by OmniboxAction::GetVectorIcon "
@@ -646,7 +644,7 @@ void RealboxHandler::OpenAutocompleteMatch(
           : std::u16string::npos,
       /*elapsed_time_since_last_change_to_default_match=*/
       elapsed_time_since_last_change_to_default_match,
-      /*result=*/autocomplete_controller_->result());
+      /*result=*/autocomplete_controller_->result(), match.destination_url);
   autocomplete_controller_->AddProviderAndTriggeringLogs(&log);
 
   OmniboxEventGlobalTracker::GetInstance()->OnURLOpened(&log);
@@ -754,7 +752,7 @@ void RealboxHandler::OnResultChanged(AutocompleteController* controller,
     if (SearchPrefetchService* search_prefetch_service =
             SearchPrefetchServiceFactory::GetForProfile(profile_)) {
       search_prefetch_service->OnResultChanged(
-          autocomplete_controller_->result());
+          web_contents_, autocomplete_controller_->result());
     }
   }
 

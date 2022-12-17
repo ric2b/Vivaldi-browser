@@ -129,9 +129,26 @@ StyleRecalcChange::Flags StyleRecalcChange::FlagsForChildren(
       result &= ~kRecalcContainer;
   }
 
-  result &= ~(kSuppressRecalc | kMarkReattach);
+  // kSuppressRecalc should only take effect for the query container itself, not
+  // for children. Also make sure the kMarkReattach flag survives one level past
+  // the container for ::first-line re-attachments initiated from
+  // UpdateStyleAndLayoutTreeForContainer().
+  if (result & kSuppressRecalc)
+    result &= ~kSuppressRecalc;
+  else
+    result &= ~kMarkReattach;
 
   return result;
+}
+
+bool StyleRecalcChange::IndependentInherit(
+    const ComputedStyle& old_style) const {
+  // During UpdateStyleAndLayoutTreeForContainer(), if the old_style is marked
+  // as depending on container queries, we need to do a proper recalc for the
+  // element.
+  return propagate_ == kIndependentInherit &&
+         (!RecalcContainerQueryDependent() ||
+          !old_style.DependsOnContainerQueries());
 }
 
 }  // namespace blink

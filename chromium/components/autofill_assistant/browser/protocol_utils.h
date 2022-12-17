@@ -81,8 +81,10 @@ class ProtocolUtils {
       bool request_email,
       bool request_phone,
       bool request_shipping,
+      const std::vector<std::string>& preexisting_address_ids,
       bool request_payment_methods,
       const std::vector<std::string>& supported_card_networks,
+      const std::vector<std::string>& preexisting_payment_instrument_ids,
       const std::string& client_token);
 
   // Create an action from the |action|.
@@ -114,7 +116,8 @@ class ProtocolUtils {
                            std::string* return_script_payload,
                            std::vector<std::unique_ptr<Action>>* actions,
                            std::vector<std::unique_ptr<Script>>* scripts,
-                           bool* should_update_scripts);
+                           bool* should_update_scripts,
+                           std::string* js_flow_library);
 
   // Parses a single serialized ActionProto. Returns nullptr in the case of
   // parsing errors.

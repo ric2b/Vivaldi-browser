@@ -23,6 +23,7 @@
 
 #include "renderer/blink/vivaldi_snapshot_page.h"
 #include "renderer/blink/vivaldi_spatial_navigation.h"
+#include "renderer/blink/vivaldi_spatnav_quad.h"
 #include "ui/vivaldi_skia_utils.h"
 
 #if BUILDFLAG(ENABLE_PLUGINS)
@@ -112,36 +113,43 @@ void VivaldiFrameServiceImpl::AccessKeyAction(const std::string& access_key) {
   }
 }
 
-void VivaldiFrameServiceImpl::GetScrollPosition(
-    GetScrollPositionCallback callback) {
+blink::Document* VivaldiFrameServiceImpl::GetDocument() {
   blink::WebLocalFrame* frame =
       render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
   if (!frame) {
-    std::move(callback).Run(0, 0);
-    return;
+    return nullptr;
   }
   blink::Document* document =
       static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
+  return document;
+}
+
+void VivaldiFrameServiceImpl::UpdateSpatnavRects() {
+  current_quad_.reset();
+  spatnav_needs_update_ = true;
+}
+
+void VivaldiFrameServiceImpl::GetScrollCoordinates(int& x, int& y) {
+  blink::Document* document = GetDocument();
+  if (!document) {
+    x = 0, y = 0;
+    return;
+  }
   blink::LocalDOMWindow* window = document->domWindow();
-  int x = window->scrollX();
-  int y = window->scrollY();
-  std::move(callback).Run(x, y);
+  x = window->scrollX();
+  y = window->scrollY();
 }
 
 void VivaldiFrameServiceImpl::ScrollPage(
     ::vivaldi::mojom::ScrollType scroll_type,
     int scroll_amount) {
   using ScrollType = ::vivaldi::mojom::ScrollType;
+  blink::Document* document = GetDocument();
   blink::WebLocalFrame* web_local_frame =
       render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
   if (!web_local_frame) {
     return;
   }
-
-  blink::Document* document =
-      static_cast<blink::WebLocalFrameImpl*>(web_local_frame)
-          ->GetFrame()
-          ->GetDocument();
   blink::LocalDOMWindow* window = document->domWindow();
 
   // WebLocalFrame doesn't have what we need.
@@ -194,12 +202,9 @@ void VivaldiFrameServiceImpl::ScrollPage(
   }
 }
 
-void VivaldiFrameServiceImpl::GetSpatialNavigationRects(
-    GetSpatialNavigationRectsCallback callback) {
-  std::vector<::vivaldi::mojom::SpatnavRectPtr> navigation_rects;
+void VivaldiFrameServiceImpl::UpdateSpatnavQuads() {
   blink::WebLocalFrame* frame = render_frame_->GetWebFrame();
   if (!frame) {
-    std::move(callback).Run(std::move(navigation_rects));
     return;
   }
 
@@ -212,6 +217,12 @@ void VivaldiFrameServiceImpl::GetSpatialNavigationRects(
 
   std::vector<blink::WebElement> spatnav_elements =
       vivaldi::GetSpatialNavigationElements(frame, scale);
+  spatnav_quads_.clear();
+
+  if (spatnav_elements.size() == 0) {
+    current_quad_ = nullptr;
+    return;
+  }
 
   for (auto& element : spatnav_elements) {
     gfx::Rect rect = element.BoundsInViewport();
@@ -227,17 +238,146 @@ void VivaldiFrameServiceImpl::GetSpatialNavigationRects(
       href = element.GetAttribute("href").Utf8();
     }
 
-    ::vivaldi::mojom::SpatnavRectPtr spatnav_rect(
-        ::vivaldi::mojom::SpatnavRect::New());
-    spatnav_rect->x = rect.x();
-    spatnav_rect->y = rect.y();
-    spatnav_rect->width = rect.width();
-    spatnav_rect->height = rect.height();
-    spatnav_rect->href = href;
-    spatnav_rect->path = vivaldi::ElementPath(element);
-    navigation_rects.push_back(std::move(spatnav_rect));
+    QuadPtr q = base::MakeRefCounted<vivaldi::Quad>(
+        rect.x(), rect.y(), rect.width(), rect.height(), href, element);
+    spatnav_quads_.push_back(q);
   }
-  std::move(callback).Run(std::move(navigation_rects));
+  vivaldi::Quad::BuildPoints(spatnav_quads_);
+  if (current_quad_) {
+    bool found = false;
+    for (size_t i = 0; i < spatnav_quads_.size(); i++) {
+      if (current_quad_->GetElement() == spatnav_quads_[i]->GetElement()) {
+        current_quad_ = spatnav_quads_[i];
+        found = true;
+      }
+    }
+    if (!found) {
+      current_quad_.reset();
+    }
+  }
+  spatnav_needs_update_ = false;
+}
+
+void VivaldiFrameServiceImpl::GetCurrentSpatnavRect(
+    GetCurrentSpatnavRectCallback callback) {
+  ::vivaldi::mojom::SpatnavRectPtr spatnav_rect(
+      ::vivaldi::mojom::SpatnavRect::New());
+  gfx::Rect r;
+  std::string href = "";
+  if (current_quad_) {
+    r = current_quad_->GetRect();
+    href = current_quad_->Href();
+  }
+  spatnav_rect->x = r.x();
+  spatnav_rect->y = r.y();
+  spatnav_rect->width = r.width();
+  spatnav_rect->height = r.height();
+  spatnav_rect->href = href;
+  std::move(callback).Run(std::move(spatnav_rect));
+}
+
+QuadPtr VivaldiFrameServiceImpl::NextQuadInDirection(
+    vivaldi::mojom::SpatnavDirection direction) {
+  using vivaldi::mojom::SpatnavDirection;
+
+  switch (direction) {
+    case SpatnavDirection::kUp:
+      return current_quad_->NextUp();
+    case SpatnavDirection::kDown:
+      return current_quad_->NextDown();
+    case SpatnavDirection::kLeft:
+      return current_quad_->NextLeft();
+    case SpatnavDirection::kRight:
+      return current_quad_->NextRight();
+    case vivaldi::mojom::SpatnavDirection::kNone:
+      return nullptr;
+  }
+}
+
+vivaldi::mojom::ScrollType VivaldiFrameServiceImpl::ScrollTypeFromSpatnavDir(
+    vivaldi::mojom::SpatnavDirection direction) {
+  using vivaldi::mojom::ScrollType;
+  using vivaldi::mojom::SpatnavDirection;
+
+  ScrollType scroll_type;
+  if (direction == SpatnavDirection::kUp) {
+    scroll_type = ScrollType::kUp;
+  } else if (direction == SpatnavDirection::kLeft) {
+    scroll_type = ScrollType::kLeft;
+  } else if (direction == SpatnavDirection::kDown) {
+    scroll_type = ScrollType::kDown;
+  } else {
+    scroll_type = ScrollType::kRight;
+  }
+  return scroll_type;
+}
+
+void VivaldiFrameServiceImpl::MoveSpatnavRect(
+    vivaldi::mojom::SpatnavDirection direction,
+    MoveSpatnavRectCallback callback) {
+  vivaldi::mojom::SpatnavRectPtr spatnav_rect(
+      vivaldi::mojom::SpatnavRect::New());
+
+  int newx, newy;
+  gfx::Rect new_rect;
+  if (!current_quad_) {
+    UpdateSpatnavQuads();
+    current_quad_ = vivaldi::Quad::GetInitialQuad(spatnav_quads_, direction);
+    if (!current_quad_) {
+      blink::Document* document = GetDocument();
+      blink::LocalDOMWindow* window = document->domWindow();
+      int scroll_amount = window->innerHeight() / 2;
+      vivaldi::mojom::ScrollType scroll_type =
+          ScrollTypeFromSpatnavDir(direction);
+      ScrollPage(scroll_type, scroll_amount);
+      GetScrollCoordinates(scrollx_, scrolly_);
+    }
+  } else {
+    GetScrollCoordinates(newx, newy);
+
+    if (spatnav_needs_update_ || (scrollx_ != newx || scrolly_ != newy)) {
+      UpdateSpatnavQuads();
+    }
+
+    QuadPtr next_quad;
+    next_quad = NextQuadInDirection(direction);
+
+    if (next_quad != nullptr) {
+      current_quad_ = next_quad;
+      blink::Element* elm = current_quad_->GetElement();
+      if (elm) {
+        elm->scrollIntoViewIfNeeded();
+      } else {
+        // If element is null, DOM might have changed and we nee to update.
+        spatnav_needs_update_ = true;
+      }
+    } else {
+      // If we found no quad in |direction| then scroll
+      blink::Document* document = GetDocument();
+      blink::LocalDOMWindow* window = document->domWindow();
+      int scroll_amount = window->innerHeight() / 2;
+      vivaldi::mojom::ScrollType scroll_type =
+          ScrollTypeFromSpatnavDir(direction);
+      ScrollPage(scroll_type, scroll_amount);
+    }
+  }
+
+  // If either ScrollPage, or scrollIntoViewIfNeeded actually
+  // did any scrolling then we need to update.
+  GetScrollCoordinates(newx, newy);
+  if (scrollx_ != newx || scrolly_ != newy) {
+    UpdateSpatnavQuads();
+  }
+  scrollx_ = newx, scrolly_ = newy;
+  if (current_quad_) {
+    new_rect = current_quad_->GetRect();
+  }
+
+  spatnav_rect->x = new_rect.x();
+  spatnav_rect->y = new_rect.y();
+  spatnav_rect->width = new_rect.width();
+  spatnav_rect->height = new_rect.height();
+  std::move(callback).Run(std::move(spatnav_rect));
 }
 
 void VivaldiFrameServiceImpl::GetFocusedElementInfo(
@@ -300,29 +440,20 @@ void VivaldiFrameServiceImpl::DetermineTextLanguage(
   std::move(callback).Run(std::move(language));
 }
 
-void VivaldiFrameServiceImpl::ActivateElementFromPoint(int x,
-                                                       int y,
-                                                       int modifiers) {
-  blink::WebLocalFrame* frame =
-      render_frame_->GetRenderView()->GetWebView()->FocusedFrame();
-  if (!frame) {
-    return;
-  }
-  blink::Document* document =
-      static_cast<blink::WebLocalFrameImpl*>(frame)->GetFrame()->GetDocument();
-  blink::Element* elm = document->ElementFromPoint(x, y);
+void VivaldiFrameServiceImpl::ActivateSpatnavElement(int modifiers) {
+  // Event for passing modifier info.
+  blink::WebKeyboardEvent web_keyboard_event(
+      blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
+  blink::KeyboardEvent* key_evt =
+      blink::KeyboardEvent::Create(web_keyboard_event, nullptr);
 
+  blink::Element* elm = current_quad_->GetElement();
   if (elm) {
-    // This key event is just to pass along modifier info.
-    blink::WebKeyboardEvent web_keyboard_event(
-        blink::WebInputEvent::Type::kRawKeyDown, modifiers, base::TimeTicks());
-    blink::KeyboardEvent* key_evt =
-        blink::KeyboardEvent::Create(web_keyboard_event, nullptr);
-    elm->DispatchSimulatedClick(key_evt);
-
-    blink::FocusParams params;
-    elm->focus(params);
+    current_quad_->GetElement()->DispatchSimulatedClick(key_evt);
+    current_quad_->GetElement()->Focus();
+    current_quad_.reset();
   }
+  spatnav_needs_update_ = true;
 }
 
 void VivaldiFrameServiceImpl::InsertText(const std::string& text) {

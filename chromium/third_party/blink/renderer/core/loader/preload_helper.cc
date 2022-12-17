@@ -32,6 +32,7 @@
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_creation_params.h"
 #include "third_party/blink/renderer/core/loader/modulescript/module_script_fetch_request.h"
 #include "third_party/blink/renderer/core/loader/pending_link_preload.h"
+#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/core/loader/resource/css_style_sheet_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/font_resource.h"
 #include "third_party/blink/renderer/core/loader/resource/image_resource.h"
@@ -114,7 +115,7 @@ MediaValuesCached* CreateMediaValues(
 bool MediaMatches(const String& media,
                   MediaValues* media_values,
                   const ExecutionContext* execution_context) {
-  scoped_refptr<MediaQuerySet> media_queries =
+  MediaQuerySet* media_queries =
       MediaQuerySet::Create(media, execution_context);
   MediaQueryEvaluator evaluator(media_values);
   return evaluator.Eval(*media_queries);
@@ -335,8 +336,6 @@ Resource* PreloadHelper::PreloadIfNeeded(
   options.parser_disposition = parser_disposition;
   FetchParameters link_fetch_params(std::move(resource_request), options);
   link_fetch_params.SetCharset(document.Encoding());
-  link_fetch_params.SetRenderBlockingBehavior(
-      RenderBlockingBehavior::kNonBlocking);
 
   if (params.cross_origin != kCrossOriginAttributeNotSet) {
     link_fetch_params.SetCrossOriginAccessControl(
@@ -351,7 +350,8 @@ Resource* PreloadHelper::PreloadIfNeeded(
   // supported preload destinations, not just the destinations that support SRI
   // in the first place.
   if (resource_type == ResourceType::kScript ||
-      resource_type == ResourceType::kCSSStyleSheet) {
+      resource_type == ResourceType::kCSSStyleSheet ||
+      resource_type == ResourceType::kFont) {
     if (!integrity_attr.IsEmpty()) {
       IntegrityMetadataSet metadata_set;
       SubresourceIntegrity::ParseIntegrityAttribute(
@@ -383,15 +383,12 @@ Resource* PreloadHelper::PreloadIfNeeded(
         String("Preload triggered for " + url.Host() + url.GetPath())));
   }
   link_fetch_params.SetLinkPreload(true);
-
+  link_fetch_params.SetRenderBlockingBehavior(
+      RenderBlockingBehavior::kNonBlocking);
   if (pending_preload) {
     if (RenderBlockingResourceManager* manager =
             document.GetRenderBlockingResourceManager()) {
-      if (BlockingAttribute::IsRenderBlocking(params.blocking)) {
-        manager->AddPendingPreload(
-            *pending_preload,
-            RenderBlockingResourceManager::PreloadType::kRegular);
-      } else if (EqualIgnoringASCIICase(params.as, "font")) {
+      if (EqualIgnoringASCIICase(params.as, "font")) {
         manager->AddPendingPreload(
             *pending_preload,
             RenderBlockingResourceManager::PreloadType::kShortBlockingFont);
@@ -526,18 +523,13 @@ void PreloadHelper::ModulePreloadIfNeeded(
                          RenderBlockingBehavior::kNonBlocking),
       Referrer::NoReferrer(), TextPosition::MinimumPosition());
 
-  // Step 11. "If element is render-blocking, then block rendering on element."
-  if (client && BlockingAttribute::IsRenderBlocking(params.blocking)) {
-    if (document.GetRenderBlockingResourceManager()) {
-      document.GetRenderBlockingResourceManager()->AddPendingPreload(
-          *client, RenderBlockingResourceManager::PreloadType::kRegular);
-    }
-  }
-
-  // Step 12. "Fetch a single module script given url, settings object,
-  // destination, options, settings object, "client", and with the top-level
-  // module fetch flag set. Wait until algorithm asynchronously completes with
-  // result." [spec text]
+  // Step 11. "Fetch a modulepreload module script graph given url, destination,
+  // settings object, and options. Wait until the algorithm asynchronously
+  // completes with result." [spec text]
+  //
+  // https://wicg.github.io/import-maps/#wait-for-import-maps
+  modulator->SetAcquiringImportMapsState(
+      Modulator::AcquiringImportMapsState::kAfterModuleScriptLoad);
   modulator->FetchSingle(request, window->Fetcher(),
                          ModuleGraphLevel::kDependentModuleFetch,
                          ModuleScriptCustomFetchType::kNone, client);

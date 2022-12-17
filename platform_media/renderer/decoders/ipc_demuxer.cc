@@ -12,6 +12,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/strings/string_util.h"
 #include "build/build_config.h"
 #include "media/base/bind_to_current_loop.h"
@@ -19,6 +20,7 @@
 #include "net/base/mime_util.h"
 #include "url/gurl.h"
 
+#include "base/vivaldi_switches.h"
 #include "platform_media/common/platform_logging_util.h"
 #include "platform_media/common/platform_media_pipeline_types.h"
 #include "platform_media/renderer/decoders/ipc_demuxer_stream.h"
@@ -80,6 +82,13 @@ IPCDemuxer::~IPCDemuxer() {
 }
 
 // static
+bool IPCDemuxer::IsEnabled() {
+  static bool enabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kVivaldiEnableIPCDemuxer);
+  return enabled;
+}
+
+// static
 std::string IPCDemuxer::CanPlayType(const std::string& content_type,
                                     const GURL& url) {
   if (!IPCMediaPipelineHost::IsAvailable())
@@ -103,6 +112,11 @@ void IPCDemuxer::StartIPC(DataSource* data_source,
                           std::string mimetype,
                           StartIPCResult callback) {
   DCHECK(media_task_runner_->RunsTasksInCurrentSequence());
+  if (!IPCFactory::has_instance()) {
+    // This may happen in tests.
+    std::move(callback).Run(false);
+    return;
+  }
   ipc_media_pipeline_host_ = std::make_unique<IPCMediaPipelineHost>();
 
   // Unretained() is safe as this owns the host.

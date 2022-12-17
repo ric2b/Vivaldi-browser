@@ -42,8 +42,8 @@
 #include "media/filters/mac/audio_toolbox_audio_decoder.h"
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
-#include "platform_media/renderer/decoders/win/wmf_audio_decoder.h"
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+#include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
 #endif
 
 #define EXPECT_HASH_EQ(a, b) EXPECT_EQ(a, b)
@@ -2021,6 +2021,11 @@ TEST_F(PipelineIntegrationTest, MSE_ADTS) {
 
   EXPECT_TRUE(WaitUntilOnEnded());
 
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  EXPECT_HASH_EQ("0.47,1.73,4.27,4.58,3.40,1.55,", GetAudioHash());
+  return;
+#endif
+
   // Verify that nothing was stripped.
   EXPECT_HASH_EQ("0.46,1.72,4.26,4.57,3.39,1.53,", GetAudioHash());
 }
@@ -2055,16 +2060,18 @@ TEST_F(PipelineIntegrationTest, MSE_ADTS_TimestampOffset) {
   // TODO(wdzierzanowski): Clarify decoder delay differences (DNA-44158).
   // Verify preroll is stripped.
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_WIN)
-  // NOTE(igor@vivaldi.com): Account for differences between AAC decoder
-  // implementations.
-  if (WMFAudioDecoder::IsEnabled()) {
-    EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
-  } else {
-    EXPECT_HASH_EQ("-1.78,-0.93,-1.72,-1.74,-1.75,-1.81,", GetAudioHash());
-  }
-#else
-  EXPECT_HASH_EQ("-1.76,-1.35,-0.72,0.70,1.24,0.52,", GetAudioHash());
+  // NOTE(igor@vivaldi.com): Adjust the hash to account for the decoder
+  // differences.
+  EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
+  return;
 #endif
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS) && BUILDFLAG(IS_MAC)
+  if (VivaldiDecoderConfig::OnlyFFmpegAudio()) {
+    EXPECT_HASH_EQ("-1.73,-1.32,-0.69,0.73,1.26,0.54,", GetAudioHash());
+    return;
+  }
+#endif
+  EXPECT_HASH_EQ("-1.76,-1.35,-0.72,0.70,1.24,0.52,", GetAudioHash());
 }
 
 TEST_F(PipelineIntegrationTest, BasicPlaybackHashed_ADTS) {
@@ -2651,18 +2658,8 @@ TEST_F(PipelineIntegrationTest, MSE_BasicPlayback_VideoOnly_MP4_HEVC) {
   TestMediaSource source("bear-320x240-v_frag-hevc.mp4", kMp4HevcVideoOnly,
                          kAppendWholeFile);
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
-  // HEVC is only supported through EME under this build flag. So this
-  // unencrypted track cannot be demuxed.
-  source.set_expected_append_result(
-      TestMediaSource::ExpectedAppendResult::kFailure);
-  EXPECT_EQ(
-      CHUNK_DEMUXER_ERROR_APPEND_FAILED,
-      StartPipelineWithMediaSource(&source, kExpectDemuxerFailure, nullptr));
-#else
   PipelineStatus status = StartPipelineWithMediaSource(&source);
   EXPECT_TRUE(status == PIPELINE_OK || status == DECODER_ERROR_NOT_SUPPORTED);
-#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
 #else
   EXPECT_EQ(
       DEMUXER_ERROR_COULD_NOT_OPEN,
@@ -2676,18 +2673,8 @@ TEST_F(PipelineIntegrationTest, MSE_BasicPlayback_VideoOnly_MP4_HEV1) {
   TestMediaSource source("bear-320x240-v_frag-hevc.mp4", kMp4Hev1VideoOnly,
                          kAppendWholeFile);
 #if BUILDFLAG(ENABLE_PLATFORM_HEVC)
-#if BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
-  // HEVC is only supported through EME under this build flag. So this
-  // unencrypted track cannot be demuxed.
-  source.set_expected_append_result(
-      TestMediaSource::ExpectedAppendResult::kFailure);
-  EXPECT_EQ(
-      CHUNK_DEMUXER_ERROR_APPEND_FAILED,
-      StartPipelineWithMediaSource(&source, kExpectDemuxerFailure, nullptr));
-#else
   PipelineStatus status = StartPipelineWithMediaSource(&source);
   EXPECT_TRUE(status == PIPELINE_OK || status == DECODER_ERROR_NOT_SUPPORTED);
-#endif  // BUILDFLAG(ENABLE_PLATFORM_ENCRYPTED_HEVC)
 #else
   EXPECT_EQ(
       DEMUXER_ERROR_COULD_NOT_OPEN,

@@ -158,7 +158,7 @@ ExtensionTabUtil::ScrubTabBehaviorType GetScrubTabBehaviorImpl(
 }
 
 bool HasValidMainFrameProcess(content::WebContents* contents) {
-  content::RenderFrameHost* main_frame_host = contents->GetMainFrame();
+  content::RenderFrameHost* main_frame_host = contents->GetPrimaryMainFrame();
   content::RenderProcessHost* process_host = main_frame_host->GetProcess();
   return process_host->IsReady() && process_host->IsInitializedAndNotDead();
 }
@@ -525,9 +525,10 @@ std::unique_ptr<base::ListValue> ExtensionTabUtil::CreateTabList(
     WebContents* web_contents = tab_strip->GetWebContentsAt(i);
     ExtensionTabUtil::ScrubTabBehavior scrub_tab_behavior =
         ExtensionTabUtil::GetScrubTabBehavior(extension, context, web_contents);
-    tab_list->Append(CreateTabObject(web_contents, scrub_tab_behavior,
-                                     extension, tab_strip, i)
-                         ->ToValue());
+    tab_list->Append(base::Value::FromUniquePtrValue(
+        CreateTabObject(web_contents, scrub_tab_behavior, extension, tab_strip,
+                        i)
+            ->ToValue()));
   }
 
   return tab_list;

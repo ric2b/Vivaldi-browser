@@ -217,7 +217,7 @@ bool ChromiumImporter::ReadAndParseSignons(
       service_name = "Chromium Safe Storage";
       account_name = "Chromium";
     }
-    OSCryptImpl::DecryptImportedString16(cipher_text, &plain_text, service_name,
+    OSCryptImpl::GetInstance()->DecryptImportedString16(cipher_text, &plain_text, service_name,
                                      account_name);
 #else
 #if BUILDFLAG(IS_LINUX)
@@ -230,11 +230,11 @@ bool ChromiumImporter::ReadAndParseSignons(
     config->should_use_preference =
         command_line.HasSwitch(switches::kEnableEncryptionSelection);
     chrome::GetDefaultUserDataDirectory(&config->user_data_path);
-    OSCrypt::SetConfig(std::move(config));
-    OSCrypt::DecryptString16(cipher_text, &plain_text);
+    OSCryptImpl::GetInstance()->SetConfig(std::move(config));
+    OSCryptImpl::GetInstance()->DecryptString16(cipher_text, &plain_text);
 #endif  // IS_LINUX
 #if BUILDFLAG(IS_WIN)
-    OSCryptImpl::DecryptImportedString16(cipher_text, &plain_text,
+    OSCryptImpl::GetInstance()->DecryptImportedString16(cipher_text, &plain_text,
                                      import_encryption_key);
 #endif  // IS_WIN
 #endif
@@ -245,7 +245,7 @@ bool ChromiumImporter::ReadAndParseSignons(
     forms->push_back(form);
   }
 #if BUILDFLAG(IS_MAC)
-  OSCryptImpl::ResetImportCache();
+  OSCryptImpl::GetInstance()->ResetImportCache();
 #endif
 
   return true;

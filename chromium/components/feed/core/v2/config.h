@@ -26,6 +26,9 @@ struct Config {
   base::TimeDelta stale_content_threshold = base::Hours(24);
   // Content older than this threshold will not be shown to the user.
   base::TimeDelta content_expiration_threshold = base::Hours(48);
+  // For users with no follows, content older than this will not be shown.
+  base::TimeDelta subscriptionless_content_expiration_threshold =
+      base::Days(14);
   // How long the window is for background refresh tasks. If the task cannot be
   // scheduled in the window, the background refresh is aborted.
   base::TimeDelta background_refresh_window_length = base::Hours(24);
@@ -57,14 +60,15 @@ struct Config {
   base::TimeDelta session_id_max_age = base::Days(30);
   // Maximum number of images prefetched per refresh.
   int max_prefetch_image_requests_per_refresh = 50;
-  // The minimum interval from the last time the notice is viewed in order for
-  // it to be considered viewed again.
-  base::TimeDelta minimum_notice_view_interval = base::Minutes(5);
 
   // Configuration for Web Feeds.
 
   // How long before Web Feed content is considered stale.
   base::TimeDelta web_feed_stale_content_threshold = base::Hours(1);
+  // How long before Web Feed content is considered stale if there are no
+  // subscriptions.
+  base::TimeDelta subscriptionless_web_feed_stale_content_threshold =
+      base::Days(7);
   // TimeDelta after startup to fetch recommended and subscribed Web Feeds if
   // they are stale. If zero, no fetching is done.
   // This delay is also used to trigger retrying stored follow/unfollow requests
@@ -111,7 +115,8 @@ struct Config {
   Config(const Config& other);
   ~Config();
 
-  base::TimeDelta GetStalenessThreshold(const StreamType& stream_type) const;
+  base::TimeDelta GetStalenessThreshold(const StreamType& stream_type,
+                                        bool is_web_feed_subscriber) const;
 };
 
 // Gets the current configuration.

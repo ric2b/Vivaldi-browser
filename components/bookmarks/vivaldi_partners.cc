@@ -23,6 +23,8 @@ const char kPartnerLocaleMapFile[] = "partners-locale-map.json";
 
 // JSON keys
 const char kBookmarksKey[] = "bookmarks";
+const char kFaviconKey[] = "favicon";
+const char kFaviconUrlKey[] = "favicon_url";
 const char kFoldersKey[] = "folders";
 const char kGuidKey[] = "guid";
 const char kGuid2Key[] = "guid2";
@@ -122,6 +124,14 @@ bool ParsePartnerDatabaseDetailsList(
           details.thumbnail = std::move(v.GetString());
         }
         bookmark_only = true;
+      } else if (property == kFaviconKey) {
+        if (!v.is_string())
+          return error(property + " is not a string");
+        details.favicon = std::move(v.GetString());
+      } else if (property == kFaviconUrlKey) {
+        if (!v.is_string())
+          return error(property + " is not a string");
+        details.favicon_url = std::move(v.GetString());
       } else {
         return error("unsupported or unknown property '" + property + "'");
       }

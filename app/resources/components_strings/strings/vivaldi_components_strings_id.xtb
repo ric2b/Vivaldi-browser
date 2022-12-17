@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Mencoba menjalankan Diagnostik Jaringan Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Situs ini berisi program yang berbahaya</translation>
 <translation id="1916770123977586577">Untuk menerapkan pengaturan yang telah diperbarui pada situs ini, muat ulang halaman ini</translation>
+<translation id="1973351931613083086">putar otomatis</translation>
 <translation id="1974060860693918893">Tingkat Lanjut</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Memeriksa proxy dan firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Diterbitkan untuk: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Kembali</translation>
 <translation id="2539524384386349900">Deteksi</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> mengirimkan tanggapan yang tidak valid.</translation>
-<translation id="2609632851001447353">Variasi</translation>
 <translation id="2634124572758952069">Alamat IP server <ph name="HOST_NAME" /> tidak dapat ditemukan.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Akses ke berkas ditolak</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Penyerang mungkin berusaha mencuri informasi Anda dari <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (misalnya, sandi, pesan, atau kartu kredit). <ph name="BEGIN_LEARN_MORE_LINK" />Pelajari lebih lanjut<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Perubahan jaringan terdeteksi.</translation>
 <translation id="2948083400971632585">Anda bisa mematikan proksi apapun yang diatur untuk suatu koneksi dari halaman pengaturan.</translation>
+<translation id="2953943267837858202">Tidak diizinkan memutar otomatis video</translation>
 <translation id="2991571918955627853">Anda tidak dapat mengunjungi <ph name="SITE" /> sekarang karena situs menggunakan HSTS. Kesalahan jaringan dan serangan biasanya bersifat sementara, sehingga halaman ini mungkin akan berfungsi nanti.</translation>
 <translation id="3005723025932146533">Tampilkan salinan yang tersimpan</translation>
 <translation id="301521992641321250">Diblokir secara otomatis</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Tekan tombol muat ulang untuk mengirimkan lagi data yang dibutuhkan untuk memuat halaman ini.</translation>
 <translation id="3234666976984236645">Selalu deteksi konten penting di situs ini</translation>
+<translation id="3291915639428159043">Putar otomatis diblokir</translation>
 <translation id="3308738399950580893">iklan</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> saat ini tidak dapat dijangkau.</translation>
 <translation id="3427092606871434483">Izinkan (standar)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Koneksi Anda tidak pribadi</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Sembunyikan semua detail</translation>
+<translation id="3620979700683094848">Situs dapat memutar otomatis video</translation>
 <translation id="3630155396527302611">Jika sudah tercantum sebagai program yang di izinkan untuk mengakses jaringan,
       coba hapus dari daftar dan tambahkan lagi.</translation>
 <translation id="3658742229777143148">Revisi</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> diblokir</translation>
 <translation id="3987940399970879459">Kurang dari 1 MB</translation>
 <translation id="4075732493274867456">Klien dan server tidak mendukung versi protokol SSL umum atau cipher suite.</translation>
+<translation id="410351446219883937">Putar otomatis</translation>
 <translation id="4116663294526079822">Selalu izinkan di situs ini</translation>
 <translation id="4130226655945681476">Memeriksa kabel jaringan, modem, dan router</translation>
 <translation id="4151403195736952345">Gunakan standar global (Deteksi)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Periksa semua pengaturan DNS anda</translation>
 <translation id="6328639280570009161">Coba matikan prediksi jaringan</translation>
 <translation id="6328786501058569169">Situs ini bersifat menipu</translation>
+<translation id="6348220984832452017">Variasi Aktif</translation>
 <translation id="6358450015545214790">Apa maksudnya?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> menolak untuk tersambung.</translation>
 <translation id="6447842834002726250">Kuki</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Izinkan <ph name="BLOCKED_TYPE" /> dari <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> tidak mematuhi semua standar keamanan.</translation>
 <translation id="7219179957768738017">Koneksi menggunakan <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Tampilkan notifikasi</translation>
 <translation id="7260504762447901703">Cabut akses</translation>
 <translation id="7353601530677266744">Baris Perintah</translation>
 <translation id="7364115444476960850">Halaman yang ingin Anda akses diblokir oleh <ph name="BLOCKER_NAME" /> Vivaldi</translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Perangkat lunak antivirus atau firewall mungkin memblokir sambungan.</translation>
 <translation id="7800304661137206267">Sambungan dienkripsi menggunakan <ph name="CIPHER" />, dengan <ph name="MAC" /> untuk autentikasi pesan dan <ph name="KX" /> sebagai mekanisme pertukaran kunci.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> biasanya menggunakan enkripsi untuk melindungi informasi Anda. Saat Vivaldi mencoba menyambung ke <ph name="SITE" /> kali ini, situs web mengembalikan kredensial yang salah dan tidak biasa. Hal ini dapat terjadi jika ada penyerang yang berpura-pura menjadi <ph name="SITE" />, atau layar masuk Wi-Fi mengganggu sambungan. Informasi Anda masih aman karena Vivaldi menghentikan sambungan sebelum terjadi pertukaran data apapun.</translation>
+<translation id="7834693436815575883">Putar otomatis diizinkan</translation>
 <translation id="7878562273885520351">Sandi Anda mungkin bocor</translation>
 <translation id="7951415247503192394">(32 bit)</translation>
 <translation id="8025119109950072390">Penyerang di situs ini dapat mengelabui Anda agar melakukan hal yang berbahaya seperti memasang software atau mengungkap informasi pribadi Anda (misalnya sandi, nomor telepon, atau kartu kredit).</translation>
 <translation id="8037357227543935929">Tanyakan (standar)</translation>
 <translation id="8041940743680923270">Gunakan standar global (Tanyakan)</translation>
+<translation id="8044382196220116469">Jangan izinkan situs memutar otomatis video</translation>
 <translation id="808894953321890993">Ubah sandi</translation>
 <translation id="8119307142152921512">pelacak dan iklan</translation>
 <translation id="8149426793427495338">Komputer Anda siap untuk tidur.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Nama Pengguna</translation>
 <translation id="8703575177326907206">Sambungan ke <ph name="DOMAIN" /> tidak dienkripsi.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />’s &lt;abbr id="dnsDefinition"&gt;alamat DNS&lt;/abbr&gt; tidak dapat ditemukan. Diagnosis masalah.</translation>
+<translation id="8774017153185436870">Situs mungkin memutar otomatis video</translation>
 <translation id="8820817407110198400">Penanda</translation>
 <translation id="8940028675168378100">Diblokir oleh <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Buka pengaturan situs</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Abaikan</translation>
 <translation id="9025348182339809926">(Tidak valid)</translation>
 <translation id="9039213469156557790">Selain itu, halaman ini berisi sumber daya lainnya yang tidak aman. Sumber daya ini dapat dilihat oleh orang lain saat transit dan dapat dimodifikasi oleh penyerang untuk mengubah perilaku halaman.</translation>
+<translation id="9048224371732578627">Diizinkan memutar otomatis video</translation>
 <translation id="9062620674789239642">Berkas mungkin telah dipindahkan, diedit, atau dihapus.</translation>
 <translation id="9069693763241529744">Diblokir oleh ekstensi</translation>
 <translation id="9073799351042754113">Anda telah memilih untuk menonaktifkan peringatan keamanan untuk situs ini.</translation>

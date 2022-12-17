@@ -221,6 +221,11 @@ void PaymentRequestDialogView::ConfirmPaymentForTesting() {
   Pay();
 }
 
+bool PaymentRequestDialogView::ClickOptOutForTesting() {
+  NOTIMPLEMENTED();
+  return false;
+}
+
 void PaymentRequestDialogView::OnStartUpdating(
     PaymentRequestSpec::UpdateReason reason) {
   ShowProcessingSpinner();
@@ -511,8 +516,6 @@ PaymentRequestDialogView::PaymentRequestDialogView(
   }
 
   ShowInitialPaymentSheet();
-
-  chrome::RecordDialogCreation(chrome::DialogIdentifier::PAYMENT_REQUEST);
 }
 
 PaymentRequestDialogView::~PaymentRequestDialogView() = default;

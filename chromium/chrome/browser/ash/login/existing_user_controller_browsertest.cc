@@ -1310,7 +1310,9 @@ IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest,
   EXPECT_TRUE(user->force_online_signin());
 }
 
-IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest, TpmError) {
+// TODO(crbug.com/1324677): Re-enable this test
+IN_PROC_BROWSER_TEST_F(ExistingUserControllerAuthFailureTest,
+                       DISABLED_TpmError) {
   SetUpStubAuthenticatorAndAttemptLogin(AuthFailure::TPM_ERROR);
 
   OobeScreenWaiter(TpmErrorView::kScreenId).Wait();
@@ -1383,7 +1385,7 @@ class ExistingUserControllerProfileTest : public LoginManagerTest {
   }
 
   void Login(const LoginManagerMixin::TestUserInfo& test_user) {
-    WizardController::SkipPostLoginScreensForTesting();
+    login_manager_mixin_.SkipPostLoginScreens();
 
     auto context = LoginManagerMixin::CreateDefaultUserContext(test_user);
     login_manager_mixin_.LoginAndWaitForActiveSession(context);

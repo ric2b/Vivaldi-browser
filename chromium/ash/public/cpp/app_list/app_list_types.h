@@ -131,8 +131,12 @@ struct ASH_PUBLIC_EXPORT AppListItemMetadata {
   std::string folder_id;           // Id of folder where the item resides.
   syncer::StringOrdinal position;  // Position of the item.
   bool is_folder = false;          // Whether this item is a folder.
-  bool is_persistent = false;  // Whether this folder is allowed to contain only
-                               // 1 item.
+
+  // Whether the folder was system created (e.g. the OEM folder or Linux apps
+  // folder). Historically (pre-2022) these folders were the only ones allowed
+  // to contain a single item.
+  bool is_system_folder = false;
+
   gfx::ImageSkia icon;         // The icon of this item.
   bool is_page_break = false;  // Whether this item is a "page break" item.
   SkColor badge_color = SK_ColorWHITE;  // Notification badge color.
@@ -145,6 +149,18 @@ struct ASH_PUBLIC_EXPORT AppListItemMetadata {
 
   // The item's icon color.
   IconColor icon_color;
+};
+
+// Where an app list item is being shown. Used for context menu.
+enum class AppListItemContext {
+  // Used in tests when the context doesn't matter.
+  kNone,
+  // The apps grid (the common case).
+  kAppsGrid,
+  // Recent apps (part of productivity launcher).
+  kRecentApps,
+  // Search results (part of peeking launcher).
+  kSearchResults,
 };
 
 // All possible orders to sort app list items.
@@ -248,6 +264,20 @@ enum class AppListBubblePage {
   kAssistant
 };
 
+// The type of the toast that shows on the app list.
+enum class AppListToastType {
+  // The toast container is not showing any toast.
+  kNone,
+
+  // Shows the nudge to guide the users to use apps reordering using context
+  // menu.
+  kReorderNudge,
+
+  // Shows the notification that the apps are temporarily sorted and allows
+  // users to undo the sorting actions.
+  kReorderUndo,
+};
+
 ASH_PUBLIC_EXPORT std::ostream& operator<<(std::ostream& os,
                                            AppListBubblePage page);
 
@@ -349,11 +379,17 @@ enum class AppListSearchResultType {
   kOpenTab,                // Open tab search results.
   kGames,                  // Game sarch results.
   kPersonalization,        // Personalization search results.
+  kZeroStateHelpApp,       // Help App (aka Explore) results for zero-state.
   // Add new values here.
-  kMaxValue = kPersonalization,
+  kMaxValue = kZeroStateHelpApp,
 };
 
 ASH_PUBLIC_EXPORT bool IsAppListSearchResultAnApp(
+    AppListSearchResultType result_type);
+
+// Returns whether the result type is a type of result shown in launcher
+// continue section when productivity launcher is enabled.
+ASH_PUBLIC_EXPORT bool IsContinueSectionResultType(
     AppListSearchResultType result_type);
 
 // The different categories a search result can be part of. Every search result
@@ -480,14 +516,12 @@ using SearchResultTags = std::vector<SearchResultTag>;
 struct ASH_PUBLIC_EXPORT SearchResultAction {
   SearchResultAction();
   SearchResultAction(SearchResultActionType type,
-                     const gfx::ImageSkia& image,
                      const std::u16string& tooltip_text,
                      bool visible_on_hover);
   SearchResultAction(const SearchResultAction& other);
   ~SearchResultAction();
 
   SearchResultActionType type;
-  gfx::ImageSkia image;
   std::u16string tooltip_text;
   // Visible when button or its parent row in hover state.
   bool visible_on_hover;
@@ -516,7 +550,14 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
     kKeyboardShortcutSnapshot,
   };
 
-  SearchResultTextItem(SearchResultTextItemType type);
+  // Only used for SearchResultTextItemType kString
+  enum OverflowBehavior {
+    kNoElide,  // Prioritize this text item for space allocation: do not elide.
+    kElide,    // Elide this text item when there is not enough space.
+    kHide,     // Completely hide this text item when there is not enough space.
+  };
+
+  explicit SearchResultTextItem(SearchResultTextItemType type);
   SearchResultTextItem(const SearchResultTextItem&);
   SearchResultTextItem& operator=(const SearchResultTextItem&);
   ~SearchResultTextItem();
@@ -536,8 +577,8 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
   gfx::ImageSkia GetImage() const;
   SearchResultTextItem& SetImage(gfx::ImageSkia icon);
 
-  bool GetElidable() const;
-  SearchResultTextItem& SetElidable(bool elidable);
+  OverflowBehavior GetOverflowBehavior() const;
+  SearchResultTextItem& SetOverflowBehavior(OverflowBehavior overflow_behavior);
 
  private:
   SearchResultTextItemType item_type;
@@ -548,9 +589,9 @@ class ASH_PUBLIC_EXPORT SearchResultTextItem {
   absl::optional<IconCode> icon_code;
   // used for type SearchResultTextItemType::kCustomIcon.
   absl::optional<gfx::ImageSkia> raw_image;
-  // Whether parts of this text item can be elided with "...". Only applicable
-  // to SearchResultTextItemType::kString.
-  bool elidable = true;
+  // Behavior of the text item when there is not enough space to show it in the
+  // UI. only applicable to SearchResultTextItemType::kString.
+  OverflowBehavior overflow_behavior = kElide;
 };
 
 // A structure holding the common information which is sent from chrome to ash,

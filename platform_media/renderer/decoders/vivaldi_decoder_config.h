@@ -8,6 +8,7 @@
 
 #include "base/memory/scoped_refptr.h"
 #include "base/task/sequenced_task_runner.h"
+#include "media/base/media_export.h"
 
 namespace media {
 
@@ -15,8 +16,12 @@ class AudioDecoder;
 class MediaLog;
 class VideoDecoder;
 
-class VivaldiDecoderConfig {
+class MEDIA_EXPORT VivaldiDecoderConfig {
  public:
+  // Return true if audio decoders implemented outside FFmpeg based on Chromium
+  // AudioDecoder API should be disabled.
+  static bool OnlyFFmpegAudio();
+
   static void AddAudioDecoders(
       const scoped_refptr<base::SequencedTaskRunner>& task_runner,
       MediaLog* media_log,

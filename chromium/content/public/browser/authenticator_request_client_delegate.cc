@@ -33,6 +33,13 @@ bool WebAuthenticationDelegate::OverrideCallerOriginAndRelyingPartyIdValidation(
   return false;
 }
 
+bool WebAuthenticationDelegate::OriginMayUseRemoteDesktopClientOverride(
+    BrowserContext* browser_context,
+    const url::Origin& caller_origin) {
+  // No origin is permitted to claim RP IDs on behalf of another origin.
+  return false;
+}
+
 #if !BUILDFLAG(IS_ANDROID)
 absl::optional<std::string>
 WebAuthenticationDelegate::MaybeGetRelyingPartyIdOverride(
@@ -136,6 +143,7 @@ bool AuthenticatorRequestClientDelegate::DoesBlockRequestOnFailure(
 void AuthenticatorRequestClientDelegate::RegisterActionCallbacks(
     base::OnceClosure cancel_callback,
     base::RepeatingClosure start_over_callback,
+    AccountPreselectedCallback account_preselected_callback,
     device::FidoRequestHandlerBase::RequestCallback request_callback,
     base::RepeatingClosure bluetooth_adapter_power_on_callback) {}
 
@@ -157,14 +165,27 @@ void AuthenticatorRequestClientDelegate::SelectAccount(
     std::vector<device::AuthenticatorGetAssertionResponse> responses,
     base::OnceCallback<void(device::AuthenticatorGetAssertionResponse)>
         callback) {
-  // SupportsResidentKeys returned false so this should never be called.
-  NOTREACHED();
+  // Automatically choose the first account to allow resident keys for virtual
+  // authenticators without a browser implementation, e.g. on content shell.
+  // TODO(crbug.com/991666): Provide a way to determine which account gets
+  // picked.
+  DCHECK(virtual_environment_);
+  std::move(callback).Run(std::move(responses.at(0)));
 }
 
 void AuthenticatorRequestClientDelegate::DisableUI() {}
 
 bool AuthenticatorRequestClientDelegate::IsWebAuthnUIEnabled() {
   return false;
+}
+
+void AuthenticatorRequestClientDelegate::SetVirtualEnvironment(
+    bool virtual_environment) {
+  virtual_environment_ = virtual_environment;
+}
+
+bool AuthenticatorRequestClientDelegate::IsVirtualEnvironmentEnabled() {
+  return virtual_environment_;
 }
 
 void AuthenticatorRequestClientDelegate::SetConditionalRequest(

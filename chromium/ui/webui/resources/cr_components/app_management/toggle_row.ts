@@ -1,13 +1,15 @@
 // Copyright 2019 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-import './shared_style.js';
+import './app_management_shared_style.css.js';
 import '//resources/cr_elements/cr_toggle/cr_toggle.m.js';
 import '//resources/cr_elements/policy/cr_policy_indicator.m.js';
 import '//resources/cr_elements/icons.m.js';
 
 import {CrToggleElement} from '//resources/cr_elements/cr_toggle/cr_toggle.m.js';
-import {html, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
+import {getTemplate} from './toggle_row.html.js';
 
 export interface AppManagementToggleRowElement {
   $: {toggle: CrToggleElement};
@@ -19,7 +21,7 @@ export class AppManagementToggleRowElement extends PolymerElement {
   }
 
   static get template() {
-    return html`{__html_template__}`;
+    return getTemplate();
   }
 
   static get properties() {

@@ -48,6 +48,7 @@
 
 #include "base/numerics/checked_math.h"
 #include "base/task/single_thread_task_runner.h"
+#include "cc/animation/animation_timeline.h"
 #include "cc/input/main_thread_scrolling_reason.h"
 #include "cc/input/snap_selection_strategy.h"
 #include "cc/layers/picture_layer.h"
@@ -249,8 +250,7 @@ void PaintLayerScrollableArea::ApplyPendingHistoryRestoreScrollOffset() {
   // Anchor-based restore should allow for earlier restoration.
   bool did_restore = RestoreScrollAnchor(
       {pending_view_state_->scroll_anchor_data_.selector_,
-       LayoutPoint(pending_view_state_->scroll_anchor_data_.offset_.x(),
-                   pending_view_state_->scroll_anchor_data_.offset_.y()),
+       LayoutPoint(pending_view_state_->scroll_anchor_data_.offset_),
        pending_view_state_->scroll_anchor_data_.simhash_});
   if (!did_restore) {
     SetScrollOffset(pending_view_state_->scroll_offset_,
@@ -1012,12 +1012,11 @@ void PaintLayerScrollableArea::UpdateAfterLayout() {
     // needs to update paint properties to account for the correct
     // scrollbounds.
     if (LocalFrameView* frame_view = GetLayoutBox()->GetFrameView()) {
-      if (this == frame_view->LayoutViewport()) {
-        GetLayoutBox()
-            ->GetFrame()
-            ->GetPage()
-            ->GetVisualViewport()
-            .SetNeedsPaintPropertyUpdate();
+      VisualViewport& visual_viewport =
+          GetLayoutBox()->GetFrame()->GetPage()->GetVisualViewport();
+      if (this == frame_view->LayoutViewport() &&
+          visual_viewport.IsActiveViewport()) {
+        visual_viewport.SetNeedsPaintPropertyUpdate();
       }
     }
 
@@ -2587,7 +2586,7 @@ cc::AnimationHost* PaintLayerScrollableArea::GetCompositorAnimationHost()
   return layer_->GetLayoutObject().GetFrameView()->GetCompositorAnimationHost();
 }
 
-CompositorAnimationTimeline*
+cc::AnimationTimeline*
 PaintLayerScrollableArea::GetCompositorAnimationTimeline() const {
   return layer_->GetLayoutObject()
       .GetFrameView()
@@ -3113,9 +3112,9 @@ gfx::Size PaintLayerScrollableArea::PixelSnappedBorderBoxSize() const {
 gfx::Rect PaintLayerScrollableArea::ScrollingBackgroundVisualRect(
     const PhysicalOffset& paint_offset) const {
   const auto* box = GetLayoutBox();
-  auto overflow_clip_rect =
-      ToPixelSnappedRect(box->OverflowClipRect(paint_offset));
-  auto scroll_size = PixelSnappedContentsSize(paint_offset);
+  auto clip_rect = box->OverflowClipRect(paint_offset);
+  auto overflow_clip_rect = ToPixelSnappedRect(clip_rect);
+  auto scroll_size = PixelSnappedContentsSize(clip_rect.offset);
   // Ensure scrolling contents are at least as large as the scroll clip
   scroll_size.SetToMax(overflow_clip_rect.size());
   gfx::Rect result(overflow_clip_rect.origin(), scroll_size);

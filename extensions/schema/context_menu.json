@@ -46,7 +46,7 @@
         "id": "ContainerContent",
         "type": "string",
         "description": "Defines functionality to set up on the C++ side. One or more menu items may be created.",
-        "enum": ["extensions", "imageinprofile", "linkinprofile", "notes", "pwa", "linkinpwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
+        "enum": ["extensions", "imageinprofile", "linkinprofile", "linktohighlight", "notes", "pwa", "linkinpwa", "sendlinktodevices", "sendpagetodevices", "spellcheck", "spellcheckoptions", "speech"]
       },
       {
         "id": "Item",
@@ -183,6 +183,9 @@
             "type": "boolean"
           },
           "extensions": {
+            "type": "boolean"
+          },
+          "highlight": {
             "type": "boolean"
           },
           "pictureinpicture": {

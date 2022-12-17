@@ -8,7 +8,7 @@
 
 IncreasedContrastThemeSupplier::IncreasedContrastThemeSupplier(
     ui::NativeTheme* native_theme)
-    : CustomThemeSupplier(INCREASED_CONTRAST),
+    : CustomThemeSupplier(ThemeType::kIncreasedContrast),
       native_theme_(native_theme),
       is_dark_mode_(native_theme->ShouldUseDarkColors()) {
   native_theme->AddObserver(this);
@@ -54,7 +54,6 @@ bool IncreasedContrastThemeSupplier::GetColor(int id, SkColor* color) const {
       return true;
     case ThemeProperties::COLOR_DOWNLOAD_SHELF_CONTENT_AREA_SEPARATOR:
     case ThemeProperties::COLOR_INFOBAR_CONTENT_AREA_SEPARATOR:
-    case ThemeProperties::COLOR_INFOBAR_TEXT:
     case ThemeProperties::COLOR_LOCATION_BAR_BORDER:
     case ThemeProperties::COLOR_SIDE_PANEL_CONTENT_AREA_SEPARATOR:
     case ThemeProperties::COLOR_TOOLBAR_CONTENT_AREA_SEPARATOR:

@@ -4,6 +4,7 @@
 
 #include "chrome/browser/content_settings/mixed_content_settings_tab_helper.h"
 
+#include "base/command_line.h"
 #include "chrome/browser/ui/browser.h"
 #include "chrome/browser/ui/browser_content_setting_bubble_model_delegate.h"
 #include "chrome/browser/ui/content_settings/content_setting_bubble_model.h"
@@ -49,7 +50,7 @@ class MixedContentSettingsTabHelperBrowserTest : public InProcessBrowserTest {
   }
 
   content::RenderFrameHost* current_frame_host() {
-    return web_contents()->GetMainFrame();
+    return web_contents()->GetPrimaryMainFrame();
   }
 
   net::EmbeddedTestServer* test_server() { return &ssl_server_; }
@@ -106,7 +107,7 @@ IN_PROC_BROWSER_TEST_F(MixedContentSettingsTabHelperBrowserTest,
   auto* new_contents_helper =
       MixedContentSettingsTabHelper::FromWebContents(new_contents);
   EXPECT_TRUE(new_contents_helper->IsRunningInsecureContentAllowed(
-      *new_contents->GetMainFrame()));
+      *new_contents->GetPrimaryMainFrame()));
 }
 
 class MixedContentSettingsTabHelperPrerenderBrowserTest

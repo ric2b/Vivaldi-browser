@@ -8,6 +8,7 @@
 #include <memory>
 #include <utility>
 
+#include "base/check_op.h"
 #include "base/dcheck_is_on.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/scoped_refptr.h"
@@ -297,6 +298,8 @@ class PLATFORM_EXPORT ParkableString final {
  public:
   ParkableString() : impl_(nullptr) {}
   explicit ParkableString(scoped_refptr<StringImpl>&& impl);
+  ParkableString(scoped_refptr<StringImpl>&& impl,
+                 std::unique_ptr<ParkableStringImpl::SecureDigest> digest);
   ParkableString(const ParkableString& rhs) : impl_(rhs.impl_) {}
   ~ParkableString();
 

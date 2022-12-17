@@ -197,9 +197,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
   virtual bool IsMaximized() const = 0;
   virtual bool IsMinimized() const = 0;
   virtual void Restore() = 0;
-  virtual void SetFullscreen(bool fullscreen,
-                             const base::TimeDelta& delay,
-                             int64_t target_display_id) = 0;
+  virtual void SetFullscreen(bool fullscreen, int64_t target_display_id) = 0;
   virtual bool IsFullscreen() const = 0;
   virtual void SetCanAppearInExistingFullscreenSpaces(
       bool can_appear_in_existing_fullscreen_spaces) = 0;
@@ -213,7 +211,7 @@ class VIEWS_EXPORT NativeWidgetPrivate : public NativeWidget {
                             ui::mojom::DragEventSource source) = 0;
   virtual void SchedulePaintInRect(const gfx::Rect& rect) = 0;
   virtual void ScheduleLayout() = 0;
-  virtual void SetCursor(gfx::NativeCursor cursor) = 0;
+  virtual void SetCursor(const ui::Cursor& cursor) = 0;
   virtual void ShowEmojiPanel();
   virtual bool IsMouseEventsEnabled() const = 0;
   // Returns true if any mouse button is currently down.

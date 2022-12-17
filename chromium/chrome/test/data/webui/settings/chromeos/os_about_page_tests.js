@@ -4,6 +4,7 @@
 
 import {CrPolicyIndicatorType} from '//resources/cr_elements/policy/cr_policy_indicator_behavior.m.js';
 import {AboutPageBrowserProxyImpl, BrowserChannel, DeviceNameBrowserProxyImpl, DeviceNameState, LifetimeBrowserProxyImpl, Router, routes, SetDeviceNameResult, UpdateStatus} from 'chrome://os-settings/chromeos/os_settings.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {PromiseResolver} from 'chrome://resources/js/promise_resolver.m.js';
 import {getDeepActiveElement} from 'chrome://resources/js/util.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
@@ -22,7 +23,10 @@ suite('AboutPageTest', function() {
   /** @type {?TestLifetimeBrowserProxy} */
   let lifetimeBrowserProxy = null;
 
-  const SPINNER_ICON = 'chrome://resources/images/throbber_small.svg';
+  const SPINNER_ICON_LIGHT_MODE =
+      'chrome://resources/images/throbber_small.svg';
+  const SPINNER_ICON_DARK_MODE =
+      'chrome://resources/images/throbber_small_dark.svg';
 
   setup(function() {
     lifetimeBrowserProxy = new TestLifetimeBrowserProxy();
@@ -50,7 +54,7 @@ suite('AboutPageTest', function() {
    */
   function fireStatusChanged(status, opt_options) {
     const options = opt_options || {};
-    cr.webUIListenerCallback('update-status-changed', {
+    webUIListenerCallback('update-status-changed', {
       progress: options.progress === undefined ? 1 : options.progress,
       message: options.message,
       status: status,
@@ -96,54 +100,78 @@ suite('AboutPageTest', function() {
   }
 
   /**
-   * Test that the status icon and status message update according to
-   * incoming 'update-status-changed' events.
+   * @param {boolean} active
    */
-  test('IconAndMessageUpdates', function() {
-    const icon = page.shadowRoot.querySelector('iron-icon');
-    assertTrue(!!icon);
-    const statusMessageEl =
-        page.shadowRoot.querySelector('#updateStatusMessage div');
-    let previousMessageText = statusMessageEl.textContent;
+  function setDarkMode(active) {
+    assertTrue(!!page);
+    page.isDarkModeActive_ = active;
+  }
 
-    fireStatusChanged(UpdateStatus.CHECKING);
-    assertEquals(SPINNER_ICON, icon.src);
-    assertEquals(null, icon.getAttribute('icon'));
-    assertNotEquals(previousMessageText, statusMessageEl.textContent);
-    previousMessageText = statusMessageEl.textContent;
+  ['light', 'dark'].forEach((mode) => {
+    suite(`with ${mode} mode active`, () => {
+      const isDarkMode = mode === 'dark';
 
-    fireStatusChanged(UpdateStatus.UPDATING, {progress: 0});
-    assertEquals(SPINNER_ICON, icon.src);
-    assertEquals(null, icon.getAttribute('icon'));
-    assertFalse(statusMessageEl.textContent.includes('%'));
-    assertNotEquals(previousMessageText, statusMessageEl.textContent);
-    previousMessageText = statusMessageEl.textContent;
+      /**
+       * Test that the OS update status message and icon update according to
+       * incoming 'update-status-changed' events, for light and dark mode
+       * respectively.
+       */
+      test('status message and icon update', () => {
+        setDarkMode(isDarkMode);
+        const icon = page.shadowRoot.querySelector('iron-icon');
+        assertTrue(!!icon);
+        const statusMessageEl =
+            page.shadowRoot.querySelector('#updateStatusMessage div');
+        let previousMessageText = statusMessageEl.textContent;
 
-    fireStatusChanged(UpdateStatus.UPDATING, {progress: 1});
-    assertNotEquals(previousMessageText, statusMessageEl.textContent);
-    assertTrue(statusMessageEl.textContent.includes('%'));
-    previousMessageText = statusMessageEl.textContent;
+        fireStatusChanged(UpdateStatus.CHECKING);
+        if (isDarkMode) {
+          assertEquals(SPINNER_ICON_DARK_MODE, icon.src);
+        } else {
+          assertEquals(SPINNER_ICON_LIGHT_MODE, icon.src);
+        }
+        assertEquals(null, icon.getAttribute('icon'));
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
-    fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
-    assertEquals(null, icon.src);
-    assertEquals('settings:check-circle', icon.icon);
-    assertNotEquals(previousMessageText, statusMessageEl.textContent);
-    previousMessageText = statusMessageEl.textContent;
+        fireStatusChanged(UpdateStatus.UPDATING, {progress: 0});
+        if (isDarkMode) {
+          assertEquals(SPINNER_ICON_DARK_MODE, icon.src);
+        } else {
+          assertEquals(SPINNER_ICON_LIGHT_MODE, icon.src);
+        }
+        assertEquals(null, icon.getAttribute('icon'));
+        assertFalse(statusMessageEl.textContent.includes('%'));
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
-    fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
-    assertEquals(null, icon.src);
-    assertEquals('cr20:domain', icon.icon);
-    assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        fireStatusChanged(UpdateStatus.UPDATING, {progress: 1});
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        assertTrue(statusMessageEl.textContent.includes('%'));
+        previousMessageText = statusMessageEl.textContent;
 
-    fireStatusChanged(UpdateStatus.FAILED);
-    assertEquals(null, icon.src);
-    assertEquals('cr:error-outline', icon.icon);
-    assertEquals(0, statusMessageEl.textContent.trim().length);
+        fireStatusChanged(UpdateStatus.NEARLY_UPDATED);
+        assertEquals(null, icon.src);
+        assertEquals('settings:check-circle', icon.icon);
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+        previousMessageText = statusMessageEl.textContent;
 
-    fireStatusChanged(UpdateStatus.DISABLED);
-    assertEquals(null, icon.src);
-    assertEquals(null, icon.getAttribute('icon'));
-    assertEquals(0, statusMessageEl.textContent.trim().length);
+        fireStatusChanged(UpdateStatus.DISABLED_BY_ADMIN);
+        assertEquals(null, icon.src);
+        assertEquals('cr20:domain', icon.icon);
+        assertNotEquals(previousMessageText, statusMessageEl.textContent);
+
+        fireStatusChanged(UpdateStatus.FAILED);
+        assertEquals(null, icon.src);
+        assertEquals('cr:error-outline', icon.icon);
+        assertEquals(0, statusMessageEl.textContent.trim().length);
+
+        fireStatusChanged(UpdateStatus.DISABLED);
+        assertEquals(null, icon.src);
+        assertEquals(null, icon.getAttribute('icon'));
+        assertEquals(0, statusMessageEl.textContent.trim().length);
+      });
+    });
   });
 
   test('ErrorMessageWithHtml', function() {
@@ -570,6 +598,120 @@ suite('AboutPageTest', function() {
     checkEndOfLifeSection();
   });
 
+  function getBuildInfoPage() {
+    page.scroller = page.offsetParent;
+    assertTrue(!!page.$['detailed-build-info-trigger']);
+    page.$['detailed-build-info-trigger'].click();
+    const buildInfoPage =
+        page.shadowRoot.querySelector('settings-detailed-build-info');
+    assertTrue(!!buildInfoPage);
+    return buildInfoPage;
+  }
+
+  test('Managed user auto update toggle in build info page', async () => {
+    loadTimeData.overrideValues({
+      isManaged: true,
+      // Set this to true to catch UI bugs.
+      showConsumerAutoUpdateToggle: true,
+    });
+
+    async function checkManagedAutoUpdateToggle(isToggleEnabled) {
+      // Create the page.
+      await initNewPage();
+      // Set overrides + response values.
+      aboutBrowserProxy.setManagedAutoUpdate(isToggleEnabled);
+      // Go to the build info page.
+      const buildInfoPage = getBuildInfoPage();
+      // Wait for overrides + response values.
+      await aboutBrowserProxy.whenCalled('isManagedAutoUpdateEnabled');
+
+      const mau_toggle = buildInfoPage.$$('#managedAutoUpdateToggle');
+      assertTrue(!!mau_toggle);
+      // Managed auto update toggle should always be disabled to toggle.
+      assertTrue(!!mau_toggle.hasAttribute('disabled'));
+      assertEquals(isToggleEnabled, mau_toggle.checked);
+      // Consumer auto update toggle should not exist.
+      assertFalse(!!buildInfoPage.$$('#consumerAutoUpdateToggle'));
+    }
+
+    await checkManagedAutoUpdateToggle(true);
+    await checkManagedAutoUpdateToggle(false);
+  });
+
+  test('Consumer user auto update toggle in build info page', async () => {
+    loadTimeData.overrideValues({
+      isManaged: false,
+    });
+
+    async function checkConsumerAutoUpdateToggle(
+        isEnabled, isTogglingAllowed, showToggle) {
+      // Create the page.
+      await initNewPage();
+      // Set overrides + response values.
+      loadTimeData.overrideValues({
+        isConsumerAutoUpdateTogglingAllowed: isTogglingAllowed,
+        showConsumerAutoUpdateToggle: showToggle,
+      });
+      aboutBrowserProxy.resetConsumerAutoUpdate(isEnabled);
+      const prefs = {
+        'settings': {
+          'consumer_auto_update_toggle': {
+            key: 'consumer_auto_update_toggle',
+            type: chrome.settingsPrivate.PrefType.BOOLEAN,
+            value: isEnabled,
+          },
+        },
+      };
+      // Go to the build info page.
+      const buildInfoPage = getBuildInfoPage();
+      // Wait for overrides + response values.
+      buildInfoPage.prefs = Object.assign({}, prefs);
+      await Promise.all([
+        aboutBrowserProxy.whenCalled('isConsumerAutoUpdateEnabled'),
+        aboutBrowserProxy.whenCalled('setConsumerAutoUpdate'),
+      ]);
+
+      // Managed auto update toggle should not exist.
+      assertFalse(!!buildInfoPage.$$('#managedAutoUpdateToggle'));
+      const cauToggle = buildInfoPage.$$('#consumerAutoUpdateToggle');
+      if (showToggle) {
+        assertTrue(!!cauToggle);
+        assertEquals(isTogglingAllowed, !cauToggle.disabled);
+        assertEquals(isEnabled, cauToggle.checked);
+      } else {
+        assertFalse(!!cauToggle);
+      }
+
+      // Check dialog popup when toggling off.
+      if (showToggle && isEnabled) {
+        let dialog = buildInfoPage.shadowRoot.querySelector(
+            'settings-consumer-auto-update-toggle-dialog');
+        assertFalse(!!dialog);
+
+        cauToggle.click();
+        flush();
+
+        dialog = buildInfoPage.shadowRoot.querySelector(
+            'settings-consumer-auto-update-toggle-dialog');
+        // Only when toggling is allowed, should the dialog popup.
+        if (isTogglingAllowed) {
+          assertTrue(!!dialog);
+        } else {
+          assertFalse(!!dialog);
+        }
+      }
+    }
+
+    for (let i = 0; i < (1 << 3); i++) {
+      // showToggle should always be true when isTogglingAllowed is true, but
+      // test to catch unintended behaviors from happening.
+      await checkConsumerAutoUpdateToggle(
+          /*isEnabled=*/ (i & 1) > 0,
+          /*isTogglingAllowed=*/ (i & 2) > 0,
+          /*showToggle=*/ (i & 4) > 0);
+    }
+  });
+
   test('GetHelp', function() {
     assertTrue(!!page.$.help);
     page.$.help.click();
@@ -682,11 +824,34 @@ suite('DetailedBuildInfoTest', function() {
   });
 
   test('Initialization', async () => {
+    loadTimeData.overrideValues({
+      isManaged: false,
+    });
+
     page = document.createElement('settings-detailed-build-info');
     document.body.appendChild(page);
 
     await Promise.all([
       browserProxy.whenCalled('pageReady'),
+      browserProxy.whenCalled('isConsumerAutoUpdateEnabled'),
+      browserProxy.whenCalled('setConsumerAutoUpdate'),
+      browserProxy.whenCalled('canChangeChannel'),
+      browserProxy.whenCalled('getChannelInfo'),
+      browserProxy.whenCalled('getVersionInfo'),
+    ]);
+  });
+
+  test('InitializationManaged', async () => {
+    loadTimeData.overrideValues({
+      isManaged: true,
+    });
+
+    page = document.createElement('settings-detailed-build-info');
+    document.body.appendChild(page);
+
+    await Promise.all([
+      browserProxy.whenCalled('pageReady'),
+      browserProxy.whenCalled('isManagedAutoUpdateEnabled'),
       browserProxy.whenCalled('canChangeChannel'),
       browserProxy.whenCalled('getChannelInfo'),
       browserProxy.whenCalled('getVersionInfo'),
@@ -890,7 +1055,7 @@ suite('DetailedBuildInfoTest', function() {
    * @return {!Promise}
    */
   function checkDeviceNameMetadata(testDeviceName, deviceNameState) {
-    cr.webUIListenerCallback(
+    webUIListenerCallback(
         'settings.updateDeviceNameMetadata',
         {deviceName: testDeviceName, deviceNameState: deviceNameState});
 
@@ -1238,6 +1403,53 @@ suite('ChannelSwitcherDialogTest', function() {
     assertTrue(isPowerwashAllowed);
     const {detail} = await whenTargetChannelChangedFired;
     assertEquals(BrowserChannel.STABLE, detail);
+  });
+});
+
+suite('Consumer auto update dialog popup', function() {
+  let dialog = null;
+  let browserProxy = null;
+  let events;
+
+  setup(function() {
+    events = [];
+    browserProxy = new TestAboutPageBrowserProxyChromeOS();
+    AboutPageBrowserProxyImpl.setInstance(browserProxy);
+    PolymerTest.clearBody();
+    dialog =
+        document.createElement('settings-consumer-auto-update-toggle-dialog');
+    document.body.appendChild(dialog);
+  });
+
+  teardown(function() {
+    dialog.remove();
+  });
+
+  function getButtonEventPromise() {
+    return new Promise(
+        (resolve) =>
+            dialog.addEventListener('set-consumer-auto-update', (e) => {
+              events.push(e);
+              resolve();
+            }));
+  }
+
+  async function clickButton(buttonId, shouldEnable) {
+    const ButtonEventPromise = getButtonEventPromise();
+    const button = dialog.shadowRoot.querySelector(buttonId);
+    assertTrue(!!button);
+    button.click();
+    await ButtonEventPromise;
+    assertEquals(1, events.length);
+    assertEquals(shouldEnable, events[0].detail.item);
+  }
+
+  test('click turn off button fires disable event', async function() {
+    await clickButton('#turnOffButton', false);
+  });
+
+  test('click keep updates button fires enable event', async function() {
+    await clickButton('#keepUpdatesButton', true);
   });
 });
 

@@ -491,8 +491,8 @@ class CORE_EXPORT WebLocalFrameImpl final
   // useful.
   WebFrameWidgetImpl* LocalRootFrameWidget();
 
-  // Scroll the focused editable element into the rect.
-  void ScrollFocusedEditableElementIntoRect(const gfx::Rect& rect);
+  // Scroll the focused editable element into the view.
+  void ScrollFocusedEditableElementIntoView();
   void ResetHasScrolledFocusedEditableIntoView();
 
   // Returns true if the frame is focused.
@@ -546,6 +546,7 @@ class CORE_EXPORT WebLocalFrameImpl final
           mojo_widget,
       const viz::FrameSinkId& frame_sink_id,
       bool is_for_nested_main_frame,
+      bool is_for_scalable_page,
       bool hidden) override;
 
   HitTestResult HitTestResultForVisualViewportPos(const gfx::Point&);
@@ -634,7 +635,6 @@ class CORE_EXPORT WebLocalFrameImpl final
   // Bookkeeping to suppress redundant scroll and focus requests for an already
   // scrolled and focused editable node.
   bool has_scrolled_focused_editable_node_into_rect_ = false;
-  gfx::Rect rect_for_scrolled_focused_editable_node_;
 
   WebHistoryItem current_history_item_;
 };

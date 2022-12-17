@@ -296,7 +296,7 @@ class PersonalDataManager : public KeyedService,
   GetActiveAutofillPromoCodeOffersForOrigin(GURL origin) const;
 
   // Returns the customized credit card art image for the |card_art_url|.
-  virtual raw_ptr<gfx::Image> GetCreditCardArtImageForUrl(
+  virtual gfx::Image* GetCreditCardArtImageForUrl(
       const GURL& card_art_url) const;
 
   // Returns the cached card art image for the |card_art_url| if it was synced
@@ -305,8 +305,7 @@ class PersonalDataManager : public KeyedService,
   // optimization for situations where a separate fetch request after trying to
   // retrieve local card art images is not needed. If the card art image is not
   // present in the cache, this function will return a nullptr.
-  raw_ptr<gfx::Image> GetCachedCardArtImageForUrl(
-      const GURL& card_art_url) const;
+  gfx::Image* GetCachedCardArtImageForUrl(const GURL& card_art_url) const;
 
   // Returns the profiles to suggest to the user, ordered by frecency.
   std::vector<AutofillProfile*> GetProfilesToSuggest() const;
@@ -558,7 +557,7 @@ class PersonalDataManager : public KeyedService,
   friend class autofill::PersonalDataManagerCleaner;
   friend class autofill::PersonalDataManagerFactory;
   friend class AutofillMetricsTest;
-  friend class FormDataImporterTest;
+  friend class FormDataImporterTestBase;
   friend class PersonalDataManagerTest;
   friend class PersonalDataManagerTestBase;
   friend class PersonalDataManagerHelper;
@@ -781,9 +780,11 @@ class PersonalDataManager : public KeyedService,
   // Returns if there are any pending queries to the web database.
   bool HasPendingQueries();
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   // Migrates the user opted in to wallet sync transport. This is needed while
   // migrating from using email to Gaia ID as th account identifier.
   void MigrateUserOptedInWalletSyncTransportIfNeeded();
+#endif
 
   // Returns true if the sync is enabled for |model_type|.
   bool IsSyncEnabledFor(syncer::ModelType model_type);
@@ -794,9 +795,9 @@ class PersonalDataManager : public KeyedService,
   // Invoked when server credit card cache is refreshed.
   void OnServerCreditCardsRefreshed();
 
-  // Checks whether any virtual card metadata for server cards is new and makes
-  // corresponding changes.
-  void ProcessVirtualCardMetadataChanges();
+  // Checks whether any new card art url is synced. If so, attempt to fetch the
+  // image based on the url.
+  void ProcessCardArtUrlChanges();
 
   // Returns the number of server credit cards that have a valid credit card art
   // image.

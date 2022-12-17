@@ -40,7 +40,7 @@ namespace navigation_interception {
 class InterceptNavigationDelegate : public base::SupportsUserData::Data {
  public:
   // Pass true for |escape_external_handler_value| to have
-  // net::EscapeExternalHandlerValue() invoked on URLs passed to
+  // base::EscapeExternalHandlerValue() invoked on URLs passed to
   // ShouldIgnoreNavigation() before the navigation is processed.
   InterceptNavigationDelegate(JNIEnv* env,
                               jobject jdelegate,
@@ -76,8 +76,13 @@ class InterceptNavigationDelegate : public base::SupportsUserData::Data {
       bool has_user_gesture,
       const absl::optional<url::Origin>& initiating_origin);
 
+  // Updates |last_user_gesture_carryover_timestamp_| when user gesture is
+  // carried over.
+  void UpdateLastUserGestureCarryoverTimestamp();
+
  private:
   JavaObjectWeakGlobalRef weak_jdelegate_;
+  base::TimeTicks last_user_gesture_carryover_timestamp_;
   bool escape_external_handler_value_ = false;
 };
 

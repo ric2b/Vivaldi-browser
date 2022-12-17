@@ -99,7 +99,7 @@ const base::Feature kBackForwardCacheMediaSessionService{
 // Enable back/forward cache for screen reader users. This flag should be
 // removed once the https://crbug.com/1271450 is resolved.
 const base::Feature kEnableBackForwardCacheForScreenReader{
-    "EnableBackForwardCacheForScreenReader", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EnableBackForwardCacheForScreenReader", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // BackForwardCache is disabled on low memory devices. The threshold is defined
 // via a field trial param: "memory_threshold_for_back_forward_cache_in_mb"
@@ -167,6 +167,12 @@ const base::Feature kBlockInsecurePrivateNetworkRequestsForNavigations{
     base::FEATURE_DISABLED_BY_DEFAULT,
 };
 
+// Broker file operations on disk cache in the Network Service.
+// This is no-op if the network service is hosted in the browser process.
+const base::Feature kBrokerFileOperationsOnDiskCacheInNetworkService{
+    "BrokerFileOperationsOnDiskCacheInNetworkService",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 // Use ThreadPriority::DISPLAY for browser UI and IO threads.
 const base::Feature kBrowserUseDisplayThreadPriority {
   "BrowserUseDisplayThreadPriority",
@@ -186,10 +192,6 @@ const base::Feature kBrowserVerifiedUserActivationKeyboard{
 const base::Feature kBrowserVerifiedUserActivationMouse{
     "BrowserVerifiedUserActivationMouse", base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Enables code caching for inline scripts.
-const base::Feature kCacheInlineScriptCode{"CacheInlineScriptCode",
-                                           base::FEATURE_ENABLED_BY_DEFAULT};
-
 // If Canvas2D Image Chromium is allowed, this feature controls whether it is
 // enabled.
 const base::Feature kCanvas2DImageChromium {
@@ -206,9 +208,6 @@ const base::Feature kCanvas2DImageChromium {
 const base::Feature kClearCrossSiteCrossBrowsingContextGroupWindowName{
     "ClearCrossSiteCrossBrowsingContextGroupWindowName",
     base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kCapabilityDelegationPaymentRequest{
-    "CapabilityDelegationPaymentRequest", base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kClickPointerEvent{"ClickPointerEvent",
                                        base::FEATURE_ENABLED_BY_DEFAULT};
@@ -288,7 +287,7 @@ const base::Feature kEarlyEstablishGpuChannel{
 
 // Enable Early Hints subresource preloads for navigation.
 const base::Feature kEarlyHintsPreloadForNavigation{
-    "EarlyHintsPreloadForNavigation", base::FEATURE_DISABLED_BY_DEFAULT};
+    "EarlyHintsPreloadForNavigation", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Requires documents embedded via <iframe>, etc, to explicitly opt-into the
 // embedding: https://github.com/mikewest/embedding-requires-opt-in.
@@ -363,11 +362,6 @@ constexpr base::Feature kFirstPartySets{"FirstPartySets",
 // feature.
 const base::FeatureParam<bool> kFirstPartySetsIsDogfooder{
     &kFirstPartySets, "FirstPartySetsIsDogfooder", false};
-
-// When enabled, the client will opt in to the V2 component format for the
-// First-Party Sets component.
-const base::Feature kFirstPartySetsV2ComponentFormat{
-    "FirstPartySetsV2ComponentFormat", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Whether to initialize the font manager when the renderer starts on a
 // background thread.
@@ -551,7 +545,7 @@ const base::Feature kMediaDevicesSystemMonitorCache {
 // Use a custom backend to store media licenses in lieu of the
 // Plugin Private File System.
 const base::Feature kMediaLicenseBackend{"MediaLicenseBackend",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
+                                         base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Allow cross-context transfer of MediaStreamTracks.
 const base::Feature kMediaStreamTrackTransfer{
@@ -594,20 +588,13 @@ const base::Feature kNavigationThreadingOptimizations{
 
 // If the network service is enabled, runs it in process.
 const base::Feature kNetworkServiceInProcess {
-  "NetworkServiceInProcess",
+  "NetworkServiceInProcess2",
 #if BUILDFLAG(IS_ANDROID)
       base::FEATURE_ENABLED_BY_DEFAULT
 #else
       base::FEATURE_DISABLED_BY_DEFAULT
 #endif
 };
-
-// If enabled the io thread in the network service runs at display priority. If
-// not enabled, the io thread in the network services runs at the default
-// priority.
-const base::Feature kNetworkServiceUsesDisplayThreadPriority{
-    "NetworkServiceUsesDisplayThreadPriority",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kNeverSlowMode{"NeverSlowMode",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
@@ -796,10 +783,6 @@ const base::Feature kSecurePaymentConfirmation {
 #endif
 };
 
-// Enables API V3 changes in Secure Payment Confirmation.
-const base::Feature kSecurePaymentConfirmationAPIV3{
-    "SecurePaymentConfirmationAPIV3", base::FEATURE_ENABLED_BY_DEFAULT};
-
 // Used to control whether to remove the restriction that PaymentCredential in
 // WebAuthn and secure payment confirmation method in PaymentRequest API must
 // use a user verifying platform authenticator. When enabled, this allows using
@@ -818,13 +801,10 @@ const base::Feature kSendBeaconThrowForBlobWithNonSimpleType{
 const base::Feature kServiceWorkerPaymentApps{"ServiceWorkerPaymentApps",
                                               base::FEATURE_ENABLED_BY_DEFAULT};
 
-// Enable the basic-card payment method from the PaymentRequest API. This flag
-// will be used to deprecate basic-card eventually: crbug.com/1209835.
+// Enable the basic-card payment method from the PaymentRequest API. This has
+// been disabled since M100 and is soon to be removed: crbug.com/1209835.
 const base::Feature kPaymentRequestBasicCard{"PaymentRequestBasicCard",
                                              base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kPaymentRequestRequiresUserActivation{
-    "PaymentRequestRequiresUserActivation", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Use this feature to experiment terminating a service worker when it doesn't
 // control any clients: https://crbug.com/1043845.
@@ -957,7 +937,7 @@ const base::Feature kStrictOriginIsolation{"StrictOriginIsolation",
 
 // Enables subresource loading with Web Bundles.
 const base::Feature kSubresourceWebBundles{"SubresourceWebBundles",
-                                           base::FEATURE_DISABLED_BY_DEFAULT};
+                                           base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Disallows window.{alert, prompt, confirm} if triggered inside a subframe that
 // is not same origin with the main frame.
@@ -1064,6 +1044,12 @@ const base::Feature kWebAssemblyCodeProtectionPku{
 #endif  // (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)) &&
         // defined(ARCH_CPU_X86_64)
 
+// Enable WebAssembly stack switching.
+#if defined(ARCH_CPU_X86_64)
+const base::Feature kEnableExperimentalWebAssemblyStackSwitching{
+    "WebAssemblyExperimentalStackSwitching", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif  // defined(ARCH_CPU_X86_64)
+
 // Enable WebAssembly dynamic tiering (only tier up hot functions).
 const base::Feature kWebAssemblyDynamicTiering{
     "WebAssemblyDynamicTiering", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -1115,11 +1101,6 @@ const base::Feature kWebBluetooth{"WebBluetooth",
 // and WebBluetoothGetDevices blink features are also enabled.
 const base::Feature kWebBluetoothNewPermissionsBackend{
     "WebBluetoothNewPermissionsBackend", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Controls whether Web Bluetooth will automatically start the bonding process,
-// to allow access to characteristics requiring a secure connection.
-const base::Feature kWebBluetoothBondOnDemand{"WebBluetoothBondOnDemand",
-                                              base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Controls whether Web Bundles (Bundled HTTP Exchanges) is enabled.
 // https://wicg.github.io/webpackage/draft-yasskin-wpack-bundled-exchanges.html
@@ -1187,19 +1168,9 @@ const base::Feature kBackgroundMediaRendererHasModerateBinding{
     "BackgroundMediaRendererHasModerateBinding",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
-// Takes advantage of specifying which big.LITTLE cores to schedule different
-// threads on.
-const base::Feature kBigLittleScheduling{"BigLittleScheduling",
-                                         base::FEATURE_DISABLED_BY_DEFAULT};
-
-// If enabled, BindingManager will use Context.BIND_NOT_FOREGROUND to avoid
-// affecting cpu scheduling priority.
-const base::Feature kBindingManagementWaiveCpu{
-    "BindingManagementWaiveCpu", base::FEATURE_DISABLED_BY_DEFAULT};
-
-// Tick fling animation independent from the browser compositor.
-const base::Feature kIndependentFlingAnimation{
-    "IndependentFlingAnimation", base::FEATURE_DISABLED_BY_DEFAULT};
+// Coalesce independent begin frame by ignoring begin frame that is out of date.
+const base::Feature kCoalesceIndependentBeginFrame{
+    "CoalesceIndependentBeginFrame", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Allows the use of an experimental feature to drop any AccessibilityEvents
 // that are not relevant to currently enabled accessibility services.
@@ -1229,19 +1200,6 @@ const base::Feature kWarmUpNetworkProcess{"WarmUpNetworkProcess",
 // https://w3c.github.io/web-nfc/
 const base::Feature kWebNfc{"WebNFC", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const char kBigLittleSchedulingBrowserMainBiggerParam[] =
-    "BigLittleSchedulingBrowserMainBiggerParam";
-const char kBigLittleSchedulingBrowserMainBigParam[] =
-    "BigLittleSchedulingBrowserMainBigParam";
-const char kBigLittleSchedulingBrowserIOBigParam[] =
-    "BigLittleSchedulingBrowserIOBigParam";
-const char kBigLittleSchedulingRenderMainBigParam[] =
-    "BigLittleSchedulingRenderMainBigParam";
-const char kBigLittleSchedulingNetworkMainBigParam[] =
-    "BigLittleSchedulingNetworkMainBigParam";
-const char kBigLittleSchedulingGpuMainBigParam[] =
-    "BigLittleSchedulingGpuMainBigParam";
-
 // When the context menu is triggered, the browser allows motion in a small
 // region around the initial touch location menu to allow for finger jittering.
 // This param holds the movement threshold in DIPs to consider drag an
@@ -1270,6 +1228,11 @@ const base::Feature kIOSurfaceCapturer{"IOSurfaceCapturer",
 
 const base::Feature kMacSyscallSandbox{"MacSyscallSandbox",
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Feature that controls whether WebContentsOcclusionChecker should handle
+// occlusion notifications.
+const base::Feature kMacWebContentsOcclusion{"MacWebContentsOcclusion",
+                                             base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables retrying to obtain list of available cameras on Macbooks after
 // restarting the video capture service if a previous attempt delivered zero

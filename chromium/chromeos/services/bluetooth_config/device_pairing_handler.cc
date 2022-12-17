@@ -43,6 +43,10 @@ mojom::PairingResult GetPairingResult(
     case device::ConnectionFailureReason::kAuthTimeout:
       [[fallthrough]];
     case device::ConnectionFailureReason::kAuthFailed:
+      [[fallthrough]];
+    case device::ConnectionFailureReason::kAuthCanceled:
+      [[fallthrough]];
+    case device::ConnectionFailureReason::kAuthRejected:
       return mojom::PairingResult::kAuthFailed;
 
     case device::ConnectionFailureReason::kUnknownError:
@@ -56,6 +60,8 @@ mojom::PairingResult GetPairingResult(
     case device::ConnectionFailureReason::kUnsupportedDevice:
       [[fallthrough]];
     case device::ConnectionFailureReason::kNotConnectable:
+      [[fallthrough]];
+    case device::ConnectionFailureReason::kInprogress:
       return mojom::PairingResult::kNonAuthFailure;
   }
 }
@@ -131,6 +137,16 @@ void DevicePairingHandler::FinishCurrentPairingRequest(
   PerformFinishCurrentPairingRequest(
       failure_reason, base::Time::Now() - pairing_start_timestamp_);
   current_pairing_device_id_.clear();
+
+  // |pair_device_callback_| can be null if |receiver_| has already been
+  // disconnected before this method is invoked.
+  if (!pair_device_callback_) {
+    BLUETOOTH_LOG(EVENT)
+        << "FinishCurrentPairingRequest() called with |pair_device_callback_| "
+           "null, not running callback";
+    return;
+  }
+
   std::move(pair_device_callback_).Run(GetPairingResult(failure_reason));
 }
 

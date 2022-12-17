@@ -164,6 +164,9 @@ const char* ProtoEnumToString(
 
 const char* ProtoEnumToString(sync_pb::WorkspaceDeskSpecifics::DeskType type);
 
+const char* ProtoEnumToString(
+    sync_pb::WorkspaceDeskSpecifics::TabGroupColor color);
+
 // Vivaldi specific
 const char* ProtoEnumToString(
     sync_pb::NotesSpecifics::VivaldiSpecialNotesType special_type);
@@ -171,6 +174,7 @@ const char* ProtoEnumToString(
 const char* ProtoEnumToString(
   sync_pb::BookmarkSpecifics::VivaldiSpecialBookmarkType special_type);
 // End Vivaldi specific
+
 }  // namespace syncer
 
 #endif  // COMPONENTS_SYNC_PROTOCOL_PROTO_ENUM_CONVERSIONS_H_

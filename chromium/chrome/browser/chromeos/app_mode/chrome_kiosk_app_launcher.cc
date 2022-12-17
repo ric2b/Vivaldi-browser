@@ -6,10 +6,13 @@
 
 #include "base/metrics/histogram_functions.h"
 #include "base/syslog_logging.h"
+#include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/extensions/extension_service.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/ui/extensions/application_launch.h"
+#include "extensions/browser/app_window/app_window.h"
+#include "extensions/browser/app_window/app_window_registry.h"
 #include "extensions/browser/disable_reason.h"
 #include "extensions/browser/extension_system.h"
 #include "extensions/common/extension_id.h"
@@ -19,6 +22,10 @@
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ash/app_mode/kiosk_app_manager.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 namespace {
 
@@ -91,7 +98,25 @@ void ChromeKioskAppLauncher::LaunchApp(LaunchCallback callback) {
           WindowOpenDisposition::NEW_WINDOW,
           apps::mojom::LaunchSource::kFromKiosk));
 
-  ReportLaunchSuccess();
+  WaitForAppWindow();
+}
+
+void ChromeKioskAppLauncher::WaitForAppWindow() {
+  auto* window_registry_ = extensions::AppWindowRegistry::Get(profile_);
+  if (!window_registry_->GetAppWindowsForApp(app_id_).empty()) {
+    ReportLaunchSuccess();
+  } else {
+    // Start waiting for app window.
+    app_window_observation_.Observe(window_registry_);
+  }
+}
+
+void ChromeKioskAppLauncher::OnAppWindowAdded(
+    extensions::AppWindow* app_window) {
+  if (app_window->extension_id() == app_id_) {
+    app_window_observation_.Reset();
+    ReportLaunchSuccess();
+  }
 }
 
 void ChromeKioskAppLauncher::MaybeUpdateAppData() {
@@ -107,6 +132,12 @@ void ChromeKioskAppLauncher::MaybeUpdateAppData() {
 }
 
 void ChromeKioskAppLauncher::ReportLaunchSuccess() {
+  SYSLOG(INFO) << "App launch completed";
+
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+  KioskSessionServiceLacros::Get()->InitChromeKioskSession(profile_, app_id_);
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
   std::move(on_ready_callback_)
       .Run(ChromeKioskAppLauncher::LaunchResult::kSuccess);
 }

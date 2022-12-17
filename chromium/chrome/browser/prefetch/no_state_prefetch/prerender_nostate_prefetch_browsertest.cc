@@ -12,6 +12,7 @@
 #include "base/memory/ref_counted.h"
 #include "base/metrics/statistics_recorder.h"
 #include "base/run_loop.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_split.h"
 #include "base/strings/stringprintf.h"
@@ -67,7 +68,6 @@
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/url_loader_interceptor.h"
 #include "content/public/test/url_loader_monitor.h"
-#include "net/base/escape.h"
 #include "net/base/features.h"
 #include "net/base/load_flags.h"
 #include "net/base/request_priority.h"
@@ -90,7 +90,7 @@ const char kExpectedPurposeHeaderOnPrefetch[] = "Purpose";
 
 std::string CreateServerRedirect(const std::string& dest_url) {
   const char* const kServerRedirectBase = "/server-redirect?";
-  return kServerRedirectBase + net::EscapeQueryParamValue(dest_url, false);
+  return kServerRedirectBase + base::EscapeQueryParamValue(dest_url, false);
 }
 
 // This is the public key of tools/origin_trials/eftest.key, used to validate
@@ -282,7 +282,7 @@ class NoStatePrefetchBrowserTest
     command_line->AppendSwitchASCII(embedder_support::kOriginTrialPublicKey,
                                     kOriginTrialPublicKeyForTesting);
     command_line->AppendSwitchASCII(switches::kEnableBlinkFeatures,
-                                    "SpeculationRulesPrefetchProxy");
+                                    "SpeculationRulesPrefetchWithSubresources");
   }
 
   void SetUpOnMainThread() override {
@@ -393,7 +393,8 @@ class NoStatePrefetchBrowserTest
                          const GURL& ping_url,
                          bool new_web_contents) const {
     content::WebContents* web_contents = GetActiveWebContents();
-    content::RenderFrameHost* render_frame_host = web_contents->GetMainFrame();
+    content::RenderFrameHost* render_frame_host =
+        web_contents->GetPrimaryMainFrame();
     // Extra arguments in JS are ignored.
     std::string javascript =
         base::StringPrintf("%s('%s', '%s')", javascript_function_name.c_str(),
@@ -438,8 +439,9 @@ class NoStatePrefetchBrowserTestHttpCache
   void SetUp() override {
     bool split_cache_by_network_isolation_key = GetParam();
     if (split_cache_by_network_isolation_key) {
-      feature_list_.InitAndEnableFeature(
-          net::features::kSplitCacheByNetworkIsolationKey);
+      feature_list_.InitWithFeatures(
+          {net::features::kSplitCacheByNetworkIsolationKey},
+          {net::features::kForceIsolationInfoFrameOriginToTopLevelFrame});
     } else {
       feature_list_.InitAndDisableFeature(
           net::features::kSplitCacheByNetworkIsolationKey);
@@ -1142,7 +1144,7 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, Prefetch301Subresource) {
 // Checks a client redirect is not followed.
 IN_PROC_BROWSER_TEST_F(NoStatePrefetchBrowserTest, PrefetchClientRedirect) {
   PrefetchFromFile(
-      "/client-redirect/?" + net::EscapeQueryParamValue(kPrefetchPage, false),
+      "/client-redirect/?" + base::EscapeQueryParamValue(kPrefetchPage, false),
       FINAL_STATUS_NOSTATE_PREFETCH_FINISHED);
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       current_browser(), src_server()->GetURL(kPrefetchPage2)));
@@ -1850,9 +1852,11 @@ IN_PROC_BROWSER_TEST_F(NoStatePrefetchFencedFrameBrowserTest,
   const GURL fenced_frame_url =
       embedded_test_server()->GetURL("/fenced_frames/title1.html");
   content::RenderFrameHost* fenced_frame_host =
-      fenced_frame_test_helper().CreateFencedFrame(
-          browser()->tab_strip_model()->GetActiveWebContents()->GetMainFrame(),
-          fenced_frame_url);
+      fenced_frame_test_helper().CreateFencedFrame(browser()
+                                                       ->tab_strip_model()
+                                                       ->GetActiveWebContents()
+                                                       ->GetPrimaryMainFrame(),
+                                                   fenced_frame_url);
   ASSERT_TRUE(fenced_frame_host);
   // NoStatePrefetchManager should not record the navigation on fenced frame
   // navigation.

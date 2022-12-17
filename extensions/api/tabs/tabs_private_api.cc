@@ -14,7 +14,6 @@
 #include "base/numerics/clamped_math.h"
 #include "base/scoped_observation.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "browser/translate/vivaldi_translate_client.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
@@ -31,7 +30,6 @@
 #include "chrome/browser/ui/tabs/tab_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/extensions/api/tabs.h"
-#include "chrome/common/extensions/command.h"
 #include "components/content_settings/core/browser/content_settings_observer.h"
 #include "components/content_settings/core/browser/host_content_settings_map.h"
 #include "components/javascript_dialogs/app_modal_dialog_controller.h"
@@ -56,6 +54,7 @@
 #include "content/public/browser/web_contents.h"
 #include "content/public/browser/web_contents_observer.h"
 #include "content/public/browser/web_contents_user_data.h"
+#include "content/public/common/url_constants.h"
 #include "extensions/api/extension_action_utils/extension_action_utils_api.h"
 #include "extensions/browser/app_window/native_app_window.h"
 #include "extensions/browser/event_router.h"
@@ -716,23 +715,10 @@ void VivaldiPrivateTabObserver::AccessKeysReceived(
   std::move(callback).Run(std::move(access_keys));
 }
 
-void VivaldiPrivateTabObserver::GetScrollPosition(
-    JSScrollPositionCallback callback) {
-  DCHECK(callback);
+void VivaldiPrivateTabObserver::UpdateSpatnavRects() {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
       web_contents()->GetMainFrame());
-  rfhi->GetVivaldiFrameService()->GetScrollPosition(
-      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(&VivaldiPrivateTabObserver::ScrollPositionReceived,
-                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-          0, 0));
-}
-
-void VivaldiPrivateTabObserver::ScrollPositionReceived(
-    JSScrollPositionCallback callback,
-    int64_t x,
-    int64_t y) {
-  std::move(callback).Run(x, y);
+  rfhi->GetVivaldiFrameService()->UpdateSpatnavRects();
 }
 
 void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
@@ -741,23 +727,34 @@ void VivaldiPrivateTabObserver::AccessKeyAction(std::string access_key) {
   rfh->GetVivaldiFrameService()->AccessKeyAction(access_key);
 }
 
-void VivaldiPrivateTabObserver::GetSpatialNavigationRects(
-    JSSpatialNavigationRectsCallback callback) {
-  DCHECK(callback);
+void VivaldiPrivateTabObserver::GetCurrentSpatnavRect(
+    JSSpatnavRectCallback callback) {
   auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
-      web_contents()->GetMainFrame());
-  rfhi->GetVivaldiFrameService()->GetSpatialNavigationRects(
+     web_contents()->GetMainFrame());
+
+  rfhi->GetVivaldiFrameService()->GetCurrentSpatnavRect(
       mojo::WrapCallbackWithDefaultInvokeIfNotRun(
-          base::BindOnce(
-              &VivaldiPrivateTabObserver::SpatialNavigationRectsReceived,
-              weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
-          std::vector<::vivaldi::mojom::SpatnavRectPtr>()));
+          base::BindOnce(&VivaldiPrivateTabObserver::SpatnavRectReceived,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          ::vivaldi::mojom::SpatnavRect::New()));
 }
 
-void VivaldiPrivateTabObserver::SpatialNavigationRectsReceived(
-    JSSpatialNavigationRectsCallback callback,
-    std::vector<::vivaldi::mojom::SpatnavRectPtr> rects) {
-  std::move(callback).Run(std::move(rects));
+void VivaldiPrivateTabObserver::MoveSpatnavRect(
+    ::vivaldi::mojom::SpatnavDirection direction,
+    JSSpatnavRectCallback callback) {
+  auto* rfhi = static_cast<content::RenderFrameHostImpl*>(
+     web_contents()->GetMainFrame());
+  rfhi->GetVivaldiFrameService()->MoveSpatnavRect(direction,
+      mojo::WrapCallbackWithDefaultInvokeIfNotRun(
+          base::BindOnce(&VivaldiPrivateTabObserver::SpatnavRectReceived,
+                         weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+          ::vivaldi::mojom::SpatnavRect::New()));
+}
+
+void VivaldiPrivateTabObserver::SpatnavRectReceived(
+    JSSpatnavRectCallback callback,
+    ::vivaldi::mojom::SpatnavRectPtr rect) {
+  std::move(callback).Run(std::move(rect));
 }
 
 void VivaldiPrivateTabObserver::DetermineTextLanguage(
@@ -1231,30 +1228,25 @@ ExtensionFunction::ResponseAction TabsPrivateScrollPageFunction::Run() {
   return RespondNow(ArgumentList(Results::Create()));
 }
 
-void TabsPrivateGetSpatialNavigationRectsFunction::
-    SpatialNavigationRectsReceived(
-        std::vector<::vivaldi::mojom::SpatnavRectPtr> spatnav_rects) {
-  namespace Results = tabs_private::GetSpatialNavigationRects::Results;
-  std::vector<tabs_private::NavigationRect> results;
+void TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived(
+    ::vivaldi::mojom::SpatnavRectPtr rect) {
+  namespace Results = tabs_private::GetCurrentSpatnavRect::Results;
+  tabs_private::NavigationRect results;
 
-  for (auto& nav_rect : spatnav_rects) {
-    tabs_private::NavigationRect rect;
-    rect.left = nav_rect->x;
-    rect.top = nav_rect->y;
-    rect.width = nav_rect->width;
-    rect.height = nav_rect->height;
-    rect.right = nav_rect->x + nav_rect->width;
-    rect.bottom = nav_rect->y + nav_rect->height;
-    rect.href = nav_rect->href;
-    rect.path = nav_rect->path;
-    results.push_back(std::move(rect));
-  }
+  results.left = rect->x;
+  results.right = rect->x + rect->width;
+  results.top = rect->y;
+  results.bottom = rect->y + rect->height;
+  results.width = rect->width;
+  results.height = rect->height;
+  results.href = rect->href;
+
   Respond(ArgumentList(Results::Create(results)));
 }
 
 ExtensionFunction::ResponseAction
-TabsPrivateGetSpatialNavigationRectsFunction::Run() {
-  using tabs_private::GetSpatialNavigationRects::Params;
+TabsPrivateGetCurrentSpatnavRectFunction::Run() {
+  using tabs_private::GetCurrentSpatnavRect::Params;
 
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
@@ -1264,48 +1256,86 @@ TabsPrivateGetSpatialNavigationRectsFunction::Run() {
       browser_context(), params->tab_id, &error);
   if (!tab_api)
     return RespondNow(Error(error));
-  tab_api->GetSpatialNavigationRects(
-      base::BindOnce(&TabsPrivateGetSpatialNavigationRectsFunction::
-                         SpatialNavigationRectsReceived,
-                     this));
-
+  tab_api->GetCurrentSpatnavRect(base::BindOnce(
+      &TabsPrivateGetCurrentSpatnavRectFunction::SpatnavRectReceived,
+      this));
   return RespondLater();
 }
 
-void TabsPrivateGetScrollPositionFunction::GetScrollPositionResponse(
-    int64_t x,
-    int64_t y) {
-  namespace Results = tabs_private::GetScrollPosition::Results;
+void TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived(
+    ::vivaldi::mojom::SpatnavRectPtr rect) {
+  namespace Results = tabs_private::MoveSpatnavRect::Results;
+  tabs_private::NavigationRect results;
 
-  Respond(ArgumentList(Results::Create(x, y)));
-}
+  results.left = rect->x;
+  results.right = rect->x + rect->width;
+  results.top = rect->y;
+  results.bottom = rect->y + rect->height;
+  results.width = rect->width;
+  results.height = rect->height;
 
-ExtensionFunction::ResponseAction TabsPrivateGetScrollPositionFunction::Run() {
-  using tabs_private::GetScrollPosition::Params;
-
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
-
-  std::string error;
-  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
-      browser_context(), params->tab_id, &error);
-  if (!tab_api)
-    return RespondNow(Error(error));
-  tab_api->GetScrollPosition(base::BindOnce(
-      &TabsPrivateGetScrollPositionFunction::GetScrollPositionResponse, this));
-
-  return RespondLater();
+  Respond(ArgumentList(Results::Create(results)));
 }
 
 ExtensionFunction::ResponseAction
-TabsPrivateActivateElementFromPointFunction::Run() {
-  using tabs_private::ActivateElementFromPoint::Params;
+TabsPrivateMoveSpatnavRectFunction::Run() {
+  using tabs_private::MoveSpatnavRect::Params;
 
   std::unique_ptr<Params> params = Params::Create(args());
   EXTENSION_FUNCTION_VALIDATE(params.get());
 
-  int x = params->x;
-  int y = params->y;
+  ::vivaldi::mojom::SpatnavDirection dir;
+  switch (params->direction) {
+    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_LEFT:
+      dir = ::vivaldi::mojom::SpatnavDirection::kLeft;
+      break;
+    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_RIGHT:
+      dir = ::vivaldi::mojom::SpatnavDirection::kRight;
+      break;
+    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_UP:
+      dir = ::vivaldi::mojom::SpatnavDirection::kUp;
+      break;
+    case vivaldi::tabs_private::NavigationDirection::NAVIGATION_DIRECTION_DOWN:
+      dir = ::vivaldi::mojom::SpatnavDirection::kDown;
+      break;
+    default:
+      dir = ::vivaldi::mojom::SpatnavDirection::kNone;
+  }
+
+  std::string error;
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
+  if (!tab_api)
+    return RespondNow(Error(error));
+  tab_api->MoveSpatnavRect(
+      dir, base::BindOnce(
+               &TabsPrivateMoveSpatnavRectFunction::SpatnavRectReceived, this));
+  return RespondLater();
+}
+
+ExtensionFunction::ResponseAction TabsPrivateUpdateSpatnavRectsFunction::Run() {
+  using tabs_private::UpdateSpatnavRects::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
+  std::string error;
+  VivaldiPrivateTabObserver* tab_api = VivaldiPrivateTabObserver::FromTabId(
+      browser_context(), params->tab_id, &error);
+  if (!tab_api)
+    return RespondNow(Error(error));
+  tab_api->UpdateSpatnavRects();
+
+  return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+TabsPrivateActivateSpatnavElementFunction::Run() {
+  using tabs_private::ActivateSpatnavElement::Params;
+
+  std::unique_ptr<Params> params = Params::Create(args());
+  EXTENSION_FUNCTION_VALIDATE(params.get());
+
   int modifiers = params->modifiers;
 
   std::string error;
@@ -1314,7 +1344,7 @@ TabsPrivateActivateElementFromPointFunction::Run() {
   if (!frame_service)
     return RespondNow(Error(error));
 
-  frame_service->ActivateElementFromPoint(x, y, modifiers);
+  frame_service->ActivateSpatnavElement(modifiers);
   return RespondNow(NoArguments());
 }
 

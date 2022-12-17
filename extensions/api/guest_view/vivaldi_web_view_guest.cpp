@@ -15,6 +15,7 @@
 #include "chrome/browser/picture_in_picture/picture_in_picture_window_manager.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/repost_form_warning_controller.h"
+#include "chrome/browser/sessions/tab_restore_service_factory.h"
 #include "chrome/browser/ssl/security_state_tab_helper.h"
 #include "chrome/browser/tab_contents/tab_util.h"
 #include "chrome/browser/task_manager/web_contents_tags.h"
@@ -37,6 +38,7 @@
 #include "components/paint_preview/buildflags/buildflags.h"
 #include "components/security_state/content/content_utils.h"
 #include "components/security_state/core/security_state.h"
+#include "components/sessions/core/tab_restore_service.h"
 #include "components/web_cache/browser/web_cache_manager.h"
 #include "content/browser/browser_plugin/browser_plugin_guest.h"  // nogncheck
 #include "content/browser/renderer_host/page_impl.h"
@@ -223,6 +225,8 @@ static std::string ContentSettingsTypeToString(
       return "ads";
     case ContentSettingsType::SOUND:
       return "sound";
+    case ContentSettingsType::AUTOPLAY:
+      return "autoplay";
     default:
       // fallthrough
       break;
@@ -483,6 +487,29 @@ void WebViewGuest::AddGuestToTabStripModel(WebViewGuest* guest,
                                            bool inherit_opener) {
   Browser* browser =
       chrome::FindBrowserWithID(SessionID::FromSerializedValue(windowId));
+
+  if (extension_host_) {
+    // This is an extension popup, split mode extensions (incognito) will have a
+    // regular profile for the webcontents. So make sure we add the tab to the
+    // correct browser.
+    content::BrowserContext* context =
+        guest->web_contents()->GetBrowserContext();
+
+    // We are done with the guest, get rid of it so the teardown will be clean.
+    guest->Destroy(false);
+
+    Profile* profile = Profile::FromBrowserContext(context);
+
+    browser = chrome::FindTabbedBrowser(profile, false);
+    if (!browser) {
+      sessions::TabRestoreService* trs =
+          TabRestoreServiceFactory::GetForProfile(profile);
+      DCHECK(trs);
+      // Restores the last closed browser-window including the tabs.
+      trs->RestoreMostRecentEntry(nullptr);
+      browser = chrome::FindTabbedBrowser(profile, false);
+    }
+  }
 
   if (!browser || !browser->window()) {
     if (windowId) {
@@ -749,6 +776,7 @@ void WebViewGuest::VivaldiCreateWebContents(
     WebContentsCreatedCallback callback) {
   RenderProcessHost* owner_render_process_host =
       owner_web_contents()->GetMainFrame()->GetProcess();
+  // browser_context_ is always owner_web_contents->GetBrowserContext().
   DCHECK_EQ(browser_context(), owner_render_process_host->GetBrowserContext());
 
   const base::Value::Dict& create_params = create_params_value.GetDict();
@@ -961,31 +989,29 @@ void WebViewGuest::VivaldiCreateWebContents(
       }
     }
 
-    if (IsVivaldiRunning()) {
-      if (auto* view_name = create_params.FindString("vivaldi_view_type")) {
-        if (*view_name == "extension_popup") {
-          // 1. Create an ExtensionFrameHelper for the viewtype.
-          // 2. take a WebContents as parameter.
-          if (auto* src_string = create_params.FindString("src")) {
-            GURL popup_url = guest_site = GURL(*src_string);
+    if (auto* view_name = create_params.FindString("vivaldi_view_type")) {
+      if (*view_name == "extension_popup") {
+        // 1. Create an ExtensionFrameHelper for the viewtype.
+        // 2. take a WebContents as parameter.
+        if (auto* src_string = create_params.FindString("src")) {
+          GURL popup_url = guest_site = GURL(*src_string);
 
-            scoped_refptr<content::SiteInstance> site_instance =
-                ProcessManager::Get(context)->GetSiteInstanceForURL(popup_url);
-            WebContents::CreateParams params(context, std::move(site_instance));
-            params.guest_delegate = this;
-            new_contents = WebContents::Create(params).release();
-            extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
-                context, popup_url, mojom::ViewType::kExtensionPopup,
-                new_contents);
-            task_manager::WebContentsTags::CreateForTabContents(new_contents);
-          }
-        } else if (*view_name == "vivaldi_embedded_view") {
-          // Create WebContents where we can open
-          // chrome-extension://mpognobbkildjkofajifpdfhcoklimli resources.
-          WebContents::CreateParams params(context);
+          scoped_refptr<content::SiteInstance> site_instance =
+              ProcessManager::Get(context)->GetSiteInstanceForURL(popup_url);
+          WebContents::CreateParams params(context, std::move(site_instance));
           params.guest_delegate = this;
           new_contents = WebContents::Create(params).release();
+          extension_host_ = std::make_unique<::vivaldi::VivaldiExtensionHost>(
+              context, popup_url, mojom::ViewType::kExtensionPopup,
+              new_contents);
+          task_manager::WebContentsTags::CreateForTabContents(new_contents);
         }
+      } else if (*view_name == "vivaldi_embedded_view") {
+        // Create WebContents where we can open
+        // chrome-extension://mpognobbkildjkofajifpdfhcoklimli resources.
+        WebContents::CreateParams params(context);
+        params.guest_delegate = this;
+        new_contents = WebContents::Create(params).release();
       }
     }
 

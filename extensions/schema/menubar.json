@@ -20,6 +20,12 @@
         "enum": [ "above", "below", "off" ]
       },
       {
+        "id": "ItemType",
+        "type": "string",
+        "description": "What kind of item.",
+        "enum": [ "command", "checkbox", "radio", "folder", "container", "separator"]
+      },
+      {
         "id": "MenuItem",
         "type": "object",
         "description": "One menu item.",
@@ -48,7 +54,7 @@
             "description": "Whether this menu item is visible or not. Defaults to true."
           },
           "type": {
-            "type": "string",
+            "$ref": "ItemType",
             "optional": true,
             "description": "'normal' or 'checkbox'. Defaults to 'normal'."
           },
@@ -57,10 +63,10 @@
             "optional": true,
             "description": "true if the checkbox is checked, otherwise false. Only applies for type='checkbox'."
           },
-          "disabled": {
+          "enabled": {
             "type": "boolean",
             "optional": true,
-            "description": "true if the item should appear as grayed out."
+            "description": "false if the item should appear as grayed out. Assumed true if not set."
           },
           "withNoWindow": {
             "type": "boolean",

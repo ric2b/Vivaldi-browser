@@ -210,7 +210,7 @@ void ExtensionWebContentsObserver::ReadyToCommitNavigation(
       ExtensionRegistry::Get(browser_context_);
 
   const Extension* const extension =
-      GetExtensionFromFrame(web_contents()->GetMainFrame(), false);
+      GetExtensionFromFrame(web_contents()->GetPrimaryMainFrame(), false);
   KioskDelegate* const kiosk_delegate =
       ExtensionsBrowserClient::Get()->GetKioskDelegate();
   DCHECK(kiosk_delegate);
@@ -254,6 +254,8 @@ void ExtensionWebContentsObserver::DidFinishNavigation(
     pm->RegisterRenderFrameHost(web_contents(), render_frame_host,
                                 frame_extension);
   }
+
+  ContentScriptTracker::DidFinishNavigation(PassKey(), navigation_handle);
 }
 
 void ExtensionWebContentsObserver::MediaPictureInPictureChanged(

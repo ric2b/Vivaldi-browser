@@ -193,6 +193,17 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
       const base::Token& crop_id,
       uint32_t crop_version,
       base::OnceCallback<void(media::mojom::CropRequestResult)> callback);
+
+  // If a new |crop_version| can be assigned, returns it.
+  // Otherwise, returns nullopt. (Can happen if the source does not support
+  // cropping, or if a change of crop-target is not possible at this time,
+  // due to technical limitations, e.g. if clones exist.)
+  //
+  // For an explanation of what a |crop_version| is, see Crop().
+  //
+  // TODO(crbug.com/1332628): Make the crop-version an implementation detail
+  // that is not exposed to the entity calling Crop().
+  virtual absl::optional<uint32_t> GetNextCropVersion();
 #endif
 
   // Notifies the source about that the number of encoded sinks have been
@@ -279,6 +290,12 @@ class BLINK_MODULES_EXPORT MediaStreamVideoSource
   // the source completes. |did_restart| must be true if the source is running
   // and false if the source is stopped.
   void OnRestartDone(bool did_restart);
+
+  // This method should be called by implementations after an attempt to switch
+  // the device of this source (e.g., via ChangeSource()) if the source
+  // is in state STOPPED_FOR_RESTART. |did_restart| must be true if the
+  // source is running and false if the source is stopped.
+  void OnRestartBySourceSwitchDone(bool did_restart);
 
   // An implementation must immediately stop producing video frames after this
   // method has been called. After this method has been called,

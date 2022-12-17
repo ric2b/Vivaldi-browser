@@ -21,6 +21,7 @@
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/test/test_url_loader_factory.h"
 #include "testing/gtest/include/gtest/gtest.h"
+#include "ui/base/layout.h"
 #include "ui/gfx/geometry/size.h"
 #include "url/gurl.h"
 
@@ -63,16 +64,16 @@ class IdpNetworkRequestManagerTest : public ::testing::Test {
 
   void TearDown() override { manager_.reset(); }
 
-  std::tuple<FetchStatus, std::set<std::string>>
+  std::tuple<FetchStatus, std::set<GURL>>
   SendManifestListRequestAndWaitForResponse(const char* test_data) {
     GURL manifest_list_url(kTestManifestListUrl);
     test_url_loader_factory().AddResponse(manifest_list_url.spec(), test_data);
 
     base::RunLoop run_loop;
     FetchStatus parsed_fetch_status;
-    std::set<std::string> parsed_urls;
+    std::set<GURL> parsed_urls;
     auto callback = base::BindLambdaForTesting(
-        [&](FetchStatus fetch_status, const std::set<std::string>& urls) {
+        [&](FetchStatus fetch_status, const std::set<GURL>& urls) {
           parsed_fetch_status = fetch_status;
           parsed_urls = urls;
           run_loop.Quit();
@@ -420,31 +421,80 @@ TEST_F(IdpNetworkRequestManagerTest, ParseAccountMalformed) {
   EXPECT_TRUE(accounts.empty());
 }
 
+TEST_F(IdpNetworkRequestManagerTest, ComputeManifestListUrl) {
+  EXPECT_EQ("https://localhost:8000/.well-known/fedcm.json",
+            IdpNetworkRequestManager::ComputeManifestListUrl(
+                GURL("https://localhost:8000/test/"))
+                ->spec());
+
+  EXPECT_EQ("https://google.com/.well-known/fedcm.json",
+            IdpNetworkRequestManager::ComputeManifestListUrl(
+                GURL("https://www.google.com:8000/test/"))
+                ->spec());
+
+  EXPECT_EQ(absl::nullopt, IdpNetworkRequestManager::ComputeManifestListUrl(
+                               GURL("https://192.101.0.1/test/")));
+}
+
+// Test that IdpNetworkRequestManager::FetchManifestList() fails when the
+// identity provider domain is empty.
+TEST_F(IdpNetworkRequestManagerTest, FetchManifestListIllegalDomainFails) {
+  GURL illegal_idp_url("https://192.101.0.1/test/");
+
+  network::TestURLLoaderFactory test_url_loader_factory;
+  auto network_manager = std::make_unique<IdpNetworkRequestManager>(
+      illegal_idp_url, url::Origin::Create(GURL(kTestRpUrl)),
+      base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
+          &test_url_loader_factory),
+      network::mojom::ClientSecurityState::New());
+
+  std::string manifest_list_contents =
+      "({\"provider_urls\": [\"" + illegal_idp_url.spec() + "\"]})";
+
+  base::RunLoop run_loop;
+  auto callback = base::BindLambdaForTesting(
+      [&](FetchStatus fetch_status, const std::set<GURL>& urls) {
+        EXPECT_EQ(FetchStatus::kHttpNotFoundError, fetch_status);
+        run_loop.Quit();
+      });
+  network_manager->FetchManifestList(std::move(callback));
+  run_loop.Run();
+
+  // Manifest list download should not have been attempted.
+  EXPECT_EQ(0, test_url_loader_factory.NumPending());
+}
+
 TEST_F(IdpNetworkRequestManagerTest, ParseManifestList) {
   FetchStatus fetch_status;
-  std::set<std::string> urls;
+  std::set<GURL> urls;
 
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "provider_urls": ["https://idp.test/fedcm.json"]
+  "provider_urls": ["https://idp.test/"]
   })");
   EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
-  EXPECT_EQ(std::set<std::string>{kTestManifestUrl}, urls);
+  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/")}, urls);
+
+  std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
+  "provider_urls": ["https://idp.test/path"]
+  })");
+  EXPECT_EQ(FetchStatus::kSuccess, fetch_status);
+  EXPECT_EQ(std::set<GURL>{GURL("https://idp.test/path/")}, urls);
 
   // Value not a list
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "provider_urls": "https://idp.test/fedcm.json"
+  "provider_urls": "https://idp.test/"
   })");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
   // Toplevel not a dictionary
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"(
-  ["https://idp.test/fedcm.json"]
+  ["https://idp.test/"]
   )");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
   // Incorrect key
   std::tie(fetch_status, urls) = SendManifestListRequestAndWaitForResponse(R"({
-  "providers": ["https://idp.test/fedcm.json"]
+  "providers": ["https://idp.test/"]
   })");
   EXPECT_EQ(FetchStatus::kInvalidResponseError, fetch_status);
 
@@ -527,6 +577,10 @@ TEST_F(IdpNetworkRequestManagerTest,
 }
 
 TEST_F(IdpNetworkRequestManagerTest, ParseManifestBrandingSelectBestSize) {
+  // Selected icon depends on OS supported scale factors.
+  ui::test::ScopedSetSupportedResourceScaleFactors
+      scoped_supported_scale_factors({ui::k100Percent});
+
   const char test_json[] = R"({
   "branding" : {
     "icons": [

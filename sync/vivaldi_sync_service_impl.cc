@@ -5,7 +5,6 @@
 #include <utility>
 
 #include "app/vivaldi_apptools.h"
-#include "base/task/post_task.h"
 #include "base/version.h"
 #include "components/prefs/pref_service.h"
 #include "components/sync/base/sync_util.h"
@@ -136,12 +135,9 @@ void VivaldiSyncServiceImpl::ClearSyncData() {
 }
 
 void VivaldiSyncServiceImpl::OnEngineInitialized(
-    const syncer::WeakHandle<syncer::DataTypeDebugInfoListener>&
-        debug_info_listener,
     bool success,
     bool is_first_time_sync_configure) {
-  SyncServiceImpl::OnEngineInitialized(debug_info_listener, success,
-                                       is_first_time_sync_configure);
+  SyncServiceImpl::OnEngineInitialized(success, is_first_time_sync_configure);
 
   if (!force_local_data_reset_)
     return;
@@ -150,8 +146,8 @@ void VivaldiSyncServiceImpl::OnEngineInitialized(
   error.error_type = syncer::CLIENT_DATA_OBSOLETE;
   error.action = syncer::RESET_LOCAL_SYNC_DATA;
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                 base::BindOnce(&SyncServiceImpl::OnActionableError,
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE, base::BindOnce(&SyncServiceImpl::OnActionableError,
                                 base::Unretained(this), error));
 }
 

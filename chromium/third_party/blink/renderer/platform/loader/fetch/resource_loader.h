@@ -149,7 +149,9 @@ class PLATFORM_EXPORT ResourceLoader final
                         int64_t encoded_data_length,
                         int64_t encoded_body_length,
                         int64_t decoded_body_length,
-                        bool should_report_corb_blocking) override;
+                        bool should_report_corb_blocking,
+                        absl::optional<bool> pervasive_payload_requested =
+                            absl::nullopt) override;
   void DidFail(const WebURLError&,
                base::TimeTicks response_end_time,
                int64_t encoded_data_length,
@@ -177,6 +179,9 @@ class PLATFORM_EXPORT ResourceLoader final
 
   // ResponseBodyLoaderClient implementation.
   void DidReceiveData(base::span<const char> data) override;
+  void DidReceiveDecodedData(
+      const String& data,
+      std::unique_ptr<ParkableStringImpl::SecureDigest> digest) override;
   void DidFinishLoadingBody() override;
   void DidFailLoadingBody() override;
   void DidCancelLoadingBody() override;
@@ -279,6 +284,9 @@ class PLATFORM_EXPORT ResourceLoader final
       feature_handle_for_scheduler_;
 
   base::TimeTicks response_end_time_for_error_cases_;
+
+  base::TimeTicks request_start_time_;
+  base::TimeTicks code_cache_arrival_time_;
 };
 
 }  // namespace blink

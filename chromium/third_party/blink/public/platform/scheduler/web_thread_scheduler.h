@@ -65,19 +65,11 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   static std::unique_ptr<WebThreadScheduler> CreateMainThreadScheduler(
       std::unique_ptr<base::MessagePump> message_pump = nullptr);
 
-  // Returns compositor thread scheduler for the compositor thread
-  // of the current process.
-  static WebThreadScheduler* CompositorThreadScheduler();
-
   // Returns main thread scheduler for the main thread of the current process.
   static WebThreadScheduler* MainThreadScheduler();
 
   // Returns the default task runner.
   virtual scoped_refptr<base::SingleThreadTaskRunner> DefaultTaskRunner();
-
-  // Returns a task runner for input-blocking tasks on the compositor thread.
-  // (For input tasks on the main thread, use WebWidgetScheduler instead.)
-  virtual scoped_refptr<base::SingleThreadTaskRunner> InputTaskRunner();
 
   // Returns the compositor task runner.
   virtual scoped_refptr<base::SingleThreadTaskRunner> CompositorTaskRunner();
@@ -172,10 +164,6 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   // a fling). Called by the compositor (impl) thread.
   virtual void DidAnimateForInputOnCompositorThread();
 
-  // Tells the scheduler that the compositor thread queued up a BeginMainFrame
-  // task to run on the main thread.
-  virtual void DidScheduleBeginMainFrame();
-
   // Tells the scheduler that the main thread processed a BeginMainFrame task
   // from its queue. Note that DidRunBeginMainFrame will be called
   // unconditionally, even if BeginMainFrame early-returns without committing
@@ -193,10 +181,6 @@ class BLINK_PLATFORM_EXPORT WebThreadScheduler {
   // the process is assumed to be foregrounded when the scheduler is
   // constructed. Must be called on the main thread.
   virtual void SetRendererBackgrounded(bool backgrounded);
-
-  // Tells the scheduler when a begin main frame is requested due to input
-  // handling.
-  virtual void OnMainFrameRequestedForInput();
 
 #if BUILDFLAG(IS_ANDROID)
   // Android WebView has very strange WebView.pauseTimers/resumeTimers API.

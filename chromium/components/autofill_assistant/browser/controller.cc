@@ -8,6 +8,7 @@
 
 #include "base/bind.h"
 #include "base/callback_helpers.h"
+#include "base/command_line.h"
 #include "base/feature_list.h"
 #include "base/no_destructor.h"
 #include "base/ranges/algorithm.h"
@@ -21,6 +22,7 @@
 #include "components/autofill_assistant/browser/metrics.h"
 #include "components/autofill_assistant/browser/protocol_utils.h"
 #include "components/autofill_assistant/browser/service/service_impl.h"
+#include "components/autofill_assistant/browser/switches.h"
 #include "components/autofill_assistant/browser/trigger_context.h"
 #include "components/autofill_assistant/browser/url_utils.h"
 #include "components/autofill_assistant/browser/user_data.h"
@@ -29,7 +31,6 @@
 #include "components/google/core/common/google_util.h"
 #include "components/password_manager/core/browser/password_change_success_tracker_impl.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -57,6 +58,14 @@ bool ShouldSuppressKeyboardForState(AutofillAssistantState state) {
     case AutofillAssistantState::INACTIVE:
       return false;
   }
+}
+
+bool ShouldSendModelVersionInContext(const TriggerContext& trigger_context) {
+  return trigger_context.GetScriptParameters()
+             .GetSendAnnotateDomModelVersion()
+             .value_or(false) ||
+         base::CommandLine::ForCurrentProcess()->HasSwitch(
+             switches::kAutofillAssistantAnnotateDom);
 }
 
 }  // namespace
@@ -139,6 +148,24 @@ content::WebContents* Controller::GetWebContents() {
   return web_contents();
 }
 
+void Controller::SetJsFlowLibrary(const std::string& js_flow_library) {
+  if (js_flow_library.empty()) {
+    return;
+  }
+
+  GetJsFlowDevtoolsWrapper()->SetJsFlowLibrary(js_flow_library);
+  GetService()->UpdateJsFlowLibraryLoaded(!js_flow_library.empty());
+}
+
+JsFlowDevtoolsWrapper* Controller::GetJsFlowDevtoolsWrapper() {
+  if (!js_flow_devtools_wrapper_) {
+    js_flow_devtools_wrapper_ = std::make_unique<JsFlowDevtoolsWrapper>(
+        GetWebContents()->GetBrowserContext());
+  }
+
+  return js_flow_devtools_wrapper_.get();
+}
+
 std::string Controller::GetEmailAddressForAccessTokenAccount() {
   return client_->GetEmailAddressForAccessTokenAccount();
 }
@@ -193,6 +220,10 @@ bool Controller::ShouldShowWarning() {
 
 ProcessedActionStatusDetailsProto& Controller::GetLogInfo() {
   return log_info_;
+}
+
+bool Controller::MustUseBackendData() const {
+  return client_->MustUseBackendData();
 }
 
 void Controller::AddNavigationListener(
@@ -409,14 +440,40 @@ void Controller::GetOrCheckScripts() {
 #else
     VLOG(2) << "GetScripts for " << script_url_.host();
 #endif
-
-    GetService()->GetScriptsForUrl(
-        url, *trigger_context_,
-        base::BindOnce(&Controller::OnGetScripts, base::Unretained(this), url));
+    MaybeUpdateClientContextAndGetScriptsForUrl(url);
   } else {
     script_tracker()->CheckScripts();
     StartPeriodicScriptChecks();
   }
+}
+
+void Controller::MaybeUpdateClientContextAndGetScriptsForUrl(const GURL& url) {
+  DCHECK(trigger_context_);
+  if (!ShouldSendModelVersionInContext(*trigger_context_)) {
+    GetScriptsForUrl(url);
+    return;
+  }
+
+  DCHECK(client_);
+  client_->GetAnnotateDomModelVersion(
+      base::BindOnce(&Controller::OnGetAnnotateDomModelVersionForGetScripts,
+                     weak_ptr_factory_.GetWeakPtr(), url));
+}
+
+void Controller::OnGetAnnotateDomModelVersionForGetScripts(
+    const GURL& url,
+    absl::optional<int64_t> model_version) {
+  if (model_version) {
+    GetService()->UpdateAnnotateDomModelContext(*model_version);
+  }
+  GetScriptsForUrl(url);
+}
+
+void Controller::GetScriptsForUrl(const GURL& url) {
+  GetService()->GetScriptsForUrl(
+      url, *trigger_context_,
+      base::BindOnce(&Controller::OnGetScripts, weak_ptr_factory_.GetWeakPtr(),
+                     url));
 }
 
 void Controller::StartPeriodicScriptChecks() {
@@ -506,6 +563,14 @@ void Controller::OnGetScripts(
         GetDisplayStringUTF8(ClientSettingsProto::DEFAULT_ERROR, GetSettings()),
         Metrics::DropOutReason::GET_SCRIPTS_UNPARSABLE);
     return;
+  }
+
+  if (response_proto.has_semantic_selector_policy()) {
+    // TODO(b/228987849): A semantic policy is set unconditionally. It may be
+    // more appropriate to only set one if there are actual eligible scripts for
+    // the given domain.
+    SetSemanticSelectorPolicy(
+        std::move(response_proto.semantic_selector_policy()));
   }
   if (response_proto.has_client_settings()) {
     SetClientSettings(response_proto.client_settings());
@@ -737,14 +802,28 @@ void Controller::InitFromParameters() {
     DCHECK(GetDeeplinkURL().is_valid());  // |deeplink_url_| must be set.
     user_data_.selected_login_.emplace(
         GetDeeplinkURL().DeprecatedGetOriginAsURL(), *password_change_username);
-    GetPasswordChangeSuccessTracker()->OnChangePasswordFlowStarted(
-        user_data_.selected_login_->origin,
-        user_data_.selected_login_->username,
-        password_manager::PasswordChangeSuccessTracker::StartEvent::
-            kAutomatedFlow);
+
+    // We only start password change success tracking here if the run was
+    // started from the Google Password Manager. The other cases are
+    // handled directly in the UI.
+    if (trigger_context_->GetScriptParameters().GetCaller().value_or(0) ==
+        static_cast<int>(
+            Metrics::AutofillAssistantCaller::GOOGLE_PASSWORD_MANAGER)) {
+      GetPasswordChangeSuccessTracker()->OnChangePasswordFlowStarted(
+          user_data_.selected_login_->origin,
+          user_data_.selected_login_->username,
+          password_manager::PasswordChangeSuccessTracker::StartEvent::
+              kAutomatedFlow,
+          password_manager::PasswordChangeSuccessTracker::EntryPoint::
+              kLeakCheckInSettings);
+    }
   }
 
   user_model_.SetCurrentURL(GetCurrentURL());
+
+  GetService()->SetDisableRpcSigning(
+      trigger_context_->GetScriptParameters().GetDisableRpcSigning().value_or(
+          false));
 }
 
 void Controller::Track(std::unique_ptr<TriggerContext> trigger_context,
@@ -809,9 +888,6 @@ void Controller::ShowFirstMessageAndStart() {
 }
 
 void Controller::Shutdown(Metrics::DropOutReason reason) {
-  for (ControllerObserver& observer : observers_) {
-    observer.OnShutdown(reason);
-  }
   client_->Shutdown(reason);
 }
 
@@ -984,6 +1060,13 @@ void Controller::SetDirectActionScripts(
       continue;
 
     direct_action_scripts_.push_back(script);
+  }
+}
+
+void Controller::SetSemanticSelectorPolicy(SemanticSelectorPolicy policy) {
+  DCHECK(annotate_dom_model_service_);
+  if (!annotate_dom_model_service_->SetOverridesPolicy(std::move(policy))) {
+    NOTREACHED() << "Setting overrides policy failed!";
   }
 }
 

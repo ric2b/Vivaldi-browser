@@ -7,6 +7,7 @@
 
 #include <vector>
 
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/ui/tabs/saved_tab_groups/saved_tab_group.h"
 
 #include "base/observer_list.h"
@@ -50,6 +51,14 @@ class SavedTabGroupModel {
   void Remove(const tab_groups::TabGroupId tab_group_id);
   void Add(const SavedTabGroup& saved_group);
 
+  // Notify Observers that a saved tab group was removed from the tabstrip.
+  void GroupClosed(tab_groups::TabGroupId tab_group_id);
+
+  // Changes the index of a given tab group by id. The new index provided is the
+  // expected index after the group is removed.
+  void Move(tab_groups::TabGroupId tab_group_id, int new_index);
+
+  // Add/Remove observers for this model.
   void AddObserver(SavedTabGroupModelObserver* observer);
   void RemoveObserver(SavedTabGroupModelObserver* observer);
 
@@ -57,7 +66,7 @@ class SavedTabGroupModel {
   // The observers.
   base::ObserverList<SavedTabGroupModelObserver>::Unchecked observers_;
   std::vector<SavedTabGroup> saved_tab_groups_;
-  Profile* profile_ = nullptr;
+  raw_ptr<Profile> profile_ = nullptr;
 };
 
 #endif  // CHROME_BROWSER_UI_TABS_SAVED_TAB_GROUPS_SAVED_TAB_GROUP_MODEL_H_

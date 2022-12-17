@@ -113,9 +113,6 @@ class PropertyTreeManager {
 
   int EnsureCompositorPageScaleTransformNode(const TransformPaintPropertyNode&);
 
-  // Used to offset the scroll translation during overscroll.
-  void SetOverscrollTransformNodeId(const int id);
-  void SetOverscrollClipNodeId(const int id);
   void SetFixedElementsDontOverscroll(const bool value);
 
   // This function is expected to be invoked right before emitting each layer.
@@ -299,7 +296,6 @@ class PropertyTreeManager {
                              const EffectPaintPropertyNode&,
                              const ClipPaintPropertyNode&,
                              const TransformPaintPropertyNode&);
-  void SetCurrentEffectRenderSurfaceReason(cc::RenderSurfaceReason);
 
   // Should only be called from EnsureCompositorTransformNode as part of
   // creating the associated scroll offset transform node.

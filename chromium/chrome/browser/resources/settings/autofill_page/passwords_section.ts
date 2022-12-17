@@ -27,7 +27,7 @@ import '../site_favicon.js';
 import './password_list_item.js';
 import './passwords_list_handler.js';
 import './passwords_export_dialog.js';
-import './passwords_shared_css.js';
+import './passwords_shared.css.js';
 import './avatar_icon.js';
 
 import {getInstance as getAnnouncerInstance} from 'chrome://resources/cr_elements/cr_a11y_announcer/cr_a11y_announcer.js';
@@ -244,6 +244,14 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
             'eligibleForAccountStorage_)',
       },
 
+      isPasswordViewPageEnabled_: {
+        type: Boolean,
+        value() {
+          return loadTimeData.getBoolean('enablePasswordViewPage');
+        },
+        reflectToAttribute: true,
+      },
+
       isUnifiedPasswordManagerEnabled_: {
         type: Boolean,
         value() {
@@ -307,6 +315,7 @@ export class PasswordsSectionElement extends PasswordsSectionElementBase {
   private hasPasswordExceptions_: boolean;
   private shouldShowBanner_: boolean;
   private isAccountStoreUser_: boolean;
+  private isPasswordViewPageEnabled_: boolean;
   private isUnifiedPasswordManagerEnabled_: boolean;
   private shouldShowDevicePasswordsLink_: boolean;
   private trustedVaultBannerState_: TrustedVaultBannerState;

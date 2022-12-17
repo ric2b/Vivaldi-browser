@@ -37,8 +37,8 @@ void ExtensionsToolbarControls::UpdateSiteAccessButtonVisibility(
 }
 
 void ExtensionsToolbarControls::UpdateRequestAccessButton(
-    int count_requesting_extensions) {
-  if (count_requesting_extensions == 0) {
+    std::vector<ToolbarActionViewController*> extensions_requesting_access) {
+  if (extensions_requesting_access.empty()) {
     request_access_button_->SetVisible(false);
   } else {
     // TODO(crbug.com/1239772): Update icons, based on the number of extensions
@@ -46,9 +46,9 @@ void ExtensionsToolbarControls::UpdateRequestAccessButton(
     // will need to access the extension information, this method may receive
     // actions instead of actions count. For now, just show the number of
     // actions.
-    request_access_button_->UpdateLabel(count_requesting_extensions);
+    request_access_button_->UpdateExtensionsRequestingAccess(
+        extensions_requesting_access);
     request_access_button_->SetVisible(true);
-    // TODO(crbug.com/1239772): Update tooltip with the extension's names.
   }
 
   ResetLayout();

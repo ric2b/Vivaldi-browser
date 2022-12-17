@@ -19,6 +19,7 @@ extern const wchar_t kVivaldiInstallerDefaultBrowser[];
 extern const wchar_t kVivaldiInstallerRegisterBrowser[];
 extern const wchar_t kVivaldiInstallerAdvancedMode[];
 extern const wchar_t kVivaldiInstallerDisableStandaloneAutoupdate[];
+extern const wchar_t kVivaldiToastActivatorCLSID[];
 
 // Vivaldi paths and filenames
 extern const wchar_t kStandaloneMarkerFile[];
@@ -48,6 +49,7 @@ extern const wchar_t kUninstallSurveyUrl[];
 
 // Switches duplicated as macros to use from mini_installer
 #define VIVALDI_INSTALLER_SWITCH_MINI "vivaldi-mini"
+#define VIVALDI_INSTALLER_SWITCH_SILENT "vivaldi-silent"
 #define VIVALDI_INSTALLER_SWITCH_UNPACK "vivaldi-unpack"
 
 #endif  // INSTALLER_UTIL_VIVALDI_INSTALL_UTIL_H_

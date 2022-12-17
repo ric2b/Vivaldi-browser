@@ -83,8 +83,8 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
-#include "chromeos/lacros/lacros_service.h"
 #include "chromeos/lacros/lacros_test_helper.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
 
 #if BUILDFLAG(ENABLE_SUPERVISED_USERS)
@@ -139,6 +139,7 @@ class ProfileManagerTest : public testing::Test {
 
   void SetUp() override {
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kNoFirstRun);
     lacros_service_test_helper_ =
         std::make_unique<chromeos::ScopedLacrosServiceTestHelper>();
 
@@ -832,12 +833,14 @@ TEST_F(ProfileManagerTest, AddProfileToStorageCheckNotOmitted) {
   EXPECT_FALSE(entry->IsOmitted());
 }
 
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
 TEST_F(ProfileManagerTest, GetSystemProfilePath) {
   base::FilePath system_profile_path = ProfileManager::GetSystemProfilePath();
   base::FilePath expected_path = temp_dir_.GetPath();
   expected_path = expected_path.Append(chrome::kSystemProfileDir);
   EXPECT_EQ(expected_path, system_profile_path);
 }
+#endif
 
 // Test profile manager that creates all profiles as guest by default.
 class UnittestGuestProfileManager : public FakeProfileManager {
@@ -2058,7 +2061,7 @@ TEST_F(ProfileManagerTest, ProfileDisplayNameIsEmailIfDefaultName) {
   // not considered default profile names for newly created profiles.
   // We use "Person %n" as the default profile name. Set |SetIsUsingDefaultName|
   // manually to mimick pre-existing profiles.
-  entry->SetIsUsingDefaultName(true);
+  entry->SetLocalProfileName(u"Default Profile", true);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
 
   entry->SetAuthInfo("23456", email2, true);
@@ -2289,7 +2292,7 @@ TEST_F(ProfileManagerTest, RegularSession) {
   crosapi::mojom::BrowserInitParamsPtr init_params =
       crosapi::mojom::BrowserInitParams::New();
   init_params->session_type = crosapi::mojom::SessionType::kRegularSession;
-  chromeos::LacrosService::Get()->SetInitParamsForTests(std::move(init_params));
+  chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 
   base::FilePath dest_path = temp_dir_.GetPath();
   dest_path = dest_path.Append(FILE_PATH_LITERAL("Regular Profile"));
@@ -2309,7 +2312,7 @@ TEST_F(ProfileManagerTest, ChildSession) {
   crosapi::mojom::BrowserInitParamsPtr init_params =
       crosapi::mojom::BrowserInitParams::New();
   init_params->session_type = crosapi::mojom::SessionType::kChildSession;
-  chromeos::LacrosService::Get()->SetInitParamsForTests(std::move(init_params));
+  chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 
   // Create and initialize a profile.
   base::FilePath dest_path = temp_dir_.GetPath();

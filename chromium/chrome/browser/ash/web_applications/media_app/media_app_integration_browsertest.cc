@@ -17,6 +17,7 @@
 #include "base/strings/string_util.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
+#include "base/test/test_file_util.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/app_service/app_launch_params.h"
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
@@ -24,6 +25,7 @@
 #include "chrome/browser/ash/file_manager/app_id.h"
 #include "chrome/browser/ash/file_manager/app_service_file_tasks.h"
 #include "chrome/browser/ash/file_manager/file_manager_test_util.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/web_applications/media_app/media_web_app_info.h"
 #include "chrome/browser/ash/web_applications/system_web_app_integration_test.h"
 #include "chrome/browser/error_reporting/mock_chrome_js_error_report_processor.h"
@@ -35,7 +37,6 @@
 #include "chrome/browser/ui/browser_list_observer.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/common/chrome_paths.h"
 #include "chromeos/constants/chromeos_features.h"
@@ -44,6 +45,7 @@
 #include "content/public/test/browser_test.h"
 #include "content/public/test/test_utils.h"
 #include "extensions/browser/entry_info.h"
+#include "media/base/media_switches.h"
 #include "services/media_session/public/mojom/media_controller.mojom.h"
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/features.h"
@@ -51,8 +53,8 @@
 #include "ui/aura/window_observer.h"
 #include "ui/gfx/color_palette.h"
 
+using ash::SystemWebAppType;
 using platform_util::OpenOperationResult;
-using web_app::SystemAppType;
 
 namespace {
 
@@ -104,9 +106,17 @@ class MediaAppIntegrationTest : public SystemWebAppIntegrationTest {
     feature_list_.InitAndEnableFeature(ash::features::kMediaAppHandlesPdf);
   }
 
-  void MediaAppLaunchWithFile(bool audio_enabled);
-  void MediaAppWithLaunchSystemWebAppAsync(bool audio_enabled);
-  void MediaAppEligibleOpenTask(bool audio_enabled);
+  void SetUpCommandLine(base::CommandLine* command_line) override {
+    SystemWebAppIntegrationTest::SetUpCommandLine(command_line);
+
+    // Use a fake audio stream. Some tests make noise otherwise, and could fight
+    // with parallel tests for access to the audio device.
+    command_line->AppendSwitch(switches::kDisableAudioOutput);
+  }
+
+  void MediaAppLaunchWithFile();
+  void MediaAppWithLaunchSystemWebAppAsync();
+  void MediaAppEligibleOpenTask();
 
   // Helper to initiate a test by launching a single file.
   content::WebContents* LaunchWithOneTestFile(const char* file);
@@ -124,26 +134,6 @@ class MediaAppIntegrationWithFilesAppTest : public MediaAppIntegrationTest {
     file_manager::test::AddDefaultComponentExtensionsOnMainThread(profile());
     MediaAppIntegrationTest::SetUpOnMainThread();
   }
-};
-
-class MediaAppIntegrationAudioEnabledTest : public MediaAppIntegrationTest {
- public:
-  MediaAppIntegrationAudioEnabledTest() {
-    feature_list_.InitAndEnableFeature(ash::features::kMediaAppHandlesAudio);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
-};
-
-class MediaAppIntegrationAudioDisabledTest : public MediaAppIntegrationTest {
- public:
-  MediaAppIntegrationAudioDisabledTest() {
-    feature_list_.InitAndDisableFeature(ash::features::kMediaAppHandlesAudio);
-  }
-
- private:
-  base::test::ScopedFeatureList feature_list_;
 };
 
 class MediaAppIntegrationDarkLightModeEnabledTest
@@ -323,7 +313,7 @@ content::WebContents* MediaAppIntegrationTest::LaunchWithOneTestFile(
 
 content::WebContents* MediaAppIntegrationTest::LaunchWithNoFiles() {
   WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
   PrepareAppForTest(web_ui);
   return web_ui;
 }
@@ -347,64 +337,43 @@ std::vector<apps::IntentLaunchInfo> GetAppsForMimeType(
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaApp) {
   const GURL url(ash::kChromeUIMediaAppURL);
   EXPECT_NO_FATAL_FAILURE(
-      ExpectSystemWebAppValid(web_app::SystemAppType::MEDIA, url, "Gallery"));
+      ExpectSystemWebAppValid(ash::SystemWebAppType::MEDIA, url, "Gallery"));
 }
 
 // Test that the MediaApp successfully loads a file passed in on its launch
 // params. This exercises only web_applications logic.
-void MediaAppIntegrationTest::MediaAppLaunchWithFile(bool audio_enabled) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchWithFile) {
   WaitForTestSystemAppInstall();
   // Launch the App for the first time.
-  content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
+  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
                                                 TestFile(kFilePng800x600));
   Browser* first_browser = chrome::FindBrowserWithActiveWindow();
   PrepareAppForTest(app);
 
   EXPECT_EQ("800x600", WaitForImageAlt(app, kFilePng800x600));
 
-  // Launch with a different file.
-  if (audio_enabled) {
-    // Open file in new window.
-    app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
-                            TestFile(kFileJpeg640x480));
-  } else {
-    // Open file in same window.
-    LaunchAppWithFileWithoutWaiting(web_app::SystemAppType::MEDIA,
-                                    TestFile(kFileJpeg640x480));
-  }
+  // Launch with a different file in a new window.
+  app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
+                          TestFile(kFileJpeg640x480));
   Browser* second_browser = chrome::FindBrowserWithActiveWindow();
   PrepareAppForTest(app);
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
-  if (audio_enabled) {
-    EXPECT_NE(first_browser, second_browser);
-  } else {
-    EXPECT_EQ(first_browser, second_browser);
-  }
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
-                       MediaAppLaunchWithFile) {
-  MediaAppLaunchWithFile(true);
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioDisabledTest,
-                       MediaAppLaunchWithFile) {
-  MediaAppLaunchWithFile(false);
+  EXPECT_NE(first_browser, second_browser);
 }
 
 // Test that the MediaApp successfully loads a file using
 // LaunchSystemWebAppAsync. This exercises high level integration with SWA
 // platform (a different code path than MediaAppLaunchWithFile test).
-void MediaAppIntegrationTest::MediaAppWithLaunchSystemWebAppAsync(
-    bool audio_enabled) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
+                       MediaAppWithLaunchSystemWebAppAsync) {
   WaitForTestSystemAppInstall();
   // Launch the App for the first time.
   web_app::SystemAppLaunchParams audio_params;
   audio_params.launch_paths.push_back(TestFile(kFilePng800x600));
-  web_app::LaunchSystemWebAppAsync(browser()->profile(),
-                                   web_app::SystemAppType::MEDIA, audio_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                                   audio_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(profile());
   Browser* first_browser = chrome::FindBrowserWithActiveWindow();
   content::WebContents* app = PrepareActiveBrowserForTest();
 
@@ -413,28 +382,14 @@ void MediaAppIntegrationTest::MediaAppWithLaunchSystemWebAppAsync(
   // Launch the App for the second time.
   web_app::SystemAppLaunchParams image_params;
   image_params.launch_paths.push_back(TestFile(kFileJpeg640x480));
-  web_app::LaunchSystemWebAppAsync(browser()->profile(),
-                                   web_app::SystemAppType::MEDIA, image_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
-  app = PrepareActiveBrowserForTest(audio_enabled ? 3 : 2);
+  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                                   image_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(profile());
+  app = PrepareActiveBrowserForTest(3);
   Browser* second_browser = chrome::FindBrowserWithActiveWindow();
 
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
-  if (audio_enabled) {
-    EXPECT_NE(first_browser, second_browser);
-  } else {
-    EXPECT_EQ(first_browser, second_browser);
-  }
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
-                       MediaAppWithLaunchSystemWebAppAsync) {
-  MediaAppWithLaunchSystemWebAppAsync(true);
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioDisabledTest,
-                       MediaAppWithLaunchSystemWebAppAsync) {
-  MediaAppWithLaunchSystemWebAppAsync(false);
+  EXPECT_NE(first_browser, second_browser);
 }
 
 // Test that the Media App launches a single window for images.
@@ -444,9 +399,9 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchImageMulti) {
   image_params.launch_paths = {TestFile(kFilePng800x600),
                                TestFile(kFileJpeg640x480)};
 
-  web_app::LaunchSystemWebAppAsync(browser()->profile(),
-                                   web_app::SystemAppType::MEDIA, image_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                                   image_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
   const BrowserList* browser_list = BrowserList::GetInstance();
   EXPECT_EQ(2u, browser_list->size());  // 1 extra for the browser test browser.
@@ -463,12 +418,13 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchPdfMulti) {
   web_app::SystemAppLaunchParams pdf_params;
   pdf_params.launch_paths = {TestFile(kFilePdfTall), TestFile(kFilePdfImg)};
 
-  web_app::LaunchSystemWebAppAsync(browser()->profile(),
-                                   web_app::SystemAppType::MEDIA, pdf_params);
-  web_app::FlushSystemWebAppLaunchesForTesting(browser()->profile());
+  web_app::LaunchSystemWebAppAsync(profile(), ash::SystemWebAppType::MEDIA,
+                                   pdf_params);
+  web_app::FlushSystemWebAppLaunchesForTesting(profile());
 
+  WaitForBrowserCount(3);  // 1 extra for the browser test browser.
   const BrowserList* browser_list = BrowserList::GetInstance();
-  EXPECT_EQ(3u, browser_list->size());  // 1 extra for the browser test browser.
+  EXPECT_EQ(3u, browser_list->size());
 
   content::TitleWatcher watcher1(
       browser_list->get(1)->tab_strip_model()->GetActiveWebContents(),
@@ -483,10 +439,9 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppLaunchPdfMulti) {
 // Test that the Media App appears as a handler for files in the App Service.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppHandlesIntents) {
   WaitForTestSystemAppInstall();
-  auto* proxy =
-      apps::AppServiceProxyFactory::GetForProfile(browser()->profile());
+  auto* proxy = apps::AppServiceProxyFactory::GetForProfile(profile());
   const std::string media_app_id =
-      *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA);
+      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
 
   {
     // Smoke test that a binary blob is not handled by Media App.
@@ -525,7 +480,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppHandlesIntents) {
 // Regression test for b/172881869.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, LoadsPdf) {
   WaitForTestSystemAppInstall();
-  LaunchApp(web_app::SystemAppType::MEDIA);
+  LaunchApp(ash::SystemWebAppType::MEDIA);
   content::WebContents* app = PrepareActiveBrowserForTest();
   // TODO(crbug/1148090): To fully load PDFs, "frame-src" needs to be set, this
   // test doesn't provide coverage for that.
@@ -608,7 +563,7 @@ bool isAppBarButtonOn(content::WebContents* app, const std::string& selector) {
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        MAYBE_LoadsInkForImageAnnotation) {
   WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
+  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
                                                 TestFile(kFileJpeg640x480));
   PrepareAppForTest(app);
 
@@ -641,7 +596,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
 // information panel.
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MAYBE_InformationPanel) {
   WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchAppWithFile(web_app::SystemAppType::MEDIA,
+  content::WebContents* app = LaunchAppWithFile(ash::SystemWebAppType::MEDIA,
                                                 TestFile(kFileJpeg640x480));
   PrepareAppForTest(app);
   EXPECT_EQ("640x480", WaitForImageAlt(app, kFileJpeg640x480));
@@ -892,13 +847,11 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest, HandleRawFiles) {
 
 // Ensures that chrome://media-app is available as a file task for the ChromeOS
 // file manager and eligible for opening appropriate files / mime types.
-void MediaAppIntegrationTest::MediaAppEligibleOpenTask(bool audio_enabled) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaAppEligibleOpenTask) {
   std::vector<base::FilePath> file_paths;
   file_paths.push_back(TestFile(kFilePng800x600));
   file_paths.push_back(TestFile(kFileVideoVP9));
-  if (audio_enabled) {
-    file_paths.push_back(TestFile(kFileAudioOgg));
-  }
+  file_paths.push_back(TestFile(kFileAudioOgg));
 
   WaitForTestSystemAppInstall();
 
@@ -919,22 +872,12 @@ void MediaAppIntegrationTest::MediaAppEligibleOpenTask(bool audio_enabled) {
     EXPECT_EQ("Gallery", task.task_title);
     EXPECT_EQ(extensions::api::file_manager_private::Verb::VERB_OPEN_WITH,
               task.task_verb);
-    EXPECT_EQ(descriptor.app_id, *GetManager().GetAppIdForSystemApp(
-                                     web_app::SystemAppType::MEDIA));
+    EXPECT_EQ(descriptor.app_id,
+              *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA));
     EXPECT_EQ(ash::kChromeUIMediaAppURL, descriptor.action_id);
     EXPECT_EQ(file_manager::file_tasks::TASK_TYPE_WEB_APP,
               descriptor.task_type);
   }
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
-                       MediaAppEligibleOpenTask) {
-  MediaAppEligibleOpenTask(true);
-}
-
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioDisabledTest,
-                       MediaAppEligibleOpenTask) {
-  MediaAppEligibleOpenTask(false);
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
@@ -942,7 +885,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAllProfilesTest,
   WaitForTestSystemAppInstall();
 
   // Check system_web_app_manager has the correct attributes for Media App.
-  auto* system_app = GetManager().GetSystemApp(web_app::SystemAppType::MEDIA);
+  auto* system_app = GetManager().GetSystemApp(ash::SystemWebAppType::MEDIA);
   EXPECT_TRUE(system_app->ShouldShowInLauncher());
   EXPECT_TRUE(system_app->ShouldShowInSearch());
 }
@@ -954,7 +897,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationPdfDisabledTest,
   WaitForTestSystemAppInstall();
 
   // Check system_web_app_manager has the correct attributes for Media App.
-  auto* system_app = GetManager().GetSystemApp(web_app::SystemAppType::MEDIA);
+  auto* system_app = GetManager().GetSystemApp(ash::SystemWebAppType::MEDIA);
   EXPECT_FALSE(system_app->ShouldShowInLauncher());
   EXPECT_FALSE(system_app->ShouldShowInSearch());
 }
@@ -967,7 +910,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   // Pass multiple arguments to console.error() to also check they are parsed
   // and captured in the error message correctly.
@@ -989,7 +932,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kDomExceptionScript));
   auto report = endpoint.WaitForReport();
@@ -1006,7 +949,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true,
             MediaAppUiBrowserTest::EvalJsInAppFrame(app, kDomExceptionScript));
@@ -1023,7 +966,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kUnhandledRejectionScript));
   auto report = endpoint.WaitForReport();
@@ -1040,7 +983,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true, MediaAppUiBrowserTest::EvalJsInAppFrame(
                       app, kUnhandledRejectionScript));
@@ -1056,7 +999,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* web_ui = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* web_ui = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true, ExecuteScript(web_ui, kTypeErrorScript));
   auto report = endpoint.WaitForReport();
@@ -1074,7 +1017,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
   ScopedMockChromeJsErrorReportProcessor processor(endpoint);
 
   WaitForTestSystemAppInstall();
-  content::WebContents* app = LaunchApp(web_app::SystemAppType::MEDIA);
+  content::WebContents* app = LaunchApp(ash::SystemWebAppType::MEDIA);
 
   EXPECT_EQ(true,
             MediaAppUiBrowserTest::EvalJsInAppFrame(app, kTypeErrorScript));
@@ -1112,18 +1055,19 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   // Check that chrome://media-app launched and the test file loads.
   EXPECT_NE(test_browser, app_browser);
   EXPECT_EQ(web_app::GetAppIdFromApplicationName(app_browser->app_name()),
-            *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA));
+            *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA));
   EXPECT_EQ("800x600", WaitForImageAlt(web_ui, kFilePng800x600));
 
   // Check the metric is recorded.
   histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromFileManager", 1);
+  histograms.ExpectBucketCount("Apps.MediaApp.Load.OtherOpenWindowCount", 0, 1);
 }
 
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeEnabledTest,
                        HasCorrectThemeAndBackgroundColor) {
   WaitForTestSystemAppInstall();
   web_app::AppId app_id =
-      *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA);
+      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
 
   web_app::WebAppRegistrar& registrar =
       web_app::WebAppProvider::GetForTest(profile())->registrar();
@@ -1139,7 +1083,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeDisabledTest,
                        HasCorrectThemeAndBackgroundColor) {
   WaitForTestSystemAppInstall();
   web_app::AppId app_id =
-      *GetManager().GetAppIdForSystemApp(web_app::SystemAppType::MEDIA);
+      *GetManager().GetAppIdForSystemApp(ash::SystemWebAppType::MEDIA);
 
   web_app::WebAppRegistrar& registrar =
       web_app::WebAppProvider::GetForTest(profile())->registrar();
@@ -1150,7 +1094,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationDarkLightModeDisabledTest,
 
 // Ensures both the "audio" and "gallery" flavours of the MediaApp can be
 // launched at the same time when launched via the files app.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest,
                        FileOpenCanLaunchBothAudioAndImages) {
   base::HistogramTester histograms;
 
@@ -1179,21 +1123,25 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest,
 
   EXPECT_NE(image_app_browser, audio_app_browser);
   EXPECT_TRUE(web_app::IsBrowserForSystemWebApp(image_app_browser,
-                                                SystemAppType::MEDIA));
+                                                ash::SystemWebAppType::MEDIA));
   EXPECT_TRUE(web_app::IsBrowserForSystemWebApp(audio_app_browser,
-                                                SystemAppType::MEDIA));
+                                                ash::SystemWebAppType::MEDIA));
 
   // Verify that launch params were correctly proceed by the "second" app to
   // launch.
   EXPECT_EQ(kFileAudioOgg, WaitForAudioTrackTitle(audio_web_ui));
   EXPECT_EQ("640x480", WaitForImageAlt(image_web_ui, kFileJpeg640x480));
 
-  // Check the metrics are recorded.
+  // Check the metrics are recorded: 2 launches from file manager machinery, and
+  // 0 other open windows for the first launch; 1 other open window for the
+  // second launch.
   histograms.ExpectTotalCount("Apps.DefaultAppLaunch.FromFileManager", 2);
+  histograms.ExpectBucketCount("Apps.MediaApp.Load.OtherOpenWindowCount", 0, 1);
+  histograms.ExpectBucketCount("Apps.MediaApp.Load.OtherOpenWindowCount", 1, 1);
 }
 
 // Ensures audio files opened in the media app successfully autoplay.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest, Autoplay) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, Autoplay) {
   content::WebContents* web_ui = LaunchWithOneTestFile(kFileAudioOgg);
 
   EXPECT_EQ(kFileAudioOgg, WaitForAudioTrackTitle(web_ui));
@@ -1218,7 +1166,7 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest, Autoplay) {
 
 // Ensures the autoplay on audio file launch updates the global media controls
 // with an appropriate media source name.
-IN_PROC_BROWSER_TEST_P(MediaAppIntegrationAudioEnabledTest, MediaControls) {
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, MediaControls) {
   using absl::optional;
   class MediaControlsObserver
       : public media_session::mojom::MediaControllerObserver {
@@ -1338,6 +1286,10 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppAllProfilesTest,
   content::WebContents* web_ui = PrepareActiveBrowserForTest();
   content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
 
+  // lastLoadedReceivedFileList is only set when the load IPC is received, so
+  // ensure that has completed before trying to index it.
+  EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
+
   // Rename "image3.jpg" to "x.jpg".
   constexpr int kRenameResultSuccess = 0;
   constexpr char kScript[] =
@@ -1425,6 +1377,53 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
   EXPECT_EQ("thumbs.db", folder.files()[0].BaseName().value());
 }
 
+IN_PROC_BROWSER_TEST_P(MediaAppIntegrationWithFilesAppTest,
+                       CheckBrowserWritable) {
+  WaitForTestSystemAppInstall();
+
+  file_manager::test::FolderInMyFiles folder(profile());
+  folder.Add({
+      TestFile(kFileJpeg640x480),
+      TestFile(kFilePng800x600),
+  });
+  // Remove ability to write to the second file.
+  base::ScopedAllowBlockingForTesting allow_blocking;
+  base::FilePermissionRestorer restore_permissions_for(folder.files()[1]);
+  EXPECT_EQ(true, base::MakeFileUnwritable(folder.files()[1]));
+
+  folder.Open(TestFile(kFileJpeg640x480));
+  content::WebContents* web_ui = PrepareActiveBrowserForTest();
+  content::RenderFrameHost* app = MediaAppUiBrowserTest::GetAppFrame(web_ui);
+
+  EXPECT_EQ("640x480", WaitForImageAlt(web_ui, kFileJpeg640x480));
+
+  // WaitForImageAlt only requires one image to load, but a follow-up IPC is
+  // used to load additional files, which might not be available on
+  // lastLoadedReceivedFileList if it is inspected now. Check the length, and
+  // retry if there are not two files yet. There is enough context switching
+  // here that 0-1 retries are usually sufficient.
+  int received_file_length = 0;
+  do {
+    EXPECT_TRUE(content::ExecuteScriptAndExtractInt(
+        app,
+        "domAutomationController.send(lastLoadedReceivedFileList().length);",
+        &received_file_length));
+  } while (received_file_length != 2);
+
+  bool result;
+  constexpr char kScript[] =
+      "lastLoadedReceivedFileList().item($1).isBrowserWritable()"
+      ".then(result => domAutomationController.send(result));";
+  // The first file should be writable.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      app, base::ReplaceStringPlaceholders(kScript, {"0"}, nullptr), &result));
+  EXPECT_TRUE(result);
+  // The second file should not be writable.
+  EXPECT_TRUE(content::ExecuteScriptAndExtractBool(
+      app, base::ReplaceStringPlaceholders(kScript, {"1"}, nullptr), &result));
+  EXPECT_FALSE(result);
+}
+
 IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, ToggleBrowserFullscreen) {
   content::WebContents* web_ui = LaunchWithOneTestFile(kFileVideoVP9);
   Browser* app_browser = chrome::FindBrowserWithActiveWindow();
@@ -1484,12 +1483,6 @@ IN_PROC_BROWSER_TEST_P(MediaAppIntegrationTest, GuestCanReadLocalFonts) {
   content::WebContents* web_ui = LaunchWithNoFiles();
   EXPECT_EQ("success", ExtractStringInGlobalScope(web_ui, script));
 }
-
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
-    MediaAppIntegrationAudioEnabledTest);
-
-INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
-    MediaAppIntegrationAudioDisabledTest);
 
 INSTANTIATE_SYSTEM_WEB_APP_MANAGER_TEST_SUITE_REGULAR_PROFILE_P(
     MediaAppIntegrationPdfDisabledTest);

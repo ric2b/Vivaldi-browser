@@ -32,7 +32,6 @@
 #include "media/video/mock_gpu_video_accelerator_factories.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
-#include "third_party/blink/renderer/platform/peerconnection/rtc_video_decoder_adapter.h"
 #include "third_party/blink/renderer/platform/peerconnection/rtc_video_decoder_stream_adapter.h"
 #include "third_party/webrtc/api/video_codecs/video_codec.h"
 #include "third_party/webrtc/api/video_codecs/vp9_profile.h"
@@ -401,8 +400,10 @@ class RTCVideoDecoderStreamAdapterTest
 };
 
 TEST_P(RTCVideoDecoderStreamAdapterTest, Create_UnknownFormat) {
-  auto adapter = RTCVideoDecoderAdapter::Create(
+  auto adapter = RTCVideoDecoderStreamAdapter::Create(
       use_hw_decoders_ ? &gpu_factories_ : nullptr,
+      decoder_factory_->GetWeakPtr(), media_thread_task_runner_,
+      gfx::ColorSpace{},
       webrtc::SdpVideoFormat(
           webrtc::CodecTypeToPayloadString(webrtc::kVideoCodecGeneric)));
   ASSERT_FALSE(adapter);
@@ -654,7 +655,7 @@ TEST_P(RTCVideoDecoderStreamAdapterTest, UseD3D11ToDecodeVP9kSVCStream) {
 
 // On ChromeOS, only based on x86(use VaapiDecoder) architecture has the ability
 // to decode VP9 kSVC Stream. Other cases should fallback to sw decoder.
-#if !(defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS_ASH))
+#if !(defined(ARCH_CPU_X86_FAMILY) && BUILDFLAG(IS_CHROMEOS))
 TEST_P(RTCVideoDecoderStreamAdapterTest,
        FallbackToSoftwareWhenDecodeVP9kSVCStream) {
   auto* decoder = decoder_factory_->decoder();

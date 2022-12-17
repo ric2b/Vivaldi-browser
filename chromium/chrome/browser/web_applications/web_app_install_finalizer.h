@@ -10,14 +10,15 @@
 #include <vector>
 
 #include "base/callback_forward.h"
+#include "base/containers/flat_set.h"
 #include "base/memory/raw_ptr.h"
 #include "base/memory/weak_ptr.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_data.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/web_app_chromeos_data.h"
 #include "chrome/browser/web_applications/web_app_constants.h"
 #include "chrome/browser/web_applications/web_app_id.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
-#include "chrome/browser/web_applications/web_app_system_web_app_data.h"
 #include "chrome/browser/web_applications/web_app_uninstall_job.h"
 #include "components/webapps/browser/install_result_code.h"
 #include "components/webapps/browser/installable/installable_metrics.h"
@@ -68,7 +69,7 @@ class WebAppInstallFinalizer {
     bool overwrite_existing_manifest_fields = true;
 
     absl::optional<WebAppChromeOsData> chromeos_data;
-    absl::optional<WebAppSystemWebAppData> system_web_app_data;
+    absl::optional<ash::SystemWebAppData> system_web_app_data;
     absl::optional<AppId> parent_app_id;
 
     // If true, OsIntegrationManager::InstallOsHooks won't be called at all,
@@ -124,7 +125,7 @@ class WebAppInstallFinalizer {
                                UninstallWebAppCallback callback);
 
   virtual void RetryIncompleteUninstalls(
-      const std::vector<AppId>& apps_to_uninstall);
+      const base::flat_set<AppId>& apps_to_uninstall);
 
   // Sync-initiated uninstall. Copied from WebAppInstallSyncInstallDelegate.
   // Called before the web apps are removed from the registry by sync. This:
@@ -136,16 +137,10 @@ class WebAppInstallFinalizer {
   // * `callback` is called.
   // The registrar is expected to be synchronously updated after this function
   // call to remove the given `web_apps`.
-  virtual void UninstallWithoutRegistryUpdateFromSync(
-      const std::vector<AppId>& web_apps,
-      RepeatingUninstallCallback callback);
+  virtual void UninstallFromSync(const std::vector<AppId>& web_apps,
+                                 RepeatingUninstallCallback callback);
 
   virtual bool CanUserUninstallWebApp(const AppId& app_id) const;
-
-  // Returns true if the app with |app_id| was previously uninstalled by the
-  // user. For example, if a user uninstalls a default app ('default apps' are
-  // considered external apps), then this will return true.
-  virtual bool WasPreinstalledWebAppUninstalled(const AppId& app_id) const;
 
   virtual bool CanReparentTab(const AppId& app_id, bool shortcut_created) const;
   virtual void ReparentTab(const AppId& app_id,
@@ -170,6 +165,14 @@ class WebAppInstallFinalizer {
   Profile* profile() { return profile_; }
 
   const WebAppRegistrar& GetWebAppRegistrar() const;
+
+  // Writes external config data to the web_app DB, mapped per source.
+  void WriteExternalConfigMapInfo(WebApp& web_app,
+                                  WebAppManagement::Type source,
+                                  bool is_placeholder,
+                                  GURL install_url);
+
+  std::vector<AppId> GetPendingUninstallsForTesting() const;
 
  private:
   using CommitCallback = base::OnceCallback<void(bool success)>;

@@ -12,14 +12,17 @@
 #include "base/time/time.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
+#include "chrome/browser/download/bubble/download_bubble_prefs.h"
 #include "chrome/browser/download/download_commands.h"
 #include "chrome/browser/download/offline_item_utils.h"
+#include "chrome/browser/enterprise/connectors/connectors_service.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager.h"
 #include "chrome/browser/safe_browsing/advanced_protection_status_manager_factory.h"
 #include "chrome/common/url_constants.h"
 #include "chrome/grit/chromium_strings.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/download/public/common/download_danger_type.h"
+#include "components/enterprise/common/proto/connectors.pb.h"
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/vector_icons/vector_icons.h"
@@ -242,31 +245,9 @@ std::u16string DownloadUIModel::GetTooltipText() const {
   return tooltip;
 }
 
-// Ordering of the warning texts should be the same as order in the
-// GetDesiredDownloadItemMode() method.
 std::u16string DownloadUIModel::GetWarningText(const std::u16string& filename,
                                                size_t* offset) const {
   *offset = std::string::npos;
-
-  if (ShouldShowIncognitoWarning()) {
-    return l10n_util::GetStringFUTF16(IDS_PROMPT_INCOGNITO_WARNING, filename,
-                                      offset);
-  }
-
-  switch (GetMixedContentStatus()) {
-    case download::DownloadItem::MixedContentStatus::BLOCK:
-      return l10n_util::GetStringFUTF16(
-          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_BLOCKED, filename, offset);
-    case download::DownloadItem::MixedContentStatus::WARN:
-      return l10n_util::GetStringFUTF16(
-          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_WARNING, filename, offset);
-    case download::DownloadItem::MixedContentStatus::UNKNOWN:
-    case download::DownloadItem::MixedContentStatus::SAFE:
-    case download::DownloadItem::MixedContentStatus::VALIDATED:
-    case download::DownloadItem::MixedContentStatus::SILENT_BLOCK:
-      break;
-  }
-
   switch (GetDangerType()) {
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
       return l10n_util::GetStringUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_URL);
@@ -278,17 +259,9 @@ std::u16string DownloadUIModel::GetWarningText(const std::u16string& filename,
                                               filename, offset);
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
       return l10n_util::GetStringFUTF16(IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT,
                                         filename, offset);
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE: {
-      return base::FeatureList::IsEnabled(
-                 safe_browsing::kSafeBrowsingCTDownloadWarning)
-                 ? l10n_util::GetStringFUTF16(
-                       IDS_PROMPT_DANGEROUS_DOWNLOAD_ACCOUNT_COMPROMISE,
-                       filename, offset)
-                 : l10n_util::GetStringFUTF16(
-                       IDS_PROMPT_MALICIOUS_DOWNLOAD_CONTENT, filename, offset);
-    }
     case download::DOWNLOAD_DANGER_TYPE_UNCOMMON_CONTENT: {
       bool request_ap_verdicts = false;
 #if BUILDFLAG(FULL_SAFE_BROWSING)
@@ -333,20 +306,29 @@ std::u16string DownloadUIModel::GetWarningText(const std::u16string& filename,
       break;
   }
 
+  switch (GetMixedContentStatus()) {
+    case download::DownloadItem::MixedContentStatus::BLOCK:
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_BLOCKED, filename, offset);
+    case download::DownloadItem::MixedContentStatus::WARN:
+      return l10n_util::GetStringFUTF16(
+          IDS_PROMPT_DOWNLOAD_MIXED_CONTENT_WARNING, filename, offset);
+    case download::DownloadItem::MixedContentStatus::UNKNOWN:
+    case download::DownloadItem::MixedContentStatus::SAFE:
+    case download::DownloadItem::MixedContentStatus::VALIDATED:
+    case download::DownloadItem::MixedContentStatus::SILENT_BLOCK:
+      break;
+  }
+
   return std::u16string();
 }
 
 std::u16string DownloadUIModel::GetWarningConfirmButtonText() const {
   const auto kDangerousFile = download::DOWNLOAD_DANGER_TYPE_DANGEROUS_FILE;
-
-  int warningConfirmButtonTextId = IDS_CONFIRM_DOWNLOAD;
-  if (ShouldShowIncognitoWarning()) {
-    warningConfirmButtonTextId = IDS_DOWNLOAD_ANYWAY;
-  } else if (GetDangerType() == kDangerousFile && IsExtensionDownload()) {
-    warningConfirmButtonTextId = IDS_CONTINUE_EXTENSION_DOWNLOAD;
-  }
-
-  return l10n_util::GetStringUTF16(warningConfirmButtonTextId);
+  return l10n_util::GetStringUTF16(
+      (GetDangerType() == kDangerousFile && IsExtensionDownload())
+          ? IDS_CONTINUE_EXTENSION_DOWNLOAD
+          : IDS_CONFIRM_DOWNLOAD);
 }
 
 std::u16string DownloadUIModel::GetShowInFolderText() const {
@@ -401,10 +383,6 @@ bool DownloadUIModel::IsMixedContent() const {
   return false;
 }
 
-bool DownloadUIModel::ShouldShowIncognitoWarning() const {
-  return false;
-}
-
 bool DownloadUIModel::ShouldAllowDownloadFeedback() const {
   return false;
 }
@@ -436,6 +414,12 @@ bool DownloadUIModel::WasUINotified() const {
 }
 
 void DownloadUIModel::SetWasUINotified(bool should_notify) {}
+
+bool DownloadUIModel::WasUIWarningShown() const {
+  return false;
+}
+
+void DownloadUIModel::SetWasUIWarningShown(bool was_ui_warning_shown) {}
 
 bool DownloadUIModel::ShouldPreferOpeningInBrowser() const {
   return true;
@@ -803,8 +787,8 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForInterrupted(
                        ui::kColorAlertHighSeverity);
 }
 
-DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
-    const {
+DownloadUIModel::BubbleUIInfo
+DownloadUIModel::GetBubbleUIInfoForInProgressOrComplete() const {
   switch (GetMixedContentStatus()) {
     case download::DownloadItem::MixedContentStatus::BLOCK:
     case download::DownloadItem::MixedContentStatus::WARN:
@@ -845,10 +829,9 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
                 DownloadCommands::Command::DISCARD,
                 /*is_prominent=*/true);
       } else {
-        // TODO(crbug.com/1320025): Update the strings to match the UX mock.
         return DownloadUIModel::BubbleUIInfo(
                    l10n_util::GetStringUTF16(
-                       IDS_DOWNLOAD_BUBBLE_MALICIOUS_URL_BLOCKED))
+                       IDS_DOWNLOAD_BUBBLE_DANGEROUS_FILE))
             .AddIconAndColor(views::kInfoIcon, ui::kColorSecondaryForeground)
             .AddPrimaryButton(DownloadCommands::Command::KEEP)
             .AddSubpageButton(
@@ -862,6 +845,7 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
       }
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
       return DownloadUIModel::BubbleUIInfo(
                  l10n_util::GetStringUTF16(
                      IDS_DOWNLOAD_BUBBLE_MALICIOUS_URL_BLOCKED))
@@ -900,21 +884,6 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
                  l10n_util::GetStringUTF16(
                      IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_ENCRYPTED))
           .AddIconAndColor(views::kInfoIcon, ui::kColorSecondaryForeground)
-          .AddSubpageButton(
-              l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_CONTINUE),
-              DownloadCommands::Command::KEEP,
-              /*is_prominent=*/false)
-          .AddSubpageButton(
-              l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DELETE),
-              DownloadCommands::Command::DISCARD,
-              /*is_prominent=*/true);
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
-      return DownloadUIModel::BubbleUIInfo(
-                 l10n_util::GetStringUTF16(
-                     IDS_DOWNLOAD_BUBBLE_WARNING_SUBPAGE_ACCOUNT_COMPROMISE))
-          .AddIconAndColor(vector_icons::kNotSecureWarningIcon,
-                           ui::kColorAlertHighSeverity)
-          .AddPrimaryButton(DownloadCommands::Command::DISCARD)
           .AddSubpageButton(
               l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_CONTINUE),
               DownloadCommands::Command::KEEP,
@@ -993,6 +962,7 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
                  l10n_util::GetStringUTF16(
                      IDS_DOWNLOAD_BUBBLE_SUBPAGE_SUMMARY_SENSITIVE_CONTENT))
           .AddIconAndColor(views::kInfoIcon, ui::kColorAlertMediumSeverity)
+          .AddPrimaryButton(DownloadCommands::Command::DISCARD)
           .AddSubpageButton(
               l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_CONTINUE),
               DownloadCommands::Command::KEEP,
@@ -1019,10 +989,16 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
           .AddSubpageButton(l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_SCAN),
                             DownloadCommands::Command::DEEP_SCAN,
                             /*is_prominent=*/true);
-    case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
-      return DownloadUIModel::BubbleUIInfo(/*has_progress_bar=*/true)
-          .AddPrimaryButton(DownloadCommands::Command::BYPASS_DEEP_SCANNING)
-          .SetProgressBarLooping();
+    case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING: {
+      BubbleUIInfo bubble_ui_info =
+          DownloadUIModel::BubbleUIInfo(/*has_progress_bar=*/true)
+              .SetProgressBarLooping();
+      if (!download::IsDownloadConnectorEnabled(profile())) {
+        bubble_ui_info.AddPrimaryButton(
+            DownloadCommands::Command::BYPASS_DEEP_SCANNING);
+      }
+      return bubble_ui_info;
+    }
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
@@ -1036,7 +1012,9 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfoForWarning()
   bool has_progress_bar = GetState() == DownloadItem::IN_PROGRESS;
   BubbleUIInfo bubble_ui_info = DownloadUIModel::BubbleUIInfo(has_progress_bar);
   if (has_progress_bar) {
-    bubble_ui_info.AddPrimaryButton(DownloadCommands::Command::CANCEL);
+    bubble_ui_info.AddPrimaryButton(IsPaused()
+                                        ? DownloadCommands::Command::RESUME
+                                        : DownloadCommands::Command::CANCEL);
   }
   return bubble_ui_info;
 }
@@ -1045,7 +1023,7 @@ DownloadUIModel::BubbleUIInfo DownloadUIModel::GetBubbleUIInfo() const {
   switch (GetState()) {
     case DownloadItem::IN_PROGRESS:
     case DownloadItem::COMPLETE:
-      return GetBubbleUIInfoForWarning();
+      return GetBubbleUIInfoForInProgressOrComplete();
     case DownloadItem::INTERRUPTED: {
       const FailState fail_state = GetLastFailState();
       if (fail_state != FailState::USER_CANCELED) {
@@ -1166,6 +1144,7 @@ DownloadUIModel::BubbleStatusTextBuilder::GetBubbleWarningStatusText() const {
       [[fallthrough]];
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_CONTENT:
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST:
+    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
     case download::DOWNLOAD_DANGER_TYPE_POTENTIALLY_UNWANTED:
       // "Blocked • Dangerous"
       return base::StrCat({prefix, l10n_util::GetStringUTF16(
@@ -1175,11 +1154,6 @@ DownloadUIModel::BubbleStatusTextBuilder::GetBubbleWarningStatusText() const {
       // "Blocked • Encrypted"
       return base::StrCat({prefix, l10n_util::GetStringUTF16(
                                        IDS_DOWNLOAD_BUBBLE_STATUS_ENCRYPTED)});
-    case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_ACCOUNT_COMPROMISE:
-      // "Blocked • Insecure download"
-      return base::StrCat(
-          {prefix, l10n_util::GetStringUTF16(
-                       IDS_DOWNLOAD_BUBBLE_WARNING_STATUS_INSECURE)});
     case download::DOWNLOAD_DANGER_TYPE_DANGEROUS_URL:
       // "Blocked • Malware"
       return base::StrCat({prefix, l10n_util::GetStringUTF16(
@@ -1217,8 +1191,16 @@ DownloadUIModel::BubbleStatusTextBuilder::GetBubbleWarningStatusText() const {
       return l10n_util::GetStringUTF16(
           IDS_DOWNLOAD_BUBBLE_STATUS_DEEP_SCANNING_PROMPT);
     case download::DOWNLOAD_DANGER_TYPE_ASYNC_SCANNING:
+#if BUILDFLAG(IS_ANDROID)
       return l10n_util::GetStringUTF16(
           IDS_DOWNLOAD_BUBBLE_STATUS_ASYNC_SCANNING);
+#else
+      return download::IsDownloadConnectorEnabled(model_->profile())
+                 ? l10n_util::GetStringUTF16(
+                       IDS_DOWNLOAD_BUBBLE_STATUS_ASYNC_SCANNING_ENTERPRISE)
+                 : l10n_util::GetStringUTF16(
+                       IDS_DOWNLOAD_BUBBLE_STATUS_ASYNC_SCANNING);
+#endif
     case download::DOWNLOAD_DANGER_TYPE_BLOCKED_UNSUPPORTED_FILETYPE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE:
     case download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_OPENED_DANGEROUS:
@@ -1278,7 +1260,7 @@ DownloadUIModel::BubbleStatusTextBuilder::GetInProgressStatusText() const {
   }
 
   // A download scheduled to be opened when complete: "↓ 100/120 MB • Opening in
-  // 10 secs"
+  // 10 seconds"
   if (web_drive.empty() && model_->GetOpenWhenComplete()) {
     if (!time_remaining_known)
       return base::StrCat(
@@ -1291,17 +1273,17 @@ DownloadUIModel::BubbleStatusTextBuilder::GetInProgressStatusText() const {
          l10n_util::GetStringFUTF16(
              IDS_DOWNLOAD_STATUS_OPEN_IN,
              ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_DURATION,
-                                    ui::TimeFormat::LENGTH_SHORT,
+                                    ui::TimeFormat::LENGTH_LONG,
                                     time_remaining))});
   }
 
-  // In progress download with known time left: "↓ 100/120 MB • 10 secs left"
+  // In progress download with known time left: "↓ 100/120 MB • 10 seconds left"
   if (time_remaining_known) {
     return base::StrCat(
         {l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DOWNLOAD_SYMBOL),
          size_ratio_prefix,
          ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_REMAINING,
-                                ui::TimeFormat::LENGTH_SHORT, time_remaining)});
+                                ui::TimeFormat::LENGTH_LONG, time_remaining)});
   }
 
   if (completed_bytes == 0) {
@@ -1360,12 +1342,25 @@ DownloadUIModel::BubbleStatusTextBuilder::GetCompletedStatusText() const {
     // Offline items have these null.
     return l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_STATUS_DONE);
   } else {
-    std::u16string total_text = ui::FormatBytes(model_->GetTotalBytes());
-    std::u16string delta_str = ui::TimeFormat::Simple(
-        ui::TimeFormat::FORMAT_ELAPSED, ui::TimeFormat::LENGTH_SHORT,
-        base::Time::Now() - model_->GetEndTime());
+    std::u16string size_text = ui::FormatBytes(model_->GetTotalBytes());
+    std::u16string delta_str;
+    if (model_->GetDangerType() ==
+        download::DOWNLOAD_DANGER_TYPE_DEEP_SCANNED_SAFE) {
+      delta_str = l10n_util::GetStringUTF16(
+          IDS_DOWNLOAD_BUBBLE_STATUS_DEEP_SCANNING_DONE);
+    } else {
+      base::TimeDelta time_elapsed = base::Time::Now() - model_->GetEndTime();
+      // If less than 1 minute has passed since download completed: "2 B • Done"
+      // Otherwise: e.g. "2 B • 3 minutes ago"
+      delta_str =
+          time_elapsed.InMinutes() == 0
+              ? l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_STATUS_DONE)
+              : ui::TimeFormat::Simple(ui::TimeFormat::FORMAT_ELAPSED,
+                                       ui::TimeFormat::LENGTH_LONG,
+                                       time_elapsed);
+    }
     return base::StrCat(
-        {total_text,
+        {size_text,
          l10n_util::GetStringUTF16(IDS_DOWNLOAD_BUBBLE_DOWNLOAD_SEPERATOR),
          delta_str});
   }

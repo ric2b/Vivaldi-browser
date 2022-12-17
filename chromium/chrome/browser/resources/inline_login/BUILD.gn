@@ -46,8 +46,8 @@ js_type_check("closure_compile") {
   ]
   if (is_chromeos_ash) {
     deps += [
-      ":inline_login_util",
       ":signin_blocked_by_policy_page",
+      ":signin_error_page",
       ":welcome_page_app",
     ]
   }
@@ -67,10 +67,11 @@ js_library("inline_login_app") {
   ]
   if (is_chromeos_ash) {
     deps += [
-      ":inline_login_util",
       ":signin_blocked_by_policy_page",
+      ":signin_error_page",
       ":welcome_page_app",
       "//chrome/browser/resources/chromeos/arc_account_picker:arc_account_picker_app",
+      "//chrome/browser/resources/chromeos/arc_account_picker:arc_util",
     ]
   }
   externs_list = [
@@ -96,6 +97,12 @@ js_library("signin_blocked_by_policy_page") {
   ]
 }
 
+js_library("signin_error_page") {
+  deps = [
+    "//third_party/polymer/v3_0/components-chromium/polymer:polymer_bundled",
+  ]
+}
+
 js_library("inline_login_browser_proxy") {
   sources =
       [ "$target_gen_dir/$preprocess_folder/inline_login_browser_proxy.js" ]
@@ -107,14 +114,11 @@ js_library("inline_login_browser_proxy") {
   extra_deps = [ ":preprocess" ]
 }
 
-js_library("inline_login_util") {
-  deps = [ "//ui/webui/resources/js:assert.m" ]
-}
-
 html_to_js("web_components") {
   js_files = [
     "inline_login_app.js",
     "signin_blocked_by_policy_page.js",
+    "signin_error_page.js",
     "welcome_page_app.js",
   ]
 }

@@ -7,9 +7,12 @@
 #include <memory>
 #include <vector>
 
+#include "ash/constants/ash_features.h"
 #include "ash/public/cpp/test/shell_test_api.h"
+#include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ui/app_list/search/chrome_search_result.h"
 #include "chrome/browser/ui/app_list/search/search_controller.h"
+#include "chrome/browser/ui/app_list/search/test/ranking_test_util.h"
 #include "chrome/browser/ui/app_list/test/test_app_list_controller_delegate.h"
 #include "chrome/test/base/chrome_ash_test_base.h"
 
@@ -18,37 +21,32 @@ namespace test {
 
 using ::test::TestAppListControllerDelegate;
 
-// TestSearchResult ------------------------------------------------------------
-
-class TestSearchResult : public ChromeSearchResult {
- public:
-  TestSearchResult() = default;
-  TestSearchResult(const TestSearchResult&) = delete;
-  TestSearchResult& operator=(const TestSearchResult&) = delete;
-  ~TestSearchResult() override = default;
-
- private:
-  void Open(int event_flags) override { NOTIMPLEMENTED(); }
-};
-
 // SearchControllerImplTest
 // --------------------------------------------------------
 
 class SearchControllerImplTest : public ChromeAshTestBase {
  public:
-  SearchControllerImplTest() = default;
+  SearchControllerImplTest() {
+    scoped_feature_list_.InitAndDisableFeature(
+        ash::features::kProductivityLauncher);
+  }
   SearchControllerImplTest(const SearchControllerImplTest&) = delete;
   SearchControllerImplTest& operator=(const SearchControllerImplTest&) = delete;
   ~SearchControllerImplTest() override = default;
 
-  SearchController& search_controller() { return search_controller_; }
+  void SetUp() override {
+    ChromeAshTestBase::SetUp();
+    search_controller_ = std::make_unique<SearchControllerImpl>(
+        /*model_updater=*/nullptr, &list_controller_, /*profile=*/nullptr,
+        /*notifier=*/nullptr);
+  }
+  SearchController& search_controller() { return *search_controller_; }
   TestAppListControllerDelegate& list_controller() { return list_controller_; }
 
  private:
+  base::test::ScopedFeatureList scoped_feature_list_;
   TestAppListControllerDelegate list_controller_;
-  SearchControllerImpl search_controller_{
-      /*model_updater=*/nullptr, &list_controller_, /*profile=*/nullptr,
-      /*notifier=*/nullptr};
+  std::unique_ptr<SearchControllerImpl> search_controller_;
 };
 
 // Tests -----------------------------------------------------------------------
@@ -79,7 +77,7 @@ TEST_F(SearchControllerImplTest,
                         /*request_to_dismiss_view=*/true,
                         /*expect_to_dismiss_view=*/true});
 
-  auto result = std::make_unique<TestSearchResult>();
+  auto result = std::make_unique<TestResult>();
   for (auto& test_case : test_cases) {
     ash::ShellTestApi().SetTabletModeEnabledForTest(test_case.is_tablet_mode);
 

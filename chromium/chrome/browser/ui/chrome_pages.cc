@@ -12,6 +12,7 @@
 #include "base/feature_list.h"
 #include "base/logging.h"
 #include "base/metrics/user_metrics.h"
+#include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/stringprintf.h"
@@ -45,7 +46,6 @@
 #include "extensions/browser/extension_prefs.h"
 #include "extensions/common/constants.h"
 #include "extensions/common/extension_urls.h"
-#include "net/base/escape.h"
 #include "net/base/url_util.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/window_open_disposition.h"
@@ -106,7 +106,7 @@ void LaunchReleaseNotesImpl(Profile* profile,
   web_app::SystemAppLaunchParams params;
   params.url = GURL("chrome://help-app/updates");
   params.launch_source = source;
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::HELP, params);
+  LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::HELP, params);
 }
 #endif
 
@@ -135,7 +135,7 @@ void ShowHelpImpl(Browser* browser, Profile* profile, HelpSource source) {
 
   web_app::SystemAppLaunchParams params;
   params.launch_source = app_launch_source;
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::HELP, params);
+  LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::HELP, params);
 #else
   GURL url;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
@@ -253,8 +253,8 @@ void ShowHistory(Browser* browser, const std::string& host_name) {
   if (!host_name.empty()) {
     GURL::Replacements replacements;
     std::string query("q=");
-    query += net::EscapeQueryParamValue(base::StrCat({"host:", host_name}),
-                                        /*use_plus=*/false);
+    query += base::EscapeQueryParamValue(base::StrCat({"host:", host_name}),
+                                         /*use_plus=*/false);
     replacements.SetQueryStr(query);
     url = url.ReplaceComponents(replacements);
   }
@@ -470,6 +470,11 @@ void ShowPrivacySandboxAdPersonalization(Browser* browser) {
   ShowSettingsSubPage(browser, kPrivacySandboxAdPersonalizationSubPage);
 }
 
+void ShowPrivacySandboxLearnMore(Browser* browser) {
+  base::RecordAction(UserMetricsAction("Options_ShowPrivacySandbox"));
+  ShowSettingsSubPage(browser, kPrivacySandboxLearnMoreSubPage);
+}
+
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 void ShowEnterpriseManagementPageInTabbedBrowser(Browser* browser) {
   // Management shows in a tab because it has a "back" arrow that takes the
@@ -494,26 +499,28 @@ void ShowAppManagementPage(Profile* profile,
 }
 
 void ShowPrintManagementApp(Profile* profile) {
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::PRINT_MANAGEMENT);
+  web_app::LaunchSystemWebAppAsync(profile,
+                                   ash::SystemWebAppType::PRINT_MANAGEMENT);
 }
 
 void ShowConnectivityDiagnosticsApp(Profile* profile) {
-  LaunchSystemWebAppAsync(profile,
-                          web_app::SystemAppType::CONNECTIVITY_DIAGNOSTICS);
+  web_app::LaunchSystemWebAppAsync(
+      profile, ash::SystemWebAppType::CONNECTIVITY_DIAGNOSTICS);
 }
 
 void ShowScanningApp(Profile* profile) {
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::SCANNING);
+  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::SCANNING);
 }
 
 void ShowDiagnosticsApp(Profile* profile) {
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::DIAGNOSTICS);
+  web_app::LaunchSystemWebAppAsync(profile, ash::SystemWebAppType::DIAGNOSTICS);
 }
 
 void ShowFirmwareUpdatesApp(Profile* profile) {
   DCHECK(base::FeatureList::IsEnabled(chromeos::features::kFirmwareUpdaterApp));
 
-  LaunchSystemWebAppAsync(profile, web_app::SystemAppType::FIRMWARE_UPDATE);
+  web_app::LaunchSystemWebAppAsync(profile,
+                                   ash::SystemWebAppType::FIRMWARE_UPDATE);
 }
 
 GURL GetOSSettingsUrl(const std::string& sub_page) {

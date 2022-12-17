@@ -31,15 +31,18 @@ struct SameSizeAsNGLayoutResult
   };
   LayoutUnit intrinsic_block_size;
   unsigned bitfields[1];
-
-#if DCHECK_IS_ON()
-  bool has_valid_space;
-#endif
 };
 
 ASSERT_SIZE(NGLayoutResult, SameSizeAsNGLayoutResult);
 
 }  // namespace
+
+// static
+const NGLayoutResult* NGLayoutResult::Clone(const NGLayoutResult& other) {
+  return MakeGarbageCollected<NGLayoutResult>(
+      other, NGPhysicalBoxFragment::Clone(
+                 To<NGPhysicalBoxFragment>(other.PhysicalFragment())));
+}
 
 // static
 const NGLayoutResult* NGLayoutResult::CloneWithPostLayoutFragments(
@@ -79,8 +82,8 @@ NGLayoutResult::NGLayoutResult(NGBoxFragmentBuilderPassKey passkey,
 
       // This field shares storage with "minimal space shortage", so both
       // cannot be set at the same time.
-      DCHECK_EQ(builder->minimal_space_shortage_, LayoutUnit::Max());
-    } else if (builder->minimal_space_shortage_ != LayoutUnit::Max()) {
+      DCHECK_EQ(builder->minimal_space_shortage_, kIndefiniteSize);
+    } else if (builder->minimal_space_shortage_ != kIndefiniteSize) {
       rare_data->minimal_space_shortage = builder->minimal_space_shortage_;
     }
 
@@ -93,9 +96,10 @@ NGLayoutResult::NGLayoutResult(NGBoxFragmentBuilderPassKey passkey,
     bitfields_.break_appeal = builder->break_appeal_;
     bitfields_.has_forced_break = builder->has_forced_break_;
   }
+  bitfields_.disable_simplified_layout = builder->disable_simplified_layout;
 
-  if (builder->ConstraintSpace() &&
-      builder->ConstraintSpace()->ShouldPropagateChildBreakValues()) {
+  if (builder->ConstraintSpace().ShouldPropagateChildBreakValues() &&
+      !builder->layout_object_->ShouldApplyLayoutContainment()) {
     bitfields_.initial_break_before = static_cast<unsigned>(
         builder->initial_break_before_.value_or(EBreakBetween::kAuto));
     bitfields_.final_break_after =
@@ -187,10 +191,6 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
 
   if (new_end_margin_strut != NGMarginStrut() || HasRareData())
     EnsureRareData()->end_margin_strut = new_end_margin_strut;
-
-#if DCHECK_IS_ON()
-  has_valid_space_ = other.has_valid_space_;
-#endif
 }
 
 NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
@@ -209,16 +209,11 @@ NGLayoutResult::NGLayoutResult(const NGLayoutResult& other,
   }
 
   DCHECK_EQ(physical_fragment_->Size(), other.physical_fragment_->Size());
-
-#if DCHECK_IS_ON()
-  has_valid_space_ = other.has_valid_space_;
-#endif
 }
 
 NGLayoutResult::NGLayoutResult(const NGPhysicalFragment* physical_fragment,
                                NGContainerFragmentBuilder* builder)
-    : space_(builder->space_ ? NGConstraintSpace(*builder->space_)
-                             : NGConstraintSpace()),
+    : space_(builder->space_),
       physical_fragment_(std::move(physical_fragment)),
       bitfields_(builder->is_self_collapsing_,
                  builder->is_pushed_by_floats_,
@@ -283,10 +278,6 @@ NGLayoutResult::NGLayoutResult(const NGPhysicalFragment* physical_fragment,
     bitfields_.is_bfc_block_offset_nullopt =
         !builder->bfc_block_offset_.has_value();
   }
-
-#if DCHECK_IS_ON()
-  has_valid_space_ = builder->space_;
-#endif
 }
 
 NGExclusionSpace NGLayoutResult::MergeExclusionSpaces(
@@ -333,7 +324,7 @@ void NGLayoutResult::CheckSameForSimplifiedLayout(
   // this may change (even if the size of the fragment remains the same).
 
   DCHECK(EndMarginStrut() == other.EndMarginStrut());
-  DCHECK_EQ(MinimalSpaceShortage(), other.MinimalSpaceShortage());
+  DCHECK(MinimalSpaceShortage() == other.MinimalSpaceShortage());
   DCHECK_EQ(TableColumnCount(), other.TableColumnCount());
 
   DCHECK_EQ(bitfields_.has_forced_break, other.bitfields_.has_forced_break);

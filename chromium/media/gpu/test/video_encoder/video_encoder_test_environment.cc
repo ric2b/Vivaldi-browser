@@ -169,6 +169,10 @@ VideoEncoderTestEnvironment* VideoEncoderTestEnvironment::Create(
   combined_enabled_features.push_back(media::kVaapiVp8TemporalLayerHWEncoding);
 #endif
 
+#if BUILDFLAG(IS_LINUX) && BUILDFLAG(USE_VAAPI)
+  combined_enabled_features.push_back(media::kVaapiVideoEncodeLinux);
+#endif
+
   const uint32_t bitrate = encode_bitrate.value_or(
       GetDefaultTargetBitrate(video->Resolution(), video->FrameRate()));
   return new VideoEncoderTestEnvironment(
@@ -200,7 +204,8 @@ VideoEncoderTestEnvironment::VideoEncoderTestEnvironment(
       num_spatial_layers_(num_spatial_layers),
       bitrate_(AllocateDefaultBitrateForTesting(num_spatial_layers_,
                                                 num_temporal_layers_,
-                                                bitrate)),
+                                                bitrate,
+                                                false)),
       spatial_layers_(GetDefaultSpatialLayers(bitrate_,
                                               video_.get(),
                                               num_spatial_layers_,

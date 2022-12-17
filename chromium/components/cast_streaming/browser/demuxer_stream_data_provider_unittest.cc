@@ -6,8 +6,10 @@
 
 #include <utility>
 
+#include "base/memory/weak_ptr.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
+#include "components/cast_streaming/browser/demuxer_stream_client.h"
 #include "media/base/audio_codecs.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/channel_layout.h"
@@ -47,6 +49,8 @@ class DemuxerStreamDataProviderTest : public testing::Test {
             base::Unretained(&callbacks_)),
         second_config_);
 
+    data_provider_->SetClient(client_.weak_factory_.GetWeakPtr());
+
     std::vector<uint8_t> data = {1, 2, 3};
     first_buffer_ = media::DecoderBuffer::CopyFrom(data.data(), 3);
     first_buffer_->set_duration(base::Seconds(1));
@@ -70,7 +74,7 @@ class DemuxerStreamDataProviderTest : public testing::Test {
  protected:
   class Callbacks {
    public:
-    MOCK_METHOD0(RequestBuffer, void());
+    MOCK_METHOD1(RequestBuffer, void(base::OnceClosure));
     MOCK_METHOD0(OnMojoDisconnect, void());
 
     MOCK_METHOD0(OnGetBufferDoneCalled, void());
@@ -92,6 +96,17 @@ class DemuxerStreamDataProviderTest : public testing::Test {
     }
   };
 
+  class MockDemuxerStreamClient : public DemuxerStreamClient {
+   public:
+    ~MockDemuxerStreamClient() override = default;
+
+    MOCK_METHOD1(EnableBitstreamConverter, void(BitstreamConverterEnabledCB));
+    MOCK_METHOD0(OnNoBuffersAvailable, void());
+    MOCK_METHOD0(OnError, void());
+
+    base::WeakPtrFactory<MockDemuxerStreamClient> weak_factory_{this};
+  };
+
   using MojoPipePair = std::pair<mojo::ScopedDataPipeProducerHandle,
                                  mojo::ScopedDataPipeConsumerHandle>;
   MojoPipePair GetMojoPipePair() {
@@ -103,6 +118,7 @@ class DemuxerStreamDataProviderTest : public testing::Test {
   }
 
   testing::StrictMock<Callbacks> callbacks_;
+  testing::StrictMock<MockDemuxerStreamClient> client_;
 
   base::test::SingleThreadTaskEnvironment task_environment_{
       base::test::TaskEnvironment::TimeSource::MOCK_TIME};
@@ -121,7 +137,7 @@ class DemuxerStreamDataProviderTest : public testing::Test {
 
 TEST_F(DemuxerStreamDataProviderTest, DataSentInOrderExpected) {
   // Test first call, providing a config and a buffer.
-  EXPECT_CALL(callbacks_, RequestBuffer());
+  EXPECT_CALL(callbacks_, RequestBuffer(testing::_));
   remote_->GetBuffer(base::BindOnce(
       &DemuxerStreamDataProviderTest::Callbacks::OnGetBufferDone,
       base::Unretained(&callbacks_), first_config_, first_buffer_));
@@ -138,7 +154,7 @@ TEST_F(DemuxerStreamDataProviderTest, DataSentInOrderExpected) {
   EXPECT_TRUE(first_config_.Matches(data_provider_->config()));
 
   // Test second call, providing NO config but do provide a buffer.
-  EXPECT_CALL(callbacks_, RequestBuffer());
+  EXPECT_CALL(callbacks_, RequestBuffer(testing::_));
   remote_->GetBuffer(base::BindOnce(
       &DemuxerStreamDataProviderTest::Callbacks::OnGetBufferDone,
       base::Unretained(&callbacks_), absl::nullopt, second_buffer_));
@@ -152,7 +168,7 @@ TEST_F(DemuxerStreamDataProviderTest, DataSentInOrderExpected) {
   task_environment_.RunUntilIdle();
 
   // Test third call, providing a different config and a buffer.
-  EXPECT_CALL(callbacks_, RequestBuffer());
+  EXPECT_CALL(callbacks_, RequestBuffer(testing::_));
   remote_->GetBuffer(base::BindOnce(
       &DemuxerStreamDataProviderTest::Callbacks::OnGetBufferDone,
       base::Unretained(&callbacks_), second_config_, third_buffer_));
@@ -166,6 +182,27 @@ TEST_F(DemuxerStreamDataProviderTest, DataSentInOrderExpected) {
   EXPECT_TRUE(second_config_.Matches(data_provider_->config()));
   data_provider_->ProvideBuffer(
       media::mojom::DecoderBuffer::From(*third_buffer_));
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(DemuxerStreamDataProviderTest, NoBuffersCallback) {
+  EXPECT_CALL(callbacks_, RequestBuffer(testing::_))
+      .WillOnce([](base::OnceClosure no_buffers_cb) {
+        std::move(no_buffers_cb).Run();
+      });
+  EXPECT_CALL(client_, OnNoBuffersAvailable());
+  remote_->GetBuffer(base::BindOnce(
+      &DemuxerStreamDataProviderTest::Callbacks::OnGetBufferDone,
+      base::Unretained(&callbacks_), first_config_, first_buffer_));
+  task_environment_.RunUntilIdle();
+}
+
+TEST_F(DemuxerStreamDataProviderTest, EnableBitstreamConverter) {
+  EXPECT_CALL(client_, EnableBitstreamConverter(testing::_))
+      .WillOnce(
+          [](base::OnceCallback<void(bool)> cb) { std::move(cb).Run(true); });
+  ;
+  remote_->EnableBitstreamConverter(base::OnceCallback<void(bool)>());
   task_environment_.RunUntilIdle();
 }
 

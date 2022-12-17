@@ -7,6 +7,7 @@
 
 #include "base/bind.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/string_util.h"
 #include "base/system/sys_info.h"
@@ -39,7 +40,6 @@
 #include "components/sync/driver/sync_service_impl.h"
 #include "components/sync/driver/sync_token_status.h"
 #include "components/sync/test/fake_server/fake_server_network_resources.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "components/ukm/ukm_recorder_observer.h"
 #include "components/ukm/ukm_service.h"
 #include "components/ukm/ukm_test_helper.h"
@@ -139,7 +139,7 @@ class TestUkmRecorderObserver : public ukm::UkmRecorderObserver {
  private:
   bool expected_allowed_;
   base::OnceClosure quit_closure_;
-  ukm::UkmRecorderImpl* ukm_recorder_;
+  raw_ptr<ukm::UkmRecorderImpl> ukm_recorder_;
 };
 
 #if BUILDFLAG(IS_ANDROID)
@@ -958,8 +958,10 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogsPreviousSourceId) {
       opener, content::JsReplace("window.open($1)", new_tab_url)));
   waiter.Wait();
   EXPECT_NE(opener, sync_browser->tab_strip_model()->GetActiveWebContents());
-  ukm::SourceId new_id = ukm::GetSourceIdForWebContentsDocument(
-      sync_browser->tab_strip_model()->GetActiveWebContents());
+  ukm::SourceId new_id = sync_browser->tab_strip_model()
+                             ->GetActiveWebContents()
+                             ->GetPrimaryMainFrame()
+                             ->GetPageUkmSourceId();
   ukm::UkmSource* new_tab_source = ukm_test_helper.GetSource(new_id);
   EXPECT_NE(nullptr, new_tab_source);
   EXPECT_EQ(ukm::kInvalidSourceId,
@@ -1003,8 +1005,10 @@ IN_PROC_BROWSER_TEST_F(UkmBrowserTest, LogsOpenerSource) {
       opener, content::JsReplace("window.open($1)", new_tab_url)));
   waiter.Wait();
   EXPECT_NE(opener, sync_browser->tab_strip_model()->GetActiveWebContents());
-  ukm::SourceId new_id = ukm::GetSourceIdForWebContentsDocument(
-      sync_browser->tab_strip_model()->GetActiveWebContents());
+  ukm::SourceId new_id = sync_browser->tab_strip_model()
+                             ->GetActiveWebContents()
+                             ->GetPrimaryMainFrame()
+                             ->GetPageUkmSourceId();
   ukm::UkmSource* new_tab_source = ukm_test_helper.GetSource(new_id);
   EXPECT_NE(nullptr, new_tab_source);
   EXPECT_EQ(first_source->id(),

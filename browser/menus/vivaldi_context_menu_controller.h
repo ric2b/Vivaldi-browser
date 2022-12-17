@@ -96,10 +96,11 @@ class ContextMenuController : public ui::SimpleMenuModel::Delegate,
                                          int id,
                                          ui::SimpleMenuModel* menu_model);
   void SanitizeModel(ui::SimpleMenuModel* menu_model);
+  std::string GetEmptyIcon();
   void SetIcon(int command_id,
                const std::string& icon,
                ui::SimpleMenuModel* menu_model);
-  void LoadFavicon(int command_id, const std::string& url);
+  void LoadFavicon(int command_id, const std::string& url, bool is_page);
   void OnFaviconDataAvailable(
       int command_id,
       const favicon_base::FaviconImageResult& image_result);

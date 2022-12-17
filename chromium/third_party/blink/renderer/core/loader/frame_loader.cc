@@ -66,7 +66,6 @@
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/ignore_opens_during_unload_count_incrementer.h"
 #include "third_party/blink/renderer/core/events/page_transition_event.h"
-#include "third_party/blink/renderer/core/exported/web_document_loader_impl.h"
 #include "third_party/blink/renderer/core/exported/web_plugin_container_impl.h"
 #include "third_party/blink/renderer/core/fragment_directive/text_fragment_anchor.h"
 #include "third_party/blink/renderer/core/frame/csp/content_security_policy.h"
@@ -76,6 +75,7 @@
 #include "third_party/blink/renderer/core/frame/local_frame.h"
 #include "third_party/blink/renderer/core/frame/local_frame_client.h"
 #include "third_party/blink/renderer/core/frame/local_frame_view.h"
+#include "third_party/blink/renderer/core/frame/policy_container.h"
 #include "third_party/blink/renderer/core/frame/settings.h"
 #include "third_party/blink/renderer/core/frame/visual_viewport.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
@@ -257,6 +257,7 @@ void FrameLoader::Init(std::unique_ptr<PolicyContainer> policy_container) {
   navigation_params->url = KURL(g_empty_string);
   navigation_params->frame_policy =
       frame_->Owner() ? frame_->Owner()->GetFramePolicy() : FramePolicy();
+  navigation_params->anonymous = InitialEmptyDocumentAnonymous();
 
   // An interesting edge case to consider: A document has:
   // CSP: sandbox allow-popups allow-popups-to-escape-sandbox
@@ -270,7 +271,7 @@ void FrameLoader::Init(std::unique_ptr<PolicyContainer> policy_container) {
     navigation_params->sandbox_flags |= csp->sandbox;
   }
 
-  DocumentLoader* new_document_loader = Client()->CreateDocumentLoader(
+  DocumentLoader* new_document_loader = MakeGarbageCollected<DocumentLoader>(
       frame_, kWebNavigationTypeOther, std::move(navigation_params),
       std::move(policy_container), nullptr /* extra_data */);
 
@@ -368,11 +369,13 @@ void FrameLoader::SaveScrollState() {
   history_item->SetScrollAnchorData(ScrollAnchorData());
   if (ScrollableArea* layout_scrollable_area = frame_->View()->LayoutViewport())
     history_item->SetScrollOffset(layout_scrollable_area->GetScrollOffset());
-  history_item->SetVisualViewportScrollOffset(
-      frame_->GetPage()->GetVisualViewport().VisibleRect().OffsetFromOrigin());
 
-  if (frame_->IsMainFrame())
-    history_item->SetPageScaleFactor(frame_->GetPage()->PageScaleFactor());
+  VisualViewport& visual_viewport = frame_->GetPage()->GetVisualViewport();
+  if (frame_->IsMainFrame() && visual_viewport.IsActiveViewport()) {
+    history_item->SetVisualViewportScrollOffset(
+        visual_viewport.VisibleRect().OffsetFromOrigin());
+    history_item->SetPageScaleFactor(visual_viewport.Scale());
+  }
 
   Client()->DidUpdateCurrentHistoryItem();
 }
@@ -657,6 +660,18 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
   if (!AllowRequestForThisFrame(request))
     return;
 
+  // Block renderer-initiated loads of filesystem: URLs.
+  if (url.ProtocolIs("filesystem") &&
+      !base::FeatureList::IsEnabled(features::kFileSystemUrlNavigation)) {
+    frame_->GetDocument()->AddConsoleMessage(
+        MakeGarbageCollected<ConsoleMessage>(
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
+            "Not allowed to navigate to " + url.Protocol() +
+                " URL: " + url.ElidedString()));
+    return;
+  }
+
   // Block renderer-initiated loads of data: and filesystem: URLs in the top
   // frame (unless they are reload requests).
   //
@@ -674,8 +689,8 @@ void FrameLoader::StartNavigation(FrameLoadRequest& request,
         network_utils::IsDataURLMimeTypeSupported(url)))) {
     frame_->GetDocument()->AddConsoleMessage(
         MakeGarbageCollected<ConsoleMessage>(
-            mojom::ConsoleMessageSource::kSecurity,
-            mojom::ConsoleMessageLevel::kError,
+            mojom::blink::ConsoleMessageSource::kSecurity,
+            mojom::blink::ConsoleMessageLevel::kError,
             "Not allowed to navigate top frame to " + url.Protocol() +
                 " URL: " + url.ElidedString()));
     return;
@@ -1050,9 +1065,44 @@ void FrameLoader::CommitNavigation(
   if (commit_reason == CommitReason::kXSLT ||
       commit_reason == CommitReason::kJavascriptUrl) {
     DCHECK(!extra_data);
-    if (auto* old_document_loader =
-            static_cast<WebDocumentLoaderImpl*>(document_loader_.Get())) {
-      extra_data = old_document_loader->TakeExtraData();
+    extra_data = document_loader_->TakeExtraData();
+  }
+
+  // Fenced frame reporting metadata persists across same-origin navigations
+  // initiated from inside the fenced frame. Embedder-initiated navigations
+  // use a unique origin (in `FencedFrame::Navigate`), so the requestor is
+  // always considered cross-origin by the check (in MPArch).
+  bool is_requestor_same_origin =
+      !navigation_params->requestor_origin.IsNull() &&
+      navigation_params->requestor_origin.IsSameOriginWith(
+          WebSecurityOrigin::Create(navigation_params->url));
+  if (is_requestor_same_origin) {
+    for (const WebNavigationParams::RedirectInfo& redirect :
+         navigation_params->redirects) {
+      is_requestor_same_origin &=
+          navigation_params->requestor_origin.IsSameOriginWith(
+              WebSecurityOrigin::Create(redirect.new_url));
+    }
+  }
+  if (is_requestor_same_origin) {
+    const mojom::blink::FencedFrameReportingPtr& old_fenced_frame_reporting =
+        document_loader_->FencedFrameReporting();
+    // TODO(crbug.com/1342301): When we disable FF self urn navigations, add
+    // this DCHECK:
+    // DCHECK(!navigation_params->fenced_frame_reporting);
+    // and remove the condition from the `if` below.
+    if (old_fenced_frame_reporting &&
+        !navigation_params->fenced_frame_reporting) {
+      navigation_params->fenced_frame_reporting.emplace();
+      for (const auto& [destination, event_type_url] :
+           old_fenced_frame_reporting->metadata) {
+        base::flat_map<WebString, WebURL> data;
+        for (const auto& [event_type, url] : event_type_url) {
+          data.emplace(event_type, url);
+        }
+        navigation_params->fenced_frame_reporting->metadata.emplace(
+            destination, std::move(data));
+      }
     }
   }
 
@@ -1147,9 +1197,15 @@ void FrameLoader::CommitNavigation(
     policy_container = PolicyContainer::CreateFromWebPolicyContainer(
         std::move(navigation_params->policy_container));
   }
+  // Synchronous navigation to about:blank is not driven by the browser process
+  // and happens after committing an initial empty document. Here, we make sure
+  // it is computed the same way as it was when creating the initial empty
+  // document.
+  if (navigation_params->is_synchronous_commit_for_bug_778318)
+    navigation_params->anonymous = InitialEmptyDocumentAnonymous();
   // TODO(dgozman): get rid of provisional document loader and most of the code
   // below. We should probably call DocumentLoader::CommitNavigation directly.
-  DocumentLoader* new_document_loader = Client()->CreateDocumentLoader(
+  DocumentLoader* new_document_loader = MakeGarbageCollected<DocumentLoader>(
       frame_, navigation_type, std::move(navigation_params),
       std::move(policy_container), std::move(extra_data));
 
@@ -1700,6 +1756,40 @@ FrameLoader::PendingEffectiveSandboxFlags() const {
   }
 }
 
+bool FrameLoader::InitialEmptyDocumentAnonymous() const {
+  Frame* parent = frame_->Tree().Parent();
+  // Top-level FrameTreeNode is never anonymous.
+  if (!parent)
+    return false;
+  // Provisional frame may be created under a remote parent. The value doesn't
+  // really matter, because the provisional frame is an implementation artifact.
+  // It is not visible. This could be removed after provisional frames being
+  // cleaned up. See https://crbug.com/578349.
+  if (frame_->IsProvisional()) {
+    return true;
+  }
+  // During a navigation inside a crashed frame, the browser process may create
+  // a speculative RenderFrame. This will commit an initial empty document under
+  // a remote frame. The real navigation will commit immediately after it.
+  // See https://crbug.com/756790
+  // There are no good way to determine whether this artifact document should be
+  // considered anonymous or not. The "anonymous" flag is pushed by the browser
+  // process during navigation and there are no local/remote replication.
+  // This is used only to reflect `window.isAnonymouslyFramed`.
+  //
+  // TODO(https://crbug.com/1325733) Adding "anonymous" inside
+  // PolicyContainerPolicies would allow the browser process to push a value
+  // here. Consider doing it, if this is worth it.
+  if (!parent->IsLocalFrame()) {
+    return true;
+  }
+
+  // An document should be anonymous when its parent is anonymous. See:
+  // https://wicg.github.io/anonymous-iframe/#initial-window-anonymous
+  return parent->DomWindow()->ToLocalDOMWindow()->isAnonymouslyFramed() ||
+         frame_->Owner()->Anonymous();
+}
+
 void FrameLoader::ModifyRequestForCSP(
     ResourceRequest& resource_request,
     const FetchClientSettingsObject* fetch_client_settings_object,
@@ -1730,9 +1820,9 @@ void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
   document_loader_->GetUseCounter().Count(
       is_subresource
           ? WebFeature::kLegacyTLSVersionInSubresource
-          : (frame_->Tree().Parent()
-                 ? WebFeature::kLegacyTLSVersionInSubframeMainResource
-                 : WebFeature::kLegacyTLSVersionInMainFrameResource),
+          : (frame_->IsOutermostMainFrame()
+                 ? WebFeature::kLegacyTLSVersionInMainFrameResource
+                 : WebFeature::kLegacyTLSVersionInSubframeMainResource),
       frame_.Get());
 
   // For non-main-frame loads, we have to use the main frame's document for
@@ -1784,8 +1874,8 @@ void FrameLoader::ReportLegacyTLSVersion(const KURL& url,
   // resources, and only use the warning level for main-frame resources.
   frame_->Console().AddMessage(MakeGarbageCollected<ConsoleMessage>(
       mojom::ConsoleMessageSource::kOther,
-      frame_->IsMainFrame() ? mojom::ConsoleMessageLevel::kWarning
-                            : mojom::ConsoleMessageLevel::kVerbose,
+      frame_->IsOutermostMainFrame() ? mojom::ConsoleMessageLevel::kWarning
+                                     : mojom::ConsoleMessageLevel::kVerbose,
       console_message));
 }
 
@@ -1796,6 +1886,7 @@ void FrameLoader::WriteIntoTrace(perfetto::TracedValue context) const {
     frame_dict.Add("id_ref", IdentifiersFactory::FrameId(frame_.Get()));
   }
   dict.Add("isLoadingMainFrame", frame_->IsMainFrame());
+  dict.Add("isOutermostMainFrame", frame_->IsOutermostMainFrame());
   dict.Add("documentLoaderURL",
            document_loader_ ? document_loader_->Url().GetString() : String());
 }

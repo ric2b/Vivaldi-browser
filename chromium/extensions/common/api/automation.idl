@@ -400,7 +400,6 @@
     loadInlineTextBoxes,
     replaceSelectedText,
     resumeMedia,
-    runScreenAi,
     scrollBackward,
     scrollDown,
     scrollForward,
@@ -478,6 +477,7 @@
   enum DescriptionFromType {
     ariaDescription,
     buttonLabel,
+    popupElement,
     relatedElement,
     rubyAnnotation,
     summary,

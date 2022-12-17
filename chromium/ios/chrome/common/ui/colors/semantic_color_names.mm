@@ -28,11 +28,15 @@ NSString* const kSeparatorColor = @"separator_color";
 NSString* const kSolidButtonTextColor = @"solid_button_text_color";
 NSString* const kTableViewRowHighlightColor = @"table_view_row_highlight_color";
 NSString* const kTertiaryBackgroundColor = @"tertiary_background_color";
+NSString* const kUpdatedTertiaryBackgroundColor =
+    @"updated_tertiary_background_color";
 NSString* const kTextPrimaryColor = @"text_primary_color";
 NSString* const kTextSecondaryColor = @"text_secondary_color";
 NSString* const kTextTertiaryColor = @"text_tertiary_color";
 NSString* const kTextQuaternaryColor = @"text_quaternary_color";
 NSString* const kTextfieldBackgroundColor = @"textfield_background_color";
+NSString* const kTextfieldFocusedBackgroundColor =
+    @"textfield_focused_background_color";
 NSString* const kTextfieldHighlightBackgroundColor =
     @"textfield_highlight_background_color";
 NSString* const kTextfieldPlaceholderColor = @"textfield_placeholder_color";

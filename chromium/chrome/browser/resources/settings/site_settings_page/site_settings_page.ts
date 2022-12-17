@@ -184,6 +184,16 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       disabledLabel: 'siteSettingsInsecureContentBlock',
     },
     {
+      route: routes.SITE_SETTINGS_FEDERATED_IDENTITY_API,
+      id: Id.FEDERATED_IDENTITY_API,
+      label: 'siteSettingsFederatedIdentityApi',
+      icon: 'settings:federated-identity-api',
+      enabledLabel: 'siteSettingsFederatedIdentityApiAllowed',
+      disabledLabel: 'siteSettingsFederatedIdentityApiBlocked',
+      shouldShow: () =>
+          loadTimeData.getBoolean('enableFederatedIdentityApiContentSetting'),
+    },
+    {
       route: routes.SITE_SETTINGS_FILE_SYSTEM_WRITE,
       id: Id.FILE_SYSTEM_WRITE,
       label: 'siteSettingsFileSystemWrite',
@@ -304,6 +314,15 @@ function getCategoryItemMap(): Map<ContentSettingsTypes, CategoryListItem> {
       label: 'siteSettingsZoomLevels',
       icon: 'settings:zoom-in',
     },
+    // Vivaldi:
+    {
+      route: routes.SITE_SETTINGS_AUTOPLAY,
+      id: Id.AUTOPLAY,
+      label: 'siteSettingsAutoplay',
+      icon: 'settings:autoplay',
+      enabledLabel: 'siteSettingsAutoplayAllowed',
+      disabledLabel: 'siteSettingsAutoplayBlocked',
+    },
   ];
 
   categoryItemMap = new Map(categoryList.map(item => [item.id, item]));
@@ -354,6 +373,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
               Id.BACKGROUND_SYNC,
             ]),
             permissionsAdvanced: buildItemListFromIds([
+              Id.AUTOPLAY,
               Id.SENSORS,
               Id.AUTOMATIC_DOWNLOADS,
               Id.PROTOCOL_HANDLERS,
@@ -385,6 +405,7 @@ export class SettingsSiteSettingsPageElement extends PolymerElement {
               Id.PDF_DOCUMENTS,
               Id.PROTECTED_CONTENT,
               Id.MIXEDSCRIPT,
+              Id.FEDERATED_IDENTITY_API,
             ]),
           };
         }

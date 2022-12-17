@@ -6,6 +6,7 @@
 
 #include "ash/components/arc/arc_prefs.h"
 #include "ash/constants/ash_features.h"
+#include "ash/webui/file_manager/file_manager_ui.h"
 #include "base/bind.h"
 #include "base/memory/ref_counted.h"
 #include "base/metrics/histogram_macros.h"
@@ -92,6 +93,10 @@ std::u16string GetIOTaskMessage(Profile* profile,
       single_file_message_id = IDS_FILE_BROWSER_DELETE_FILE_NAME;
       multiple_file_message_id = IDS_FILE_BROWSER_DELETE_ITEMS_REMAINING;
       break;
+    case OperationType::kExtract:
+      single_file_message_id = IDS_FILE_BROWSER_EXTRACT_FILE_NAME;
+      multiple_file_message_id = IDS_FILE_BROWSER_EXTRACT_ITEMS_REMAINING;
+      break;
     case OperationType::kZip:
       single_file_message_id = IDS_FILE_BROWSER_ZIP_FILE_NAME;
       multiple_file_message_id = IDS_FILE_BROWSER_ZIP_ITEMS_REMAINING;
@@ -124,8 +129,7 @@ SystemNotificationManager::SystemNotificationManager(Profile* profile)
 SystemNotificationManager::~SystemNotificationManager() = default;
 
 bool SystemNotificationManager::DoFilesSwaWindowsExist() {
-  return FindSystemWebAppBrowser(profile_, web_app::SystemAppType::FILE_MANAGER,
-                                 Browser::TYPE_APP) != nullptr;
+  return ash::file_manager::FileManagerUI::GetNumInstances() != 0;
 }
 
 std::unique_ptr<message_center::Notification>

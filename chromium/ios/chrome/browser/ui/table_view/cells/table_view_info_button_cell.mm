@@ -18,7 +18,7 @@
 
 namespace {
 
-// Proportion of |textLayoutGuide| and |statusTextLabel|. This guarantees both
+// Proportion of `textLayoutGuide` and `statusTextLabel`. This guarantees both
 // of them at least occupies 20% of the cell.
 const CGFloat kCellLabelsWidthProportion = 0.2f;
 
@@ -32,6 +32,11 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
 // Constraints that are used when the iconImageView is visible and hidden.
 @property(nonatomic, strong) NSLayoutConstraint* iconVisibleConstraint;
 @property(nonatomic, strong) NSLayoutConstraint* iconHiddenConstraint;
+
+// Constraint used when the `trailingButton` is visible and hidden.
+@property(nonatomic, strong)
+    NSLayoutConstraint* trailingButtonVisibleConstraint;
+@property(nonatomic, strong) NSLayoutConstraint* trailingButtonHiddenConstraint;
 
 // Constraints that are used when the preferred content size is an
 // "accessibility" category.
@@ -56,10 +61,12 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
   self = [super initWithStyle:style reuseIdentifier:reuseIdentifier];
   if (self) {
     self.isAccessibilityElement = YES;
+    _isButtonSelectedForVoiceOver = YES;
 
     _iconImageView = [[UIImageView alloc] init];
     _iconImageView.translatesAutoresizingMaskIntoConstraints = NO;
     _iconImageView.hidden = YES;
+    _iconImageView.contentMode = UIViewContentModeCenter;
     [self.contentView addSubview:_iconImageView];
 
     UILayoutGuide* textLayoutGuide = [[UILayoutGuide alloc] init];
@@ -104,6 +111,14 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
     _trailingButton.accessibilityIdentifier = kTableViewCellInfoButtonViewId;
     [self.contentView addSubview:_trailingButton];
 
+    // Set up the constraint assuming that the button is hidden.
+    _trailingButtonVisibleConstraint = [textLayoutGuide.trailingAnchor
+        constraintLessThanOrEqualToAnchor:_statusTextLabel.leadingAnchor
+                                 constant:-kTableViewHorizontalSpacing];
+    _trailingButtonHiddenConstraint = [textLayoutGuide.trailingAnchor
+        constraintEqualToAnchor:_trailingButton.trailingAnchor
+                       constant:-kTableViewHorizontalSpacing];
+
     // Set up the constraints assuming that the icon image is hidden.
     _iconVisibleConstraint = [textLayoutGuide.leadingAnchor
         constraintEqualToAnchor:_iconImageView.trailingAnchor
@@ -112,7 +127,7 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
         constraintEqualToAnchor:self.contentView.leadingAnchor
                        constant:kTableViewHorizontalSpacing];
 
-    // Set the constranits of |textLabel| and |statusTextLabel| to make their
+    // Set the constranits of `textLabel` and `statusTextLabel` to make their
     // width >= 20% of the cell to ensure both of them have a space.
     NSLayoutConstraint* widthConstraintStatus = [_statusTextLabel.widthAnchor
         constraintGreaterThanOrEqualToAnchor:self.contentView.widthAnchor
@@ -125,7 +140,7 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
                                       multiplier:kCellLabelsWidthProportion];
     widthConstraintLayoutGuide.priority = UILayoutPriorityDefaultHigh + 1;
 
-    // Set the content hugging property to |statusTextLabel| to wrap the text
+    // Set the content hugging property to `statusTextLabel` to wrap the text
     // and give other label more space.
     [_statusTextLabel
         setContentHuggingPriority:UILayoutPriorityDefaultHigh + 2
@@ -142,9 +157,7 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
       [_trailingButton.trailingAnchor
           constraintEqualToAnchor:self.contentView.trailingAnchor
                          constant:-kTableViewHorizontalSpacing],
-      [textLayoutGuide.trailingAnchor
-          constraintLessThanOrEqualToAnchor:_statusTextLabel.leadingAnchor
-                                   constant:-kTableViewHorizontalSpacing],
+      _trailingButtonVisibleConstraint,
       [textLayoutGuide.centerYAnchor
           constraintEqualToAnchor:self.contentView.centerYAnchor],
       [textLayoutGuide.widthAnchor
@@ -263,6 +276,18 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
   }
 }
 
+- (void)hideUIButton:(BOOL)isHidden {
+  self.trailingButton.hidden = isHidden;
+  self.trailingButtonHiddenConstraint.active = NO;
+  if (isHidden) {
+    self.trailingButtonHiddenConstraint.active = YES;
+    self.trailingButtonVisibleConstraint.active = NO;
+  } else {
+    self.trailingButtonHiddenConstraint.active = NO;
+    self.trailingButtonVisibleConstraint.active = YES;
+  }
+}
+
 #pragma mark - UIView
 
 - (void)traitCollectionDidChange:(UITraitCollection*)previousTraitCollection {
@@ -302,7 +327,11 @@ const CGFloat kCellLabelsWidthProportion = 0.2f;
 
 - (CGPoint)accessibilityActivationPoint {
   // Center the activation point over the info button, so that double-tapping
-  // triggers to show the popover.
+  // triggers to show the popover if `isButtonSelectedForVoiceOver` is
+  // true.
+  if (!self.isButtonSelectedForVoiceOver)
+    return self.center;
+
   CGRect buttonFrame = UIAccessibilityConvertFrameToScreenCoordinates(
       self.trailingButton.frame, self);
   return CGPointMake(CGRectGetMidX(buttonFrame), CGRectGetMidY(buttonFrame));

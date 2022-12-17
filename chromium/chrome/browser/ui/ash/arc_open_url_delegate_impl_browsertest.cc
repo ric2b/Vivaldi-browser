@@ -9,6 +9,8 @@
 
 #include "chrome/browser/apps/app_service/app_service_proxy.h"
 #include "chrome/browser/apps/app_service/app_service_proxy_factory.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
+#include "chrome/browser/ash/system_web_apps/types/system_web_app_type.h"
 #include "chrome/browser/chromeos/arc/arc_web_contents_data.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/ui/browser.h"
@@ -18,9 +20,8 @@
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
 #include "chrome/browser/ui/web_applications/test/web_app_navigation_browsertest.h"
 #include "chrome/browser/ui/webui/settings/chromeos/constants/routes.mojom.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_types.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_provider.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/test/base/in_process_browser_test.h"
@@ -42,7 +43,7 @@ size_t GetNumberOfSettingsWindows() {
   return std::count_if(browser_list->begin(), browser_list->end(),
                        [](Browser* browser) {
                          return web_app::IsBrowserForSystemWebApp(
-                             browser, web_app::SystemAppType::SETTINGS);
+                             browser, ash::SystemWebAppType::SETTINGS);
                        });
 }
 
@@ -99,9 +100,8 @@ void TestOpenSettingFromArc(Browser* browser,
                             const GURL& expected_url,
                             size_t expected_setting_window_count) {
   // Install the Settings App.
-  web_app::WebAppProvider::GetForTest(browser->profile())
-      ->system_web_app_manager()
-      .InstallSystemAppsForTesting();
+  ash::SystemWebAppManager::GetForTest(browser->profile())
+      ->InstallSystemAppsForTesting();
 
   ArcOpenUrlDelegateImpl::GetForTesting()->OpenChromePageFromArc(page);
 
@@ -156,7 +156,7 @@ IN_PROC_BROWSER_TEST_F(ArcOpenUrlDelegateImplWebAppBrowserTest,
   web_app_info->scope =
       https_server().GetURL(GetAppUrlHost(), GetAppScopePath());
   web_app_info->title = base::UTF8ToUTF16(GetAppName());
-  web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+  web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
   apps::ShareTarget share_target;
   share_target.method = apps::ShareTarget::Method::kGet;
   share_target.action = app_url;
@@ -341,6 +341,9 @@ void TestAllOSSettingPages(const GURL& base_url) {
   TestOpenOSSettingsChromePage(
       ChromePage::MANAGEACCESSIBILITYTTS,
       base_url.Resolve(chromeos::settings::mojom::kTextToSpeechSubpagePath));
+  TestOpenOSSettingsChromePage(
+      ChromePage::PRIVACYHUB,
+      base_url.Resolve(chromeos::settings::mojom::kPrivacyHubSubpagePath));
 }
 
 void TestAllBrowserSettingPages(const GURL& base_url) {
@@ -378,9 +381,8 @@ void TestAllAboutPages() {
 
 IN_PROC_BROWSER_TEST_F(ArcOpenUrlDelegateImplBrowserTest, TestOpenChromePage) {
   // Install the Settings App.
-  web_app::WebAppProvider::GetForTest(browser()->profile())
-      ->system_web_app_manager()
-      .InstallSystemAppsForTesting();
+  ash::SystemWebAppManager::GetForTest(browser()->profile())
+      ->InstallSystemAppsForTesting();
 
   TestAllOSSettingPages(GURL(chrome::kChromeUIOSSettingsURL));
   TestAllBrowserSettingPages(GURL(chrome::kChromeUISettingsURL));

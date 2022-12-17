@@ -4,9 +4,13 @@
 
 #include "components/autofill_assistant/content/renderer/autofill_assistant_model_executor.h"
 
+#include <ostream>
+
+#include "base/command_line.h"
 #include "base/i18n/case_conversion.h"
 #include "base/no_destructor.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/autofill_assistant/content/common/switches.h"
 #include "components/optimization_guide/core/execution_status.h"
 #include "components/optimization_guide/core/tflite_op_resolver.h"
 #include "third_party/abseil-cpp/absl/status/status.h"
@@ -17,8 +21,43 @@
 #include "third_party/tflite_support/src/tensorflow_lite_support/metadata/cc/metadata_extractor.h"
 
 namespace autofill_assistant {
+namespace {
 
-AutofillAssistantModelExecutor::AutofillAssistantModelExecutor() = default;
+std::string SparseVectorToDebugString(
+    AutofillAssistantModelExecutor::SparseVector sparse_vector) {
+  std::ostringstream out;
+  out << "Sparse vector representation:\n";
+  for (const auto& entry : sparse_vector) {
+    out << "  [idx: [" << entry.first.first << ", " << entry.first.second
+        << "], count: " << entry.second << "]";
+  }
+  return out.str();
+}
+
+void DenseEncode(
+    const AutofillAssistantModelExecutor::SparseVector& sparse_vector,
+    std::vector<std::vector<float>>& inputs) {
+  for (const auto& entry : sparse_vector) {
+    const auto& coordinates = entry.first;
+    if (static_cast<size_t>(coordinates.first) >= inputs.size()) {
+      NOTREACHED();
+      continue;
+    }
+    if (static_cast<size_t>(coordinates.second) >=
+        inputs[coordinates.first].size()) {
+      NOTREACHED();
+      continue;
+    }
+    inputs[coordinates.first][coordinates.second] = entry.second;
+  }
+}
+
+}  // namespace
+
+AutofillAssistantModelExecutor::AutofillAssistantModelExecutor(
+    absl::optional<OverridesMap> overrides)
+    : overrides_(std::move(overrides)) {}
+
 AutofillAssistantModelExecutor::~AutofillAssistantModelExecutor() = default;
 
 bool AutofillAssistantModelExecutor::InitializeModelFromFile(
@@ -121,6 +160,18 @@ bool AutofillAssistantModelExecutor::Preprocess(
     NOTREACHED() << "Input tensors mismatch.";
     return false;
   }
+
+  SparseVector sparse_vector = TokenizeSignalsToSparseVector(node_signals);
+  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+          switches::kAutofillAssistantDebugAnnotateDom)) {
+    VLOG(3) << SparseVectorToDebugString(sparse_vector);
+  }
+
+  if (overrides_ && overrides_->contains(sparse_vector)) {
+    overrides_result_ = (*overrides_)[sparse_vector];
+    return true;
+  }
+
   std::vector<std::vector<float>> inputs;
   for (const auto* input_tensor : input_tensors) {
     tflite::RuntimeShape shape = tflite::GetTensorShape(input_tensor);
@@ -129,27 +180,7 @@ bool AutofillAssistantModelExecutor::Preprocess(
     }
     inputs.emplace_back(std::vector(shape.Dims(1), 0.0f));
   }
-
-  DCHECK(tags_tokenizer_);
-  Tokenize(node_signals.node_features.html_tag.Utf16(), tags_tokenizer_.get(),
-           &inputs[0]);
-  DCHECK(types_tokenizer_);
-  Tokenize(node_signals.node_features.type.Utf16(), types_tokenizer_.get(),
-           &inputs[1]);
-  DCHECK(text_tokenizer_);
-  Tokenize(node_signals.node_features.invisible_attributes.Utf16(),
-           text_tokenizer_.get(), &inputs[2]);
-  for (const auto& text : node_signals.node_features.text) {
-    Tokenize(text.Utf16(), text_tokenizer_.get(), &inputs[2]);
-  }
-  for (const auto& text : node_signals.label_features.text) {
-    Tokenize(text.Utf16(), text_tokenizer_.get(), &inputs[3]);
-  }
-  for (const auto& text : node_signals.context_features.header_text) {
-    Tokenize(text.Utf16(), text_tokenizer_.get(), &inputs[4]);
-  }
-  Tokenize(node_signals.context_features.form_type.Utf16(),
-           text_tokenizer_.get(), &inputs[4]);
+  DenseEncode(sparse_vector, inputs);
 
   for (size_t i = 0; i < inputs.size(); ++i) {
     absl::Status tensor_status =
@@ -163,7 +194,7 @@ bool AutofillAssistantModelExecutor::Preprocess(
 
 bool AutofillAssistantModelExecutor::GetIndexOfBestRole(
     const std::vector<float>& output_role,
-    size_t* index_of_best_role) {
+    size_t* index_of_best_role) const {
   if (output_role.size() <
       static_cast<size_t>(
           model_metadata_.output().semantic_role().classes_size())) {
@@ -182,7 +213,7 @@ bool AutofillAssistantModelExecutor::GetIndexOfBestRole(
 bool AutofillAssistantModelExecutor::GetBlockIndex(
     const std::vector<float>& output_role,
     size_t index_of_best_role,
-    int* block_index) {
+    int* block_index) const {
   if (index_of_best_role >=
       static_cast<size_t>(model_metadata_.output()
                               .semantic_role()
@@ -198,7 +229,7 @@ bool AutofillAssistantModelExecutor::GetBlockIndex(
 bool AutofillAssistantModelExecutor::GetObjective(
     const std::vector<float>& output_objective,
     int block_index,
-    int* objective) {
+    int* objective) const {
   if (block_index + 1 >= model_metadata_.output().objective().blocks_size()) {
     NOTREACHED();
     return false;
@@ -207,8 +238,8 @@ bool AutofillAssistantModelExecutor::GetObjective(
                      model_metadata_.output().objective().blocks(block_index);
   auto block_end = output_objective.begin() +
                    model_metadata_.output().objective().blocks(block_index + 1);
-  size_t index_of_best_objective =
-      std::distance(block_start, std::max_element(block_start, block_end));
+  size_t index_of_best_objective = std::distance(
+      output_objective.begin(), std::max_element(block_start, block_end));
   if (index_of_best_objective >=
       static_cast<size_t>(
           model_metadata_.output().objective().classes_size())) {
@@ -223,6 +254,18 @@ bool AutofillAssistantModelExecutor::GetObjective(
 
 absl::optional<std::pair<int, int>> AutofillAssistantModelExecutor::Postprocess(
     const std::vector<const TfLiteTensor*>& output_tensors) {
+  // Check if we have an override for this execution and return that instead.
+  if (overrides_result_) {
+    if (base::CommandLine::ForCurrentProcess()->HasSwitch(
+            switches::kAutofillAssistantDebugAnnotateDom)) {
+      VLOG(3) << "Found override, using (role: " << overrides_result_->first
+              << ", objective: " << overrides_result_->second << ")";
+    }
+    // Cleanup the result in case this executor is reused.
+    std::pair<int, int> result = *overrides_result_;
+    overrides_result_.reset();
+    return result;
+  }
   if (output_tensors.size() < 2u) {
     NOTREACHED() << "Output Tensors mismatch.";
     return absl::nullopt;
@@ -242,6 +285,12 @@ absl::optional<std::pair<int, int>> AutofillAssistantModelExecutor::Postprocess(
 
   size_t index_of_best_role;
   if (!GetIndexOfBestRole(output_role, &index_of_best_role)) {
+    return absl::nullopt;
+  }
+  if (index_of_best_role >=
+      static_cast<size_t>(
+          model_metadata_.output().semantic_role().classes_size())) {
+    NOTREACHED();
     return absl::nullopt;
   }
   int semantic_role =
@@ -265,19 +314,52 @@ absl::optional<std::pair<int, int>> AutofillAssistantModelExecutor::Postprocess(
 void AutofillAssistantModelExecutor::Tokenize(
     const std::u16string& input,
     tflite::support::text::tokenizer::RegexTokenizer* tokenizer,
-    std::vector<float>* output) {
+    const int feature_index,
+    SparseMap& output_map) {
   auto result =
       tokenizer->Tokenize(base::UTF16ToUTF8(base::i18n::ToUpper(input)));
   for (const auto& token : result.subwords) {
     int index;
     if (tokenizer->LookupId(token, &index)) {
-      if (static_cast<size_t>(index) >= output->size()) {
-        NOTREACHED();
-        continue;
-      }
-      ++output->at(index);
+      output_map[std::make_pair(feature_index, index)]++;
     }
   }
+}
+
+AutofillAssistantModelExecutor::SparseVector
+AutofillAssistantModelExecutor::TokenizeSignalsToSparseVector(
+    const blink::AutofillAssistantNodeSignals& node_signals) {
+  SparseMap sparse_map;
+
+  DCHECK(tags_tokenizer_);
+  Tokenize(node_signals.node_features.html_tag.Utf16(), tags_tokenizer_.get(),
+           /* feature_index= */ 0, sparse_map);
+  DCHECK(types_tokenizer_);
+  Tokenize(node_signals.node_features.type.Utf16(), types_tokenizer_.get(),
+           /* feature_index= */ 1, sparse_map);
+  DCHECK(text_tokenizer_);
+  Tokenize(node_signals.node_features.invisible_attributes.Utf16(),
+           text_tokenizer_.get(), /* feature_index= */ 2, sparse_map);
+  for (const auto& text : node_signals.node_features.text) {
+    Tokenize(text.Utf16(), text_tokenizer_.get(), /* feature_index= */ 2,
+             sparse_map);
+  }
+  for (const auto& text : node_signals.label_features.text) {
+    Tokenize(text.Utf16(), text_tokenizer_.get(), /* feature_index= */ 3,
+             sparse_map);
+  }
+  for (const auto& text : node_signals.context_features.header_text) {
+    Tokenize(text.Utf16(), text_tokenizer_.get(), /* feature_index= */ 4,
+             sparse_map);
+  }
+  Tokenize(node_signals.context_features.form_type.Utf16(),
+           text_tokenizer_.get(), /* feature_index= */ 4, sparse_map);
+
+  SparseVector sparse_vector;
+  for (const auto& entry : sparse_map) {
+    sparse_vector.emplace_back(entry);
+  }
+  return sparse_vector;
 }
 
 }  // namespace autofill_assistant

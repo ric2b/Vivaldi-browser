@@ -404,17 +404,13 @@ TransportSecurityState::TransportSecurityState()
 
 TransportSecurityState::TransportSecurityState(
     std::vector<std::string> hsts_host_bypass_list)
-    : enable_static_pins_(true),
-      enable_static_expect_ct_(true),
-      enable_pkp_bypass_for_local_trust_anchors_(true),
-      sent_hpkp_reports_cache_(kMaxReportCacheEntries),
+    : sent_hpkp_reports_cache_(kMaxReportCacheEntries),
       sent_expect_ct_reports_cache_(kMaxReportCacheEntries),
       key_expect_ct_by_nik_(base::FeatureList::IsEnabled(
           features::kPartitionExpectCTStateByNetworkIsolationKey)) {
 // Static pinning is only enabled for official builds to make sure that
 // others don't end up with pins that cannot be easily updated.
-#if (!BUILDFLAG(GOOGLE_CHROME_BRANDING) && !defined (VIVALDI_BUILD)) || BUILDFLAG(IS_ANDROID) || \
-    BUILDFLAG(IS_IOS)
+#if (!BUILDFLAG(GOOGLE_CHROME_BRANDING) && !defined (VIVALDI_BUILD)) || BUILDFLAG(IS_IOS)
   enable_static_pins_ = false;
   enable_static_expect_ct_ = false;
 #endif
@@ -1179,8 +1175,10 @@ bool TransportSecurityState::GetStaticPKPState(const std::string& host,
                                                PKPState* pkp_result) const {
   DCHECK_CALLED_ON_VALID_THREAD(thread_checker_);
 
-  if (!enable_static_pins_ || !IsStaticPKPListTimely())
+  if (!enable_static_pins_ || !IsStaticPKPListTimely() ||
+      !base::FeatureList::IsEnabled(features::kStaticKeyPinningEnforcement)) {
     return false;
+  }
 
   PreloadResult result;
   if (host_pins_.has_value()) {
@@ -1387,9 +1385,7 @@ void TransportSecurityState::AddOrUpdateEnabledExpectCTHosts(
       hashed_host, network_isolation_key)] = state;
 }
 
-TransportSecurityState::STSState::STSState()
-    : upgrade_mode(MODE_DEFAULT), include_subdomains(false) {
-}
+TransportSecurityState::STSState::STSState() = default;
 
 TransportSecurityState::STSState::~STSState() = default;
 
@@ -1405,14 +1401,13 @@ TransportSecurityState::STSStateIterator::STSStateIterator(
 
 TransportSecurityState::STSStateIterator::~STSStateIterator() = default;
 
-TransportSecurityState::PKPState::PKPState() : include_subdomains(false) {
-}
+TransportSecurityState::PKPState::PKPState() = default;
 
 TransportSecurityState::PKPState::PKPState(const PKPState& other) = default;
 
 TransportSecurityState::PKPState::~PKPState() = default;
 
-TransportSecurityState::ExpectCTState::ExpectCTState() : enforce(false) {}
+TransportSecurityState::ExpectCTState::ExpectCTState() = default;
 
 TransportSecurityState::ExpectCTState::~ExpectCTState() = default;
 
@@ -1641,10 +1636,18 @@ bool TransportSecurityState::IsCTLogListTimely() const {
 }
 
 bool TransportSecurityState::IsStaticPKPListTimely() const {
+  if (pins_list_always_timely_for_testing_) {
+    return true;
+  }
+
   // If the list has not been updated via component updater, freshness depends
-  // on build freshness.
+  // on the compiled-in list freshness.
   if (!host_pins_.has_value()) {
-    return IsBuildTimely();
+#if BUILDFLAG(INCLUDE_TRANSPORT_SECURITY_STATE_PRELOAD_LIST)
+    return (base::Time::Now() - kPinsListTimestamp).InDays() < 70;
+#else
+    return false;
+#endif
   }
   DCHECK(!key_pins_list_last_update_time_.is_null());
   // Else, we use the last update time.

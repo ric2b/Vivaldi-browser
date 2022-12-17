@@ -17,7 +17,6 @@
 #include "chrome/browser/web_applications/externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/os_integration/os_integration_manager.h"
 #include "chrome/browser/web_applications/policy/web_app_policy_manager.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_externally_managed_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_os_integration_manager.h"
@@ -144,7 +143,7 @@ void FakeWebAppProvider::SetWebAppUiManager(
 }
 
 void FakeWebAppProvider::SetSystemWebAppManager(
-    std::unique_ptr<SystemWebAppManager> system_web_app_manager) {
+    std::unique_ptr<ash::SystemWebAppManager> system_web_app_manager) {
   CheckNotStarted();
   system_web_app_manager_ = std::move(system_web_app_manager);
 }
@@ -173,14 +172,14 @@ WebAppIconManager& FakeWebAppProvider::GetIconManager() const {
   return *icon_manager_;
 }
 
+WebAppCommandManager& FakeWebAppProvider::GetCommandManager() const {
+  DCHECK(command_manager_);
+  return *command_manager_;
+}
+
 AbstractWebAppDatabaseFactory& FakeWebAppProvider::GetDatabaseFactory() const {
   DCHECK(database_factory_);
   return *database_factory_;
-}
-
-void FakeWebAppProvider::SkipAwaitingExtensionSystem() {
-  CheckNotStarted();
-  skip_awaiting_extension_system_ = true;
 }
 
 void FakeWebAppProvider::StartWithSubsystems() {
@@ -200,10 +199,6 @@ void FakeWebAppProvider::SetDefaultFakeSubsystems() {
   // that don't need them.
   base::CommandLine::ForCurrentProcess()->AppendSwitch(
       switches::kDisableDefaultApps);
-
-  // Default to not wait for a test extension system, that is usually never
-  // started in web app tests.
-  SkipAwaitingExtensionSystem();
 
   SetRegistrar(std::make_unique<WebAppRegistrarMutable>(profile_));
   SetDatabaseFactory(std::make_unique<FakeWebAppDatabaseFactory>());
@@ -235,7 +230,7 @@ void FakeWebAppProvider::SetDefaultFakeSubsystems() {
   SetSystemWebAppManager(
       std::make_unique<web_app::TestSystemWebAppManager>(profile_));
 
-  SetCommandManager(std::make_unique<WebAppCommandManager>());
+  SetCommandManager(std::make_unique<WebAppCommandManager>(profile_));
 
   ON_CALL(processor(), IsTrackingMetadata())
       .WillByDefault(testing::Return(true));
@@ -276,6 +271,7 @@ void FakeWebAppProviderCreator::OnWillCreateBrowserContextServices(
 std::unique_ptr<KeyedService> FakeWebAppProviderCreator::CreateWebAppProvider(
     content::BrowserContext* context) {
   Profile* profile = Profile::FromBrowserContext(context);
+  DCHECK(!WebAppProviderFactory::IsServiceCreatedForProfile(profile));
   if (!AreWebAppsEnabled(profile) || !callback_)
     return nullptr;
   return callback_.Run(profile);

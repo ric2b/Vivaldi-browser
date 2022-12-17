@@ -112,8 +112,6 @@ class PrefetchURLLoader : public network::mojom::URLLoader,
                         base::OnceCallback<void()> callback) override;
   void OnReceiveCachedMetadata(mojo_base::BigBuffer data) override;
   void OnTransferSizeUpdated(int32_t transfer_size_diff) override;
-  void OnStartLoadingResponseBody(
-      mojo::ScopedDataPipeConsumerHandle body) override;
   void OnComplete(const network::URLLoaderCompletionStatus& status) override;
 
   // mojo::DataPipeDrainer::Client overrides:
@@ -127,6 +125,8 @@ class PrefetchURLLoader : public network::mojom::URLLoader,
 
   // Set in the constructor and updated when redirected.
   network::ResourceRequest resource_request_;
+
+  network::mojom::URLResponseHeadPtr response_;
 
   const net::NetworkIsolationKey network_isolation_key_;
 

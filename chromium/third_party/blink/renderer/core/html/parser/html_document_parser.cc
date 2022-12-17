@@ -44,6 +44,7 @@
 #include "third_party/blink/renderer/core/html/html_document.h"
 #include "third_party/blink/renderer/core/html/nesting_level_incrementer.h"
 #include "third_party/blink/renderer/core/html/parser/atomic_html_token.h"
+#include "third_party/blink/renderer/core/html/parser/background_html_scanner.h"
 #include "third_party/blink/renderer/core/html/parser/html_parser_metrics.h"
 #include "third_party/blink/renderer/core/html/parser/html_resource_preloader.h"
 #include "third_party/blink/renderer/core/html/parser/html_tree_builder.h"
@@ -74,10 +75,41 @@ namespace blink {
 // the final page. This is the default value to use, if no Finch-provided
 // value exists.
 constexpr int kDefaultMaxTokenizationBudget = 250;
+constexpr int kNumYieldsWithDefaultBudget = 2;
 
 class EndIfDelayedForbiddenScope;
 class ShouldCompleteScope;
 class AttemptToEndForbiddenScope;
+
+base::TimeDelta GetDefaultTimedBudget() {
+  static const base::FeatureParam<base::TimeDelta> kDefaultParserBudgetParam{
+      &features::kTimedHTMLParserBudget, "default-parser-budget",
+      base::Milliseconds(10)};
+  // Cache the value to avoid parsing the param string more than once.
+  static const base::TimeDelta kDefaultParserBudgetValue =
+      kDefaultParserBudgetParam.Get();
+  return kDefaultParserBudgetValue;
+}
+
+base::TimeDelta GetTimedBudget(int times_yielded) {
+  static const base::FeatureParam<int> kNumYieldsWithDefaultBudgetParam{
+      &features::kTimedHTMLParserBudget, "num-yields-with-default-budget",
+      kNumYieldsWithDefaultBudget};
+  // Cache the value to avoid parsing the param string more than once.
+  static const int kNumYieldsWithDefaultBudgetValue =
+      kNumYieldsWithDefaultBudgetParam.Get();
+
+  static const base::FeatureParam<base::TimeDelta> kLongParserBudgetParam{
+      &features::kTimedHTMLParserBudget, "long-parser-budget",
+      base::Milliseconds(500)};
+  // Cache the value to avoid parsing the param string more than once.
+  static const base::TimeDelta kLongParserBudgetValue =
+      kLongParserBudgetParam.Get();
+
+  if (times_yielded <= kNumYieldsWithDefaultBudgetValue)
+    return GetDefaultTimedBudget();
+  return kLongParserBudgetValue;
+}
 
 // This class encapsulates the internal state needed for synchronous foreground
 // HTML parsing (e.g. if HTMLDocumentParser::PumpTokenizer yields, this class
@@ -403,10 +435,10 @@ HTMLDocumentParser::HTMLDocumentParser(Document& document,
                      ? Thread::Current()->Scheduler()
                      : nullptr) {
   // Report metrics for async document parsing or forced synchronous parsing.
-  // The document must be main frame to meet UKM requirements, and must have a
-  // high resolution clock for high quality data.
-  if (sync_policy == kAllowDeferredParsing && document.GetFrame() &&
-      document.GetFrame()->IsMainFrame() &&
+  // The document must be outermost main frame to meet UKM requirements, and
+  // must have a high resolution clock for high quality data.
+  if (sync_policy == kAllowDeferredParsing &&
+      document.IsInOutermostMainFrame() &&
       base::TimeTicks::IsHighResolution()) {
     metrics_reporter_ = std::make_unique<HTMLParserMetrics>(
         document.UkmSourceID(), document.UkmRecorder());
@@ -456,6 +488,7 @@ void HTMLDocumentParser::Detach() {
   // fast/dom/HTMLScriptElement/script-load-events.html we do.
   preload_scanner_.reset();
   insertion_preload_scanner_.reset();
+  background_scanner_.Reset();
   // Oilpan: It is important to clear token_ to deallocate backing memory of
   // HTMLToken::data_ and let the allocator reuse the memory for
   // HTMLToken::data_ of a next HTMLDocumentParser. We need to clear
@@ -661,9 +694,14 @@ bool HTMLDocumentParser::PumpTokenizer() {
   // number, to attempt to consume all available tokens in one go. This
   // heuristic is intended to allow a quick first contentful paint, followed by
   // a larger rendering lifecycle that processes the remainder of the page.
-  int budget = (task_runner_state_->TimesYielded() <= 2)
-                   ? kDefaultMaxTokenizationBudget
-                   : 1e7;
+  int budget =
+      (task_runner_state_->TimesYielded() <= kNumYieldsWithDefaultBudget)
+          ? kDefaultMaxTokenizationBudget
+          : 1e7;
+
+  base::TimeDelta timed_budget;
+  if (timed_parser_budget_enabled_)
+    timed_budget = GetTimedBudget(task_runner_state_->TimesYielded());
 
   base::ElapsedTimer chunk_parsing_timer_;
   unsigned tokens_parsed = 0;
@@ -678,6 +716,10 @@ bool HTMLDocumentParser::PumpTokenizer() {
       // to yield at some point soon, especially if we're in "extended budget"
       // mode. So reduce the budget back to at most the default.
       budget = std::min(budget, kDefaultMaxTokenizationBudget);
+      if (timed_parser_budget_enabled_) {
+        timed_budget = std::min(timed_budget, chunk_parsing_timer_.Elapsed() +
+                                                  GetDefaultTimedBudget());
+      }
     }
     {
       RUNTIME_CALL_TIMER_SCOPE(
@@ -695,7 +737,10 @@ bool HTMLDocumentParser::PumpTokenizer() {
       DCHECK(base::FeatureList::IsEnabled(
                  features::kDeferBeginMainFrameDuringLoading) ||
              scheduler_->DontDeferBeginMainFrame());
-      should_yield = budget <= 0 && scheduler_->DontDeferBeginMainFrame();
+      if (timed_parser_budget_enabled_)
+        should_yield = chunk_parsing_timer_.Elapsed() >= timed_budget;
+      else
+        should_yield = budget <= 0 && scheduler_->DontDeferBeginMainFrame();
       should_yield |= scheduler_->ShouldYieldForHighPriorityWork();
       should_yield &= task_runner_state_->HaveExitedHeader();
     } else {
@@ -881,6 +926,8 @@ void HTMLDocumentParser::Append(const String& input_source) {
     preload_scanner_ =
         CreatePreloadScanner(TokenPreloadScanner::ScannerType::kMainDocument);
   }
+
+  ScanInBackground(input_source);
 
   if (GetDocument()->IsPrefetchOnly()) {
     preload_scanner_->AppendToEnd(source);
@@ -1147,6 +1194,11 @@ void HTMLDocumentParser::ExecuteScriptsWaitingForResources() {
   if (task_runner_state_->WaitingForStylesheets())
     task_runner_state_->SetWaitingForStylesheets(false);
 
+  if (IsStopping()) {
+    AttemptToRunDeferredScriptsAndEnd();
+    return;
+  }
+
   // Document only calls this when the Document owns the DocumentParser so this
   // will not be called in the DocumentFragment case.
   DCHECK(script_runner_);
@@ -1266,6 +1318,12 @@ void HTMLDocumentParser::ScanAndPreload(HTMLPreloadScanner* scanner) {
       GetDocument()->GetStyleEngine().UpdateViewport();
     }
     if (task_runner_state_->NeedsLinkHeaderPreloadsDispatch()) {
+      {
+        TRACE_EVENT0("blink", "HTMLDocumentParser::DispatchLinkHeaderPreloads");
+        GetDocument()->Loader()->DispatchLinkHeaderPreloads(
+            base::OptionalOrNullptr(viewport_description),
+            PreloadHelper::kOnlyLoadMedia);
+      }
       if (GetDocument()->Loader()->GetPrefetchedSignedExchangeManager()) {
         TRACE_EVENT0("blink",
                      "HTMLDocumentParser::DispatchSignedExchangeManager");
@@ -1276,11 +1334,6 @@ void HTMLDocumentParser::ScanAndPreload(HTMLPreloadScanner* scanner) {
             ->Loader()
             ->GetPrefetchedSignedExchangeManager()
             ->StartPrefetchedLinkHeaderPreloads();
-      } else {
-        TRACE_EVENT0("blink", "HTMLDocumentParser::DispatchLinkHeaderPreloads");
-        GetDocument()->Loader()->DispatchLinkHeaderPreloads(
-            base::OptionalOrNullptr(viewport_description),
-            PreloadHelper::kOnlyLoadMedia);
       }
       task_runner_state_->DispatchedLinkHeaderPreloads();
     }
@@ -1310,11 +1363,24 @@ void HTMLDocumentParser::FetchQueuedPreloads() {
 }
 
 std::string HTMLDocumentParser::GetPreloadHistogramSuffix() {
-  bool is_main_frame = GetDocument() && GetDocument()->GetFrame() &&
-                       GetDocument()->GetFrame()->IsMainFrame();
+  bool is_outermost_main_frame =
+      GetDocument() && GetDocument()->IsInOutermostMainFrame();
   bool have_seen_first_byte = task_runner_state_->SeenFirstByte();
-  return base::StrCat({is_main_frame ? ".MainFrame" : ".Subframe",
+  return base::StrCat({is_outermost_main_frame ? ".MainFrame" : ".Subframe",
                        have_seen_first_byte ? ".NonInitial" : ".Initial"});
+}
+
+void HTMLDocumentParser::ScanInBackground(const String& source) {
+  if (task_runner_state_->IsSynchronous() || !GetDocument()->Url().IsValid())
+    return;
+
+  if (!base::FeatureList::IsEnabled(features::kPrecompileInlineScripts))
+    return;
+
+  if (!background_scanner_)
+    background_scanner_ = BackgroundHTMLScanner::Create(options_, this);
+
+  background_scanner_.AsyncCall(&BackgroundHTMLScanner::Scan).WithArgs(source);
 }
 
 }  // namespace blink

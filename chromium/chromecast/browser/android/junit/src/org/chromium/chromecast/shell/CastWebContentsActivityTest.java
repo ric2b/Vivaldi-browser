@@ -69,6 +69,7 @@ public class CastWebContentsActivityTest {
     public static class ExtendedShadowActivity extends ShadowActivity {
         private boolean mTurnScreenOn;
         private boolean mShowWhenLocked;
+        private MotionEvent mLastTouchEvent;
 
         public boolean getTurnScreenOn() {
             return mTurnScreenOn;
@@ -76,6 +77,12 @@ public class CastWebContentsActivityTest {
 
         public boolean getShowWhenLocked() {
             return mShowWhenLocked;
+        }
+
+        public MotionEvent popLastTouchEvent() {
+            MotionEvent result = mLastTouchEvent;
+            mLastTouchEvent = null;
+            return result;
         }
 
         @Implementation
@@ -86,6 +93,12 @@ public class CastWebContentsActivityTest {
         @Implementation
         public void setShowWhenLocked(boolean showWhenLocked) {
             mShowWhenLocked = showWhenLocked;
+        }
+
+        @Implementation
+        public boolean dispatchTouchEvent(MotionEvent ev) {
+            mLastTouchEvent = ev;
+            return true;
         }
     }
 
@@ -325,6 +338,60 @@ public class CastWebContentsActivityTest {
         mActivityLifecycle.create().start().resume();
         MotionEvent event = mock(MotionEvent.class);
         assertFalse(mActivity.dispatchTouchEvent(event));
+    }
+
+    @Test
+    @Config(shadows = {ExtendedShadowActivity.class})
+    public void testDispatchTouchEventInPipMode() {
+        CastWebContentsSurfaceHelper surfaceHelper = mock(CastWebContentsSurfaceHelper.class);
+        ExtendedShadowActivity shadowActivity = (ExtendedShadowActivity) Shadow.extract(mActivity);
+        when(surfaceHelper.isTouchInputEnabled()).thenReturn(true);
+        mActivity.setSurfaceHelperForTesting(surfaceHelper);
+        Window window = mock(Window.class);
+        mActivityLifecycle.create().start().resume();
+        shadowActivity.setWindow(window);
+        MotionEvent event = mock(MotionEvent.class);
+        when(event.getAction()).thenReturn(MotionEvent.ACTION_DOWN);
+        when(window.superDispatchTouchEvent(event)).thenReturn(true);
+        // Sanity check: touch is enabled before entering PiP mode.
+        assertTrue(mActivity.dispatchTouchEvent(event));
+        assertEquals(shadowActivity.popLastTouchEvent(), event);
+        mActivity.onUserLeaveHint();
+        mActivity.onPictureInPictureModeChanged(true, null);
+        // Touch is disabled while in PiP mode.
+        assertFalse(mActivity.dispatchTouchEvent(event));
+        assertNull(shadowActivity.popLastTouchEvent());
+        mActivity.onPictureInPictureModeChanged(false, null);
+        // Touch is re-enabled after leaving PiP mode.
+        assertTrue(mActivity.dispatchTouchEvent(event));
+    }
+
+    @Test
+    @Config(shadows = {ExtendedShadowActivity.class}, sdk = {Build.VERSION_CODES.O})
+    public void testStopWhileNotInPipModeDoesNotCloseActivity() {
+        mShadowActivityManager.setLockTaskModeState(ActivityManager.LOCK_TASK_MODE_NONE);
+        ExtendedShadowActivity shadowActivity = (ExtendedShadowActivity) Shadow.extract(mActivity);
+        mActivityLifecycle.create().start().resume();
+        verifyBroadcastedIntent(
+                filterFor(CastWebContentsIntentUtils.ACTION_ACTIVITY_STOPPED), () -> {
+                    mActivityLifecycle.pause().stop();
+                    assertFalse(mShadowActivity.isFinishing());
+                }, false);
+    }
+
+    @Test
+    @Config(shadows = {ExtendedShadowActivity.class}, sdk = {Build.VERSION_CODES.O})
+    public void testStopWhileInPipModeClosesActivity() {
+        mShadowActivityManager.setLockTaskModeState(ActivityManager.LOCK_TASK_MODE_NONE);
+        ExtendedShadowActivity shadowActivity = (ExtendedShadowActivity) Shadow.extract(mActivity);
+        mActivityLifecycle.create().start().resume();
+        mActivity.onUserLeaveHint();
+        mActivity.onPictureInPictureModeChanged(true, null);
+        verifyBroadcastedIntent(
+                filterFor(CastWebContentsIntentUtils.ACTION_ACTIVITY_STOPPED), () -> {
+                    mActivityLifecycle.pause().stop();
+                    assertTrue(mShadowActivity.isFinishing());
+                }, true);
     }
 
     @Test

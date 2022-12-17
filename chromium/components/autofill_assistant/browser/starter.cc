@@ -30,7 +30,6 @@
 #include "components/autofill_assistant/browser/trigger_scripts/dynamic_trigger_conditions.h"
 #include "components/autofill_assistant/browser/trigger_scripts/static_trigger_conditions.h"
 #include "components/autofill_assistant/browser/url_utils.h"
-#include "components/ukm/content/source_url_recorder.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 
@@ -180,7 +179,7 @@ Starter::Starter(content::WebContents* web_contents,
     : content::WebContentsObserver(web_contents),
       content::WebContentsUserData<Starter>(*web_contents),
       current_ukm_source_id_(
-          ukm::GetSourceIdForWebContentsDocument(web_contents)),
+          web_contents->GetPrimaryMainFrame()->GetPageUkmSourceId()),
       cached_failed_trigger_script_fetches_(
           GetOrCreateFailedTriggerScriptFetchesCache()),
       user_denylisted_domains_(kMaxUserDenylistedCacheSize),
@@ -426,7 +425,7 @@ void Starter::Init() {
              fetch_trigger_scripts_on_navigation_) {
     MaybeStartImplicitlyForUrl(
         web_contents()->GetLastCommittedURL(),
-        ukm::GetSourceIdForWebContentsDocument(web_contents()));
+        web_contents()->GetPrimaryMainFrame()->GetPageUkmSourceId());
   }
 }
 
@@ -471,7 +470,13 @@ void Starter::Start(std::unique_ptr<TriggerContext> trigger_context) {
   CancelPendingStartup(Metrics::TriggerScriptFinishedState::CANCELED);
   pending_trigger_context_ = std::move(trigger_context);
   if (!platform_delegate_->IsAttached()) {
-    OnStartDone(/* start_regular_script = */ false);
+    OnStartDone(/* start_script= */ false);
+    return;
+  }
+
+  if (platform_delegate_->GetIsSupervisedUser()) {
+    OnStartDone(/* start_script= */ false);
+    return;
   }
 
   if (base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
@@ -508,7 +513,7 @@ void Starter::Start(std::unique_ptr<TriggerContext> trigger_context) {
 
   if (IsTriggerScriptContext(*pending_trigger_context_) &&
       !url_utils::IsSamePublicSuffixDomain(
-          web_contents()->GetMainFrame()->GetLastCommittedURL(),
+          web_contents()->GetPrimaryMainFrame()->GetLastCommittedURL(),
           startup_url.value_or(GURL()))) {
     waiting_for_deeplink_navigation_ = true;
     return;
@@ -845,6 +850,14 @@ void Starter::ReportPreconditionsChecked(bool start_script) {
 
 void Starter::DeleteTriggerScriptCoordinator() {
   trigger_script_coordinator_.reset();
+}
+
+const CommonDependencies* Starter::GetCommonDependencies() {
+  return platform_delegate_->GetCommonDependencies();
+}
+
+const PlatformDependencies* Starter::GetPlatformDependencies() {
+  return platform_delegate_->GetPlatformDependencies();
 }
 
 base::WeakPtr<Starter> Starter::GetWeakPtr() {

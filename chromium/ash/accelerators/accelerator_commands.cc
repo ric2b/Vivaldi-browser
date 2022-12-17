@@ -17,8 +17,11 @@
 #include "ash/shelf/shelf.h"
 #include "ash/shell.h"
 #include "ash/system/keyboard_brightness_control_delegate.h"
+#include "ash/system/model/system_tray_model.h"
 #include "ash/system/status_area_widget.h"
 #include "ash/system/time/calendar_metrics.h"
+#include "ash/system/time/calendar_model.h"
+#include "ash/system/unified/date_tray.h"
 #include "ash/system/unified/unified_system_tray.h"
 #include "ash/system/unified/unified_system_tray_bubble.h"
 #include "ash/wm/float/float_controller.h"
@@ -54,6 +57,10 @@ views::Widget* FindPipWidget() {
 }
 
 }  // namespace
+
+void DumpCalendarModel() {
+  Shell::Get()->system_tray_model()->calendar_model()->DebugDump();
+}
 
 void CycleBackwardMru() {
   Shell::Get()->window_cycle_controller()->HandleCycleWindow(
@@ -211,18 +218,28 @@ void ShiftPrimaryDisplay() {
 
 void ToggleCalendar() {
   aura::Window* target_root = Shell::GetRootWindowForNewWindows();
-  UnifiedSystemTray* tray = RootWindowController::ForWindow(target_root)
-                                ->GetStatusAreaWidget()
-                                ->unified_system_tray();
-  if (tray->IsBubbleShown()) {
+  StatusAreaWidget* status_area_widget =
+      RootWindowController::ForWindow(target_root)->GetStatusAreaWidget();
+  UnifiedSystemTray* tray = status_area_widget->unified_system_tray();
+
+  // If currently showing the calendar view, close it.
+  if (tray->IsShowingCalendarView()) {
     tray->CloseBubble();
-  } else {
-    tray->ShowBubble();
-    tray->ActivateBubble();
-    tray->bubble()->ShowCalendarView(
-        calendar_metrics::CalendarViewShowSource::kAccelerator,
-        calendar_metrics::CalendarEventSource::kKeyboard);
+    return;
   }
+
+  // If currently not showing the calendar view, show the bubble if needed then
+  // show the calendar view.
+  if (!tray->IsBubbleShown()) {
+    // Set `DateTray` to be active prior to showing the bubble, this prevents
+    // flashing of the status area. See crbug.com/1332603.
+    status_area_widget->date_tray()->SetIsActive(true);
+    tray->ShowBubble();
+  }
+
+  tray->bubble()->ShowCalendarView(
+      calendar_metrics::CalendarViewShowSource::kAccelerator,
+      calendar_metrics::CalendarEventSource::kKeyboard);
 }
 
 void ToggleFullscreen() {

@@ -261,6 +261,9 @@ bool IsSignoutDisallowedByPolicy(
         AUTHENTICATION_FAILED_WITH_FORCE_SIGNIN:
     case signin_metrics::ProfileSignout::SIGNIN_NOT_ALLOWED_ON_PROFILE_INIT:
     case signin_metrics::ProfileSignout::USER_TUNED_OFF_SYNC_FROM_DICE_UI:
+    case signin_metrics::ProfileSignout::SIGNIN_RETRIGGERD_FROM_WEB_SIGNIN:
+    case signin_metrics::ProfileSignout::
+        USER_CLICKED_SIGNOUT_FROM_CLEAR_BROWSING_DATA_PAGE:
       return true;
     case signin_metrics::ProfileSignout::ACCOUNT_REMOVED_FROM_DEVICE:
     case signin_metrics::ProfileSignout::
@@ -289,6 +292,13 @@ bool IsSignoutDisallowedByPolicy(
     case signin_metrics::ProfileSignout::
         USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS:
       return false;
+    case signin_metrics::ProfileSignout::USER_CLICKED_SIGNOUT_PROFILE_MENU:
+      return false;
+    case signin_metrics::ProfileSignout::
+        USER_CLICKED_SIGNOUT_FROM_USER_POLICY_NOTIFICATION_DIALOG:
+      return false;
+    case signin_metrics::ProfileSignout::ACCOUNT_EMAIL_UPDATED:
+      return true;
     case signin_metrics::ProfileSignout::NUM_PROFILE_SIGNOUT_METRICS:
       NOTREACHED();
       return false;
@@ -426,7 +436,13 @@ const signin_metrics::ProfileSignout kSignoutSources[] = {
     signin_metrics::ProfileSignout::
         IOS_ACCOUNT_REMOVED_FROM_DEVICE_AFTER_RESTORE,
     signin_metrics::ProfileSignout::USER_CLICKED_REVOKE_SYNC_CONSENT_SETTINGS,
-
+    signin_metrics::ProfileSignout::USER_CLICKED_SIGNOUT_PROFILE_MENU,
+    signin_metrics::ProfileSignout::SIGNIN_RETRIGGERD_FROM_WEB_SIGNIN,
+    signin_metrics::ProfileSignout::
+        USER_CLICKED_SIGNOUT_FROM_USER_POLICY_NOTIFICATION_DIALOG,
+    signin_metrics::ProfileSignout::ACCOUNT_EMAIL_UPDATED,
+    signin_metrics::ProfileSignout::
+        USER_CLICKED_SIGNOUT_FROM_CLEAR_BROWSING_DATA_PAGE,
 };
 static_assert(std::size(kSignoutSources) ==
                   signin_metrics::ProfileSignout::NUM_PROFILE_SIGNOUT_METRICS,

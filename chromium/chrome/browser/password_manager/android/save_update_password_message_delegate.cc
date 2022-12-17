@@ -94,7 +94,7 @@ void SaveUpdatePasswordMessageDelegate::DisplaySaveUpdatePasswordPromptInternal(
   CreateMessage(update_password);
   RecordMessageShownMetrics();
   messages::MessageDispatcherBridge::Get()->EnqueueMessage(
-      message_.get(), web_contents_, messages::MessageScopeType::NAVIGATION,
+      message_.get(), web_contents_, messages::MessageScopeType::WEB_CONTENTS,
       messages::MessagePriority::kNormal);
 }
 
@@ -171,7 +171,7 @@ void SaveUpdatePasswordMessageDelegate::CreateMessage(bool update_password) {
         password_manager::features::UsesUnifiedPasswordManagerUi()
             ? IDS_PASSWORD_MESSAGE_NEVER_SAVE_MENU_ITEM
             : IDS_PASSWORD_MANAGER_BLOCKLIST_BUTTON));
-    message_->SetSecondaryActionCallback(base::BindOnce(
+    message_->SetSecondaryActionCallback(base::BindRepeating(
         &SaveUpdatePasswordMessageDelegate::HandleNeverSaveClicked,
         base::Unretained(this)));
   }
@@ -288,7 +288,7 @@ void SaveUpdatePasswordMessageDelegate::DisplayUsernameConfirmDialog(
   password_edit_dialog_->Show(
       usernames, selected_username_index,
       passwords_state_.form_manager()->GetPendingCredentials().password_value,
-      origin, std::string());
+      origin, account_email_);
 }
 
 unsigned int SaveUpdatePasswordMessageDelegate::GetDisplayUsernames(
@@ -327,14 +327,11 @@ void SaveUpdatePasswordMessageDelegate::HandleDialogDismissed(
 }
 
 void SaveUpdatePasswordMessageDelegate::HandleSavePasswordFromDialog(
-    int selected_username_index) {
-  if (passwords_state_.GetCurrentForms().size() > 1) {
-    UpdatePasswordFormUsernameAndPassword(
-        passwords_state_.GetCurrentForms()[selected_username_index]
-            ->username_value,
-        passwords_state_.form_manager()->GetPendingCredentials().password_value,
-        passwords_state_.form_manager());
-  }
+    const std::u16string& username,
+    const std::u16string& password) {
+  DCHECK(passwords_state_.GetCurrentForms().size() > 1);
+  UpdatePasswordFormUsernameAndPassword(username, password,
+                                        passwords_state_.form_manager());
   passwords_state_.form_manager()->Save();
 }
 

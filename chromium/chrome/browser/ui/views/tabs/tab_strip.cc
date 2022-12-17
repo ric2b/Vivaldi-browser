@@ -979,6 +979,11 @@ void TabStrip::OnGroupVisualsChanged(
   if (!is_collapsing)
     tab_container_->ExitTabClosingMode();
   tab_container_->StartBasicAnimation();
+
+  // The active tab may need to repaint its group stroke if it's in |group|.
+  int active_index = GetActiveIndex();
+  if (IsValidModelIndex(active_index))
+    tab_at(active_index)->SchedulePaint();
 }
 
 void TabStrip::ToggleTabGroup(const tab_groups::TabGroupId& group,
@@ -1145,6 +1150,10 @@ void TabStrip::SetTabNeedsAttention(int model_index, bool attention) {
   tab_at(model_index)->SetTabNeedsAttention(attention);
 }
 
+int TabStrip::GetActiveIndex() const {
+  return controller_->GetActiveIndex();
+}
+
 int TabStrip::GetModelIndexOf(const TabSlotView* view) const {
   return tab_container_->GetModelIndexOf(view);
 }
@@ -1204,10 +1213,6 @@ const ui::ListSelectionModel& TabStrip::GetSelectionModel() const {
 
 Tab* TabStrip::tab_at(int index) const {
   return tab_container_->GetTabAtModelIndex(index);
-}
-
-int TabStrip::GetActiveIndex() const {
-  return controller_->GetActiveIndex();
 }
 
 void TabStrip::SelectTab(Tab* tab, const ui::Event& event) {
@@ -1506,22 +1511,22 @@ SkColor TabStrip::GetTabSeparatorColor() const {
 SkColor TabStrip::GetTabBackgroundColor(
     TabActive active,
     BrowserFrameActiveState active_state) const {
-  const ui::ThemeProvider* tp = GetThemeProvider();
-  if (!tp)
+  const auto* cp = GetColorProvider();
+  if (!cp)
     return gfx::kPlaceholderColor;
 
-  constexpr int kColorIds[2][2] = {
-      {ThemeProperties::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_INACTIVE,
-       ThemeProperties::COLOR_TAB_BACKGROUND_INACTIVE_FRAME_ACTIVE},
-      {ThemeProperties::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_INACTIVE,
-       ThemeProperties::COLOR_TAB_BACKGROUND_ACTIVE_FRAME_ACTIVE}};
+  constexpr ChromeColorIds kColorIds[2][2] = {
+      {kColorTabBackgroundInactiveFrameInactive,
+       kColorTabBackgroundInactiveFrameActive},
+      {kColorTabBackgroundActiveFrameInactive,
+       kColorTabBackgroundActiveFrameActive}};
 
   using State = BrowserFrameActiveState;
   const bool tab_active = active == TabActive::kActive;
   const bool frame_active =
       (active_state == State::kActive) ||
       ((active_state == State::kUseCurrent) && ShouldPaintAsActiveFrame());
-  return tp->GetColor(kColorIds[tab_active][frame_active]);
+  return cp->GetColor(kColorIds[tab_active][frame_active]);
 }
 
 SkColor TabStrip::GetTabForegroundColor(TabActive active) const {

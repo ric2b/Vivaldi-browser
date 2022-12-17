@@ -101,9 +101,6 @@
 #endif
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#if BUILDFLAG(IS_MAC)
-#include "platform_media/renderer/decoders/mac/core_audio_demuxer.h"
-#endif
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
 #endif
 
@@ -400,21 +397,6 @@ MimeType TranslateMimeTypeToHistogramEnum(const std::string& mime_type) {
 
 #endif
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-std::string GetLoadTypeName(WebMediaPlayer::LoadType load_type) {
-  switch (load_type) {
-    case WebMediaPlayer::kLoadTypeURL:
-      return "LoadTypeURL";
-    case WebMediaPlayer::kLoadTypeMediaSource:
-      return "LoadTypeMediaSource";
-    case WebMediaPlayer::kLoadTypeMediaStream:
-      return "LoadTypeMediaStream";
-  }
-  NOTREACHED();
-  return "";
-}
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
-
 }  // namespace
 
 class BufferedDataSourceHostImpl;
@@ -450,7 +432,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
     mojo::PendingRemote<media::mojom::MediaMetricsProvider> metrics_provider,
     CreateSurfaceLayerBridgeCB create_bridge_callback,
     scoped_refptr<viz::RasterContextProvider> raster_context_provider,
-    WebMediaPlayer::SurfaceLayerMode surface_layer_mode,
+    bool use_surface_layer,
     bool is_background_suspend_enabled,
     bool is_background_video_playback_enabled,
     bool is_background_video_track_optimization_supported,
@@ -476,7 +458,7 @@ WebMediaPlayerImpl::WebMediaPlayerImpl(
       observer_(std::move(media_observer)),
       enable_instant_source_buffer_gc_(enable_instant_source_buffer_gc),
       embedded_media_experience_enabled_(embedded_media_experience_enabled),
-      surface_layer_mode_(surface_layer_mode),
+      use_surface_layer_(use_surface_layer),
       create_bridge_callback_(std::move(create_bridge_callback)),
       request_routing_token_cb_(std::move(request_routing_token_cb)),
       media_metrics_provider_(std::move(metrics_provider)),
@@ -699,11 +681,6 @@ WebMediaPlayer::LoadTiming WebMediaPlayerImpl::Load(
   WebURL url = source.GetAsURL();
   DVLOG(1) << __func__ << "(" << load_type << ", " << GURL(url) << ", "
            << cors_mode << ")";
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  VLOG(1) << __FUNCTION__ << ": Load type : " << GetLoadTypeName(load_type)
-          << " Url : " << GURL(url) << " Cors mode " << cors_mode;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 
   bool is_deferred = false;
 
@@ -931,11 +908,6 @@ void WebMediaPlayerImpl::DoLoad(LoadType load_type,
                                 : media::mojom::MediaURLScheme::kUnknown,
       media::mojom::MediaStreamType::kNone);
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  VLOG(1) << __FUNCTION__ << ": Load type : " << GetLoadTypeName(load_type)
-          << " Url : " << GURL(url) << " Cors mode " << cors_mode;
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
-
   if (demuxer_override_ || load_type == kLoadTypeMediaSource) {
     // If a demuxer override was specified or a Media Source pipeline will be
     // used, the pipeline can start immediately.
@@ -1099,26 +1071,30 @@ void WebMediaPlayerImpl::DoSeek(base::TimeDelta time, bool time_updated) {
     SetReadyState(WebMediaPlayer::kReadyStateHaveMetadata);
 
   // When paused or ended, we know exactly what the current time is and can
-  // elide seeks to it. However, there are two cases that are not elided:
+  // elide seeks to it. However, there are three cases that are not elided:
   //   1) When the pipeline state is not stable.
-  //      In this case we just let `pipeline_controller_` decide what to do, as
+  //      In this case we just let PipelineController decide what to do, as
   //      it has complete information.
-  //   2) For MSE.
+  //   2) When the ready state was not kReadyStateHaveEnoughData.
+  //      If playback has not started, it's possible to enter a state where
+  //      OnBufferingStateChange() will not be called again to complete the
+  //      seek.
+  //   3) For MSE.
   //      Because the buffers may have changed between seeks, MSE seeks are
   //      never elided.
   if (paused_ && pipeline_controller_->IsStable() &&
       (paused_time_ == time || (ended_ && time == base::Seconds(Duration()))) &&
       !chunk_demuxer_) {
-    // If the ready state was high enough before, we can indicate that the seek
-    // completed just by restoring it. Otherwise we will just wait for the real
-    // ready state change to eventually happen.
     if (old_state == kReadyStateHaveEnoughData) {
+      // This will in turn SetReadyState() to signal the demuxer seek, followed
+      // by timeChanged() to signal the renderer seek.
+      should_notify_time_changed_ = true;
       main_task_runner_->PostTask(
           FROM_HERE, base::BindOnce(&WebMediaPlayerImpl::OnBufferingStateChange,
                                     weak_this_, media::BUFFERING_HAVE_ENOUGH,
                                     media::BUFFERING_CHANGE_REASON_UNKNOWN));
+      return;
     }
-    return;
   }
 
   if (playback_events_recorder_)
@@ -1398,11 +1374,6 @@ WebMediaPlayer::ReadyState WebMediaPlayerImpl::GetReadyState() const {
   return ready_state_;
 }
 
-WebMediaPlayer::SurfaceLayerMode WebMediaPlayerImpl::GetVideoSurfaceLayerMode()
-    const {
-  return surface_layer_mode_;
-}
-
 WebString WebMediaPlayerImpl::GetErrorMessage() const {
   DCHECK(main_task_runner_->BelongsToCurrentThread());
   return WebString::FromUTF8(media_log_->GetErrorMessage());
@@ -1505,6 +1476,7 @@ void WebMediaPlayerImpl::Paint(cc::PaintCanvas* canvas,
       GetCurrentFrameFromCompositor();
   last_frame_request_time_ = tick_clock_->NowTicks();
   video_frame_readback_count_++;
+  pipeline_controller_->OnExternalVideoFrameRequest();
 
   video_renderer_.Paint(
       video_frame, canvas, gfx::RectF(rect), flags,
@@ -1512,10 +1484,25 @@ void WebMediaPlayerImpl::Paint(cc::PaintCanvas* canvas,
       raster_context_provider_.get());
 }
 
-scoped_refptr<media::VideoFrame> WebMediaPlayerImpl::GetCurrentFrame() {
+scoped_refptr<media::VideoFrame>
+WebMediaPlayerImpl::GetCurrentFrameThenUpdate() {
   last_frame_request_time_ = tick_clock_->NowTicks();
   video_frame_readback_count_++;
+  pipeline_controller_->OnExternalVideoFrameRequest();
   return GetCurrentFrameFromCompositor();
+}
+
+absl::optional<int> WebMediaPlayerImpl::CurrentFrameId() const {
+  DCHECK(main_task_runner_->BelongsToCurrentThread());
+  TRACE_EVENT0("media", "WebMediaPlayerImpl::GetCurrentFrameID");
+
+  // We can't copy from protected frames.
+  if (cdm_context_ref_)
+    return absl::nullopt;
+
+  if (auto frame = compositor_->GetCurrentFrameOnAnyThread())
+    return frame->unique_id();
+  return absl::nullopt;
 }
 
 media::PaintCanvasVideoRenderer*
@@ -1904,6 +1891,10 @@ void WebMediaPlayerImpl::OnMemoryPressure(
                                 memory_pressure_level, force_instant_gc));
 }
 
+void WebMediaPlayerImpl::OnFallback(media::PipelineStatus status) {
+  media_metrics_provider_->OnFallback(std::move(status).AddHere());
+}
+
 void WebMediaPlayerImpl::OnError(media::PipelineStatus status) {
   DVLOG(1) << __func__ << ": status=" << status;
   DCHECK(main_task_runner_->BelongsToCurrentThread());
@@ -2079,7 +2070,7 @@ void WebMediaPlayerImpl::OnMetadata(const media::PipelineMetadata& metadata) {
         DisableOverlay();
     }
 
-    if (surface_layer_mode_ == WebMediaPlayer::SurfaceLayerMode::kAlways) {
+    if (use_surface_layer_) {
       ActivateSurfaceLayerForVideo();
     } else {
       DCHECK(!video_layer_);
@@ -2738,7 +2729,8 @@ void WebMediaPlayerImpl::OnRemotePlayStateChange(
     client_->ResumePlayback();
   } else if (state == media::MediaStatus::State::PAUSED && !Paused()) {
     DVLOG(1) << __func__ << " requesting PAUSE.";
-    client_->PausePlayback();
+    client_->PausePlayback(
+        WebMediaPlayerClient::PauseReason::kRemotePlayStateChange);
   }
 }
 #endif  // BUILDFLAG(IS_ANDROID)
@@ -2772,19 +2764,22 @@ void WebMediaPlayerImpl::DataSourceInitialized(bool success) {
   }
 
 #if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  if (mb_data_source_ &&
-      media::ProtocolSniffer::ShouldSniffProtocol(mb_data_source_->mime_type())) {
-    // PostTask is needed to free BufferedDataSource lock as recursive ones
-    // are not allowed.
-    main_task_runner_->PostTask(
-        FROM_HERE,
-        base::BindOnce(&WebMediaPlayerImpl::SniffProtocol, weak_this_));
+  if (media::IPCDemuxer::IsEnabled()) {
+    if (mb_data_source_ && media::ProtocolSniffer::ShouldSniffProtocol(
+                               mb_data_source_->mime_type())) {
+      // PostTask is needed to free BufferedDataSource lock as recursive ones
+      // are not allowed.
+      main_task_runner_->PostTask(
+          FROM_HERE,
+          base::BindOnce(&WebMediaPlayerImpl::SniffProtocol, weak_this_));
+      return;
+    }
+    StartIPCPipeline(mime_type_);
     return;
   }
-  StartIPCPipeline(mime_type_);
-#else
-  StartPipeline();
 #endif  // USE_SYSTEM_PROPRIETARY_CODECS
+
+  StartPipeline();
 }
 
 void WebMediaPlayerImpl::OnDataSourceRedirected() {
@@ -3486,8 +3481,11 @@ void WebMediaPlayerImpl::ScheduleIdlePauseTimer() {
 #endif
 
   // Idle timeout chosen arbitrarily.
-  background_pause_timer_.Start(FROM_HERE, base::Seconds(5), client_,
-                                &WebMediaPlayerClient::PausePlayback);
+  background_pause_timer_.Start(
+      FROM_HERE, base::Seconds(5),
+      base::BindOnce(
+          &WebMediaPlayerClient::PausePlayback, base::Unretained(client_),
+          WebMediaPlayerClient::PauseReason::kSuspendedPlayerIdleTimeout));
 }
 
 void WebMediaPlayerImpl::CreateWatchTimeReporter() {
@@ -3725,10 +3723,6 @@ bool WebMediaPlayerImpl::IsBackgroundOptimizationCandidate() const {
   if (!HasAudio() && HasVideo())
     return true;
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  VLOG(1) << __FUNCTION__ << ": Load type : " << GetLoadTypeName(load_type_);
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
-
   // Videos shorter than the maximum allowed keyframe distance can be optimized.
   base::TimeDelta duration = GetPipelineMediaDuration();
 
@@ -3781,7 +3775,8 @@ void WebMediaPlayerImpl::PauseVideoIfNeeded() {
   // client_->PausePlayback() will get `paused_when_hidden_` set to
   // false and UpdatePlayState() called, so set the flag to true after and then
   // return.
-  client_->PausePlayback();
+  client_->PausePlayback(
+      WebMediaPlayerClient::PauseReason::kBackgroundVideoOptimization);
   paused_when_hidden_ = true;
 }
 
@@ -3910,10 +3905,6 @@ void WebMediaPlayerImpl::RecordVideoNaturalSize(const gfx::Size& natural_size) {
   initial_video_height_recorded_ = true;
 
   int height = natural_size.height();
-
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  VLOG(1) << __FUNCTION__ << ": Load type : " << GetLoadTypeName(load_type_);
-#endif  // USE_SYSTEM_PROPRIETARY_CODECS
 
   if (load_type_ == kLoadTypeURL)
     UMA_HISTOGRAM_VIDEO_HEIGHT("Media.VideoHeight.Initial.SRC", height);
@@ -4130,7 +4121,7 @@ void WebMediaPlayerImpl::SniffProtocol() {
 void WebMediaPlayerImpl::StartIPCPipeline(std::string mime_type) {
   VLOG(1) << "PROPMEDIA(RENDERER) : " << __FUNCTION__
           << " mime_type=" << mime_type
-          << " load_type=" << GetLoadTypeName(load_type_);
+          << " load_type=" << load_type_;
   DCHECK(load_type_ != kLoadTypeMediaSource);
   GURL url;
   if (mb_data_source_) {
@@ -4162,11 +4153,6 @@ void WebMediaPlayerImpl::StartIPCPipeline(std::string mime_type) {
     demuxer_ = std::move(ipc_demuxer);
     return;
   }
-#if BUILDFLAG(IS_MAC)
-  if (media::CoreAudioDemuxer::IsSupported(mime_type, url)) {
-    SetDemuxer(std::make_unique<media::CoreAudioDemuxer>(data_source_.get()));
-  }
-#endif  // IS_MAC
   StartPipeline();
 }
 

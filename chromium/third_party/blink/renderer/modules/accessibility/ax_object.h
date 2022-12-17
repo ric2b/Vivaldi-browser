@@ -1279,6 +1279,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   // TODO(accessibility) Move these to a static helper util class.
   static bool IsARIAControl(ax::mojom::blink::Role);
   static bool IsARIAInput(ax::mojom::blink::Role);
+  static bool IsFrame(const Node*);
   static bool HasARIAOwns(Element* element);
   // Is this a widget that requires container widget.
   bool IsSubWidget() const;
@@ -1375,11 +1376,6 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
   static bool IsNameFromAriaAttribute(Element* element);
   // Return true if the name is from @aria-label / @aria-labelledby / @title.
   bool IsNameFromAuthorAttribute() const;
-  String TextFromAriaLabelledby(AXObjectSet& visited,
-                                AXRelatedObjectVector* related_objects,
-                                Vector<String>& ids) const;
-  String TextFromAriaDescribedby(AXRelatedObjectVector* related_objects,
-                                 Vector<String>& ids) const;
 
   ax::mojom::blink::Role ButtonRoleType() const;
 
@@ -1398,6 +1394,7 @@ class MODULES_EXPORT AXObject : public GarbageCollected<AXObject> {
 
   // Helpers for serialization.
   void SerializeActionAttributes(ui::AXNodeData* node_data);
+  void SerializeChildTreeID(ui::AXNodeData* node_data);
   void SerializeChooserPopupAttributes(ui::AXNodeData* node_data);
   void SerializeColorAttributes(ui::AXNodeData* node_data);
   void SerializeElementAttributes(ui::AXNodeData* node_data);

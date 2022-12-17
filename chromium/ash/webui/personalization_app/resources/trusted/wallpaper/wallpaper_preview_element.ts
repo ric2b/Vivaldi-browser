@@ -9,12 +9,15 @@
 
 import 'chrome://resources/cr_elements/cr_button/cr_button.m.js';
 import 'chrome://resources/polymer/v3_0/iron-icon/iron-icon.js';
-import '../../common/icons.js';
-import '../../common/styles.js';
-import './styles.js';
-import '../cros_button_style.js';
+import '../../common/icons.html.js';
+import '../../common/common_style.css.js';
+import './trusted_style.css.js';
+import '../cros_button_style.css.js';
 
-import {CurrentWallpaper, WallpaperProviderInterface} from '../personalization_app.mojom-webui.js';
+import {assert} from 'chrome://resources/js/assert_ts.js';
+
+import {getLocalStorageAttribution, isNonEmptyArray} from '../../common/utils.js';
+import {CurrentWallpaper, WallpaperProviderInterface, WallpaperType} from '../personalization_app.mojom-webui.js';
 import {Paths, PersonalizationRouter} from '../personalization_router_element.js';
 import {WithPersonalizationStore} from '../personalization_store.js';
 import {hasHttpScheme, removeHighResolutionSuffix} from '../utils.js';
@@ -35,20 +38,16 @@ export class WallpaperPreview extends WithPersonalizationStore {
     return {
       image_: {
         type: Object,
+        value: null,
       },
       imageLoading_: {
         type: Boolean,
       },
-      showImage_: {
-        type: Boolean,
-        computed: 'computeShowImage_(image_, imageLoading_)',
-      }
     };
   }
 
   private image_: CurrentWallpaper|null;
   private imageLoading_: boolean;
-  private showImage_: boolean;
   private wallpaperProvider_: WallpaperProviderInterface;
 
   constructor() {
@@ -70,8 +69,9 @@ export class WallpaperPreview extends WithPersonalizationStore {
   /**
    * Navigate to wallpaper collections page.
    */
-  onClickWallpaper_() {
-    PersonalizationRouter.instance().goToRoute(Paths.Collections);
+  private onClickWallpaper_() {
+    assert(!!this.image_ && this.image_.type !== WallpaperType.kPolicy);
+    PersonalizationRouter.instance().goToRoute(Paths.COLLECTIONS);
   }
 
   /**
@@ -88,18 +88,37 @@ export class WallpaperPreview extends WithPersonalizationStore {
     return '';
   }
 
-  private computeShowImage_(image: CurrentWallpaper|null, loading: boolean):
-      boolean {
-    // Specifically check === false to avoid undefined case while component is
-    // initializing.
-    return loading === false && !!image;
+  private getImageAltDescription_(image: CurrentWallpaper|null): string {
+    if (!image) {
+      return `${this.i18n('currentlySet')} ${
+          this.i18n('unknownImageAttribution')}`;
+    }
+    if (image.type === WallpaperType.kDefault) {
+      return `${this.i18n('currentlySet')} ${this.i18n('defaultWallpaper')}`;
+    }
+    if (isNonEmptyArray(image.attribution)) {
+      return [this.i18n('currentlySet'), ...image.attribution].join(' ');
+    }
+    // Fallback to cached attribution.
+    const attribution = getLocalStorageAttribution(image.key);
+    if (isNonEmptyArray(attribution)) {
+      return [this.i18n('currentlySet'), ...attribution].join(' ');
+    }
+    return `${this.i18n('currentlySet')} ${
+        this.i18n('unknownImageAttribution')}`;
   }
 
   /**
-   * Returns hidden state of loading placeholder.
+   * Returns visible state of loading placeholder.
    */
-  private showPlaceholders_(loading: boolean, showImage: boolean): boolean {
-    return loading || !showImage;
+  private showPlaceholders_(
+      imageLoading: boolean, image: CurrentWallpaper|null): boolean {
+    return imageLoading || !image;
+  }
+
+  private isPolicyControlled_(image: CurrentWallpaper|null): boolean {
+    return !!image && image.type === WallpaperType.kPolicy;
   }
 }
+
 customElements.define(WallpaperPreview.is, WallpaperPreview);

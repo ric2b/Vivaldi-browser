@@ -2,8 +2,10 @@
 
 #include "platform_media/renderer/decoders/vivaldi_decoder_config.h"
 
+#include "base/command_line.h"
 #include "build/build_config.h"
 
+#include "base/vivaldi_switches.h"
 #include "platform_media/common/feature_toggles.h"
 
 #if BUILDFLAG(IS_MAC)
@@ -23,19 +25,29 @@
 namespace media {
 
 /* static */
+bool VivaldiDecoderConfig::OnlyFFmpegAudio() {
+  static bool use_old = base::CommandLine::ForCurrentProcess()->HasSwitch(
+      switches::kVivaldiOldPlatformAudio);
+
+  return !use_old;
+}
+
+/* static */
 void VivaldiDecoderConfig::AddAudioDecoders(
     const scoped_refptr<base::SequencedTaskRunner>& task_runner,
     MediaLog* media_log,
     std::vector<std::unique_ptr<AudioDecoder>>& decoders) {
-  // The system audio decoders should be the first to take priority over FFmpeg.
+  if (VivaldiDecoderConfig::OnlyFFmpegAudio())
+    return;
+
+    // The system audio decoders should be the first to take priority over
+    // FFmpeg.
 #if BUILDFLAG(IS_MAC)
   decoders.insert(decoders.begin(),
                   std::make_unique<ATAudioDecoder>(task_runner));
 #elif BUILDFLAG(IS_WIN)
-  if (WMFAudioDecoder::IsEnabled()) {
-    decoders.insert(decoders.begin(),
-                    std::make_unique<WMFAudioDecoder>(task_runner));
-  }
+  decoders.insert(decoders.begin(),
+                  std::make_unique<WMFAudioDecoder>(task_runner));
 #endif
 }
 

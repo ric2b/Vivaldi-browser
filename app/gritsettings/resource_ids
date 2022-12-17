@@ -15,6 +15,9 @@
     "includes": [60400],
     "structures": [60500],
   },
+  "app/installer/vivaldi_installer_strings.grd": {
+    "messages": [60600],
+  },
 
   # Long sections, hundreds of strings
   "app/native_resources/vivaldi_native_strings.grd": {

@@ -17,7 +17,6 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/compiler_specific.h"
-#include "base/feature_list.h"
 #include "base/json/json_reader.h"
 #include "base/memory/ref_counted.h"
 #include "base/run_loop.h"
@@ -89,8 +88,12 @@ constexpr char kMachineID[] = "fake-machine-id";
 constexpr char kMachineModel[] = "fake-machine-model";
 constexpr char kBrandCode[] = "fake-brand-code";
 constexpr char kAttestedDeviceId[] = "fake-attested-device-id";
-constexpr char kEthernetMacAddress[] = "fake-ethernet-mac-address";
-constexpr char kDockMacAddress[] = "fake-dock-mac-address";
+constexpr CloudPolicyClient::MacAddress kEthernetMacAddress = {0, 1, 2,
+                                                               3, 4, 5};
+constexpr char kEthernetMacAddressStr[] = "000102030405";
+constexpr CloudPolicyClient::MacAddress kDockMacAddress = {170, 187, 204,
+                                                           221, 238, 255};
+constexpr char kDockMacAddressStr[] = "AABBCCDDEEFF";
 constexpr char kManufactureDate[] = "fake-manufacture-date";
 constexpr char kOAuthToken[] = "fake-oauth-token";
 constexpr char kDMToken[] = "fake-dm-token";
@@ -251,8 +254,8 @@ em::DeviceManagementRequest GetRegistrationRequest() {
   register_request->set_brand_code(kBrandCode);
   register_request->mutable_device_register_identification()
       ->set_attested_device_id(kAttestedDeviceId);
-  register_request->set_ethernet_mac_address(kEthernetMacAddress);
-  register_request->set_dock_mac_address(kDockMacAddress);
+  register_request->set_ethernet_mac_address(kEthernetMacAddressStr);
+  register_request->set_dock_mac_address(kDockMacAddressStr);
   register_request->set_manufacture_date(kManufactureDate);
   register_request->set_lifetime(
       em::DeviceRegisterRequest::LIFETIME_INDEFINITE);
@@ -280,8 +283,8 @@ em::DeviceManagementRequest GetReregistrationRequest() {
   reregister_request->set_brand_code(kBrandCode);
   reregister_request->mutable_device_register_identification()
       ->set_attested_device_id(kAttestedDeviceId);
-  reregister_request->set_ethernet_mac_address(kEthernetMacAddress);
-  reregister_request->set_dock_mac_address(kDockMacAddress);
+  reregister_request->set_ethernet_mac_address(kEthernetMacAddressStr);
+  reregister_request->set_dock_mac_address(kDockMacAddressStr);
   reregister_request->set_manufacture_date(kManufactureDate);
   reregister_request->set_lifetime(
       em::DeviceRegisterRequest::LIFETIME_INDEFINITE);
@@ -314,8 +317,8 @@ em::DeviceManagementRequest GetCertBasedRegistrationRequest(
   register_request->set_brand_code(kBrandCode);
   register_request->mutable_device_register_identification()
       ->set_attested_device_id(kAttestedDeviceId);
-  register_request->set_ethernet_mac_address(kEthernetMacAddress);
-  register_request->set_dock_mac_address(kDockMacAddress);
+  register_request->set_ethernet_mac_address(kEthernetMacAddressStr);
+  register_request->set_dock_mac_address(kDockMacAddressStr);
   register_request->set_manufacture_date(kManufactureDate);
   register_request->set_lifetime(
       em::DeviceRegisterRequest::LIFETIME_INDEFINITE);
@@ -520,6 +523,7 @@ class CloudPolicyClientTest : public testing::Test {
         .WillOnce(DoAll(service_.CaptureJobType(&job_type_),
                         service_.CaptureAuthData(&auth_data_),
                         service_.CaptureQueryParams(&query_params_),
+                        service_.CaptureTimeout(&timeout_),
                         service_.CaptureRequest(&job_request_),
                         service_.SendJobOKAsync(response)));
   }
@@ -529,6 +533,7 @@ class CloudPolicyClientTest : public testing::Test {
         .WillOnce(DoAll(service_.CaptureJobType(&job_type_),
                         service_.CaptureAuthData(&auth_data_),
                         service_.CaptureQueryParams(&query_params_),
+                        service_.CaptureTimeout(&timeout_),
                         service_.CapturePayload(&job_payload_),
                         service_.SendJobOKAsync(response)));
   }
@@ -539,6 +544,7 @@ class CloudPolicyClientTest : public testing::Test {
             DoAll(service_.CaptureJobType(&job_type_),
                   service_.CaptureAuthData(&auth_data_),
                   service_.CaptureQueryParams(&query_params_),
+                  service_.CaptureTimeout(&timeout_),
                   service_.CaptureRequest(&job_request_),
                   service_.SendJobResponseAsync(net_error, response_code)));
   }
@@ -573,6 +579,7 @@ class CloudPolicyClientTest : public testing::Test {
   DeviceManagementService::JobConfiguration::JobType job_type_;
   DeviceManagementService::JobConfiguration::ParameterMap query_params_;
   DMAuth auth_data_;
+  base::TimeDelta timeout_;
   em::DeviceManagementRequest job_request_;
   std::string job_payload_;
   std::string client_id_;
@@ -586,7 +593,6 @@ class CloudPolicyClientTest : public testing::Test {
   StrictMock<MockRobotAuthCodeCallbackObserver>
       robot_auth_code_callback_observer_;
   StrictMock<MockResponseCallbackObserver> response_callback_observer_;
-  FakeSigningService fake_signing_service_;
   std::unique_ptr<CloudPolicyClient> client_;
   network::TestURLLoaderFactory url_loader_factory_;
   scoped_refptr<network::SharedURLLoaderFactory> shared_url_loader_factory_;
@@ -656,10 +662,6 @@ TEST_F(CloudPolicyClientTest, SetupRegistrationAndPolicyFetchWithOAuthToken) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_APPLE) || \
     (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS))
 TEST_F(CloudPolicyClientTest, RegistrationWithTokenAndPolicyFetch) {
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kUploadBrowserDeviceIdentifier);
-
   const em::DeviceManagementResponse policy_response = GetPolicyResponse();
 
   ExpectAndCaptureJob(GetRegistrationResponse());
@@ -670,7 +672,7 @@ TEST_F(CloudPolicyClientTest, RegistrationWithTokenAndPolicyFetch) {
       .WillOnce(Return(kDeviceDMToken));
   FakeClientDataDelegate client_data_delegate;
   client_->RegisterWithToken(kEnrollmentToken, "device_id",
-                             client_data_delegate);
+                             client_data_delegate, /*is_mandatory=*/true);
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_TOKEN_ENROLLMENT,
             job_type_);
@@ -679,6 +681,7 @@ TEST_F(CloudPolicyClientTest, RegistrationWithTokenAndPolicyFetch) {
   EXPECT_TRUE(client_->is_registered());
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+  EXPECT_EQ(base::Seconds(0), timeout_);
 
   ExpectAndCaptureJob(policy_response);
   EXPECT_CALL(observer_, OnPolicyFetched);
@@ -691,6 +694,20 @@ TEST_F(CloudPolicyClientTest, RegistrationWithTokenAndPolicyFetch) {
             GetPolicyRequest().SerializePartialAsString());
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
   CheckPolicyResponse(policy_response);
+}
+
+TEST_F(CloudPolicyClientTest, RegistrationWithTokenTestTimeout) {
+  ExpectAndCaptureJob(GetRegistrationResponse());
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  EXPECT_CALL(device_dmtoken_callback_observer_,
+              OnDeviceDMTokenRequested(
+                  /*user_affiliation_ids=*/std::vector<std::string>()))
+      .WillOnce(Return(kDeviceDMToken));
+  FakeClientDataDelegate client_data_delegate;
+  client_->RegisterWithToken(kEnrollmentToken, "device_id",
+                             client_data_delegate, /*is_mandatory=*/false);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(base::Seconds(30), timeout_);
 }
 #endif
 
@@ -717,6 +734,7 @@ TEST_F(CloudPolicyClientTest, RegistrationAndPolicyFetch) {
   VerifyQueryParameter();
   EXPECT_TRUE(client_->is_registered());
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
+  EXPECT_EQ(base::Seconds(0), timeout_);
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
 
   ExpectAndCaptureJob(policy_response);
@@ -780,24 +798,27 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateAndPolicyFetch) {
                   /*user_affiliation_ids=*/std::vector<std::string>()))
       .WillOnce(Return(kDeviceDMToken));
   ExpectAndCaptureJob(GetRegistrationResponse());
-  fake_signing_service_.set_success(true);
+  auto fake_signing_service = std::make_unique<FakeSigningService>();
+  fake_signing_service->set_success(true);
+  const std::string expected_job_request_string =
+      GetCertBasedRegistrationRequest(
+          fake_signing_service.get(),
+          /*psm_execution_result=*/absl::nullopt,
+          /*psm_determination_timestamp=*/absl::nullopt)
+          .SerializePartialAsString();
   EXPECT_CALL(observer_, OnRegistrationStateChanged);
   CloudPolicyClient::RegistrationParameters device_attestation(
       em::DeviceRegisterRequest::DEVICE,
       em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION);
   client_->RegisterWithCertificate(
       device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
-      std::string() /* sub_organization */, &fake_signing_service_);
+      std::string() /* sub_organization */, std::move(fake_signing_service));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_CERT_BASED_REGISTRATION,
       job_type_);
   EXPECT_EQ(job_request_.SerializePartialAsString(),
-            GetCertBasedRegistrationRequest(
-                &fake_signing_service_,
-                /*psm_execution_result=*/absl::nullopt,
-                /*psm_determination_timestamp=*/absl::nullopt)
-                .SerializePartialAsString());
+            expected_job_request_string);
   EXPECT_TRUE(client_->is_registered());
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
@@ -816,14 +837,15 @@ TEST_F(CloudPolicyClientTest, RegistrationWithCertificateAndPolicyFetch) {
 }
 
 TEST_F(CloudPolicyClientTest, RegistrationWithCertificateFailToSignRequest) {
-  fake_signing_service_.set_success(false);
+  auto fake_signing_service = std::make_unique<FakeSigningService>();
+  fake_signing_service->set_success(false);
   EXPECT_CALL(observer_, OnClientError);
   CloudPolicyClient::RegistrationParameters device_attestation(
       em::DeviceRegisterRequest::DEVICE,
       em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_ATTESTATION);
   client_->RegisterWithCertificate(
       device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
-      std::string() /* sub_organization */, &fake_signing_service_);
+      std::string() /* sub_organization */, std::move(fake_signing_service));
   EXPECT_FALSE(client_->is_registered());
   EXPECT_EQ(DM_STATUS_CANNOT_SIGN_REQUEST, client_->status());
 }
@@ -1069,10 +1091,6 @@ TEST_F(CloudPolicyClientTest, PolicyFetchWithInvalidationNoPayload) {
 #if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC) || BUILDFLAG(IS_LINUX)
 TEST_F(CloudPolicyClientTest, PolicyFetchWithBrowserDeviceIdentifier) {
   RegisterClient();
-
-  base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndEnableFeature(
-      features::kUploadBrowserDeviceIdentifier);
 
   // Add the policy type that contains browser device identifier.
   client_->AddPolicyTypeToFetch(
@@ -1706,7 +1724,13 @@ TEST_P(CloudPolicyClientRegisterWithPsmParamsTest,
                   /*user_affiliation_ids=*/std::vector<std::string>()))
       .WillOnce(Return(kDeviceDMToken));
   ExpectAndCaptureJob(GetRegistrationResponse());
-  fake_signing_service_.set_success(true);
+  auto fake_signing_service = std::make_unique<FakeSigningService>();
+  fake_signing_service->set_success(true);
+  const std::string expected_job_request_string =
+      GetCertBasedRegistrationRequest(fake_signing_service.get(),
+                                      psm_execution_result,
+                                      kExpectedPsmDeterminationTimestamp)
+          .SerializePartialAsString();
   EXPECT_CALL(observer_, OnRegistrationStateChanged);
   CloudPolicyClient::RegistrationParameters device_attestation(
       em::DeviceRegisterRequest::DEVICE,
@@ -1716,16 +1740,13 @@ TEST_P(CloudPolicyClientRegisterWithPsmParamsTest,
   device_attestation.SetPsmExecutionResult(psm_execution_result);
   client_->RegisterWithCertificate(
       device_attestation, std::string() /* client_id */, kEnrollmentCertificate,
-      std::string() /* sub_organization */, &fake_signing_service_);
+      std::string() /* sub_organization */, std::move(fake_signing_service));
   base::RunLoop().RunUntilIdle();
   EXPECT_EQ(
       DeviceManagementService::JobConfiguration::TYPE_CERT_BASED_REGISTRATION,
       job_type_);
   EXPECT_EQ(job_request_.SerializePartialAsString(),
-            GetCertBasedRegistrationRequest(&fake_signing_service_,
-                                            psm_execution_result,
-                                            kExpectedPsmDeterminationTimestamp)
-                .SerializePartialAsString());
+            expected_job_request_string);
   EXPECT_TRUE(client_->is_registered());
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
   EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
@@ -2506,6 +2527,85 @@ TEST_F(CloudPolicyClientTest, PolicyReregistrationFailsWithNonMatchingDMToken) {
   EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
   EXPECT_EQ(DM_STATUS_SERVICE_MANAGEMENT_TOKEN_INVALID, client_->status());
 }
+
+#if !BUILDFLAG(IS_CHROMEOS)
+TEST_F(CloudPolicyClientTest, PolicyReregistrationAfterDMTokenDeletion) {
+  // Enable the DMToken deletion feature.
+  base::test::ScopedFeatureList feature_list;
+  feature_list.InitAndEnableFeature(features::kDmTokenDeletion);
+
+  RegisterClient();
+
+  // Handle 410 (device needs reset) on policy fetch.
+  EXPECT_TRUE(client_->is_registered());
+  EXPECT_FALSE(client_->requires_reregistration());
+  DeviceManagementService::JobConfiguration::JobType upload_type;
+  em::DeviceManagementResponse response;
+  response.add_error_detail(em::CBCM_DELETION_POLICY_PREFERENCE_DELETE_TOKEN);
+  EXPECT_CALL(job_creation_handler_, OnJobCreation)
+      .WillOnce(DoAll(
+          service_.CaptureJobType(&upload_type),
+          service_.SendJobResponseAsync(
+              net::OK, DeviceManagementService::kDeviceNotFound, response)));
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  EXPECT_CALL(observer_, OnClientError);
+  client_->FetchPolicy();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(DM_STATUS_SERVICE_DEVICE_NEEDS_RESET, client_->status());
+  EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
+  EXPECT_FALSE(client_->is_registered());
+  EXPECT_TRUE(client_->requires_reregistration());
+
+  // Re-register.
+  ExpectAndCaptureJob(GetRegistrationResponse());
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  EXPECT_CALL(device_dmtoken_callback_observer_,
+              OnDeviceDMTokenRequested(
+                  /*user_affiliation_ids=*/std::vector<std::string>()))
+      .WillOnce(Return(kDeviceDMToken));
+  CloudPolicyClient::RegistrationParameters user_recovery(
+      em::DeviceRegisterRequest::USER,
+      em::DeviceRegisterRequest::FLAVOR_ENROLLMENT_RECOVERY);
+  client_->Register(user_recovery, client_id_, kOAuthToken);
+  base::RunLoop().RunUntilIdle();
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_POLICY_FETCH,
+            upload_type);
+  EXPECT_EQ(DeviceManagementService::JobConfiguration::TYPE_REGISTRATION,
+            job_type_);
+  EXPECT_EQ(auth_data_, DMAuth::NoAuth());
+  VerifyQueryParameter();
+  EXPECT_EQ(job_request_.SerializePartialAsString(),
+            GetReregistrationRequest().SerializePartialAsString());
+  EXPECT_TRUE(client_->is_registered());
+  EXPECT_FALSE(client_->requires_reregistration());
+  EXPECT_FALSE(client_->GetPolicyFor(policy_type_, std::string()));
+  EXPECT_EQ(DM_STATUS_SUCCESS, client_->status());
+}
+
+TEST_F(CloudPolicyClientTest, PolicyFetchDMTokenDeletion_FeatureDisabled) {
+  RegisterClient();
+  EXPECT_TRUE(client_->is_registered());
+  EXPECT_FALSE(client_->requires_reregistration());
+
+  DeviceManagementService::JobConfiguration::JobType upload_type;
+  em::DeviceManagementResponse response;
+  response.add_error_detail(em::CBCM_DELETION_POLICY_PREFERENCE_DELETE_TOKEN);
+  EXPECT_CALL(job_creation_handler_, OnJobCreation)
+      .WillOnce(DoAll(
+          service_.CaptureJobType(&upload_type),
+          service_.SendJobResponseAsync(
+              net::OK, DeviceManagementService::kDeviceNotFound, response)));
+  EXPECT_CALL(observer_, OnRegistrationStateChanged);
+  EXPECT_CALL(observer_, OnClientError);
+
+  client_->FetchPolicy();
+  base::RunLoop().RunUntilIdle();
+
+  // Because the feature is disabled by default, the presence of the token
+  // deletion error detail still results in the "not found" DM status.
+  EXPECT_EQ(DM_STATUS_SERVICE_DEVICE_NOT_FOUND, client_->status());
+}
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 TEST_F(CloudPolicyClientTest, RequestFetchRobotAuthCodes) {
   RegisterClient();

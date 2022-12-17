@@ -140,7 +140,7 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
   };
   if (url.is_valid()) {
     formatted_url = url_formatter::FormatUrl(
-        url, url_formatter::kFormatUrlOmitNothing, net::UnescapeRule::NORMAL,
+        url, url_formatter::kFormatUrlOmitNothing, base::UnescapeRule::NORMAL,
         &parsed_unicode, nullptr, nullptr);
 
     set_fragment16("urlForSecurityDisplay", formatted_url);
@@ -154,7 +154,9 @@ RequestResult VivaldiUtilitiesHookDelegate::HandleGetUrlFragments(
     DomainInfo info = GetDomainInfo(url);
     std::u16string tld(info.idn_result.result);
     if (!tld.empty()) {
-      size_t dot = tld.find_last_of('.');
+      // tld variable now contains topleveldomain.tld, so first dot is the start
+      // of the real tld.
+      size_t dot = tld.find_first_of('.');
       if (dot != std::u16string::npos) {
         tld = tld.substr(dot + 1);
       }

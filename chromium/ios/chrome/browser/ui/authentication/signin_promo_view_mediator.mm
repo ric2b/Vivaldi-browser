@@ -6,6 +6,7 @@
 
 #include <memory>
 
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
@@ -36,13 +37,14 @@ namespace {
 // automatically dismissed.
 const int kAutomaticSigninPromoViewDismissCount = 20;
 
-// Returns true if the sign-in promo is supported for |access_point|.
+// Returns true if the sign-in promo is supported for `access_point`.
 bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
   switch (access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER:
     case signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS:
     case signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER:
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
       return true;
     case signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_LINK:
@@ -62,8 +64,6 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -76,6 +76,8 @@ bool IsSupportedAccessPoint(signin_metrics::AccessPoint access_point) {
         ACCESS_POINT_ENTERPRISE_SIGNOUT_COORDINATOR:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return false;
   }
@@ -88,13 +90,18 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     int displayed_count) {
   switch (access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.BookmarkManager.ImpressionsTilSigninButtons",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.SettingsManager.ImpressionsTilSigninButtons",
+          displayed_count);
+      break;
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
+      base::UmaHistogramCounts100(
+          "MobileSignInPromo.NTPFeedTop.ImpressionsTilSigninButtons",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::
@@ -119,8 +126,6 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -131,6 +136,8 @@ void RecordImpressionsTilSigninButtonsHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_KALEIDOSCOPE:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -145,13 +152,18 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     int displayed_count) {
   switch (access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.BookmarkManager.ImpressionsTilDismiss",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.SettingsManager.ImpressionsTilDismiss",
+          displayed_count);
+      break;
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
+      base::UmaHistogramCounts100(
+          "MobileSignInPromo.NTPFeedTop.ImpressionsTilDismiss",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::
@@ -176,8 +188,6 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -188,6 +198,8 @@ void RecordImpressionsTilDismissHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_KALEIDOSCOPE:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -202,13 +214,18 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     int displayed_count) {
   switch (access_point) {
     case signin_metrics::AccessPoint::ACCESS_POINT_BOOKMARK_MANAGER:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.BookmarkManager.ImpressionsTilXButton",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
-      UMA_HISTOGRAM_COUNTS_100(
+      base::UmaHistogramCounts100(
           "MobileSignInPromo.SettingsManager.ImpressionsTilXButton",
+          displayed_count);
+      break;
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
+      base::UmaHistogramCounts100(
+          "MobileSignInPromo.NTPFeedTop.ImpressionsTilXButton",
           displayed_count);
       break;
     case signin_metrics::AccessPoint::
@@ -233,8 +250,6 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -245,6 +260,8 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
     case signin_metrics::AccessPoint::ACCESS_POINT_KALEIDOSCOPE:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       NOTREACHED() << "Unexpected value for access point "
                    << static_cast<int>(access_point);
@@ -252,7 +269,7 @@ void RecordImpressionsTilXButtonHistogramForAccessPoint(
   }
 }
 
-// Returns the DisplayedCount preference key string for |access_point|.
+// Returns the DisplayedCount preference key string for `access_point`.
 const char* DisplayedCountPreferenceKey(
     signin_metrics::AccessPoint access_point) {
   switch (access_point) {
@@ -260,6 +277,8 @@ const char* DisplayedCountPreferenceKey(
       return prefs::kIosBookmarkSigninPromoDisplayedCount;
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
       return prefs::kIosSettingsSigninPromoDisplayedCount;
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
+      return prefs::kIosNtpFeedTopSigninPromoDisplayedCount;
     case signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS:
     case signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER:
     case signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE:
@@ -280,8 +299,6 @@ const char* DisplayedCountPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -294,12 +311,14 @@ const char* DisplayedCountPreferenceKey(
         ACCESS_POINT_ENTERPRISE_SIGNOUT_COORDINATOR:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
 }
 
-// Returns AlreadySeen preference key string for |access_point|.
+// Returns AlreadySeen preference key string for `access_point`.
 const char* AlreadySeenSigninViewPreferenceKey(
     signin_metrics::AccessPoint access_point) {
   switch (access_point) {
@@ -307,6 +326,8 @@ const char* AlreadySeenSigninViewPreferenceKey(
       return prefs::kIosBookmarkPromoAlreadySeen;
     case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS:
       return prefs::kIosSettingsPromoAlreadySeen;
+    case signin_metrics::AccessPoint::ACCESS_POINT_NTP_FEED_TOP_PROMO:
+      return prefs::kIosNtpFeedTopPromoAlreadySeen;
     case signin_metrics::AccessPoint::ACCESS_POINT_RECENT_TABS:
     case signin_metrics::AccessPoint::ACCESS_POINT_TAB_SWITCHER:
     case signin_metrics::AccessPoint::ACCESS_POINT_START_PAGE:
@@ -327,8 +348,6 @@ const char* AlreadySeenSigninViewPreferenceKey(
     case signin_metrics::AccessPoint::ACCESS_POINT_AUTOFILL_DROPDOWN:
     case signin_metrics::AccessPoint::ACCESS_POINT_NTP_CONTENT_SUGGESTIONS:
     case signin_metrics::AccessPoint::ACCESS_POINT_RESIGNIN_INFOBAR:
-    case signin_metrics::AccessPoint::ACCESS_POINT_SAVE_CARD_BUBBLE:
-    case signin_metrics::AccessPoint::ACCESS_POINT_MANAGE_CARDS_BUBBLE:
     case signin_metrics::AccessPoint::ACCESS_POINT_MACHINE_LOGON:
     case signin_metrics::AccessPoint::ACCESS_POINT_GOOGLE_SERVICES_SETTINGS:
     case signin_metrics::AccessPoint::ACCESS_POINT_SYNC_ERROR_CARD:
@@ -341,6 +360,8 @@ const char* AlreadySeenSigninViewPreferenceKey(
         ACCESS_POINT_ENTERPRISE_SIGNOUT_COORDINATOR:
     case signin_metrics::AccessPoint::
         ACCESS_POINT_SIGNIN_INTERCEPT_FIRST_RUN_EXPERIENCE:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SEND_TAB_TO_SELF_PROMO:
+    case signin_metrics::AccessPoint::ACCESS_POINT_SETTINGS_SYNC_OFF_ROW:
     case signin_metrics::AccessPoint::ACCESS_POINT_MAX:
       return nullptr;
   }
@@ -396,6 +417,10 @@ const char* AlreadySeenSigninViewPreferenceKey(
   // Settings
   registry->RegisterBooleanPref(prefs::kIosSettingsPromoAlreadySeen, false);
   registry->RegisterIntegerPref(prefs::kIosSettingsSigninPromoDisplayedCount,
+                                0);
+  // NTP Feed
+  registry->RegisterBooleanPref(prefs::kIosNtpFeedTopPromoAlreadySeen, false);
+  registry->RegisterIntegerPref(prefs::kIosNtpFeedTopSigninPromoDisplayedCount,
                                 0);
 }
 
@@ -499,8 +524,6 @@ const char* AlreadySeenSigninViewPreferenceKey(
   self.signinPromoViewVisible = YES;
   signin_metrics::RecordSigninImpressionUserActionForAccessPoint(
       self.accessPoint);
-  signin_metrics::RecordSigninImpressionWithAccountUserActionForAccessPoint(
-      self.accessPoint, !!self.identity);
   const char* displayedCountPreferenceKey =
       DisplayedCountPreferenceKey(self.accessPoint);
   if (!displayedCountPreferenceKey)
@@ -601,7 +624,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
   self.signinInProgress = NO;
 }
 
-// Starts sign-in process with the Chrome identity from |identity|.
+// Starts sign-in process with the Chrome identity from `identity`.
 - (void)showSigninWithIdentity:(ChromeIdentity*)identity
                    promoAction:(signin_metrics::PromoAction)promoAction {
   self.signinPromoViewState = ios::SigninPromoViewState::UsedAtLeastOnce;
@@ -626,7 +649,7 @@ const char* AlreadySeenSigninViewPreferenceKey(
                                 completion:completion];
   } else {
     ShowSigninCommand* command = [[ShowSigninCommand alloc]
-        initWithOperation:AUTHENTICATION_OPERATION_SIGNIN
+        initWithOperation:AuthenticationOperationSigninAndSync
                  identity:identity
               accessPoint:self.accessPoint
               promoAction:promoAction

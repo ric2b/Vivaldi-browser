@@ -30,6 +30,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/ui/web_applications/web_app_controller_browsertest.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -104,6 +105,7 @@ class MockVideoPictureInPictureWindowController
   MOCK_METHOD0(ToggleMicrophone, void());
   MOCK_METHOD0(ToggleCamera, void());
   MOCK_METHOD0(HangUp, void());
+  MOCK_CONST_METHOD0(GetSourceBounds, const gfx::Rect&());
 };
 
 const base::FilePath::CharType kPictureInPictureWindowSizePage[] =
@@ -326,11 +328,14 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller() != nullptr);
 
-  ASSERT_TRUE(window_controller()->GetWindowForTesting() != nullptr);
-  EXPECT_FALSE(window_controller()->GetWindowForTesting()->IsVisible());
+  EXPECT_FALSE(window_controller()->GetWindowForTesting());
   ASSERT_EQ(true, EvalJs(active_web_contents, "enterPictureInPicture();"));
 
+  ASSERT_TRUE(window_controller()->GetWindowForTesting());
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
+
+  // The bounds should be nontrivial.
+  EXPECT_NE(window_controller()->GetSourceBounds(), gfx::Rect());
 
   gfx::NativeWindow native_window = GetOverlayWindow()->GetNativeWindow();
   EXPECT_FALSE(platform_util::IsWindowActive(native_window));
@@ -346,7 +351,7 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   EXPECT_TRUE(GetOverlayWindow()->AreControlsVisible());
 }
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH)
+#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 class PictureInPicturePixelComparisonBrowserTest
     : public VideoPictureInPictureWindowControllerBrowserTest {
  public:
@@ -555,7 +560,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPicturePixelComparisonBrowserTest,
   ASSERT_TRUE(ReadImageFile(expected_play_image_path, &expected_image));
   EXPECT_TRUE(CompareImages(GetResultBitmap(), expected_image));
 }
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
 
 // Tests that when an active WebContents accurately tracks whether a video
 // is in Picture-in-Picture.
@@ -606,10 +611,12 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  ASSERT_NE(GetOverlayWindow(), nullptr);
-  ASSERT_FALSE(GetOverlayWindow()->IsVisible());
+  ASSERT_FALSE(GetOverlayWindow());
 
   ASSERT_EQ(true, EvalJs(active_web_contents, "enterPictureInPicture();"));
+
+  ASSERT_TRUE(GetOverlayWindow());
+  ASSERT_TRUE(GetOverlayWindow()->IsVisible());
 
   GetOverlayWindow()->SetSize(gfx::Size(400, 400));
 
@@ -1006,7 +1013,7 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   ASSERT_EQ(2u, render_frame_hosts.size());
 
   content::RenderFrameHost* iframe =
-      render_frame_hosts[0] == active_web_contents->GetMainFrame()
+      render_frame_hosts[0] == active_web_contents->GetPrimaryMainFrame()
           ? render_frame_hosts[1]
           : render_frame_hosts[0];
 
@@ -1074,7 +1081,7 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   ASSERT_EQ(2u, render_frame_hosts.size());
 
   content::RenderFrameHost* iframe =
-      render_frame_hosts[0] == active_web_contents->GetMainFrame()
+      render_frame_hosts[0] == active_web_contents->GetPrimaryMainFrame()
           ? render_frame_hosts[1]
           : render_frame_hosts[0];
 
@@ -1108,7 +1115,7 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   ASSERT_EQ(2u, render_frame_hosts.size());
 
   content::RenderFrameHost* iframe =
-      render_frame_hosts[0] == active_web_contents->GetMainFrame()
+      render_frame_hosts[0] == active_web_contents->GetPrimaryMainFrame()
           ? render_frame_hosts[1]
           : render_frame_hosts[0];
 
@@ -1330,7 +1337,7 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   ASSERT_EQ(2u, render_frame_hosts.size());
 
   content::RenderFrameHost* iframe =
-      render_frame_hosts[0] == active_web_contents->GetMainFrame()
+      render_frame_hosts[0] == active_web_contents->GetPrimaryMainFrame()
           ? render_frame_hosts[1]
           : render_frame_hosts[0];
 
@@ -1376,10 +1383,12 @@ IN_PROC_BROWSER_TEST_F(VideoPictureInPictureWindowControllerBrowserTest,
   SetUpWindowController(active_web_contents);
   ASSERT_TRUE(window_controller());
 
-  ASSERT_NE(GetOverlayWindow(), nullptr);
-  ASSERT_FALSE(GetOverlayWindow()->IsVisible());
+  ASSERT_FALSE(GetOverlayWindow());
 
   ASSERT_EQ(true, EvalJs(active_web_contents, "enterPictureInPicture();"));
+
+  ASSERT_TRUE(GetOverlayWindow());
+  ASSERT_TRUE(GetOverlayWindow()->IsVisible());
 
   // The PiP window starts in the bottom-right quadrant of the screen.
   gfx::Rect bottom_right_bounds = GetOverlayWindow()->GetBounds();
@@ -1640,7 +1649,7 @@ IN_PROC_BROWSER_TEST_F(PictureInPictureWindowControllerFencedFrameBrowserTest,
       embedded_test_server()->GetURL("/fenced_frames/title1.html");
   content::RenderFrameHost* fenced_frame_host =
       fenced_frame_test_helper().CreateFencedFrame(
-          active_web_contents->GetMainFrame(), fenced_frame_url);
+          active_web_contents->GetPrimaryMainFrame(), fenced_frame_url);
   EXPECT_NE(nullptr, fenced_frame_host);
   EXPECT_TRUE(window_controller()->GetWindowForTesting()->IsVisible());
 }
@@ -2062,7 +2071,7 @@ class WebAppVideoPictureInPictureWindowControllerBrowserTest
     auto web_app_info = std::make_unique<WebAppInstallInfo>();
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.DeprecatedGetOriginAsURL();
-    web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+    web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
     const web_app::AppId app_id = InstallWebApp(std::move(web_app_info));
 
     Browser* app_browser = LaunchWebAppBrowserAndWait(app_id);

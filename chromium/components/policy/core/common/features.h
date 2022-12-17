@@ -14,14 +14,8 @@
 namespace policy {
 namespace features {
 
-// Enable chrome://management page on Android.
-POLICY_EXPORT extern const base::Feature kChromeManagementPageAndroid;
-
 // Enable force installed Chrome apps policy migration.
 POLICY_EXPORT extern const base::Feature kDefaultChromeAppsMigration;
-
-// Update browser device identifier during enrollment and fetching policies.
-POLICY_EXPORT extern const base::Feature kUploadBrowserDeviceIdentifier;
 
 // Enable reporting Login events to the reporting connector when the Password
 // Manager detects that the user logged in to a web page.
@@ -43,6 +37,14 @@ POLICY_EXPORT extern const base::Feature
 
 // Enable caching the value of the ManagementStatus.
 POLICY_EXPORT extern const base::Feature kEnableCachedManagementStatus;
+
+// Causes the DMToken to be deleted (rather than invalidated) when a browser is
+// deleted from CBCM.
+POLICY_EXPORT extern const base::Feature kDmTokenDeletion;
+
+// Allow mac to detect policy scope with a private API. The feature is limited
+// in the policy component only.
+extern const base::Feature kPolicyScopeDetectionMac;
 
 }  // namespace features
 }  // namespace policy

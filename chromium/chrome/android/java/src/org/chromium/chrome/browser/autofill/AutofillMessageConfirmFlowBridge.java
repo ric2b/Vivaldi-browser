@@ -70,13 +70,15 @@ public class AutofillMessageConfirmFlowBridge
                 mNativeSaveCardMessageConfirmDelegate, month, year);
     }
 
-    // no-op
     @Override
-    public void onUserDismiss() {}
+    public void onUserDismiss() {
+        AutofillMessageConfirmFlowBridgeJni.get().onUserDismiss(
+                mNativeSaveCardMessageConfirmDelegate);
+    }
 
     @Override
     public void onLinkClicked(String url) {
-        AutofillMessageConfirmFlowBridgeJni.get().onLegalMessageLinkClicked(
+        AutofillMessageConfirmFlowBridgeJni.get().onLinkClicked(
                 mNativeSaveCardMessageConfirmDelegate, url);
     }
 
@@ -102,12 +104,13 @@ public class AutofillMessageConfirmFlowBridge
     }
 
     @CalledByNative
-    private void fixDate(String title, String cardLabel, String confirmButtonLabel) {
+    private void fixDate(
+            String title, String cardLabel, String cardholderAccount, String confirmButtonLabel) {
         Activity activity = mWindowAndroid.getActivity().get();
         if (!prepareToShowDialog(activity)) return;
         if (mSaveCardPrompt == null) {
             mSaveCardPrompt = AutofillExpirationDateFixFlowPrompt.createAsMessageFixFlowPrompt(
-                    activity, this, title, cardLabel, confirmButtonLabel);
+                    activity, this, title, cardLabel, cardholderAccount, confirmButtonLabel);
             for (LegalMessageLine line : mLegalMessageLines) {
                 mSaveCardPrompt.addLegalMessageLine(line);
             }
@@ -116,13 +119,13 @@ public class AutofillMessageConfirmFlowBridge
     }
 
     @CalledByNative
-    private void fixName(
-            String title, String inferredName, String cardLabel, String confirmButtonLabel) {
+    private void fixName(String title, String inferredName, String cardLabel,
+            String cardholderAccount, String confirmButtonLabel) {
         Activity activity = mWindowAndroid.getActivity().get();
         if (!prepareToShowDialog(activity)) return;
         if (mSaveCardPrompt == null) {
-            mSaveCardPrompt = AutofillNameFixFlowPrompt.createAsMessageFixFlowPrompt(
-                    activity, this, inferredName, title, cardLabel, confirmButtonLabel);
+            mSaveCardPrompt = AutofillNameFixFlowPrompt.createAsMessageFixFlowPrompt(activity, this,
+                    inferredName, title, cardLabel, cardholderAccount, confirmButtonLabel);
             for (LegalMessageLine line : mLegalMessageLines) {
                 mSaveCardPrompt.addLegalMessageLine(line);
             }
@@ -131,12 +134,13 @@ public class AutofillMessageConfirmFlowBridge
     }
 
     @CalledByNative
-    private void confirmSaveCard(String title, String cardLabel, String confirmButtonLabel) {
+    private void confirmSaveCard(
+            String title, String cardLabel, String cardholderAccount, String confirmButtonLabel) {
         Activity activity = mWindowAndroid.getActivity().get();
         if (!prepareToShowDialog(activity)) return;
         if (mSaveCardPrompt == null) {
             mSaveCardPrompt = AutofillSaveCardConfirmFlowPrompt.createPrompt(
-                    activity, this, title, cardLabel, confirmButtonLabel);
+                    activity, this, title, cardLabel, cardholderAccount, confirmButtonLabel);
             for (LegalMessageLine line : mLegalMessageLines) {
                 mSaveCardPrompt.addLegalMessageLine(line);
             }
@@ -183,7 +187,8 @@ public class AutofillMessageConfirmFlowBridge
         void onDateConfirmed(long nativeSaveCardMessageConfirmDelegate, String month, String year);
         void onNameConfirmed(long nativeSaveCardMessageConfirmDelegate, String name);
         void onSaveCardConfirmed(long nativeSaveCardMessageConfirmDelegate);
-        void onLegalMessageLinkClicked(long nativeSaveCardMessageConfirmDelegate, String url);
+        void onUserDismiss(long nativeSaveCardMessageConfirmDelegate);
+        void onLinkClicked(long nativeSaveCardMessageConfirmDelegate, String url);
         void dialogDismissed(long nativeSaveCardMessageConfirmDelegate);
     }
 }

@@ -9,7 +9,6 @@
 
 #include <vector>
 
-#include "base/containers/flat_set.h"
 #include "base/values.h"
 #include "pdf/document_attachment_info.h"
 #include "pdf/document_metadata.h"
@@ -24,8 +23,11 @@ class TestPDFiumEngine : public PDFiumEngine {
   // Page number.
   static constexpr uint32_t kPageNumber = 13u;
 
-  // Dummy data to save.
-  static constexpr uint8_t kSaveData[] = {'1', '2', '3'};
+  // Dummy loaded data.
+  static constexpr uint8_t kLoadedData[] = {'l', 'o', 'a', 'd', 'e', 'd'};
+
+  // Dummy save data.
+  static constexpr uint8_t kSaveData[] = {'s', 'a', 'v', 'e'};
 
   explicit TestPDFiumEngine(PDFEngine::Client* client);
 
@@ -42,6 +44,14 @@ class TestPDFiumEngine : public PDFiumEngine {
   MOCK_METHOD(void, ScrolledToXPosition, (int), (override));
   MOCK_METHOD(void, ScrolledToYPosition, (int), (override));
 
+  MOCK_METHOD(void,
+              Paint,
+              (const gfx::Rect&,
+               SkBitmap&,
+               std::vector<gfx::Rect>&,
+               std::vector<gfx::Rect>&),
+              (override));
+
   MOCK_METHOD(bool,
               HandleInputEvent,
               (const blink::WebInputEvent&),
@@ -49,8 +59,7 @@ class TestPDFiumEngine : public PDFiumEngine {
 
   MOCK_METHOD(std::vector<uint8_t>,
               PrintPages,
-              (const std::vector<int>& page_numbers,
-               const blink::WebPrintParams& print_params),
+              (const std::vector<int>&, const blink::WebPrintParams&),
               (override));
 
   MOCK_METHOD(void, ZoomUpdated, (double), (override));
@@ -60,7 +69,7 @@ class TestPDFiumEngine : public PDFiumEngine {
               (const DocumentLayout::Options&),
               (override));
 
-  bool HasPermission(DocumentPermission permission) const override;
+  MOCK_METHOD(bool, HasPermission, (DocumentPermission), (const override));
 
   const std::vector<DocumentAttachmentInfo>& GetDocumentAttachmentInfoList()
       const override;
@@ -72,6 +81,8 @@ class TestPDFiumEngine : public PDFiumEngine {
   // Returns an empty bookmark list.
   base::Value::List GetBookmarks() override;
 
+  MOCK_METHOD(gfx::Rect, GetPageScreenRect, (int), (const override));
+
   MOCK_METHOD(void, SetGrayscale, (bool), (override));
 
   uint32_t GetLoadedByteSize() override;
@@ -82,7 +93,7 @@ class TestPDFiumEngine : public PDFiumEngine {
 
   MOCK_METHOD(void, SetCaretPosition, (const gfx::Point&), (override));
 
-  void SetPermissions(const std::vector<DocumentPermission>& permissions);
+  MOCK_METHOD(void, OnDocumentCanceled, (), (override));
 
  protected:
   std::vector<DocumentAttachmentInfo>& doc_attachment_info_list() {
@@ -95,8 +106,6 @@ class TestPDFiumEngine : public PDFiumEngine {
   std::vector<DocumentAttachmentInfo> doc_attachment_info_list_;
 
   DocumentMetadata metadata_;
-
-  base::flat_set<DocumentPermission> permissions_;
 };
 
 }  // namespace chrome_pdf

@@ -163,7 +163,9 @@ class VivaldiBaseDeps(gclient.GitDependency):
         should_recurse=False,
         relative=None,
         condition=None,
-        print_outbuf=True)
+        print_outbuf=True,
+        protocol=(BASE_URL or "ssh:").split(":")[0],
+        )
 
   @property
   def root_dir(self):

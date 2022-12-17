@@ -88,6 +88,9 @@ sync_pb::PasswordSpecificsData CreateSpecificsData(
   password_specifics.set_federation_url(std::string());
   *password_specifics.mutable_password_issues() =
       CreateSpecificsDataIssues(issue_types);
+  // The current code always populates notes for outgoing protos even when
+  // non-exists.
+  password_specifics.mutable_notes();
   return password_specifics;
 }
 
@@ -106,6 +109,84 @@ TEST(PasswordProtoUtilsTest, ConvertIssueProtoToMapAndBack) {
       Eq(specifics_data.password_issues().SerializeAsString()));
 }
 
+TEST(PasswordProtoUtilsTest, ConvertPasswordNoteToNotesProtoAndBack) {
+  std::vector<PasswordNote> notes;
+  notes.emplace_back(u"unique_display_name", u"value",
+                     /*date_created*/ base::Time::Now(),
+                     /*hide_by_default=*/true);
+  notes.emplace_back(u"unique_display_name2", u"value2",
+                     /*date_created*/ base::Time::Now() - base::Hours(1),
+                     /*hide_by_default=*/false);
+  sync_pb::PasswordSpecificsData_Notes base_notes_proto;
+  EXPECT_EQ(notes, PasswordNotesFromProto(
+                       PasswordNotesToProto(notes, base_notes_proto)));
+}
+
+TEST(PasswordProtoUtilsTest,
+     CacheNoteUniqueDisplayNameWhenNoteContainsUnknownField) {
+  const std::string kNoteUniqueDisplayName = "Note Unique Display Name";
+  sync_pb::PasswordSpecificsData password_specifics_data;
+  sync_pb::PasswordSpecificsData_Notes_Note* note =
+      password_specifics_data.mutable_notes()->add_note();
+  note->set_unique_display_name(kNoteUniqueDisplayName);
+  *note->mutable_unknown_fields() = "unknown_fields";
+  sync_pb::PasswordSpecificsData trimmed_specifics =
+      TrimPasswordSpecificsDataForCaching(password_specifics_data);
+  // The unique_display_name field should be cached since it's necessary for
+  // reconciliation of notes with cached ones during commit.
+  EXPECT_EQ(kNoteUniqueDisplayName,
+            trimmed_specifics.notes().note(0).unique_display_name());
+}
+
+TEST(PasswordProtoUtilsTest, ReconcileCachedNotesUsingUnqiueDisplayName) {
+  const std::string kNoteUniqueDisplayName1 = "Note Unique Display Name 1";
+  const std::string kNoteValue1 = "Note Value 1";
+  const std::string kNoteUnknownFields1 = "Note Unknown Fields 1";
+  const std::string kNoteUniqueDisplayName2 = "Note Unique Display Name 2";
+  const std::string kNoteValue2 = "Note Value 2";
+  const std::string kNoteUnknownFields2 = "Note Unknown Fields 2";
+
+  // Create a base note proto that contains two notes with unknown fields.
+  sync_pb::PasswordSpecificsData_Notes base_notes;
+
+  sync_pb::PasswordSpecificsData_Notes_Note* note_proto1 =
+      base_notes.add_note();
+  note_proto1->set_unique_display_name(kNoteUniqueDisplayName1);
+  *note_proto1->mutable_unknown_fields() = kNoteUnknownFields1;
+
+  sync_pb::PasswordSpecificsData_Notes_Note* note_proto2 =
+      base_notes.add_note();
+  note_proto2->set_unique_display_name(kNoteUniqueDisplayName2);
+  *note_proto2->mutable_unknown_fields() = kNoteUnknownFields2;
+
+  // Create the notes to be committed with the same unique display names in the
+  // base specifics. Notes will be reconciled using the unique display name and
+  // hence the order shouldn't matter.
+  std::vector<PasswordNote> notes;
+  notes.emplace_back(base::UTF8ToUTF16(kNoteUniqueDisplayName2),
+                     base::UTF8ToUTF16(kNoteValue2),
+                     /*date_created=*/base::Time::Now(),
+                     /*hide_by_default=*/true);
+  notes.emplace_back(base::UTF8ToUTF16(kNoteUniqueDisplayName1),
+                     base::UTF8ToUTF16(kNoteValue1),
+                     /*date_created=*/base::Time::Now(),
+                     /*hide_by_default=*/true);
+
+  // Reconciliation should preserve the order of the notes in the base specifics
+  // and carry over the known fields.
+  sync_pb::PasswordSpecificsData_Notes reconciled_notes =
+      PasswordNotesToProto(notes, base_notes);
+  EXPECT_EQ(kNoteUniqueDisplayName1,
+            reconciled_notes.note(0).unique_display_name());
+  EXPECT_EQ(kNoteValue1, reconciled_notes.note(0).value());
+  EXPECT_EQ(kNoteUnknownFields1, reconciled_notes.note(0).unknown_fields());
+
+  EXPECT_EQ(kNoteUniqueDisplayName2,
+            reconciled_notes.note(1).unique_display_name());
+  EXPECT_EQ(kNoteValue2, reconciled_notes.note(1).value());
+  EXPECT_EQ(kNoteUnknownFields2, reconciled_notes.note(1).unknown_fields());
+}
+
 TEST(PasswordProtoUtilsTest, ConvertSpecificsToFormAndBack) {
   sync_pb::PasswordSpecifics specifics;
   *specifics.mutable_client_only_encrypted_data() =
@@ -114,9 +195,49 @@ TEST(PasswordProtoUtilsTest, ConvertSpecificsToFormAndBack) {
                           /*issue_types=*/{});
 
   EXPECT_THAT(SpecificsFromPassword(
-                  PasswordFromSpecifics(specifics.client_only_encrypted_data()))
+                  PasswordFromSpecifics(specifics.client_only_encrypted_data()),
+                  /*base_password_data=*/{})
                   .SerializeAsString(),
               Eq(specifics.SerializeAsString()));
+}
+
+TEST(PasswordProtoUtilsTest, SpecificsDataFromPasswordPreservesUnknownFields) {
+  sync_pb::PasswordSpecificsData specifics =
+      CreateSpecificsData("http://www.origin.com/", "username_element",
+                          "username_value", "password_element", "signon_realm",
+                          /*issue_types=*/{});
+
+  PasswordForm form = PasswordFromSpecifics(specifics);
+
+  *specifics.mutable_unknown_fields() = "unknown_fields";
+
+  sync_pb::PasswordSpecificsData specifics_with_only_unknown_fields;
+  *specifics_with_only_unknown_fields.mutable_unknown_fields() =
+      "unknown_fields";
+
+  EXPECT_EQ(SpecificsDataFromPassword(form, specifics_with_only_unknown_fields)
+                .SerializeAsString(),
+            specifics.SerializeAsString());
+}
+
+TEST(PasswordProtoUtilsTest, SpecificsFromPasswordPreservesUnknownFields) {
+  sync_pb::PasswordSpecificsData specifics =
+      CreateSpecificsData("http://www.origin.com/", "username_element",
+                          "username_value", "password_element", "signon_realm",
+                          /*issue_types=*/{});
+
+  PasswordForm form = PasswordFromSpecifics(specifics);
+
+  *specifics.mutable_unknown_fields() = "unknown_fields";
+
+  sync_pb::PasswordSpecificsData specifics_with_only_unknown_fields;
+  *specifics_with_only_unknown_fields.mutable_unknown_fields() =
+      "unknown_fields";
+
+  EXPECT_EQ(SpecificsFromPassword(form, specifics_with_only_unknown_fields)
+                .client_only_encrypted_data()
+                .SerializeAsString(),
+            specifics.SerializeAsString());
 }
 
 TEST(PasswordProtoUtilsTest,

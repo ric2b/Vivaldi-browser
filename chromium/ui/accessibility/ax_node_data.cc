@@ -450,7 +450,7 @@ bool AXNodeData::GetHtmlAttribute(const char* attribute,
   for (const std::pair<std::string, std::string>& html_attribute :
        html_attributes) {
     const std::string& attr = html_attribute.first;
-    if (base::LowerCaseEqualsASCII(attr, attribute)) {
+    if (base::EqualsCaseInsensitiveASCII(attr, attribute)) {
       *value = html_attribute.second;
       return true;
     }
@@ -735,7 +735,6 @@ void AXNodeData::AddAction(ax::mojom::Action action_enum) {
     case ax::mojom::Action::kInternalInvalidateTree:
     case ax::mojom::Action::kLoadInlineTextBoxes:
     case ax::mojom::Action::kReplaceSelectedText:
-    case ax::mojom::Action::kRunScreenAi:
     case ax::mojom::Action::kScrollToMakeVisible:
     case ax::mojom::Action::kScrollToPoint:
     case ax::mojom::Action::kSetAccessibilityFocus:
@@ -1081,25 +1080,6 @@ bool AXNodeData::IsSpinnerTextField() const {
   // spinbutton role to AXRoleProperties::IsTextField().
   return role == ax::mojom::Role::kSpinButton &&
          GetStringAttribute(ax::mojom::StringAttribute::kInputType) == "number";
-}
-
-bool AXNodeData::IsReadOnlyOrDisabled() const {
-  switch (GetRestriction()) {
-    case ax::mojom::Restriction::kReadOnly:
-    case ax::mojom::Restriction::kDisabled:
-      return true;
-    case ax::mojom::Restriction::kNone: {
-      if (HasState(ax::mojom::State::kEditable) ||
-          HasState(ax::mojom::State::kRichlyEditable)) {
-        return false;
-      }
-
-      // By default, when readonly is not supported, we assume the node is never
-      // editable - then always readonly.
-      return ShouldHaveReadonlyStateByDefault(role) ||
-             !IsReadOnlySupported(role);
-    }
-  }
 }
 
 bool AXNodeData::IsRangeValueSupported() const {

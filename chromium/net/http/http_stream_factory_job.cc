@@ -124,7 +124,6 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
           base::BindRepeating(&Job::OnIOComplete, base::Unretained(this))),
       connection_(new ClientSocketHandle),
       session_(session),
-      next_state_(STATE_NONE),
       destination_(std::move(destination)),
       origin_url_(origin_url),
       is_websocket_(is_websocket),
@@ -147,15 +146,7 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
           (ShouldForceQuic(session, destination_, proxy_info, using_ssl_))),
       quic_version_(quic_version),
       expect_spdy_(alternative_protocol == kProtoHTTP2 && !using_quic_),
-      using_spdy_(false),
-      should_reconsider_proxy_(false),
       quic_request_(session_->quic_stream_factory()),
-      expect_on_quic_host_resolution_(false),
-      using_existing_quic_session_(false),
-      establishing_tunnel_(false),
-      was_alpn_negotiated_(false),
-      negotiated_protocol_(kProtoUnknown),
-      num_streams_(0),
       pushed_stream_id_(kNoPushedStreamFound),
       spdy_session_key_(
           using_quic_ ? SpdySessionKey()
@@ -164,12 +155,12 @@ HttpStreamFactory::Job::Job(Delegate* delegate,
                                           request_info_.privacy_mode,
                                           request_info_.socket_tag,
                                           request_info_.network_isolation_key,
-                                          request_info_.secure_dns_policy)),
-      stream_type_(HttpStreamRequest::BIDIRECTIONAL_STREAM),
-      init_connection_already_resumed_(false) {
+                                          request_info_.secure_dns_policy)) {
   // Websocket `destination` schemes should be converted to HTTP(S).
-  DCHECK(base::LowerCaseEqualsASCII(destination_.scheme(), url::kHttpScheme) ||
-         base::LowerCaseEqualsASCII(destination_.scheme(), url::kHttpsScheme));
+  DCHECK(base::EqualsCaseInsensitiveASCII(destination_.scheme(),
+                                          url::kHttpScheme) ||
+         base::EqualsCaseInsensitiveASCII(destination_.scheme(),
+                                          url::kHttpsScheme));
 
   // This class is specific to a single `ProxyServer`, so `proxy_info_` must be
   // non-empty. Entries beyond the first are ignored. It should simply take a
@@ -308,6 +299,12 @@ void HttpStreamFactory::Job::SetPriority(RequestPriority priority) {
   // TODO(akalin): Maybe Propagate this to the preconnect state.
 }
 
+bool HttpStreamFactory::Job::HasAvailableSpdySession() const {
+  return !using_quic_ && CanUseExistingSpdySession() &&
+         session_->spdy_session_pool()->HasAvailableSession(spdy_session_key_,
+                                                            is_websocket_);
+}
+
 bool HttpStreamFactory::Job::was_alpn_negotiated() const {
   return was_alpn_negotiated_;
 }
@@ -356,7 +353,8 @@ bool HttpStreamFactory::Job::ShouldForceQuic(
           base::Contains(quic_params->origins_to_force_quic_on,
                          HostPortPair::FromSchemeHostPort(destination))) &&
          proxy_info.is_direct() &&
-         base::LowerCaseEqualsASCII(destination.scheme(), url::kHttpsScheme);
+         base::EqualsCaseInsensitiveASCII(destination.scheme(),
+                                          url::kHttpsScheme);
 }
 
 // static
@@ -409,7 +407,7 @@ void HttpStreamFactory::Job::OnStreamReadyCallback() {
   DCHECK_NE(job_type_, PRECONNECT);
   DCHECK(!is_websocket_ || try_websocket_over_http2_);
 
-  MaybeCopyConnectionAttemptsFromSocketOrHandle();
+  MaybeCopyConnectionAttemptsFromHandle();
 
   delegate_->OnStreamReady(this, server_ssl_config_);
   // |this| may be deleted after this call.
@@ -420,7 +418,7 @@ void HttpStreamFactory::Job::OnWebSocketHandshakeStreamReadyCallback() {
   DCHECK_NE(job_type_, PRECONNECT);
   DCHECK(is_websocket_);
 
-  MaybeCopyConnectionAttemptsFromSocketOrHandle();
+  MaybeCopyConnectionAttemptsFromHandle();
 
   delegate_->OnWebSocketHandshakeStreamReady(
       this, server_ssl_config_, proxy_info_, std::move(websocket_stream_));
@@ -430,7 +428,7 @@ void HttpStreamFactory::Job::OnWebSocketHandshakeStreamReadyCallback() {
 void HttpStreamFactory::Job::OnBidirectionalStreamImplReadyCallback() {
   DCHECK(bidirectional_stream_impl_);
 
-  MaybeCopyConnectionAttemptsFromSocketOrHandle();
+  MaybeCopyConnectionAttemptsFromHandle();
 
   delegate_->OnBidirectionalStreamImplReady(this, server_ssl_config_,
                                             proxy_info_);
@@ -440,7 +438,7 @@ void HttpStreamFactory::Job::OnBidirectionalStreamImplReadyCallback() {
 void HttpStreamFactory::Job::OnStreamFailedCallback(int result) {
   DCHECK_NE(job_type_, PRECONNECT);
 
-  MaybeCopyConnectionAttemptsFromSocketOrHandle();
+  MaybeCopyConnectionAttemptsFromHandle();
 
   delegate_->OnStreamFailed(this, result, server_ssl_config_);
   // |this| may be deleted after this call.
@@ -452,7 +450,7 @@ void HttpStreamFactory::Job::OnCertificateErrorCallback(
   DCHECK_NE(job_type_, PRECONNECT);
   DCHECK(!spdy_session_request_);
 
-  MaybeCopyConnectionAttemptsFromSocketOrHandle();
+  MaybeCopyConnectionAttemptsFromHandle();
 
   delegate_->OnCertificateError(this, result, server_ssl_config_, ssl_info);
   // |this| may be deleted after this call.
@@ -819,11 +817,18 @@ int HttpStreamFactory::Job::DoInitConnectionImpl() {
     DCHECK(!is_websocket_);
     DCHECK(request_info_.socket_tag == SocketTag());
 
+    // The lifeime of the preconnect tasks is not controlled by |connection_|.
+    // It may outlives |this|. So we can't use |io_callback_| which holds
+    // base::Unretained(this).
+    auto callback =
+        base::BindOnce(&Job::OnIOComplete, ptr_factory_.GetWeakPtr());
+
     return PreconnectSocketsForHttpRequest(
         destination_, request_info_.load_flags, priority_, session_,
         proxy_info_, server_ssl_config_, proxy_ssl_config_,
         request_info_.privacy_mode, request_info_.network_isolation_key,
-        request_info_.secure_dns_policy, net_log_, num_streams_);
+        request_info_.secure_dns_policy, net_log_, num_streams_,
+        std::move(callback));
   }
 
   ClientSocketPool::ProxyAuthCallback proxy_auth_callback =
@@ -880,7 +885,8 @@ int HttpStreamFactory::Job::DoInitConnectionImplQuic() {
       std::move(destination), quic_version_, request_info_.privacy_mode,
       priority_, request_info_.socket_tag, request_info_.network_isolation_key,
       request_info_.secure_dns_policy, proxy_info_.is_direct(),
-      ssl_config->GetCertVerifyFlags(), url, net_log_, &net_error_details_,
+      /*require_dns_https_alpn=*/false, ssl_config->GetCertVerifyFlags(), url,
+      net_log_, &net_error_details_,
       base::BindOnce(&Job::OnFailedOnDefaultNetwork, ptr_factory_.GetWeakPtr()),
       io_callback_);
   if (rv == OK) {
@@ -1239,21 +1245,12 @@ int HttpStreamFactory::Job::ReconsiderProxyAfterError(int error) {
   return error;
 }
 
-// If the connection succeeds, failed connection attempts leading up to the
-// success will be returned via the successfully connected socket. If the
-// connection fails, failed connection attempts will be returned via the
-// ClientSocketHandle. Check whether a socket was returned and copy the
-// connection attempts from the proper place.
-void HttpStreamFactory::Job::MaybeCopyConnectionAttemptsFromSocketOrHandle() {
+void HttpStreamFactory::Job::MaybeCopyConnectionAttemptsFromHandle() {
   if (!connection_)
     return;
 
-  ConnectionAttempts socket_attempts = connection_->connection_attempts();
-  if (connection_->socket()) {
-    connection_->socket()->GetConnectionAttempts(&socket_attempts);
-  }
-
-  delegate_->AddConnectionAttemptsToRequest(this, socket_attempts);
+  delegate_->AddConnectionAttemptsToRequest(this,
+                                            connection_->connection_attempts());
 }
 
 HttpStreamFactory::JobFactory::JobFactory() = default;

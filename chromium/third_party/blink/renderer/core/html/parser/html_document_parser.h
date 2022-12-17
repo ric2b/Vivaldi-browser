@@ -30,6 +30,7 @@
 #include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "base/task/single_thread_task_runner.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/dom/parser_content_policy.h"
 #include "third_party/blink/renderer/core/dom/scriptable_document_parser.h"
@@ -47,10 +48,12 @@
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 #include "third_party/blink/renderer/platform/scheduler/public/thread_scheduler.h"
 #include "third_party/blink/renderer/platform/wtf/deque.h"
+#include "third_party/blink/renderer/platform/wtf/sequence_bound.h"
 #include "third_party/blink/renderer/platform/wtf/text/text_position.h"
 
 namespace blink {
 
+class BackgroundHTMLScanner;
 class Document;
 class DocumentFragment;
 class Element;
@@ -186,6 +189,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   void FetchQueuedPreloads();
   std::string GetPreloadHistogramSuffix();
   void FinishAppend();
+  void ScanInBackground(const String& source);
 
   HTMLToken& Token() { return *token_; }
 
@@ -202,6 +206,7 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   std::unique_ptr<HTMLPreloadScanner> preload_scanner_;
   // A scanner used only for input provided to the insert() method.
   std::unique_ptr<HTMLPreloadScanner> insertion_preload_scanner_;
+  WTF::SequenceBound<BackgroundHTMLScanner> background_scanner_;
 
   scoped_refptr<base::SingleThreadTaskRunner> loading_task_runner_;
 
@@ -213,6 +218,9 @@ class CORE_EXPORT HTMLDocumentParser : public ScriptableDocumentParser,
   std::unique_ptr<HTMLParserMetrics> metrics_reporter_;
   // A timer for how long we are inactive after yielding
   std::unique_ptr<base::ElapsedTimer> yield_timer_;
+
+  const bool timed_parser_budget_enabled_ =
+      base::FeatureList::IsEnabled(features::kTimedHTMLParserBudget);
 
   ThreadScheduler* scheduler_;
 };

@@ -48,6 +48,8 @@
 #include "content/public/browser/browser_thread.h"
 #include "ui/message_center/public/cpp/notification.h"
 
+#include "installer/util/vivaldi_install_util.h"
+
 namespace mswr = Microsoft::WRL;
 namespace winfoundtn = ABI::Windows::Foundation;
 namespace winui = ABI::Windows::UI;
@@ -686,8 +688,12 @@ class NotificationPlatformBridgeWinImpl
   // system, either under HKCU or HKLM.
   bool IsToastActivatorRegistered() {
     base::win::RegKey key;
+
+    // get the clsid for the current application.
+    base::FilePath target_exe = vivaldi::GetPathOfCurrentExe();
     std::wstring path =
-        InstallUtil::GetToastActivatorRegistryPath() + L"\\LocalServer32";
+        InstallUtil::GetToastActivatorRegistryPath(&target_exe) +
+        L"\\LocalServer32";
     HKEY root = install_static::IsSystemInstall() ? HKEY_LOCAL_MACHINE
                                                   : HKEY_CURRENT_USER;
     return ERROR_SUCCESS == key.Open(root, path.c_str(), KEY_QUERY_VALUE);

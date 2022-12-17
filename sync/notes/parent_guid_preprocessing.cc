@@ -9,6 +9,7 @@
 
 #include "base/check.h"
 #include "base/guid.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_piece.h"
 #include "components/sync/protocol/entity_specifics.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
@@ -126,7 +127,7 @@ class LazySyncIdToGuidMapInUpdates {
     }
   }
 
-  const syncer::UpdateResponseDataList* const updates_;
+  const raw_ptr<const syncer::UpdateResponseDataList> updates_;
   bool initialized_ = false;
   std::
       unordered_map<base::StringPiece, base::StringPiece, base::StringPieceHash>

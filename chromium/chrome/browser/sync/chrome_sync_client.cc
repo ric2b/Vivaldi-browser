@@ -410,13 +410,13 @@ ChromeSyncClient::CreateDataTypeControllers(syncer::SyncService* sync_service) {
         dump_stack, profile_));
 
     if (IsAppSyncEnabled(profile_)) {
-      controllers.push_back(CreateAppsModelTypeController(sync_service));
+      controllers.push_back(CreateAppsModelTypeController());
 
       controllers.push_back(CreateAppSettingsModelTypeController(sync_service));
 
       if (web_app::AreWebAppsEnabled(profile_) &&
           web_app::WebAppProvider::GetForWebApps(profile_)) {
-        controllers.push_back(CreateWebAppsModelTypeController(sync_service));
+        controllers.push_back(CreateWebAppsModelTypeController());
       }
     }
 #endif  // BUILDFLAG(ENABLE_EXTENSIONS)
@@ -524,8 +524,9 @@ invalidation::InvalidationService* ChromeSyncClient::GetInvalidationService() {
   invalidation::ProfileInvalidationProvider* provider =
       invalidation::ProfileInvalidationProviderFactory::GetForProfile(profile_);
 
-  if (provider)
+  if (provider) {
     return provider->GetInvalidationService();
+  }
   return nullptr;
 }
 
@@ -685,8 +686,7 @@ void ChromeSyncClient::SkipMainProfileCheckForTesting() {
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
 std::unique_ptr<syncer::ModelTypeController>
-ChromeSyncClient::CreateAppsModelTypeController(
-    syncer::SyncService* sync_service) {
+ChromeSyncClient::CreateAppsModelTypeController() {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   if (chromeos::features::IsSyncSettingsCategorizationEnabled()) {
     return AppsModelTypeController::Create(
@@ -722,8 +722,7 @@ ChromeSyncClient::CreateAppSettingsModelTypeController(
 }
 
 std::unique_ptr<syncer::ModelTypeController>
-ChromeSyncClient::CreateWebAppsModelTypeController(
-    syncer::SyncService* sync_service) {
+ChromeSyncClient::CreateWebAppsModelTypeController() {
   syncer::ModelTypeControllerDelegate* delegate =
       GetControllerDelegateForModelType(syncer::WEB_APPS).get();
   return std::make_unique<syncer::ModelTypeController>(

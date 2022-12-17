@@ -154,7 +154,7 @@ EventResult GetEventResult(download::DownloadDangerType danger_type,
   if (download_core_service) {
     ChromeDownloadManagerDelegate* delegate =
         download_core_service->GetDownloadManagerDelegate();
-    if (delegate && delegate->ShouldBlockFile(danger_type, item)) {
+    if (delegate && delegate->ShouldBlockFile(danger_type)) {
       return EventResult::BLOCKED;
     }
   }
@@ -465,8 +465,8 @@ void DeepScanningRequest::PopulateRequest(FileAnalysisRequest* request,
     request->set_content_type(file_metadata_.at(path).mime_type);
   }
 
-  for (const std::string& tag : analysis_settings_.tags)
-    request->add_tag(tag);
+  for (const auto& tag : analysis_settings_.tags)
+    request->add_tag(tag.first);
 }
 
 void DeepScanningRequest::PrepareClientDownloadRequest(

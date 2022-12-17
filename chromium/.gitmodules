@@ -43,6 +43,12 @@
 [submodule "third_party/colorama/src"]
 	path = third_party/colorama/src
 	url = ../../external/colorama.git
+[submodule "third_party/content_analysis_sdk/src"]
+	path = third_party/content_analysis_sdk/src
+	url = ../../external/github.com/chromium/content_analysis_sdk.git
+[submodule "third_party/cpuinfo/src"]
+	path = third_party/cpuinfo/src
+	url = ../../external/github.com/pytorch/cpuinfo.git
 [submodule "third_party/crc32c/src"]
 	path = third_party/crc32c/src
 	url = ../../external/github.com/google/crc32c.git
@@ -91,12 +97,12 @@
 [submodule "third_party/freetype/src"]
 	path = third_party/freetype/src
 	url = ../src/third_party/freetype2.git
+[submodule "third_party/fxdiv/src"]
+	path = third_party/fxdiv/src
+	url = ../../external/github.com/Maratyszcza/FXdiv.git
 [submodule "third_party/gemmlowp/src"]
 	path = third_party/gemmlowp/src
 	url = ../../external/github.com/google/gemmlowp.git
-[submodule "third_party/glfw/src"]
-	path = third_party/glfw/src
-	url = ../../external/github.com/glfw/glfw.git
 [submodule "third_party/google_toolbox_for_mac/src"]
 	path = third_party/google_toolbox_for_mac/src
 	url = ../../external/github.com/google/google-toolbox-for-mac.git
@@ -211,6 +217,9 @@
 [submodule "third_party/perfetto"]
 	path = third_party/perfetto
 	url = ../../android/platform/external/perfetto.git
+[submodule "third_party/pthreadpool/src"]
+	path = third_party/pthreadpool/src
+	url = ../../external/github.com/Maratyszcza/pthreadpool.git
 [submodule "third_party/pywebsocket3/src"]
 	path = third_party/pywebsocket3/src
 	url = ../../external/github.com/GoogleChromeLabs/pywebsocket3.git
@@ -283,6 +292,9 @@
 [submodule "third_party/xdg-utils"]
 	path = third_party/xdg-utils
 	url = ../deps/xdg-utils.git
+[submodule "third_party/xnnpack/src"]
+	path = third_party/xnnpack/src
+	url = ../../external/github.com/google/XNNPACK.git
 [submodule "v8"]
 	path = v8
 	url = ../../v8/v8.git

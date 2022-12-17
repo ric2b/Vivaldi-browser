@@ -168,7 +168,7 @@ class MockWebMediaPlayerClient : public WebMediaPlayerClient {
   MOCK_METHOD0(OnPictureInPictureStateChange, void());
   MOCK_CONST_METHOD0(CouldPlayIfEnoughData, bool());
   MOCK_METHOD0(ResumePlayback, void());
-  MOCK_METHOD0(PausePlayback, void());
+  MOCK_METHOD1(PausePlayback, void(WebMediaPlayerClient::PauseReason));
   MOCK_METHOD0(DidPlayerStartPlaying, void());
   MOCK_METHOD1(DidPlayerPaused, void(bool));
   MOCK_METHOD1(DidPlayerMutedStatusChange, void(bool));
@@ -441,9 +441,9 @@ class WebMediaPlayerImplTest
         base::BindOnce(&WebMediaPlayerImplTest::CreateMockSurfaceLayerBridge,
                        base::Unretained(this)),
         viz::TestContextProvider::Create(),
-        WebMediaPlayer::SurfaceLayerMode::kAlways,
-        is_background_suspend_enabled_, is_background_video_playback_enabled_,
-        true, std::move(demuxer_override), nullptr);
+        /*use_surface_layer=*/true, is_background_suspend_enabled_,
+        is_background_video_playback_enabled_, true,
+        std::move(demuxer_override), nullptr);
   }
 
   std::unique_ptr<WebSurfaceLayerBridge> CreateMockSurfaceLayerBridge(
@@ -1967,7 +1967,10 @@ TEST_F(WebMediaPlayerImplTest, BackgroundIdlePauseTimerDependsOnAudio) {
   ScheduleIdlePauseTimer();
   EXPECT_TRUE(IsIdlePauseTimerRunning());
 
-  EXPECT_CALL(client_, PausePlayback());
+  EXPECT_CALL(
+      client_,
+      PausePlayback(
+          WebMediaPlayerClient::PauseReason::kSuspendedPlayerIdleTimeout));
   FireIdlePauseTimer();
   base::RunLoop().RunUntilIdle();
 }
@@ -2284,7 +2287,7 @@ class WebMediaPlayerImplBackgroundBehaviorTest
     }
 
     if (IsVideoBeingCaptured())
-      wmpi_->GetCurrentFrame();
+      wmpi_->GetCurrentFrameThenUpdate();
 
     BackgroundPlayer();
   }

@@ -16,6 +16,7 @@
 #include <vector>
 
 #include "ash/app_list/app_list_metrics.h"
+#include "ash/app_list/grid_index.h"
 #include "ash/app_list/model/app_list_item_list_observer.h"
 #include "ash/app_list/model/app_list_model_observer.h"
 #include "ash/app_list/paged_view_structure.h"
@@ -58,35 +59,10 @@ class AppsGridContextMenu;
 class AppsGridViewFocusDelegate;
 class AppsGridViewFolderDelegate;
 class PulsingBlockView;
+class AppsGridRowChangeAnimator;
 class GhostImageView;
 class AppsGridViewTest;
 class ScrollableAppsGridViewTest;
-
-// Represents the index to an item view in the grid.
-struct ASH_EXPORT GridIndex {
-  GridIndex() = default;
-  GridIndex(int page, int slot) : page(page), slot(slot) {}
-
-  bool operator==(const GridIndex& other) const {
-    return page == other.page && slot == other.slot;
-  }
-  bool operator!=(const GridIndex& other) const {
-    return page != other.page || slot != other.slot;
-  }
-  bool operator<(const GridIndex& other) const {
-    return std::tie(page, slot) < std::tie(other.page, other.slot);
-  }
-
-  // Whether the grid index is a valid index, i.e. whether page and slot are
-  // non-negative. This method does *not* check whether the index exists in an
-  // apps grid.
-  bool IsValid() const;
-
-  std::string ToString() const;
-
-  int page = -1;  // Which page an item view is on.
-  int slot = -1;  // Which slot in the page an item view is in.
-};
 
 // AppsGridView displays a grid of app icons. It is used for:
 // - The main grid of apps in the launcher
@@ -467,7 +443,7 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // Sets the focus to the correct view when a drag ends. Focus is on the app
   // list item view during the drag.
-  virtual void SetFocusAfterEndDrag() = 0;
+  virtual void SetFocusAfterEndDrag(AppListItem* drag_item) = 0;
 
   // Calculates the index range of the visible item views.
   virtual absl::optional<VisibleItemIndexRange> GetVisibleItemIndexRange()
@@ -529,6 +505,9 @@ class ASH_EXPORT AppsGridView : public views::View,
   // views::BoundsAnimatorObserver:
   void OnBoundsAnimatorProgressed(views::BoundsAnimator* animator) override;
   void OnBoundsAnimatorDone(views::BoundsAnimator* animator) override;
+
+  // Destroys all item view layers if they are not required.
+  void DestroyLayerItemsIfNotNeeded();
 
   // Whether app list item views require layers - for example during drag, or
   // folder repositioning animation.
@@ -611,6 +590,7 @@ class ASH_EXPORT AppsGridView : public views::View,
   friend class test::AppsGridViewTest;
   friend class PagedAppsGridView;
   friend class PagedViewStructure;
+  friend class AppsGridRowChangeAnimator;
 
   enum DropTargetRegion {
     NO_TARGET,
@@ -668,19 +648,6 @@ class ASH_EXPORT AppsGridView : public views::View,
   // Calculates ideal bounds for app list item views within the apps grid, and
   // animates their bounds (using `bounds_animator_`) to their ideal position.
   void AnimateToIdealBounds();
-
-  // Invoked when the given |view|'s current bounds and target bounds are on
-  // different rows. To avoid moving diagonally, |view| would be put into a
-  // slot prior |target| and fade in while moving to |target|. In the meanwhile,
-  // a layer copy of |view| would start at |current| and fade out while moving
-  // to succeeding slot of |current|. |animate_current| controls whether to run
-  // fading out animation from |current|. |animate_target| controls whether to
-  // run fading in animation to |target|.
-  void AnimationBetweenRows(AppListItemView* view,
-                            bool animate_current,
-                            const gfx::Rect& current,
-                            bool animate_target,
-                            const gfx::Rect& target);
 
   // Extracts drag location info from |root_location| into |drag_point|.
   void ExtractDragLocation(const gfx::Point& root_location,
@@ -747,6 +714,11 @@ class ASH_EXPORT AppsGridView : public views::View,
   // level item list. The view model is will get updated in response to the data
   // model changes.
   void ReparentItemForReorder(AppListItem* item, const GridIndex& target);
+
+  // Records the user metrics action for deleting a folder if `folder_id` has
+  // been removed from the data model. Called after an app item move which might
+  // or might not cause a folder to be deleted.
+  void MaybeRecordFolderDeleteUserAction(const std::string& folder_id);
 
   // Removes the AppListItemView at |index| in |view_model_|, removes it from
   // view structure as well and deletes it.
@@ -1124,6 +1096,9 @@ class ASH_EXPORT AppsGridView : public views::View,
 
   // A closure that runs at the end of the fade out animation.
   base::OnceClosure fade_out_done_closure_for_test_;
+
+  // Used to trigger and manage row change animations.
+  std::unique_ptr<AppsGridRowChangeAnimator> row_change_animator_;
 
   base::WeakPtrFactory<AppsGridView> weak_factory_{this};
 };

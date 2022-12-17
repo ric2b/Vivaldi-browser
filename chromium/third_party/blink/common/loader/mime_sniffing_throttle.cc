@@ -42,7 +42,7 @@ void MimeSniffingThrottle::WillProcessResponse(
       response_head->headers->GetNormalizedHeader("x-content-type-options",
                                                   &content_type_options)) {
     blocked_sniffing_mime =
-        base::LowerCaseEqualsASCII(content_type_options, "nosniff");
+        base::EqualsCaseInsensitiveASCII(content_type_options, "nosniff");
   }
 
   if (!blocked_sniffing_mime &&
@@ -75,8 +75,10 @@ const char* MimeSniffingThrottle::NameForLoggingWillProcessResponse() {
 }
 
 void MimeSniffingThrottle::ResumeWithNewResponseHead(
-    network::mojom::URLResponseHeadPtr new_response_head) {
-  delegate_->UpdateDeferredResponseHead(std::move(new_response_head));
+    network::mojom::URLResponseHeadPtr new_response_head,
+    mojo::ScopedDataPipeConsumerHandle body) {
+  delegate_->UpdateDeferredResponseHead(std::move(new_response_head),
+                                        std::move(body));
   delegate_->Resume();
 }
 

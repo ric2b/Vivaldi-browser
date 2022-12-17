@@ -55,8 +55,11 @@ component("wtf") {
     "cross_thread_copier.h",
     "cross_thread_copier_base.h",
     "cross_thread_copier_gfx.h",
+    "cross_thread_copier_gpu.h",
     "cross_thread_copier_media.h",
     "cross_thread_copier_mojo.h",
+    "cross_thread_copier_public.h",
+    "cross_thread_copier_skia.h",
     "cross_thread_copier_std.h",
     "cross_thread_functional.h",
     "date_math.cc",
@@ -110,6 +113,7 @@ component("wtf") {
     "text/atomic_string.cc",
     "text/atomic_string.h",
     "text/atomic_string_cf.cc",
+    "text/atomic_string_encoding.h",
     "text/atomic_string_hash.h",
     "text/atomic_string_table.cc",
     "text/atomic_string_table.h",
@@ -236,6 +240,10 @@ component("wtf") {
     ]
   }
 
+  if (!is_mac && (current_cpu == "x86" || current_cpu == "x64")) {
+    sources += [ "text/ascii_fast_path.cc" ]
+  }
+
   if (is_win) {
     cflags = [ "/wd4068" ]  # Unknown pragma.
 
@@ -287,6 +295,7 @@ source_set("wtf_unittests_sources") {
     "assertions_test.cc",
     "atomic_operations_test.cc",
     "bit_field_test.cc",
+    "bloom_filter_test.cc",
     "cross_thread_functional_test.cc",
     "decimal_test.cc",
     "deque_test.cc",

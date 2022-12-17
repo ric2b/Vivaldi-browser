@@ -11,6 +11,7 @@
 #include <vector>
 
 #include "chrome/browser/web_applications/user_display_mode.h"
+#include "components/services/app_service/public/cpp/run_on_os_login_types.h"
 #include "components/services/app_service/public/mojom/types.mojom-forward.h"
 #include "third_party/blink/public/common/manifest/manifest.h"
 #include "third_party/blink/public/mojom/manifest/display_mode.mojom.h"
@@ -129,7 +130,7 @@ enum class ExternalInstallSource {
   // Installed as a Chrome component, such as a help app, or a settings app.
   // The corresponding ExternallyManagedAppManager::SynchronizeInstalledApps
   // call site is
-  // in SystemWebAppManager::RefreshPolicyInstalledApps.
+  // in ash::SystemWebAppManager::RefreshPolicyInstalledApps.
   kSystemInstalled = 3,
 
   // Installed from ARC.
@@ -197,18 +198,9 @@ enum class RunOnOsLoginPolicy {
 
 std::string RunOnOsLoginModeToString(RunOnOsLoginMode mode);
 
-// These values are persisted to logs. Entries should not be renumbered and
-// numeric values should never be reused.
-// Records result of user reaction to install in-product help promo.
-enum class InstallIphResult {
-  // Installed the web app after IPH was shown.
-  kInstalled = 0,
-  // Clicked the install icon but canceled install after IPH was shown.
-  kCanceled = 1,
-  // Ignored IPH, didn't click install.
-  kIgnored = 2,
-  kMaxValue = kIgnored,
-};
+// Converts RunOnOsLoginMode from web_app::RunOnOsLoginMode to
+// apps::RunOnOsLoginMode.
+apps::RunOnOsLoginMode ConvertOsLoginMode(web_app::RunOnOsLoginMode login_mode);
 
 // Number of times IPH can be ignored for this app before it's muted.
 constexpr int kIphMuteAfterConsecutiveAppSpecificIgnores = 3;

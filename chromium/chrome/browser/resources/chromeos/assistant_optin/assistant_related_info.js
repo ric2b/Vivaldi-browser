@@ -69,6 +69,15 @@ class AssistantRelatedInfo extends AssistantRelatedInfoBase {
         type: String,
         value: '',
       },
+
+      /**
+       * Whether the marketing opt-in page is being rendered in dark mode.
+       * @private {boolean}
+       */
+      isDarkModeActive_: {
+        type: Boolean,
+        value: false,
+      },
     };
   }
 
@@ -182,7 +191,7 @@ class AssistantRelatedInfo extends AssistantRelatedInfoBase {
     this.loading = true;
     this.loadingError_ = false;
     this.headerReceived_ = false;
-    let locale = this.locale.replace('-', '_').toLowerCase();
+    const locale = this.locale.replace('-', '_').toLowerCase();
     this.webview_.src = this.urlTemplate_.replace('$', locale);
   }
 
@@ -190,6 +199,12 @@ class AssistantRelatedInfo extends AssistantRelatedInfoBase {
    * Handles event when animation webview cannot be loaded.
    */
   onWebViewErrorOccurred(details) {
+    if (details && details.error == 'net::ERR_ABORTED') {
+      // Retry triggers net::ERR_ABORTED, so ignore it.
+      // TODO(b/232592745): Replace with a state machine to handle aborts
+      // gracefully and avoid duplicate reloads.
+      return;
+    }
     this.dispatchEvent(
         new CustomEvent('error', {bubbles: true, composed: true}));
     this.loadingError_ = true;
@@ -244,13 +259,22 @@ class AssistantRelatedInfo extends AssistantRelatedInfoBase {
   reloadContent(data) {
     this.skipActivityControl_ = !data['activityControlNeeded'];
     this.childName_ = data['childName'];
-    this.$.zippy.setAttribute(
-        'icon-src',
-        'data:text/html;charset=utf-8,' +
-            encodeURIComponent(this.$.zippy.getWrappedIcon(
-                'https://www.gstatic.com/images/icons/material/system/2x/' +
-                    'info_outline_grey600_24dp.png',
-                this.i18n('assistantScreenContextTitle'))));
+    if (!data['useNativeIcons']) {
+      const url = this.isDarkModeActive_ ? 'info_outline_gm_grey500_24dp.png' :
+                                           'info_outline_gm_grey600_24dp.png';
+      this.$.zippy.setAttribute(
+          'icon-src',
+          'data:text/html;charset=utf-8,' +
+              encodeURIComponent(this.$.zippy.getWrappedIcon(
+                  'https://www.gstatic.com/images/icons/material/system/2x/' +
+                      url,
+                  this.i18n('assistantScreenContextTitle'),
+                  getComputedStyle(document.body)
+                      .getPropertyValue('--cros-bg-color'))));
+      this.$.zippy.nativeIconType = AssistantNativeIconType.NONE;
+    } else {
+      this.$.zippy.nativeIconType = AssistantNativeIconType.INFO;
+    }
     this.equalWeightButtons_ = data['equalWeightButtons'];
 
     this.consentStringLoaded_ = true;
@@ -326,6 +350,11 @@ class AssistantRelatedInfo extends AssistantRelatedInfoBase {
           this.i18n('assistantRelatedInfoTitleForChild', childName) :
           this.i18n('assistantRelatedInfoTitle');
     }
+  }
+
+  getAnimationUrl_(isDarkMode) {
+    return './assistant_optin/assistant_related_info_' +
+        (isDarkMode ? 'dm' : 'lm') + '.json';
   }
 }
 

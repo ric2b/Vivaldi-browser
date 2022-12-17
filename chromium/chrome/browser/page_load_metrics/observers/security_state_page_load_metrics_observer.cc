@@ -102,6 +102,18 @@ SecurityStatePageLoadMetricsObserver::OnStart(
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+SecurityStatePageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // All data aggregation are done in SiteEngagementService and
+  // SecurityStateTabHelper, and this class just monitors the timings to record
+  // the aggregated data. As the outermost page's OnCommit and OnComplete are
+  // the timing this class is interested in, it just stops observing
+  // FencedFrames.
+  return STOP_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SecurityStatePageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   // Only navigations committed to the main frame are monitored.

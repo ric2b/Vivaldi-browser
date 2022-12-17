@@ -21,4 +21,5 @@
     <item type="id" name="new_incognito_tab_menu_id" />
     <!-- Vivaldi -->
     <item type="id" name="vivaldi_create_new_tab_stack" />
+    <item type="id" name="vivaldi_close_other_tabs" />
 </resources>

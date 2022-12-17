@@ -28,6 +28,7 @@ import androidx.recyclerview.widget.LinearLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import org.chromium.base.TraceEvent;
+import org.chromium.base.metrics.TimingMetric;
 import org.chromium.base.task.PostTask;
 import org.chromium.chrome.browser.omnibox.R;
 import org.chromium.chrome.browser.ui.theme.BrandedColorScheme;
@@ -52,6 +53,13 @@ import org.vivaldi.browser.suggestions.SearchEngineSuggestionView.LayoutMargins;
 /** A widget for showing a list of omnibox suggestions. */
 public class OmniboxSuggestionsDropdown extends RecyclerView {
     private static final long DEFERRED_INITIAL_SHRINKING_LAYOUT_FROM_IME_DURATION_MS = 300;
+    /**
+     * Used to defer the accessibility announcement for list content.
+     * This makes core difference when the list is first shown up, when the interaction with the
+     * Omnibox and presence of virtual keyboard may actually cause throttling of the Accessibility
+     * events.
+     */
+    private static final long LIST_COMPOSITION_ACCESSIBILITY_ANNOUNCEMENT_DELAY_MS = 300;
 
     private final int mStandardBgColor;
     private final int mIncognitoBgColor;
@@ -310,8 +318,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         try (TraceEvent tracing = TraceEvent.scoped("OmniboxSuggestionsList.Measure");
-                SuggestionsMetrics.TimingMetric metric =
-                        SuggestionsMetrics.recordSuggestionListMeasureTime()) {
+                TimingMetric metric = SuggestionsMetrics.recordSuggestionListMeasureTime()) {
             int anchorBottomRelativeToContent = calculateAnchorBottomRelativeToContent();
             maybeUpdateLayoutParams(anchorBottomRelativeToContent);
 
@@ -440,8 +447,7 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         try (TraceEvent tracing = TraceEvent.scoped("OmniboxSuggestionsList.Layout");
-                SuggestionsMetrics.TimingMetric metric =
-                        SuggestionsMetrics.recordSuggestionListLayoutTime()) {
+                TimingMetric metric = SuggestionsMetrics.recordSuggestionListLayoutTime()) {
             super.onLayout(changed, l, t, r, b);
         }
     }
@@ -555,6 +561,13 @@ public class OmniboxSuggestionsDropdown extends RecyclerView {
         } else {
             mAlignmentViewLayoutListener = null;
         }
+    }
+
+    public void emitWindowContentChanged() {
+        PostTask.postDelayedTask(UiThreadTaskTraits.DEFAULT, () -> {
+            announceForAccessibility(getContext().getString(
+                    R.string.accessibility_omnibox_suggested_items, mAdapter.getItemCount()));
+        }, LIST_COMPOSITION_ACCESSIBILITY_ANNOUNCEMENT_DELAY_MS);
     }
 
     private void adjustSidePadding() {

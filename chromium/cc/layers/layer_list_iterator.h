@@ -9,6 +9,7 @@
 #include <vector>
 
 #include "base/memory/raw_ptr.h"
+#include "base/memory/raw_ptr_exclusion.h"
 #include "cc/cc_export.h"
 
 namespace cc {
@@ -42,7 +43,7 @@ class CC_EXPORT LayerListIterator {
 
   // `current_layer` is not a raw_ptr<...> for performance reasons (based on
   // analysis of sampling profiler data and tab_search:top100:2020).
-  Layer* current_layer_;
+  RAW_PTR_EXCLUSION Layer* current_layer_;
 
   std::vector<size_t> list_indices_;
 };
@@ -67,7 +68,7 @@ class CC_EXPORT LayerListConstIterator {
   const Layer* operator*() const { return current_layer_; }
 
  private:
-  const Layer* current_layer_;
+  raw_ptr<const Layer> current_layer_;
   std::vector<size_t> list_indices_;
 };
 

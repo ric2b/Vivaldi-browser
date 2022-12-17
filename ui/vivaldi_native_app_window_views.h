@@ -22,6 +22,7 @@
 #include "ui/views/widget/widget_delegate.h"
 #include "ui/views/widget/widget_observer.h"
 #include "ui/views/window/client_view.h"
+#include "ui/vivaldi_browser_window.h"
 
 class SkRegion;
 class VivaldiBrowserWindow;

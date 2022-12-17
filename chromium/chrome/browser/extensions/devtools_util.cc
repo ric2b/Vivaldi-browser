@@ -57,7 +57,10 @@ void InspectServiceWorkerBackground(const Extension* extension,
     if (host->GetType() == content::DevToolsAgentHost::kTypeServiceWorker &&
         host->GetURL() ==
             extension->GetResourceURL(
-                BackgroundInfo::GetBackgroundServiceWorkerScript(extension))) {
+                BackgroundInfo::GetBackgroundServiceWorkerScript(extension)) &&
+        // NOTE(andre@vivaldi.com) : Added because we run multiple windows per
+        // extension.
+        profile == Profile::FromBrowserContext(host->GetBrowserContext())) {
       DevToolsWindow::OpenDevToolsWindow(host, profile);
       break;
     }

@@ -184,7 +184,6 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
                       kProxyHost,
                       quic::Perspective::IS_SERVER,
                       false),
-        random_generator_(0),
         user_agent_(kUserAgent),
         proxy_endpoint_(url::kHttpsScheme, kProxyHost, kProxyPort),
         destination_endpoint_(url::kHttpsScheme, kOriginHost, kOriginPort),
@@ -267,7 +266,8 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
         base::WrapUnique(static_cast<QuicServerInfo*>(nullptr)),
         QuicSessionKey("mail.example.org", 80, PRIVACY_MODE_DISABLED,
                        SocketTag(), NetworkIsolationKey(),
-                       SecureDnsPolicy::kAllow),
+                       SecureDnsPolicy::kAllow,
+                       /*require_dns_https_alpn=*/false),
         /*require_confirmation=*/false,
         /*migrate_session_early_v2=*/false,
         /*migrate_session_on_network_change_v2=*/false,
@@ -610,7 +610,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
   }
 
   RecordingNetLogObserver net_log_observer_;
-  QuicFlagSaver saver_;
+  quic::test::QuicFlagSaver saver_;
   const quic::ParsedQuicVersion version_;
   const quic::QuicStreamId client_data_stream_id1_;
   const bool client_headers_include_h2_stream_dependency_;
@@ -636,7 +636,7 @@ class QuicProxyClientSocketTest : public ::testing::TestWithParam<TestParams>,
   QuicTestPacketMaker client_maker_;
   QuicTestPacketMaker server_maker_;
   IPEndPoint peer_addr_;
-  quic::test::MockRandom random_generator_;
+  quic::test::MockRandom random_generator_{0};
   ProofVerifyDetailsChromium verify_details_;
   MockCryptoClientStreamFactory crypto_client_stream_factory_;
 

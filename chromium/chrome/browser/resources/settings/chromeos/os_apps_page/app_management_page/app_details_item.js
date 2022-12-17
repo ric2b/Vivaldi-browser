@@ -2,12 +2,13 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import '//resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/cr_components/localized_link/localized_link.js';
+import 'chrome://resources/cr_elements/policy/cr_tooltip_icon.m.js';
 
-import {AppType, InstallSource} from '//resources/cr_components/app_management/constants.js';
-import {html, mixinBehaviors, PolymerElement} from '//resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+import {AppType, InstallSource} from 'chrome://resources/cr_components/app_management/constants.js';
 import {I18nBehavior, I18nBehaviorInterface} from 'chrome://resources/js/i18n_behavior.m.js';
 import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
+import {html, mixinBehaviors, PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {BrowserProxy} from './browser_proxy.js';
 
@@ -76,6 +77,69 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
   }
 
   /**
+   * The full storage information is only shown for
+   * Android and Web apps.
+   *
+   * @param {!App} app
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowStorage_(app) {
+    switch (app.type) {
+      case AppType.kWeb:
+      case AppType.kArc:
+      case AppType.kSystemWeb:
+        return (app.appSize !== null || app.dataSize !== null);
+      default:
+        return false;
+    }
+  }
+
+  /**
+   * The app size information is displayed when a value exists.
+   *
+   * @param {!App} app
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowAppSize_(app) {
+    return app.appSize !== null && app.appSize !== '';
+  }
+
+  /**
+   * The data size information is displayed when a value exists.
+   *
+   * @param {!App} app
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowDataSize_(app) {
+    return app.dataSize !== null && app.dataSize !== '';
+  }
+  /**
+   * The info icon is only shown for apps installed from the Chrome browser.
+   *
+   * @param {!App} app
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowInfoIcon_(app) {
+    return app.installSource === InstallSource.kBrowser;
+  }
+
+  /**
+   * The launch icon is show for apps installed from the CHrome WEb
+   * Store and Google Play Store.
+   *
+   * @param {!App} app
+   * @returns {boolean}
+   * @private
+   */
+  shouldShowLaunchIcon_(app) {
+    return app.dataSize !== null && app.dataSize !== '';
+  }
+
+  /**
    * Returns the string for the app type.
    *
    * @param {!App} app
@@ -87,9 +151,11 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
       case AppType.kArc:
         return this.i18n('appManagementAppDetailsTypeAndroid');
       case AppType.kChromeApp:
+      case AppType.kStandaloneBrowserChromeApp:
         return this.i18n('appManagementAppDetailsTypeChrome');
       case AppType.kWeb:
       case AppType.kExtension:
+      case AppType.kStandaloneBrowserExtension:
         return this.i18n('appManagementAppDetailsTypeWeb');
       case AppType.kBuiltIn:
       case AppType.kSystemWeb:
@@ -113,8 +179,6 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
         return this.i18n('appManagementAppDetailsInstallSourceWebStore');
       case InstallSource.kPlayStore:
         return this.i18n('appManagementAppDetailsInstallSourcePlayStore');
-      case InstallSource.kBrowser:
-        return this.i18n('appManagementAppDetailsInstallSourceBrowser');
       default:
         console.error('Install source not recognised.');
         return '';
@@ -142,12 +206,44 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
               ]
             });
       case InstallSource.kBrowser:
+        return this.i18n('appManagementAppDetailsInstallSourceBrowser');
       case InstallSource.kUnknown:
         return this.getTypeString_(app);
       default:
         console.error('Install source not recognised.');
         return this.getTypeString_(app);
     }
+  }
+
+  /**
+   * Returns the app size string.
+   *
+   * @param {!App} app
+   * @returns {string}
+   * @private
+   */
+  getAppSizeString_(app) {
+    if (app.appSize === null || app.appSize === '') {
+      return '';
+    }
+    return this.i18n(
+        'appManagementAppDetailsAppSize', /** @type {!string} */ (app.appSize));
+  }
+
+  /**
+   * Returns the data size string.
+   *
+   * @param {!App} app
+   * @returns {string}
+   * @private
+   */
+  getDataSizeString_(app) {
+    if (app.dataSize === null || app.dataSize === '') {
+      return '';
+    }
+    return this.i18n(
+        'appManagementAppDetailsDataSize',
+        /** @type {!string} */ (app.dataSize));
   }
 
   /**
@@ -179,6 +275,18 @@ class AppManagementAppDetailsItem extends AppManagementAppDetailsItemBase {
     return this.i18n(
         'appManagementAppDetailsVersion',
         app.version ? app.version.toString() : '');
+  }
+
+  /**
+   * Returns the sanitized URL for apps downloaded from
+   * the Chrome browser, to be shown in the tooltip.
+   *
+   * @param {!App} app
+   * @returns {string}
+   * @private
+   */
+  getSanitizedURL_(app) {
+    return app.publisherId.replace(/\?.*$/g, '');
   }
 }
 

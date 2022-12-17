@@ -318,7 +318,8 @@ std::unique_ptr<WindowResizer> CreateWindowResizerForTabletMode(
       static_cast<AppType>(window->GetProperty(aura::client::kAppType));
   // App windows can be dragged from the client area (see
   // ToplevelWindowEventHandler).
-  if (app_type != AppType::BROWSER && window_component == HTCLIENT) {
+  if (app_type != AppType::BROWSER && app_type != AppType::LACROS &&
+      window_component == HTCLIENT) {
     DCHECK_EQ(source, ::wm::WINDOW_MOVE_SOURCE_TOUCH);
     window_state->CreateDragDetails(point_in_parent, HTCLIENT,
                                     ::wm::WINDOW_MOVE_SOURCE_TOUCH);
@@ -367,9 +368,9 @@ int GetDraggingThreshold(const DragDetails& details) {
 #if DCHECK_IS_ON()
   // Other state types either create a different window resizer, or none at all.
   std::vector<WindowStateType> draggable_states = {
-      WindowStateType::kDefault, WindowStateType::kNormal,
+      WindowStateType::kDefault,        WindowStateType::kNormal,
       WindowStateType::kPrimarySnapped, WindowStateType::kSecondarySnapped,
-      WindowStateType::kMaximized};
+      WindowStateType::kMaximized,      WindowStateType::kFloated};
   DCHECK(base::Contains(draggable_states, state));
 #endif
 
@@ -902,6 +903,8 @@ void WorkspaceWindowResizer::CompleteDrag() {
               window, screen_util::GetMaximizedWindowBoundsInParent(window),
               /*maximize=*/true);
         }
+
+        window_state()->TrackDragToMaximizeBehavior();
         break;
       default:
         NOTREACHED();

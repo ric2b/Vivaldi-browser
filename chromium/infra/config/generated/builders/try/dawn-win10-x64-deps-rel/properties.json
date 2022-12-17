@@ -121,7 +121,8 @@
     "column_keys": [],
     "grouping_keys": [
       "status",
-      "v.test_suite"
+      "v.test_suite",
+      "v.gpu"
     ]
   },
   "builder_group": "tryserver.chromium.dawn",

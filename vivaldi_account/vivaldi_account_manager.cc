@@ -7,10 +7,10 @@
 #include "base/i18n/case_conversion.h"
 #include "base/json/json_reader.h"
 #include "base/rand_util.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/strings/utf_string_conversions.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/profiles/profile.h"
@@ -19,7 +19,6 @@
 #include "components/prefs/pref_service.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
-#include "net/base/escape.h"
 #include "net/http/http_status_code.h"
 #include "prefs/vivaldi_pref_names.h"
 #include "services/network/public/cpp/simple_url_loader.h"
@@ -164,8 +163,8 @@ VivaldiAccountManager::VivaldiAccountManager(Profile* profile)
     std::string refresh_token;
     if (OSCrypt::DecryptString(encrypted_refresh_token, &refresh_token)) {
       refresh_token_ = refresh_token;
-      base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                     base::BindOnce(&VivaldiAccountManager::RequestNewToken,
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE, base::BindOnce(&VivaldiAccountManager::RequestNewToken,
                                     base::Unretained(this)));
       return;
     } else {
@@ -246,15 +245,15 @@ void VivaldiAccountManager::Login(const std::string& untrimmed_username,
   }
 
   std::string url_encoded_client_id =
-      net::EscapeUrlEncodedData(kClientId, true);
+      base::EscapeUrlEncodedData(kClientId, true);
   std::string url_encoded_client_secret =
-      net::EscapeUrlEncodedData(kClientSecret, true);
+      base::EscapeUrlEncodedData(kClientSecret, true);
   std::string url_encoded_username =
-      net::EscapeUrlEncodedData(username.substr(0, domain_position), true);
-  std::string url_encoded_password = net::EscapeUrlEncodedData(
+      base::EscapeUrlEncodedData(username.substr(0, domain_position), true);
+  std::string url_encoded_password = base::EscapeUrlEncodedData(
       password.empty() ? password_handler_.password() : password, true);
   std::string url_encoded_device_id =
-      net::EscapeUrlEncodedData(device_id_, true);
+      base::EscapeUrlEncodedData(device_id_, true);
   std::string body = base::StringPrintf(
       kRequestTokenFromCredentials, url_encoded_client_id.c_str(),
       url_encoded_client_secret.c_str(), url_encoded_username.c_str(),
@@ -288,13 +287,13 @@ void VivaldiAccountManager::RequestNewToken() {
     return;
 
   std::string url_encoded_client_id =
-      net::EscapeUrlEncodedData(kClientId, true);
+      base::EscapeUrlEncodedData(kClientId, true);
   std::string url_encoded_client_secret =
-      net::EscapeUrlEncodedData(kClientSecret, true);
+      base::EscapeUrlEncodedData(kClientSecret, true);
   std::string url_encoded_refresh_token =
-      net::EscapeUrlEncodedData(refresh_token_, true);
+      base::EscapeUrlEncodedData(refresh_token_, true);
   std::string url_encoded_device_id =
-      net::EscapeUrlEncodedData(device_id_, true);
+      base::EscapeUrlEncodedData(device_id_, true);
   std::string body = base::StringPrintf(
       kRequestTokenFromRefreshToken, url_encoded_client_id.c_str(),
       url_encoded_client_secret.c_str(), url_encoded_refresh_token.c_str(),
@@ -355,8 +354,8 @@ void VivaldiAccountManager::OnTokenRequestDone(
   if (response_code == net::HTTP_BAD_REQUEST) {
     std::string server_message = ParseFailureResponse(std::move(response_body));
     if (!using_password && !password_handler_.password().empty()) {
-      base::PostTask(
-          FROM_HERE, {content::BrowserThread::UI},
+      content::GetUIThreadTaskRunner({})->PostTask(
+          FROM_HERE,
           base::BindOnce(&VivaldiAccountManager::Login, base::Unretained(this),
                          account_info_.username, std::string(), false));
     } else {

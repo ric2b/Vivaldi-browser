@@ -88,12 +88,12 @@ public class PrivacySandboxBridge {
         return topics;
     }
 
-    public static @DialogType int getRequiredDialogType() {
-        return PrivacySandboxBridgeJni.get().getRequiredDialogType();
+    public static @PromptType int getRequiredPromptType() {
+        return PrivacySandboxBridgeJni.get().getRequiredPromptType();
     }
 
-    public static void dialogActionOccurred(@DialogAction int action) {
-        PrivacySandboxBridgeJni.get().dialogActionOccurred(action);
+    public static void promptActionOccurred(@PromptAction int action) {
+        PrivacySandboxBridgeJni.get().promptActionOccurred(action);
     }
 
     @NativeMethods
@@ -114,7 +114,7 @@ public class PrivacySandboxBridge {
         Topic[] getCurrentTopTopics();
         Topic[] getBlockedTopics();
         void setTopicAllowed(int topicId, int taxonomyVersion, boolean allowed);
-        int getRequiredDialogType();
-        void dialogActionOccurred(int action);
+        int getRequiredPromptType();
+        void promptActionOccurred(int action);
     }
 }

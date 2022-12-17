@@ -18,10 +18,6 @@
 #include "media/media_buildflags.h"
 #include "testing/gtest/include/gtest/gtest.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-#include "platform_media/renderer/decoders/ipc_audio_decoder.h"
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
 namespace media {
 
 class AudioFileReaderTest : public testing::Test {
@@ -144,9 +140,6 @@ class AudioFileReaderTest : public testing::Test {
   void disable_packet_verification() { packet_verification_disabled_ = true; }
 
  protected:
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
-#endif
   scoped_refptr<DecoderBuffer> data_;
   std::unique_ptr<InMemoryUrlProtocol> protocol_;
   std::unique_ptr<AudioFileReader> reader_;

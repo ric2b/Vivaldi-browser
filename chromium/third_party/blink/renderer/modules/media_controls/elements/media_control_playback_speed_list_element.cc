@@ -173,7 +173,7 @@ Element* MediaControlPlaybackSpeedListElement::CreatePlaybackSpeedListItem(
   playback_speed_item_input->SetFloatingPointAttribute(PlaybackRateAttrName(),
                                                        playback_rate);
   if (playback_rate == MediaElement().playbackRate()) {
-    playback_speed_item_input->setChecked(true);
+    playback_speed_item_input->SetChecked(true);
     playback_speed_item->setAttribute(html_names::kAriaCheckedAttr, "true");
     checked_item_ = playback_speed_item;
   }
@@ -248,7 +248,7 @@ void MediaControlPlaybackSpeedListElement::CenterCheckedItem() {
   auto* arg =
       MakeGarbageCollected<V8UnionBooleanOrScrollIntoViewOptions>(options);
   checked_item_->scrollIntoView(arg);
-  checked_item_->focus();
+  checked_item_->Focus();
 }
 
 void MediaControlPlaybackSpeedListElement::Trace(Visitor* visitor) const {

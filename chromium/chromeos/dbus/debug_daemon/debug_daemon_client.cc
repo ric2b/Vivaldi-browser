@@ -172,6 +172,7 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
   void GetRoutes(
       bool numeric,
       bool ipv6,
+      bool all_tables,
       DBusMethodCallback<std::vector<std::string>> callback) override {
     dbus::MethodCall method_call(debugd::kDebugdInterface, debugd::kGetRoutes);
     dbus::MessageWriter writer(&method_call);
@@ -185,6 +186,10 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
     sub_writer.OpenDictEntry(&elem_writer);
     elem_writer.AppendString("v6");
     elem_writer.AppendVariantOfBool(ipv6);
+    sub_writer.CloseContainer(&elem_writer);
+    sub_writer.OpenDictEntry(&elem_writer);
+    elem_writer.AppendString("all");
+    elem_writer.AppendVariantOfBool(all_tables);
     sub_writer.CloseContainer(&elem_writer);
     writer.CloseContainer(&sub_writer);
     debugdaemon_proxy_->CallMethod(
@@ -211,16 +216,16 @@ class DebugDaemonClientImpl : public DebugDaemonClient {
                        weak_ptr_factory_.GetWeakPtr(), std::move(callback)));
   }
 
-  void GetPerfOutput(base::TimeDelta duration,
-                     const std::vector<std::string>& perf_args,
+  void GetPerfOutput(const std::vector<std::string>& quipper_args,
+                     bool disable_cpu_idle,
                      int file_descriptor,
                      DBusMethodCallback<uint64_t> callback) override {
     DCHECK(file_descriptor);
     dbus::MethodCall method_call(debugd::kDebugdInterface,
-                                 debugd::kGetPerfOutputFd);
+                                 debugd::kGetPerfOutputV2);
     dbus::MessageWriter writer(&method_call);
-    writer.AppendUint32(duration.InSeconds());
-    writer.AppendArrayOfStrings(perf_args);
+    writer.AppendArrayOfStrings(quipper_args);
+    writer.AppendBool(disable_cpu_idle);
     writer.AppendFileDescriptor(file_descriptor);
 
     debugdaemon_proxy_->CallMethod(

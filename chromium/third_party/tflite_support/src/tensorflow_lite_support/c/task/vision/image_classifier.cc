@@ -100,7 +100,7 @@ struct TfLiteImageClassifier {
   std::unique_ptr<ImageClassifierCpp> impl;
 };
 
-TfLiteImageClassifierOptions TfLiteImageClassifierOptionsCreate() {
+TfLiteImageClassifierOptions TfLiteImageClassifierOptionsCreate(void) {
   // Use brace-enclosed initializer list will break the Kokoro test.
   TfLiteImageClassifierOptions options;
   options.classification_options =
@@ -144,7 +144,8 @@ TfLiteClassificationResult* GetClassificationResultCStruct(
        ++head) {
     const ClassificationsCpp& classifications =
         classification_result_cpp.classifications(head);
-    c_classifications[head].head_index = head;
+    c_classifications[head].head_index = classifications.head_index();
+    c_classifications[head].head_name = nullptr;
 
     auto c_categories = new TfLiteCategory[classifications.classes_size()];
     c_classifications->size = classifications.classes_size();

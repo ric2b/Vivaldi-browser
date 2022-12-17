@@ -63,6 +63,7 @@
           "name": {"type": "string", "description": "Text in item."},
           "type": {"$ref": "ItemType", "optional": false, "description": "Defaults to 'normal'."},
           "selected": {"type": "boolean", "optional": true, "description": "Whether item is initially selected. Default to false."},
+          "enabled": {"type": "boolean", "optional": true, "description": "Whether item is enabled or not (grayed out) . Defaults to true."},
           "visible": {"type": "boolean", "optional": true, "description": "Whether item is visible or not. Defaults to true."},
           "checked": {"type": "boolean", "optional": true, "description": "true if the checkbox is checked. Ignored unless type is 'checkbox' or 'radiobutton'."},
           "radiogroup": {"type": "integer", "optional": true, "description": "The radiobutton group this item belongs to. Must be present for a radio button."},

@@ -152,11 +152,19 @@ gpu_linux_builder(
 
 gpu_linux_builder(
     name = "gpu-fyi-try-linux-intel-exp",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Experimental Release (Intel UHD 630)",
+    ],
     pool = "luci.chromium.gpu.linux.intel.try",
 )
 
 gpu_linux_builder(
     name = "gpu-fyi-try-linux-intel-rel",
+    mirrors = [
+        "ci/GPU FYI Linux Builder",
+        "ci/Linux FYI Release (Intel UHD 630)",
+    ],
     pool = "luci.chromium.gpu.linux.intel.try",
 )
 
@@ -339,21 +347,6 @@ gpu_win_builder(
 gpu_win_builder(
     name = "gpu-fyi-try-win10-nvidia-rel-64",
     pool = "luci.chromium.gpu.win10.nvidia.try",
-)
-
-gpu_win_builder(
-    name = "gpu-fyi-try-win7-amd-rel-32",
-    pool = "luci.chromium.gpu.win7.amd.try",
-)
-
-gpu_win_builder(
-    name = "gpu-fyi-try-win7-nvidia-rel-32",
-    pool = "luci.chromium.gpu.win7.nvidia.try",
-)
-
-gpu_win_builder(
-    name = "gpu-fyi-try-win7-nvidia-rel-64",
-    pool = "luci.chromium.gpu.win7.nvidia.try",
 )
 
 gpu_win_builder(

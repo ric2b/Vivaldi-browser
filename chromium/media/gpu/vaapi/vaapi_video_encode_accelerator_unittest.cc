@@ -12,9 +12,11 @@
 #include "base/run_loop.h"
 #include "base/test/gmock_callback_support.h"
 #include "base/test/task_environment.h"
+#include "build/chromeos_buildflags.h"
 #include "media/base/media_util.h"
 #include "media/gpu/gpu_video_encode_accelerator_helpers.h"
 #include "media/gpu/vaapi/vaapi_utils.h"
+#include "media/gpu/vaapi/vaapi_video_encoder_delegate.h"
 #include "media/gpu/vaapi/vaapi_wrapper.h"
 #include "media/gpu/vaapi/vp9_vaapi_video_encoder_delegate.h"
 #include "media/gpu/vp9_picture.h"
@@ -40,6 +42,7 @@ constexpr Bitrate kDefaultBitrate =
     Bitrate::ConstantBitrate(kDefaultBitrateBps);
 constexpr uint32_t kDefaultFramerate = 30;
 constexpr size_t kMaxNumOfRefFrames = 3u;
+
 constexpr int kSpatialLayersResolutionDenom[][3] = {
     {1, 0, 0},  // For one spatial layer.
     {2, 1, 0},  // For two spatial layers.
@@ -94,16 +97,6 @@ bool IsSVCSupported(const VideoEncodeAccelerator::Config& config) {
          config.storage_type ==
              VideoEncodeAccelerator::Config::StorageType::kGpuMemoryBuffer &&
          config.output_profile == VP9PROFILE_PROFILE0;
-}
-
-MATCHER_P3(MatchesVaapiVideoEncoderDelegateConfig,
-           max_ref_frames,
-           native_input_mode,
-           bitrate_control,
-           "") {
-  return arg.max_num_ref_frames == max_ref_frames &&
-         arg.native_input_mode == native_input_mode &&
-         arg.bitrate_control == bitrate_control;
 }
 
 MATCHER_P3(MatchesBitstreamBufferMetadata,
@@ -221,9 +214,6 @@ class MockVP9VaapiVideoEncoderDelegate : public VP9VaapiVideoEncoderDelegate {
   bool UpdateRates(const VideoBitrateAllocation&, uint32_t) override {
     return false;
   }
-  void set_native_input_mode(bool native_input_mode) {
-    native_input_mode_ = native_input_mode;
-  }
 };
 }  // namespace
 
@@ -308,12 +298,6 @@ class VaapiVideoEncodeAcceleratorTest
       NO_THREAD_SAFETY_ANALYSIS {
     base::RunLoop run_loop;
     ::testing::InSequence s;
-    constexpr auto kBitrateControl = VaapiVideoEncoderDelegate::BitrateControl::
-        kConstantQuantizationParameter;
-    const bool native_input_mode =
-        config.storage_type.value_or(
-            VideoEncodeAccelerator::Config::StorageType::kShmem) ==
-        VideoEncodeAccelerator::Config::StorageType::kGpuMemoryBuffer;
     const size_t num_spatial_layers = config.spatial_layers.size();
     // Scaling is needed only for non highest spatial layer, so here the vpp
     // number is |num_spatial_layers - 1|.
@@ -331,16 +315,13 @@ class VaapiVideoEncodeAcceleratorTest
         reinterpret_cast<VaapiVideoEncodeAccelerator*>(encoder_.get());
     vaapi_encoder->vpp_vaapi_wrapper_ = mock_vpp_vaapi_wrapper_;
 
-    EXPECT_CALL(*mock_encoder_,
-                Initialize(_, MatchesVaapiVideoEncoderDelegateConfig(
-                                  kMaxNumOfRefFrames, native_input_mode,
-                                  kBitrateControl)))
-        .WillOnce(WithArgs<1>(
-            [mock_encoder = mock_encoder_](
-                const VaapiVideoEncoderDelegate::Config& ave_config) {
-              mock_encoder->set_native_input_mode(ave_config.native_input_mode);
-              return true;
-            }));
+    EXPECT_CALL(
+        *mock_encoder_,
+        Initialize(_,
+                   testing::Field(
+                       &VaapiVideoEncoderDelegate::Config::max_num_ref_frames,
+                       kMaxNumOfRefFrames)))
+        .WillOnce(Return(true));
     EXPECT_CALL(*mock_vaapi_wrapper_, CreateContext(kDefaultEncodeSize))
         .WillOnce(Return(true));
     EXPECT_CALL(client_, RequireBitstreamBuffers(_, kDefaultEncodeSize, _))
@@ -375,6 +356,11 @@ class VaapiVideoEncodeAcceleratorTest
                   vaapi_wrapper, surface_id, size, format));
               return va_surfaces;
             }));
+
+    EXPECT_CALL(
+        *mock_vaapi_wrapper_,
+        UploadVideoFrameToSurface(_, kInputSurfaceId, kDefaultEncodeSize))
+        .WillOnce(Return(true));
 
     constexpr VASurfaceID kEncodeSurfaceId = 1234;
     EXPECT_CALL(*mock_vaapi_wrapper_,
@@ -419,10 +405,6 @@ class VaapiVideoEncodeAcceleratorTest
           }
           return true;
         }));
-    EXPECT_CALL(
-        *mock_vaapi_wrapper_,
-        UploadVideoFrameToSurface(_, kInputSurfaceId, kDefaultEncodeSize))
-        .WillOnce(Return(true));
     EXPECT_CALL(*mock_vaapi_wrapper_,
                 ExecuteAndDestroyPendingBuffers(kInputSurfaceId))
         .WillOnce(Return(true));
@@ -556,16 +538,10 @@ class VaapiVideoEncodeAcceleratorTest
 
       // For reconstructed surface.
       if (va_encode_surface_ids_[i].empty()) {
-        // TODO(https://github.com/intel/media-driver/issues/1232): Remove this
-        // workaround of aligning |encode_size|.
-        gfx::Size aligned_size(
-            base::bits::AlignUp(svc_resolutions[i].width(), 16),
-            base::bits::AlignUp(svc_resolutions[i].height(), 16));
-
         EXPECT_CALL(
             *mock_vaapi_wrapper_,
             CreateScopedVASurfaces(
-                VA_RT_FORMAT_YUV420, aligned_size,
+                VA_RT_FORMAT_YUV420, svc_resolutions[i],
                 std::vector<VaapiWrapper::SurfaceUsageHint>{
                     VaapiWrapper::SurfaceUsageHint::kVideoEncoder},
                 _, absl::optional<gfx::Size>(), absl::optional<uint32_t>()))

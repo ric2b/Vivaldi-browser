@@ -5,7 +5,7 @@
 import("//chrome/common/features.gni")
 import("//tools/grit/grit_rule.gni")
 import("//tools/grit/preprocess_if_expr.gni")
-import("//tools/polymer/html_to_js.gni")
+import("//tools/polymer/css_to_wrapper.gni")
 import("//tools/polymer/html_to_wrapper.gni")
 import("//tools/typescript/ts_library.gni")
 import("//ui/webui/resources/tools/generate_grd.gni")
@@ -100,12 +100,12 @@ grit("resources") {
   output_dir = "$root_gen_dir/chrome"
 }
 
-html_to_js("css_wrapper_files") {
-  js_files = css_wrapper_files
+css_to_wrapper("css_wrapper_files") {
+  in_files = css_files
 }
 
 html_to_wrapper("html_wrapper_files") {
-  in_files = html_files
+  in_files = html_files + icons_html_files
 }
 
 ts_library("build_ts") {
@@ -113,11 +113,11 @@ ts_library("build_ts") {
   out_dir = "$target_gen_dir/tsc"
   composite = true
   tsconfig_base = "tsconfig_base.json"
-  in_files = ts_files + css_wrapper_files + html_wrapper_files +
-             [ "history_clusters/history_clusters.mojom-webui.js" ]
+  in_files = ts_files + css_wrapper_files + html_wrapper_files
   deps = [
     "//third_party/polymer/v3_0:library",
     "//ui/webui/resources:library",
+    "//ui/webui/resources/cr_components/history_clusters:build_ts",
     "//ui/webui/resources/mojo:library",
   ]
   definitions = [
@@ -125,16 +125,7 @@ ts_library("build_ts") {
     "//tools/typescript/definitions/metrics_private.d.ts",
   ]
   extra_deps = [
-    ":copy_history_clusters_mojom",
     ":preprocess",
     ":preprocess_generated",
   ]
-}
-
-copy("copy_history_clusters_mojom") {
-  sources = [ "$root_gen_dir/mojom-webui/chrome/browser/ui/webui/history_clusters/history_clusters.mojom-webui.js" ]
-  outputs = [
-    "$target_gen_dir/$preprocess_folder/history_clusters/{{source_file_part}}",
-  ]
-  deps = [ "//chrome/browser/ui/webui/history_clusters:mojo_bindings_webui_js" ]
 }

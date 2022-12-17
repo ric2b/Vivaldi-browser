@@ -694,18 +694,14 @@ AccessibilityPrivateIsFeatureEnabledFunction::Run() {
       enabled = ::features::IsEnhancedNetworkVoicesEnabled();
       break;
     case accessibility_private::AccessibilityFeature::
-        ACCESSIBILITY_FEATURE_DICTATIONCOMMANDS:
-      enabled =
-          ::features::IsExperimentalAccessibilityDictationCommandsEnabled();
-      break;
-    case accessibility_private::AccessibilityFeature::
         ACCESSIBILITY_FEATURE_GOOGLETTSLANGUAGEPACKS:
       enabled = ::features::
           IsExperimentalAccessibilityGoogleTtsLanguagePacksEnabled();
       break;
     case accessibility_private::AccessibilityFeature::
-        ACCESSIBILITY_FEATURE_DICTATIONHINTS:
-      enabled = ::features::IsExperimentalAccessibilityDictationHintsEnabled();
+        ACCESSIBILITY_FEATURE_DICTATIONPUMPKINPARSING:
+      enabled =
+          ::features::IsExperimentalAccessibilityDictationWithPumpkinEnabled();
       break;
     case accessibility_private::AccessibilityFeature::
         ACCESSIBILITY_FEATURE_NONE:
@@ -812,9 +808,6 @@ AccessibilityPrivateGetLocalizedDomKeyStringForKeyCodeFunction::Run() {
 
 ExtensionFunction::ResponseAction
 AccessibilityPrivateUpdateDictationBubbleFunction::Run() {
-  if (!::features::IsExperimentalAccessibilityDictationCommandsEnabled())
-    return RespondNow(Error("Dictation commands feature is disabled."));
-
   std::unique_ptr<accessibility_private::UpdateDictationBubble::Params> params(
       accessibility_private::UpdateDictationBubble::Params::Create(args()));
   EXTENSION_FUNCTION_VALIDATE(params);
@@ -868,4 +861,18 @@ AccessibilityPrivateUpdateDictationBubbleFunction::Run() {
   ash::AccessibilityController::Get()->UpdateDictationBubble(properties.visible,
                                                              icon, text, hints);
   return RespondNow(NoArguments());
+}
+
+ExtensionFunction::ResponseAction
+AccessibilityPrivateInstallPumpkinForDictationFunction::Run() {
+  AccessibilityManager::Get()->InstallPumpkinForDictation(
+      base::BindOnce(&AccessibilityPrivateInstallPumpkinForDictationFunction::
+                         OnPumpkinInstallFinished,
+                     base::RetainedRef(this)));
+  return RespondLater();
+}
+
+void AccessibilityPrivateInstallPumpkinForDictationFunction::
+    OnPumpkinInstallFinished(bool success) {
+  Respond(OneArgument(base::Value(success)));
 }

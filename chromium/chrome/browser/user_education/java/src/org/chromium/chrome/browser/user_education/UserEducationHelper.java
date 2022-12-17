@@ -59,6 +59,8 @@ public class UserEducationHelper {
      * should.
      */
     public void requestShowIPH(IPHCommand iphCommand) {
+        if (iphCommand == null) return;
+
         try (TraceEvent te = TraceEvent.scoped("UserEducationHelper::requestShowIPH")) {
             // TODO (https://crbug.com/1048632): Use the current profile (i.e., regular profile or
             // incognito profile) instead of always using regular profile. Currently always original
@@ -79,10 +81,6 @@ public class UserEducationHelper {
         }
 
         String featureName = iphCommand.featureName;
-        String contentString = iphCommand.contentString;
-        String accessibilityString = iphCommand.accessibilityText;
-        assert (!contentString.isEmpty());
-        assert (!accessibilityString.isEmpty());
         assert (featureName != null);
 
         ViewRectProvider viewRectProvider = iphCommand.viewRectProvider;
@@ -104,6 +102,17 @@ public class UserEducationHelper {
             iphCommand.onBlockedCallback.run();
             return;
         }
+
+        // If scroll optimizations were enabled, iphCommand would have been built lazily, and we
+        // would have to fetch the data that is needed from this point on.
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.ANDROID_SCROLL_OPTIMIZATIONS)) {
+            iphCommand.fetchFromResources();
+        }
+
+        String contentString = iphCommand.contentString;
+        String accessibilityString = iphCommand.accessibilityText;
+        assert (!contentString.isEmpty());
+        assert (!accessibilityString.isEmpty());
 
         // Automatic snoozes are handled separately. If automatic snoozing is enabled, we won't show
         // snooze UI in the IPH, but we will treat the dismiss as an implicit snooze action.

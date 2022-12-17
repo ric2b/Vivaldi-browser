@@ -92,20 +92,6 @@ PaintResult PaintLayerPainter::Paint(GraphicsContext& context,
       !paint_layer_.HasSelfPaintingLayerDescendant())
     return kFullyPainted;
 
-  // If the transform can't be inverted, don't paint anything. We still need to
-  // paint if there are animations to ensure the animation can be setup to run
-  // on the compositor.
-  bool paint_non_invertible_transforms = false;
-  const auto* properties = layout_object.FirstFragment().PaintProperties();
-  if (properties && properties->Transform() &&
-      properties->Transform()->HasActiveTransformAnimation()) {
-    paint_non_invertible_transforms = true;
-  }
-  if (!paint_non_invertible_transforms && paint_layer_.Transform() &&
-      !paint_layer_.Transform()->IsInvertible()) {
-    return kFullyPainted;
-  }
-
   return PaintLayerContents(context, paint_flags);
 }
 
@@ -128,76 +114,6 @@ static bool ShouldCreateSubsequence(const PaintLayer& paint_layer,
     return false;
 
   return true;
-}
-
-static bool IsUnclippedLayoutView(const PaintLayer& layer) {
-  if (IsA<LayoutView>(layer.GetLayoutObject())) {
-    const auto* frame = layer.GetLayoutObject().GetFrame();
-    if (frame && !frame->ClipsContent())
-      return true;
-  }
-  return false;
-}
-
-bool PaintLayerPainter::ShouldUseInfiniteCullRect() {
-  bool is_printing = paint_layer_.GetLayoutObject().GetDocument().Printing();
-  if (IsUnclippedLayoutView(paint_layer_) && !is_printing)
-    return true;
-
-  // Cull rects and clips can't be propagated across a filter which moves
-  // pixels, since the input of the filter may be outside the cull rect /
-  // clips yet still result in painted output.
-  // TODO(wangxianzhu): We can let CullRect support mapping for pixel moving
-  // filters to avoid this infinite cull rect.
-  if (paint_layer_.HasFilterThatMovesPixels() &&
-      // However during printing, we don't want filter outset to cross page
-      // boundaries. This also avoids performance issue because the PDF renderer
-      // is super slow for big filters. Otherwise all filtered contents would
-      // appear in the painted result of every page.
-      // TODO(crbug.com/1098995): For now we don't adjust cull rect for clips.
-      // When we do, we need to check if we are painting under a real clip.
-      // This won't be a problem when we use block fragments for printing.
-      !is_printing)
-    return true;
-
-  // Cull rect mapping doesn't work under perspective in some cases.
-  // See http://crbug.com/887558 for details.
-  if (paint_layer_.GetLayoutObject().StyleRef().HasPerspective())
-    return true;
-
-  if (const auto* properties =
-          paint_layer_.GetLayoutObject().FirstFragment().PaintProperties()) {
-    // Cull rect mapping doesn't work under perspective in some cases.
-    // See http://crbug.com/887558 for details.
-    if (properties->Perspective())
-      return true;
-
-    if (const auto* transform = properties->Transform()) {
-      // A CSS transform can also have perspective like
-      // "transform: perspective(100px) rotateY(45deg)". In these cases, we
-      // also want to skip cull rect mapping. See http://crbug.com/887558 for
-      // details.
-      if (!transform->IsIdentityOr2DTranslation() &&
-          transform->Matrix().HasPerspective()) {
-        return true;
-      }
-
-      // Ensure content under animating transforms is not culled out.
-      if (transform->HasActiveTransformAnimation())
-        return true;
-
-      // As an optimization, skip cull rect updating for non-composited
-      // transforms which have already been painted. This is because the cull
-      // rect update, which needs to do complex mapping of the cull rect, can
-      // be more expensive than over-painting.
-      if (!transform->HasDirectCompositingReasons() &&
-          paint_layer_.PreviousPaintResult() == kFullyPainted) {
-        return true;
-      }
-    }
-  }
-
-  return false;
 }
 
 static gfx::Rect FirstFragmentVisualRect(const LayoutBoxModelObject& object) {
@@ -250,8 +166,6 @@ PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
       is_document_element_invisible);
 
   bool is_self_painting_layer = paint_layer_.IsSelfPaintingLayer();
-  bool is_unclipped_layout_view = IsUnclippedLayoutView(paint_layer_);
-
   bool should_paint_content =
       paint_layer_.HasVisibleContent() &&
       // Content under a LayoutSVGHiddenContainer is auxiliary resources for
@@ -259,7 +173,11 @@ PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
       // is primary, not auxiliary.
       !paint_layer_.IsUnderSVGHiddenContainer() && is_self_painting_layer;
 
-  if (object.FirstFragment().NextFragment() || is_unclipped_layout_view) {
+  if (object.FirstFragment().NextFragment() ||
+      // When printing, the LayoutView's background should extend infinitely
+      // regardless of LayoutView's visual rect, so don't check intersection
+      // between the visual rect and the cull rect (custom for each page).
+      (IsA<LayoutView>(object) && object.GetDocument().Printing())) {
     result = kMayBeClippedByCullRect;
   } else {
     gfx::Rect visual_rect = FirstFragmentVisualRect(object);
@@ -283,7 +201,7 @@ PaintResult PaintLayerPainter::PaintLayerContents(GraphicsContext& context,
     }
 
     if (!cull_rect_intersects_self && !cull_rect_intersects_contents) {
-      if (!is_unclipped_layout_view && paint_layer_.KnownToClipSubtree()) {
+      if (paint_layer_.KnownToClipSubtree()) {
         paint_layer_.SetPreviousPaintResult(kMayBeClippedByCullRect);
         return kMayBeClippedByCullRect;
       }

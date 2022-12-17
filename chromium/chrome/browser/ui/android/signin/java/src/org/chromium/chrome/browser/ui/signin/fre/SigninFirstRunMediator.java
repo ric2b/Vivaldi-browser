@@ -35,6 +35,7 @@ import org.chromium.ui.modaldialog.ModalDialogManager;
 import org.chromium.ui.modelutil.PropertyModel;
 import org.chromium.ui.text.NoUnderlineClickableSpan;
 import org.chromium.ui.text.SpanApplier;
+import org.chromium.ui.util.ColorUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -61,8 +62,7 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
         mProfileDataCache = ProfileDataCache.createWithDefaultImageSizeAndNoBadge(mContext);
         mModel = SigninFirstRunProperties.createModel(this::onSelectedAccountClicked,
                 this::onContinueAsClicked, this::onDismissClicked,
-                ExternalAuthUtils.getInstance().canUseGooglePlayServices(),
-                getFooterString(/*hasChildAccount=*/false, /*isMetricsReportingDisabled=*/false));
+                ExternalAuthUtils.getInstance().canUseGooglePlayServices(), getFooterString(false));
 
         mProfileDataCache.addObserver(this);
 
@@ -82,6 +82,7 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
     }
 
     void reset() {
+        mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT, false);
         mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER, false);
     }
 
@@ -105,7 +106,7 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
 
         final boolean isChild = mModel.get(SigninFirstRunProperties.IS_SELECTED_ACCOUNT_SUPERVISED);
         mModel.set(SigninFirstRunProperties.FOOTER_STRING,
-                getFooterString(isChild, isMetricsReportingDisabledByPolicy()));
+                getFooterString(isMetricsReportingDisabledByPolicy()));
     }
 
     /** Implements {@link ProfileDataCache.Observer}. */
@@ -186,10 +187,9 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
             mDelegate.advanceToNextPage();
             return;
         }
-        mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER, true);
+        mModel.set(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT, true);
         final SigninManager signinManager = IdentityServicesProvider.get().getSigninManager(
                 Profile.getLastUsedRegularProfile());
-        signinManager.onFirstRunCheckDone();
         signinManager.signin(
                 AccountUtils.createAccountFromName(mSelectedAccountName), new SignInCallback() {
                     @Override
@@ -235,8 +235,9 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
      * See crbug.com/1294994 for details.
      */
     private boolean isContinueOrDismissClicked() {
-        // This property key is set when continue or dismiss button is clicked.
-        return mModel.get(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER);
+        // These property keys are set when continue or dismiss button is clicked respectively.
+        return mModel.get(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER_WITH_TEXT)
+                || mModel.get(SigninFirstRunProperties.SHOW_SIGNIN_PROGRESS_SPINNER);
     }
 
     private void setSelectedAccountName(String accountName) {
@@ -274,42 +275,33 @@ class SigninFirstRunMediator implements AccountsChangeObserver, ProfileDataCache
     private void onChildAccountStatusReady(boolean isChild, @Nullable Account childAccount) {
         mModel.set(SigninFirstRunProperties.IS_SELECTED_ACCOUNT_SUPERVISED, isChild);
         mModel.set(SigninFirstRunProperties.FOOTER_STRING,
-                getFooterString(isChild, isMetricsReportingDisabledByPolicy()));
+                getFooterString(isMetricsReportingDisabledByPolicy()));
         // Selected account data will be updated in {@link #onProfileDataUpdated}
         mProfileDataCache.setBadge(isChild ? R.drawable.ic_account_child_20dp : 0);
     }
 
     /**
      * Builds footer string dynamically.
-     * First line has a TOS link. A privacy notice will also be shown for child accounts.
-     * Second line appears only if MetricsReporting is not disabled by policy.
+     * First line has a TOS link. Second line appears only if MetricsReporting is not
+     * disabled by policy.
      */
-    private SpannableString getFooterString(
-            boolean hasChildAccount, boolean isMetricsReportingDisabled) {
-        String footerString = mContext.getString(hasChildAccount
-                        ? R.string.signin_fre_footer_tos_with_supervised_user
-                        : R.string.signin_fre_footer_tos);
+    private SpannableString getFooterString(boolean isMetricsReportingDisabled) {
+        String footerString = mContext.getString(R.string.signin_fre_footer_tos);
 
         ArrayList<SpanApplier.SpanInfo> spans = new ArrayList<>();
         // Terms of Service SpanInfo.
-        final NoUnderlineClickableSpan clickableTermsOfServiceSpan = new NoUnderlineClickableSpan(
-                mContext, view -> mDelegate.showInfoPage(R.string.google_terms_of_service_url));
+        final NoUnderlineClickableSpan clickableTermsOfServiceSpan =
+                new NoUnderlineClickableSpan(mContext,
+                        view
+                        -> mDelegate.showInfoPage(ColorUtils.inNightMode(mContext)
+                                        ? R.string.google_terms_of_service_dark_mode_url
+                                        : R.string.google_terms_of_service_url));
         spans.add(
                 new SpanApplier.SpanInfo("<TOS_LINK>", "</TOS_LINK>", clickableTermsOfServiceSpan));
 
-        // Privacy notice Link SpanInfo.
-        if (hasChildAccount) {
-            final NoUnderlineClickableSpan clickablePrivacyPolicySpan =
-                    new NoUnderlineClickableSpan(mContext,
-                            view -> mDelegate.showInfoPage(R.string.google_privacy_policy_url));
-
-            spans.add(new SpanApplier.SpanInfo(
-                    "<PRIVACY_LINK>", "</PRIVACY_LINK>", clickablePrivacyPolicySpan));
-        }
-
         // Metrics and Crash Reporting SpanInfo.
         if (!isMetricsReportingDisabled) {
-            footerString += "\n" + mContext.getString(R.string.signin_fre_footer_metrics_reporting);
+            footerString += " " + mContext.getString(R.string.signin_fre_footer_metrics_reporting);
             final NoUnderlineClickableSpan clickableUMADialogSpan =
                     new NoUnderlineClickableSpan(mContext, view -> mDelegate.openUmaDialog());
             spans.add(

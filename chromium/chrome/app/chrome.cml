@@ -60,11 +60,7 @@
                 "fuchsia.media.Audio",
                 "fuchsia.media.AudioDeviceEnumerator",
                 "fuchsia.media.ProfileProvider",
-
-                // TODO(crbug.com/1293605): Do not provide this until the
-                // delegation issue is resolved.
-                // "fuchsia.mediacodec.CodecFactory",
-
+                "fuchsia.mediacodec.CodecFactory",
                 "fuchsia.memorypressure.Provider",
                 "fuchsia.net.interfaces.State",
                 "fuchsia.net.name.Lookup",
@@ -72,6 +68,7 @@
                 "fuchsia.process.Launcher",
                 "fuchsia.ui.composition.Allocator",
                 "fuchsia.ui.composition.Flatland",
+                "fuchsia.ui.composition.ScreenCapture",
                 "fuchsia.ui.input3.Keyboard",
                 "fuchsia.ui.scenic.Scenic",
             ],

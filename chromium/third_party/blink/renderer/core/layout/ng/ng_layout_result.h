@@ -5,6 +5,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_LAYOUT_RESULT_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_NG_NG_LAYOUT_RESULT_H_
 
+#include "base/check_op.h"
 #include "base/dcheck_is_on.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/renderer/bindings/core/v8/serialization/serialized_script_value.h"
@@ -50,12 +51,20 @@ class CORE_EXPORT NGLayoutResult final
     kNeedsRelayoutWithNoForcedTruncateAtLineClamp = 4,
     kDisableFragmentation = 5,
     kNeedsRelayoutWithNoChildScrollbarChanges = 6,
-    kNeedsRelayoutWithRowCrossSizeChanges = 7,
+    kAlgorithmSpecific1 = 7,  // Save bits by using the same value for mutually
+                              // exclusive results.
+    kNeedsRelayoutWithRowCrossSizeChanges = kAlgorithmSpecific1,
+    kNeedsRelayoutAsLastTableBox = kAlgorithmSpecific1,
     // When adding new values, make sure the bit size of |Bitfields::status| is
     // large enough to store.
   };
 
-  // Creates a copy of |other| but uses the "post-layout" fragments to ensure
+  // Make a shallow clone of the result. The fragment is cloned. Fragment
+  // *items* are also cloned, but child fragments are not. Apart from that it's
+  // truly shallow. Pinky promise.
+  static const NGLayoutResult* Clone(const NGLayoutResult&);
+
+  // Same as Clone(), but uses the "post-layout" fragments to ensure
   // fragment-tree consistency.
   static const NGLayoutResult* CloneWithPostLayoutFragments(
       const NGLayoutResult& other,
@@ -264,9 +273,9 @@ class CORE_EXPORT NGLayoutResult final
     return data ? data->clearance_after_line : LayoutUnit();
   }
 
-  LayoutUnit MinimalSpaceShortage() const {
+  absl::optional<LayoutUnit> MinimalSpaceShortage() const {
     if (!HasRareData() || rare_data_->minimal_space_shortage == kIndefiniteSize)
-      return LayoutUnit::Max();
+      return absl::nullopt;
     return rare_data_->minimal_space_shortage;
   }
 
@@ -412,11 +421,14 @@ class CORE_EXPORT NGLayoutResult final
     return bitfields_.subtree_modified_margin_strut;
   }
 
+  // Returns true if we can't apply the simplified layout algorithm to the
+  // box with this layout result.
+  bool DisableSimplifiedLayout() const {
+    return bitfields_.disable_simplified_layout;
+  }
+
   // Returns the space which generated this object for caching purposes.
   const NGConstraintSpace& GetConstraintSpaceForCaching() const {
-#if DCHECK_IS_ON()
-    DCHECK(has_valid_space_);
-#endif
     return space_;
   }
 
@@ -598,7 +610,8 @@ class CORE_EXPORT NGLayoutResult final
     }
 
     DataUnionType data_union_type() const {
-      return static_cast<DataUnionType>(bit_field.get<DataUnionTypeValue>());
+      return static_cast<DataUnionType>(
+          bit_field.get_concurrently<DataUnionTypeValue>());
     }
 
     void set_data_union_type(DataUnionType data_type) {
@@ -847,7 +860,8 @@ class CORE_EXPORT NGLayoutResult final
           subtree_modified_margin_strut(subtree_modified_margin_strut),
           initial_break_before(static_cast<unsigned>(EBreakBetween::kAuto)),
           final_break_after(static_cast<unsigned>(EBreakBetween::kAuto)),
-          status(static_cast<unsigned>(kSuccess)) {}
+          status(static_cast<unsigned>(kSuccess)),
+          disable_simplified_layout(false) {}
 
     unsigned has_rare_data_exclusion_space : 1;
     unsigned has_oof_positioned_offset : 1;
@@ -873,10 +887,10 @@ class CORE_EXPORT NGLayoutResult final
     unsigned final_break_after : 4;     // EBreakBetween
 
     unsigned status : 3;  // EStatus
+    unsigned disable_simplified_layout : 1;
   };
 
-  // The constraint space which generated this layout result, may not be valid
-  // as indicated by |has_valid_space_|.
+  // The constraint space which generated this layout result.
   const NGConstraintSpace space_;
 
   Member<const NGPhysicalFragment> physical_fragment_;
@@ -900,10 +914,6 @@ class CORE_EXPORT NGLayoutResult final
 
   LayoutUnit intrinsic_block_size_;
   Bitfields bitfields_;
-
-#if DCHECK_IS_ON()
-  bool has_valid_space_ = false;
-#endif
 };
 
 }  // namespace blink

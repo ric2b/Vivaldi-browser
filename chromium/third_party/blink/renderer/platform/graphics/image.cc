@@ -88,13 +88,13 @@ cc::ImageDecodeCache& Image::SharedCCDecodeCache(SkColorType color_type) {
     DEFINE_THREAD_SAFE_STATIC_LOCAL(
         cc::SoftwareImageDecodeCache, image_decode_cache,
         (kRGBA_F16_SkColorType, kLockedMemoryLimitBytes,
-         PaintImage::kDefaultGeneratorClientId));
+         PaintImage::GetNextGeneratorClientId()));
     return image_decode_cache;
   }
   DEFINE_THREAD_SAFE_STATIC_LOCAL(cc::SoftwareImageDecodeCache,
                                   image_decode_cache,
                                   (kN32_SkColorType, kLockedMemoryLimitBytes,
-                                   PaintImage::kDefaultGeneratorClientId));
+                                   PaintImage::GetNextGeneratorClientId()));
   return image_decode_cache;
 }
 
@@ -158,7 +158,8 @@ PaintImage Image::ResizeAndOrientImage(
   }
 
   const SkImageInfo surface_info = SkImageInfo::MakeN32(
-      size.width(), size.height(), kPremul_SkAlphaType, surface_color_space);
+      size.width(), size.height(), image.GetSkImageInfo().alphaType(),
+      surface_color_space);
   sk_sp<SkSurface> surface = SkSurface::MakeRaster(surface_info);
   if (!surface)
     return PaintImage();

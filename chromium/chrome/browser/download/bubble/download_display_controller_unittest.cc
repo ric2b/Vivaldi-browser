@@ -3,7 +3,10 @@
 // found in the LICENSE file.
 
 #include "chrome/browser/download/bubble/download_display_controller.h"
+
+#include "base/command_line.h"
 #include "base/files/file_path.h"
+#include "base/memory/raw_ptr.h"
 #include "chrome/browser/download/bubble/download_bubble_controller.h"
 #include "chrome/browser/download/bubble/download_display.h"
 #include "chrome/browser/download/bubble/download_icon_state.h"
@@ -12,6 +15,7 @@
 #include "chrome/browser/download/download_core_service_factory.h"
 #include "chrome/browser/download/download_prefs.h"
 #include "chrome/browser/ui/browser.h"
+#include "chrome/common/chrome_switches.h"
 #include "chrome/test/base/test_browser_window.h"
 #include "chrome/test/base/testing_browser_process.h"
 #include "chrome/test/base/testing_profile.h"
@@ -19,6 +23,7 @@
 #include "components/download/public/common/download_danger_type.h"
 #include "components/download/public/common/mock_download_item.h"
 #include "components/offline_items_collection/core/offline_item.h"
+#include "content/public/browser/download_item_utils.h"
 #include "content/public/test/browser_task_environment.h"
 #include "content/public/test/mock_download_manager.h"
 #include "content/public/test/test_utils.h"
@@ -27,6 +32,7 @@
 using testing::_;
 using testing::NiceMock;
 using testing::Return;
+using testing::ReturnRef;
 using testing::ReturnRefOfCopy;
 using testing::SetArgPointee;
 
@@ -65,9 +71,8 @@ class FakeDownloadDisplay : public DownloadDisplay {
   }
 
   void ShowDetails() override { detail_shown_ = true; }
-
-  bool IsDetailsShown() { return detail_shown_; }
-  void SetDetailsShown(bool detail_shown) { detail_shown_ = detail_shown; }
+  void HideDetails() override { detail_shown_ = false; }
+  bool IsShowingDetails() override { return detail_shown_; }
 
   DownloadIconState GetDownloadIconState() { return icon_state_; }
   bool IsActive() { return is_active_; }
@@ -106,7 +111,9 @@ class DownloadDisplayControllerTest : public testing::Test {
  public:
   DownloadDisplayControllerTest()
       : manager_(std::make_unique<NiceMock<content::MockDownloadManager>>()),
-        testing_profile_manager_(TestingBrowserProcess::GetGlobal()) {}
+        testing_profile_manager_(TestingBrowserProcess::GetGlobal()) {
+    base::CommandLine::ForCurrentProcess()->AppendSwitch(switches::kNoFirstRun);
+  }
   DownloadDisplayControllerTest(const DownloadDisplayControllerTest&) = delete;
   DownloadDisplayControllerTest& operator=(
       const DownloadDisplayControllerTest&) = delete;
@@ -116,7 +123,7 @@ class DownloadDisplayControllerTest : public testing::Test {
 
     profile_ = testing_profile_manager_.CreateTestingProfile("testing_profile");
     EXPECT_CALL(*manager_.get(), GetBrowserContext())
-        .WillRepeatedly(Return(profile_));
+        .WillRepeatedly(Return(profile_.get()));
 
     // Set test delegate to get the corresponding download prefs.
     auto delegate = std::make_unique<ChromeDownloadManagerDelegate>(profile_);
@@ -171,6 +178,7 @@ class DownloadDisplayControllerTest : public testing::Test {
         .WillRepeatedly(Return(base::Time::Now()));
     EXPECT_CALL(item(index), GetDangerType())
         .WillRepeatedly(Return(download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS));
+    EXPECT_CALL(item(index), IsDangerous()).WillRepeatedly(Return(false));
     int received_bytes =
         state == download::DownloadItem::IN_PROGRESS ? 50 : 100;
     EXPECT_CALL(item(index), GetReceivedBytes())
@@ -201,6 +209,8 @@ class DownloadDisplayControllerTest : public testing::Test {
     EXPECT_CALL(*manager_.get(), GetAllDownloads(_))
         .WillRepeatedly(SetArgPointee<0>(items));
     item(index).AddObserver(&controller().get_download_notifier_for_testing());
+    content::DownloadItemUtils::AttachInfoForTesting(&(item(index)), profile_,
+                                                     nullptr);
     controller().OnNewItem((state == download::DownloadItem::IN_PROGRESS) &&
                            show_details);
   }
@@ -244,6 +254,18 @@ class DownloadDisplayControllerTest : public testing::Test {
                                show_details_if_done);
   }
 
+  void OnRemovedItem(const ContentId& id) { controller().OnRemovedItem(id); }
+
+  void RemoveLastDownload() {
+    items_.pop_back();
+    std::vector<download::DownloadItem*> items;
+    for (size_t i = 0; i < items_.size(); ++i) {
+      items.push_back(&item(i));
+    }
+    EXPECT_CALL(*manager_.get(), GetAllDownloads(_))
+        .WillRepeatedly(SetArgPointee<0>(items));
+  }
+
   bool VerifyDisplayState(bool shown,
                           bool detail_shown,
                           DownloadIconState icon_state,
@@ -254,11 +276,11 @@ class DownloadDisplayControllerTest : public testing::Test {
       ADD_FAILURE() << "Display should have shown state " << shown
                     << ", but found " << display().IsShowing();
     }
-    if (detail_shown != display().IsDetailsShown()) {
+    if (detail_shown != display().IsShowingDetails()) {
       success = false;
       ADD_FAILURE() << "Display should have detailed shown state "
                     << detail_shown << ", but found "
-                    << display().IsDetailsShown();
+                    << display().IsShowingDetails();
     }
     if (icon_state != display().GetDownloadIconState()) {
       success = false;
@@ -287,7 +309,7 @@ class DownloadDisplayControllerTest : public testing::Test {
   std::unique_ptr<NiceMock<content::MockDownloadManager>> manager_;
   std::unique_ptr<FakeDownloadBubbleUIController> bubble_controller_;
   TestingProfileManager testing_profile_manager_;
-  Profile* profile_;
+  raw_ptr<Profile> profile_;
   std::unique_ptr<TestBrowserWindow> window_;
   std::unique_ptr<Browser> browser_;
 };
@@ -391,7 +413,7 @@ TEST_F(DownloadDisplayControllerTest,
 
   // Reset details_shown before the second download starts. This can happen if
   // the user clicks somewhere else to dismiss the download bubble.
-  display().SetDetailsShown(false);
+  display().HideDetails();
 
   InitDownloadItem(FILE_PATH_LITERAL("/foo/bar2.pdf"),
                    download::DownloadItem::IN_PROGRESS);
@@ -401,7 +423,7 @@ TEST_F(DownloadDisplayControllerTest,
 
   // Reset details_shown while the downloads are in progress. This can happen if
   // the user clicks somewhere else to dismiss the download bubble.
-  display().SetDetailsShown(false);
+  display().HideDetails();
 
   UpdateDownloadItem(/*item_index=*/0, DownloadState::COMPLETE);
   // The download icon state is still kProgress because not all downloads are
@@ -420,7 +442,7 @@ TEST_F(DownloadDisplayControllerTest,
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
                                  /*icon_state=*/DownloadIconState::kProgress,
                                  /*is_active=*/true));
-  display().SetDetailsShown(false);
+  display().HideDetails();
 
   UpdateOfflineItem(/*item_index=*/0, OfflineItemState::COMPLETE);
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/false,
@@ -429,7 +451,7 @@ TEST_F(DownloadDisplayControllerTest,
 
   InitDownloadItem(FILE_PATH_LITERAL("/foo/bar3.pdf"),
                    download::DownloadItem::IN_PROGRESS);
-  display().SetDetailsShown(false);
+  display().HideDetails();
   // Pop open partial view on completed download.
   UpdateDownloadItem(/*item_index=*/2, DownloadState::COMPLETE,
                      download::DOWNLOAD_DANGER_TYPE_NOT_DANGEROUS,
@@ -499,7 +521,84 @@ TEST_F(DownloadDisplayControllerTest, UpdateToolbarButtonState_EmptyFilePath) {
                                  /*is_active=*/true));
 }
 
+TEST_F(DownloadDisplayControllerTest,
+       UpdateToolbarButtonState_DangerousDownload) {
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  EXPECT_CALL(item(0), IsDangerous()).WillRepeatedly(Return(true));
+  UpdateDownloadItem(/*item_index=*/0, DownloadState::IN_PROGRESS,
+                     download::DOWNLOAD_DANGER_TYPE_DANGEROUS_HOST,
+                     /*show_details_if_done=*/true);
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+
+  // Downloads prompted for deep scanning should be considered in progress.
+  UpdateDownloadItem(/*item_index=*/0, DownloadState::IN_PROGRESS,
+                     download::DOWNLOAD_DANGER_TYPE_PROMPT_FOR_SCANNING,
+                     /*show_details_if_done=*/true);
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+}
+
+TEST_F(DownloadDisplayControllerTest, UpdateToolbarButtonState_OnRemovedItem) {
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  std::string same_id = "Download 1";
+  std::string different_id = "Download 2";
+  EXPECT_CALL(item(0), GetGuid()).WillRepeatedly(ReturnRef(same_id));
+
+  OnRemovedItem(ContentId("LEGACY_DOWNLOAD", different_id));
+  // The download display is still shown, because the removed download is
+  // different.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  OnRemovedItem(ContentId("LEGACY_DOWNLOAD", same_id));
+  // The download display is hided, because the only item in the download list
+  // is about to be removed.
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+}
+
+TEST_F(DownloadDisplayControllerTest,
+       UpdateToolbarButtonState_OnRemovedItemMultipleDownloads) {
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar1.pdf"),
+                   download::DownloadItem::IN_PROGRESS);
+  std::vector<std::string> ids = {"Download 1", "Download 2"};
+  EXPECT_CALL(item(0), GetGuid()).WillRepeatedly(ReturnRef(ids[0]));
+  EXPECT_CALL(item(1), GetGuid()).WillRepeatedly(ReturnRef(ids[1]));
+
+  // The download display is still shown, because there are multiple downloads
+  // in the list.
+  OnRemovedItem(ContentId("LEGACY_DOWNLOAD", ids[0]));
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/true, /*detail_shown=*/true,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+
+  RemoveLastDownload();
+  OnRemovedItem(ContentId("LEGACY_DOWNLOAD", ids[0]));
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kProgress,
+                                 /*is_active=*/true));
+}
+
 TEST_F(DownloadDisplayControllerTest, InitialState_OldLastDownload) {
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::COMPLETE);
   base::Time current_time = base::Time::Now();
   // Set the last complete time to more than 1 day ago.
   DownloadPrefs::FromDownloadManager(&manager())
@@ -513,6 +612,8 @@ TEST_F(DownloadDisplayControllerTest, InitialState_OldLastDownload) {
 }
 
 TEST_F(DownloadDisplayControllerTest, InitialState_NewLastDownload) {
+  InitDownloadItem(FILE_PATH_LITERAL("/foo/bar.pdf"),
+                   download::DownloadItem::COMPLETE);
   base::Time current_time = base::Time::Now();
   // Set the last complete time to less than 1 day ago.
   DownloadPrefs::FromDownloadManager(&manager())
@@ -528,6 +629,23 @@ TEST_F(DownloadDisplayControllerTest, InitialState_NewLastDownload) {
   // The display should stop showing once the last download is more than 1 day
   // ago.
   task_environment_.FastForwardBy(base::Hours(1));
+  EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
+                                 /*icon_state=*/DownloadIconState::kComplete,
+                                 /*is_active=*/false));
+}
+
+TEST_F(DownloadDisplayControllerTest,
+       InitialState_NewLastDownloadWithEmptyItem) {
+  base::Time current_time = base::Time::Now();
+  // Set the last complete time to less than 1 day ago.
+  DownloadPrefs::FromDownloadManager(&manager())
+      ->SetLastCompleteTime(current_time - base::Hours(23));
+
+  DownloadDisplayController controller(&display(), profile(),
+                                       &bubble_controller());
+  // Although the last complete time is set, the download display is not shown
+  // because the download item list is empty. This can happen if the download
+  // history is deleted by the user.
   EXPECT_TRUE(VerifyDisplayState(/*shown=*/false, /*detail_shown=*/false,
                                  /*icon_state=*/DownloadIconState::kComplete,
                                  /*is_active=*/false));

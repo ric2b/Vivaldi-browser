@@ -36,17 +36,13 @@
 #include "chrome/browser/ui/views/sharing/sharing_dialog_view.h"
 #include "chrome/browser/ui/views/sharing/sharing_icon_view.h"
 #include "chrome/browser/ui/views/sharing_hub/sharing_hub_icon_view.h"
+#include "chrome/browser/ui/views/side_search/side_search_icon_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_icon_container_view.h"
 #include "chrome/browser/ui/views/translate/translate_icon_view.h"
-#include "chrome/browser/ui/views/webauthn/webauthn_icon_view.h"
 #include "chrome/common/chrome_features.h"
 #include "content/public/common/content_features.h"
 #include "ui/views/animation/ink_drop.h"
 #include "ui/views/layout/box_layout.h"
-
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
-#include "chrome/browser/ui/views/side_search/side_search_icon_view.h"
-#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
 
 PageActionIconController::PageActionIconController() = default;
 PageActionIconController::~PageActionIconController() = default;
@@ -212,25 +208,16 @@ void PageActionIconController::Init(const PageActionIconParams& params,
                 base::BindRepeating(SharingDialogView::GetAsBubble)));
         break;
       case PageActionIconType::kSideSearch:
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
         DCHECK(params.command_updater);
         add_page_action_icon(
             type, std::make_unique<SideSearchIconView>(
                       params.command_updater, params.icon_label_bubble_delegate,
                       params.page_action_icon_delegate, params.browser));
-#endif  // BUILDFLAG(ENABLE_SIDE_SEARCH)
         break;
       case PageActionIconType::kTranslate:
         DCHECK(params.command_updater);
         add_page_action_icon(
             type, std::make_unique<TranslateIconView>(
-                      params.command_updater, params.icon_label_bubble_delegate,
-                      params.page_action_icon_delegate));
-        break;
-      case PageActionIconType::kWebAuthn:
-        DCHECK(base::FeatureList::IsEnabled(features::kWebAuthConditionalUI));
-        add_page_action_icon(
-            type, std::make_unique<WebAuthnIconView>(
                       params.command_updater, params.icon_label_bubble_delegate,
                       params.page_action_icon_delegate));
         break;

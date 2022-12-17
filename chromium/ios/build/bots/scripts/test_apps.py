@@ -131,6 +131,11 @@ class GTestsApp(object):
     self.host_app_path = kwargs.get('host_app_path')
     self.inserted_libs = kwargs.get('inserted_libs') or []
 
+  def remove_gtest_sharding_env_vars(self):
+    """Removes sharding related env vars from self.env_vars."""
+    for env_var_key in ['GTEST_SHARD_INDEX', 'GTEST_TOTAL_SHARDS']:
+      self.env_vars.pop(env_var_key, None)
+
   def fill_xctest_run(self, out_dir):
     """Fills xctestrun file by egtests.
 
@@ -485,7 +490,7 @@ class DeviceXCTestUnitTestsApp(GTestsApp):
     }
 
     if self.env_vars:
-      self.xctestrun_data['TestTargetName'].update(
+      xctestrun_data['TestTargetName'].update(
           {'EnvironmentVariables': self.env_vars})
 
     if self.included_tests or self.excluded_tests:
@@ -596,7 +601,7 @@ class SimulatorXCTestUnitTestsApp(GTestsApp):
     }
 
     if self.env_vars:
-      self.xctestrun_data['TestTargetName'].update(
+      xctestrun_data['TestTargetName'].update(
           {'EnvironmentVariables': self.env_vars})
 
     if self.included_tests or self.excluded_tests:

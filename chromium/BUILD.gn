@@ -223,7 +223,7 @@ group("gn_all") {
     }
   }
 
-  if (!is_ios && !is_android) {
+  if (!is_ios && !is_android && !is_fuchsia) {
     deps += [ "//components/viz/demo:viz_demo" ]
     if (!use_libfuzzer) {
       # TODO(crbug.com/1241949): libcronet.$version.so fails to link in libfuzzer builds.
@@ -260,12 +260,12 @@ group("gn_all") {
   }
 
   if (is_fuchsia && !is_chromecast) {
+    # Add targets that only exist on Fuchsia.
     deps += [
       ":d8_fuchsia",
-      "//fuchsia/engine:web_engine",
-      "//fuchsia/release:fuchsia_sizes",
-      "//fuchsia/runners:cast_runner",
-      "//fuchsia/runners:web_runner",
+      "//build/fuchsia/cipd",
+      "//fuchsia_web:gn_all",
+      "//tools/fuchsia/size_tests:fuchsia_sizes",
 
       # Ensure this target, used by cipd, is built in all configurations.
       # TODO(crbug.com/1265618): Remove this once it has a natural dependency.
@@ -274,10 +274,6 @@ group("gn_all") {
       # Ensure this target continues to build.
       "//chromecast/bindings:bindings_manager_fuchsia",
     ]
-
-    if (is_official_build) {
-      deps += [ "//fuchsia/cipd" ]
-    }
   }
 
   deps += root_extra_deps
@@ -457,8 +453,11 @@ group("gn_all") {
       "//third_party/breakpad:generate_test_dump",
       "//third_party/breakpad:minidump-2-core",
       "//tools/dump_process_memory:dump_process",
-      "//tools/memory/partition_allocator:all",
     ]
+  }
+
+  if (is_linux || is_chromeos || is_android || is_mac) {
+    deps += [ "//tools/memory/partition_allocator:all" ]
   }
 
   if (is_chromeos_ash) {
@@ -474,6 +473,7 @@ group("gn_all") {
       "//components/exo/wayland:wayland_client_compatibility_tests",
       "//components/session_manager/core",
       "//third_party/shell-encryption:shell_encryption_unittests",
+      "//tools/traffic_annotation/auditor:traffic_annotation_auditor",
       "//ui/chromeos:ui_chromeos_unittests",
     ]
   }
@@ -691,11 +691,14 @@ group("gn_all") {
     deps += [ "//chromecast:cast_test_lists" ]
 
     if (!is_fuchsia) {
-      deps += [ "//chromecast:cast_shell" ]
-      deps += [ "//chromecast/cast_core:core_runtime_simple" ]
-    }
-    if (enable_extensions && use_aura) {
-      deps += [ "//chrome/browser/resources/chromeos/accessibility:build" ]
+      deps += [
+        "//chromecast:cast_shell",
+        "//chromecast/cast_core:core_runtime_simple",
+      ]
+
+      if (enable_extensions && use_aura) {
+        deps += [ "//chrome/browser/resources/chromeos/accessibility:build" ]
+      }
     }
   }
 
@@ -727,15 +730,19 @@ group("gn_all") {
     deps += [ "//third_party/sqlite:sqlite_shell" ]
   }
 
+  if ((is_linux && !is_chromecast) || is_chromeos_lacros || is_fuchsia) {
+    # TODO(https://crbug.com/1329673): Figure out if this should be in gn_all and how cross-platform this is.
+    deps += [ "//components/services/filesystem:filesystem_service_unittests" ]
+  }
+
   if ((is_linux && !is_chromecast) || is_chromeos_lacros) {
-    # TODO(GYP): Figure out if any of these should be in gn_all
+    # TODO(https://crbug.com/1329673): Figure out if any of these should be in gn_all
     # and figure out how cross-platform they are
     deps += [
       "//chrome/installer/util:strings",
       "//chrome/tools/convert_dict",
       "//components/constrained_window:unit_tests",
       "//components/metrics:serialization",
-      "//components/services/filesystem:filesystem_service_unittests",
       "//components/sessions:unit_tests",
       "//media/cast:udp_proxy",
       "//storage/browser:dump_file_system",
@@ -852,6 +859,7 @@ group("gn_all") {
     deps += [
       "//mojo/public/rust",
       "//mojo/public/rust:mojo_rust_tests",
+      "//third_party/rust/autocxx/chromium_integration/tests",
     ]
   }
   if (enable_rust) {
@@ -859,9 +867,15 @@ group("gn_all") {
   }
 }
 
+# This group and the following exist to give targets for the waterfall to refer to.
 group("rust_build_tests") {
   testonly = true
   deps = [ "//build/rust/tests" ]
+}
+
+group("rust_autocxx_tests") {
+  testonly = true
+  deps = [ "//third_party/rust/autocxx/chromium_integration/tests" ]
 }
 
 # TODO(https://crbug.com/1112776): ensure remoting is functional on Linux builds with
@@ -881,6 +895,16 @@ if (enable_remoting && ((is_linux && ozone_platform_x11) ||
     if (is_win) {
       deps += [ "//chrome/chrome_cleaner:shipped_binaries" ]
     }
+  }
+}
+
+if (is_chromeos_ash) {
+  group("traffic_annotation_auditor_dependencies") {
+    deps = [
+      "//chrome",
+      "//chromeos",
+      "//tools/traffic_annotation/summary:annotations_xml",
+    ]
   }
 }
 
@@ -985,6 +1009,7 @@ if (is_chromeos_ash) {
       "//third_party/breakpad:minidump_stackwalk($host_toolchain)",
       "//third_party/dawn/src/dawn/tests:dawn_end2end_tests",
       "//third_party/dawn/src/dawn/tests:dawn_unittests",
+      "//ui/ozone:ozone_integration_tests",
 
       # Blocked on https://github.com/catapult-project/catapult/issues/2297
       #"//third_party/catapult/telemetry:bitmaptools",
@@ -1268,7 +1293,7 @@ if (!is_ios) {
     data_deps = [ ":blink_web_tests_support_data" ]
     data = [
       "//third_party/blink/perf_tests/",
-      "//third_party/blink/web_tests/SmokeTests",
+      "//third_party/blink/web_tests/SmokeTests/Default.txt",
       "//third_party/blink/web_tests/VirtualTestSuites",
 
       # List all test expectations here
@@ -1281,6 +1306,9 @@ if (!is_ios) {
       "//third_party/blink/web_tests/TestExpectations",
       "//third_party/blink/web_tests/WebDriverExpectations",
       "//third_party/blink/web_tests/WebGPUExpectations",
+
+      # Generic baselines
+      "//third_party/blink/web_tests/platform/generic/",
 
       # === List Test Cases folders here ===
       "//third_party/blink/web_tests/accessibility/",
@@ -1331,6 +1359,7 @@ if (!is_ios) {
       "//third_party/blink/web_tests/overflow/",
       "//third_party/blink/web_tests/paint/",
       "//third_party/blink/web_tests/payments/",
+      "//third_party/blink/web_tests/pending_beacon/",
       "//third_party/blink/web_tests/permissionclient/",
       "//third_party/blink/web_tests/plugins/",
       "//third_party/blink/web_tests/pointer-lock/",
@@ -1376,6 +1405,7 @@ if (!is_ios) {
     if (is_win || is_linux || is_fuchsia) {
       data += [
         "//third_party/blink/web_tests/platform/win/",
+        "//third_party/blink/web_tests/platform/win10/",
         "//third_party/blink/web_tests/platform/win7/",
       ]
       if (is_linux || is_fuchsia) {
@@ -1386,12 +1416,14 @@ if (!is_ios) {
       }
     } else if (is_mac) {
       data += [
+        "//third_party/blink/web_tests/SmokeTests/Mac.txt",
         "//third_party/blink/web_tests/platform/mac/",
-        "//third_party/blink/web_tests/platform/mac-mac10.12/",
         "//third_party/blink/web_tests/platform/mac-mac10.13/",
         "//third_party/blink/web_tests/platform/mac-mac10.14/",
         "//third_party/blink/web_tests/platform/mac-mac10.15/",
+        "//third_party/blink/web_tests/platform/mac-mac11/",
         "//third_party/blink/web_tests/platform/mac-mac11-arm64/",
+        "//third_party/blink/web_tests/platform/mac-mac12-arm64/",
       ]
     }
 
@@ -1426,23 +1458,18 @@ if (!is_ios) {
     # This target differs from :blink_web_tests in that it uses the same
     # test harness and a few additional flags but, more importantly, only runs
     # the web_tests/wpt_internal/webgpu tests, so it doesn't have a data
-    # dependency on the whole web_test directory. run_webgpu_cts.py is a wrapper
-    # script around run_web_tests.py which performs additional setup for running
-    # the WebGPU CTS.
+    # dependency on the whole web_test directory.
     script = _common_web_test_script
 
-    # Add run_webgpu_cts.py and remove run_web_tests.py from _common_web_test_args
-    args = [ "@WrappedPath(" +
-             rebase_path("//third_party/blink/tools/run_webgpu_cts.py",
-                         root_build_dir) + ")" ] + _common_web_test_args -
-           [ _common_web_test_args[0] ]
+    args = _common_web_test_args
     if (is_asan) {
       args += [ "--timeout-ms=30000" ]
     }
     args += [
-      "--webgpu-cts-expectations",
+      "--ignore-default-expectations",
+      "--additional-expectations",
       "@WrappedPath(../../third_party/blink/web_tests/WebGPUExpectations)",
-      "--isolated-script-test-filter=wpt_internal/webgpu/web_platform/reftests",
+      "--isolated-script-test-filter=wpt_internal/webgpu/web_platform/reftests/*",
     ]
 
     data_deps = [

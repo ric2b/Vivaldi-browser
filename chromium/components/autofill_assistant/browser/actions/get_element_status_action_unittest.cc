@@ -18,6 +18,7 @@
 #include "components/autofill_assistant/browser/selector.h"
 #include "components/autofill_assistant/browser/service.pb.h"
 #include "components/autofill_assistant/browser/user_model.h"
+#include "components/autofill_assistant/browser/web/element_finder_result.h"
 #include "components/autofill_assistant/browser/web/element_store.h"
 #include "components/autofill_assistant/browser/web/mock_web_controller.h"
 #include "content/public/test/browser_task_environment.h"
@@ -704,7 +705,7 @@ TEST_F(GetElementStatusActionTest, SucceedsWithPasswordManagerValue) {
       .WillOnce(WithArgs<1>([this](auto&& callback) {
         std::unique_ptr<ElementFinderResult> element =
             std::make_unique<ElementFinderResult>();
-        element->SetRenderFrameHost(web_contents_->GetMainFrame());
+        element->SetRenderFrameHost(web_contents_->GetPrimaryMainFrame());
         std::move(callback).Run(OkClientStatus(), std::move(element));
       }));
   EXPECT_CALL(mock_website_login_manager_, GetPasswordForLogin(_, _))

@@ -36,7 +36,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model_observer.h"
 #include "chrome/browser/ui/ui_features.h"
 #include "chrome/browser/ui/views/bookmarks/bookmark_bar_view.h"
-#include "chrome/browser/ui/views/chrome_view_class_properties.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/frame/immersive_mode_controller.h"
 #include "chrome/browser/ui/views/frame/top_container_view.h"
@@ -467,7 +466,7 @@ WebUITabStripContainerView::WebUITabStripContainerView(
 }
 
 WebUITabStripContainerView::~WebUITabStripContainerView() {
-  content::WebContentsObserver::Observe(nullptr);
+  DeinitializeWebView();
   // The TabCounter button uses |this| as a listener. We need to make
   // sure we outlive it.
   delete new_tab_button_;
@@ -695,9 +694,9 @@ void WebUITabStripContainerView::SetContainerTargetVisibility(
     if (web_view_->GetWebContents()->IsCrashed())
       InitializeWebView();
 
-    immersive_revealed_lock_.reset(
+    immersive_revealed_lock_ =
         browser_view_->immersive_mode_controller()->GetRevealedLock(
-            ImmersiveModeController::ANIMATE_REVEAL_YES));
+            ImmersiveModeController::ANIMATE_REVEAL_YES);
 
     SetVisible(true);
     PreferredSizeChanged();
@@ -938,8 +937,20 @@ void WebUITabStripContainerView::InitializeWebView() {
   task_manager::WebContentsTags::CreateForTabContents(
       web_view_->web_contents());
 
-  if (TabStripUI* tab_strip_ui = GetTabStripUI(web_view_->GetWebContents()))
+  if (TabStripUI* tab_strip_ui = GetTabStripUI(web_view_->GetWebContents())) {
+    // References to the |browser_view_->browser()| and |this| are borrowed
+    // here, and will be released |DeinitializeWebView|.
     tab_strip_ui->Initialize(browser_view_->browser(), this);
+  }
 
   content::WebContentsObserver::Observe(web_view_->GetWebContents());
+}
+
+void WebUITabStripContainerView::DeinitializeWebView() {
+  content::WebContentsObserver::Observe(nullptr);
+
+  if (TabStripUI* tab_strip_ui = GetTabStripUI(web_view_->GetWebContents())) {
+    // See corresponding comments from InitializeWebView().
+    tab_strip_ui->Deinitialize();
+  }
 }

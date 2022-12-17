@@ -41,7 +41,7 @@
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS)
@@ -78,13 +78,12 @@ bool ShouldShowLacrosSideBySideWarningInAsh() {
 bool ShouldShowLacrosSideBySideWarningInLacros() {
   return base::FeatureList::IsEnabled(
              syncer::kSyncSettingsShowLacrosSideBySideWarning) &&
-         !chromeos::LacrosService::Get()
-              ->init_params()
+         !chromeos::BrowserInitParams::Get()
               ->standalone_browser_is_only_browser;
 }
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
 std::string BuildOSSettingsUrl(const std::string& sub_page) {
   std::string os_settings_url = chrome::kChromeUIOSSettingsURL;
   os_settings_url.append(sub_page);
@@ -206,6 +205,8 @@ void AddPersonalizationOptionsStrings(content::WebUIDataSource* html_source) {
     {"linkDoctorPrefDesc", IDS_SETTINGS_LINKDOCTOR_PREF_DESC},
     {"driveSuggestPref", IDS_DRIVE_SUGGEST_PREF},
     {"driveSuggestPrefDesc", IDS_DRIVE_SUGGEST_PREF_DESC},
+    {"autofillAssistantPref", IDS_SETTINGS_AUTOFILL_ASSISTANT_PREF},
+    {"autofillAssistantPrefDesc", IDS_SETTINGS_AUTOFILL_ASSISTANT_PREF_DESC},
   };
   html_source->AddLocalizedStrings(kLocalizedStrings);
 }
@@ -307,7 +308,7 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
     {"syncSettingsLacrosSideBySideWarning",
      IDS_SYNC_SETTINGS_SIDE_BY_SIDE_WARNING_LACROS},
 #endif
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
     {"browserSyncFeatureLabel", IDS_BROWSER_SETTINGS_SYNC_FEATURE_LABEL},
 #endif
   };
@@ -376,7 +377,7 @@ void AddSyncPageStrings(content::WebUIDataSource* html_source) {
       BuildOSSettingsUrl(chromeos::settings::mojom::kSyncSetupSubpagePath));
 #endif
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   html_source->AddString(
       "osSyncSettingsUrl",
       BuildOSSettingsUrl(chromeos::settings::mojom::kSyncSubpagePath));

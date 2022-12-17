@@ -165,6 +165,10 @@ void LockScreen::ShowParentAccessDialog() {
   contents_view_->ShowParentAccessDialog();
 }
 
+void LockScreen::SetHasKioskApp(bool has_kiosk_apps) {
+  contents_view_->SetHasKioskApp(has_kiosk_apps);
+}
+
 void LockScreen::OnLockScreenNoteStateChanged(mojom::TrayActionState state) {
   Shell::Get()
       ->login_screen_controller()

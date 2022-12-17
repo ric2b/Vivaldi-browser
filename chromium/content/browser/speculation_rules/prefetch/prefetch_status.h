@@ -71,7 +71,6 @@ enum class PrefetchStatus {
 
   // Variants of the first three statuses with the additional context of a
   // successfully completed NoStatePrefetch.
-  // TODO add note that these are deprecated in the new code?
   kPrefetchUsedNoProbeWithNSP = 16,
   kPrefetchUsedProbeSuccessWithNSP = 17,
   kPrefetchNotUsedProbeFailedWithNSP = 18,
@@ -130,6 +129,10 @@ enum class PrefetchStatus {
   // (e.g., a non publicly routable IP address or a hostname which is not
   // registry-controlled) but the prefetch was to be proxied.
   kPrefetchNotEligibleHostIsNonUnique = 36,
+
+  // The prefetch was not made because the user requested that the browser use
+  // less data.
+  kPrefetchNotEligibleDataSaverEnabled = 37,
 };
 
 }  // namespace content

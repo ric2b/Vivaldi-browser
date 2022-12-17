@@ -19,7 +19,7 @@ AutofillClient::PopupOpenArgs::PopupOpenArgs() = default;
 AutofillClient::PopupOpenArgs::PopupOpenArgs(
     const gfx::RectF& element_bounds,
     base::i18n::TextDirection text_direction,
-    std::vector<autofill::Suggestion> suggestions,
+    std::vector<Suggestion> suggestions,
     AutoselectFirstSuggestion autoselect_first_suggestion,
     PopupType popup_type)
     : element_bounds(element_bounds),
@@ -41,10 +41,14 @@ version_info::Channel AutofillClient::GetChannel() const {
   return version_info::Channel::UNKNOWN;
 }
 
+MerchantPromoCodeManager* AutofillClient::GetMerchantPromoCodeManager() {
+  return nullptr;
+}
+
 std::unique_ptr<SingleFieldFormFillRouter>
 AutofillClient::GetSingleFieldFormFillRouter() {
   return std::make_unique<SingleFieldFormFillRouter>(
-      GetAutocompleteHistoryManager());
+      GetAutocompleteHistoryManager(), GetMerchantPromoCodeManager());
 }
 
 AutofillOfferManager* AutofillClient::GetAutofillOfferManager() {
@@ -76,7 +80,7 @@ void AutofillClient::DismissUnmaskAuthenticatorSelectionDialog(
   // ChromeAutofillClient (Chrome Desktop and Clank) implements this.
 }
 
-raw_ptr<VirtualCardEnrollmentManager>
+VirtualCardEnrollmentManager*
 AutofillClient::GetVirtualCardEnrollmentManager() {
   // This is overridden by platform subclasses. Currently only
   // ChromeAutofillClient (Chrome Desktop and Clank) implements this.

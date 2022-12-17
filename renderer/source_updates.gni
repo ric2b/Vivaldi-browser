@@ -6,6 +6,8 @@ update_target("//chrome/renderer:renderer") {
     "//vivaldi/renderer/vivaldi_frame_service_impl.h",
     "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.cc",
     "//vivaldi/renderer/vivaldi_render_frame_blink_proxy_impl.h",
+    "//vivaldi/renderer/blink/vivaldi_spatnav_quad.cc",
+    "//vivaldi/renderer/blink/vivaldi_spatnav_quad.h",
   ]
 }
 
@@ -17,6 +19,7 @@ update_template_instance("//third_party/blink/renderer/core:core") {
     "//vivaldi/renderer/blink/vivaldi_snapshot_page.h",
     "//vivaldi/renderer/blink/vivaldi_spatial_navigation.cc",
     "//vivaldi/renderer/blink/vivaldi_spatial_navigation.h",
+    "//vivaldi/renderer/blink/vivaldi_autoplay_policy.cc",
   ]
   public_deps += [
     "//vivaldi/renderer/mojo:frame_host_service_blink",

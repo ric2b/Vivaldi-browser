@@ -190,47 +190,61 @@ ExtensionFunction::ResponseAction SearchEnginesGetTemplateUrlsFunction::Run() {
   const TemplateURL* default_search;
   default_search =
       service->GetDefaultSearchProvider(TemplateURLService::kDefaultSearchMain);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_search = base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_search = base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchPrivate);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_private = base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_private = base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchField);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_search_field = base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_search_field = base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchFieldPrivate);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_search_field_private =
-      base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_search_field_private =
+        base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchSpeeddials);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_speeddials = base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_speeddials = base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchSpeeddialsPrivate);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_speeddials_private =
-      base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_speeddials_private =
+        base::NumberToString(default_search->id());
+  }
 
   default_search = service->GetDefaultSearchProvider(
       TemplateURLService::kDefaultSearchImage);
-  if (!service->loaded())
-    AddTemplateURLToResult(default_search, true, result.template_urls);
-  result.default_image = base::NumberToString(default_search->id());
+  if (default_search) {
+    if (!service->loaded())
+      AddTemplateURLToResult(default_search, true, result.template_urls);
+    result.default_image = base::NumberToString(default_search->id());
+  }
 
   return RespondNow(ArgumentList(
       vivaldi::search_engines::GetTemplateUrls::Results::Create(result)));
@@ -291,10 +305,9 @@ SearchEnginesRemoveTemplateUrlFunction::Run() {
         vivaldi::search_engines::RemoveTemplateUrl::Results::Create(false)));
 
   for (int i = 0; i < TemplateURLService::kDefaultSearchTypeCount; i++) {
-    if (turl_to_remove->id() ==
-        service
-            ->GetDefaultSearchProvider(TemplateURLService::DefaultSearchType(i))
-            ->id())
+    const TemplateURL* default_turl = service->GetDefaultSearchProvider(
+        TemplateURLService::DefaultSearchType(i));
+    if (default_turl && turl_to_remove->id() == default_turl->id())
       switch (i) {
         case TemplateURLService::kDefaultSearchMain:
         case TemplateURLService::kDefaultSearchPrivate:

@@ -719,7 +719,8 @@ void VivaldiUIEvents::SendKeyboardShortcutEvent(
       is_exception) {
     ::vivaldi::BroadcastEvent(tabs_private::OnKeyboardShortcut::kEventName,
                               tabs_private::OnKeyboardShortcut::Create(
-                                  window_id, shortcut_text, is_auto_repeat),
+                                  window_id, shortcut_text, is_auto_repeat,
+                                  event.from_devtools),
                               browser_context);
   }
 }

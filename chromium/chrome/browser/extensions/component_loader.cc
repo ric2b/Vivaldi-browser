@@ -70,6 +70,10 @@
 #include "ui/file_manager/grit/file_manager_resources.h"
 #endif
 
+#if BUILDFLAG(IS_CHROMEOS)
+#include "chromeos/constants/chromeos_features.h"
+#endif
+
 #if BUILDFLAG(ENABLE_PDF)
 #include "chrome/browser/pdf/pdf_extension_util.h"
 #endif
@@ -390,10 +394,11 @@ void ComponentLoader::AddFileManagerExtension() {
 }
 
 void ComponentLoader::AddAudioPlayerExtension() {
-  // TODO(b/189172062): Guard this with ShouldInstallObsoleteComponentExtension
-  // when the feature is on and stable.
-  if (!base::FeatureList::IsEnabled(
-          chromeos::features::kMediaAppHandlesAudio)) {
+  // TODO(b/189172062): Delete this entirely around M106 when it has has a
+  // chance to be cleaned up.
+  if (extensions::ExtensionPrefs::Get(profile_)
+          ->ShouldInstallObsoleteComponentExtension(
+              file_manager::kAudioPlayerAppId)) {
     Add(IDR_AUDIO_PLAYER_MANIFEST,
         base::FilePath(FILE_PATH_LITERAL("audio_player")));
   }
@@ -538,17 +543,18 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     }
 #endif  // BUILDFLAG(ENABLE_HANGOUT_SERVICES_EXTENSION)
 
-    bool install_feedback = enable_background_extensions_during_testing;
+#if BUILDFLAG(IS_CHROMEOS)
+    Add(IDR_ECHO_MANIFEST,
+        base::FilePath(FILE_PATH_LITERAL("/usr/share/chromeos-assets/echo")));
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    install_feedback = true;
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    if (install_feedback) {
-      AddWithNameAndDescription(
-          IDR_FEEDBACK_MANIFEST, base::FilePath(FILE_PATH_LITERAL("feedback")),
-          l10n_util::GetStringUTF8(IDS_FEEDBACK_REPORT_APP_TITLE),
-          // Description string
-          l10n_util::GetStringUTF8(IDS_FEEDBACK_REPORT_PAGE_TITLE));
+    if (!base::FeatureList::IsEnabled(
+            chromeos::features::kDisableOfficeEditingComponentApp)) {
+      Add(IDR_QUICKOFFICE_MANIFEST,
+          base::FilePath(
+              FILE_PATH_LITERAL("/usr/share/chromeos-assets/quickoffice")));
     }
+#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
     if (command_line->HasSwitch(switches::kLoadGuestModeTestExtension)) {
@@ -561,21 +567,11 @@ void ComponentLoader::AddDefaultComponentExtensionsWithBackgroundPages(
     AddImageLoaderExtension();
 
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
-    if (!base::FeatureList::IsEnabled(
-            chromeos::features::kDisableOfficeEditingComponentApp)) {
-      Add(IDR_QUICKOFFICE_MANIFEST,
-          base::FilePath(
-              FILE_PATH_LITERAL("/usr/share/chromeos-assets/quickoffice")));
-    }
-
     // TODO(https://crbug.com/1005083): Force the off the record profile to be
     // created to allow the virtual keyboard to work in guest mode.
     if (!IsNormalSession())
       ExtensionsBrowserClient::Get()->GetOffTheRecordContext(profile_);
 #endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING)
-
-    Add(IDR_ECHO_MANIFEST,
-        base::FilePath(FILE_PATH_LITERAL("/usr/share/chromeos-assets/echo")));
 
     if (!command_line->HasSwitch(ash::switches::kGuestSession)) {
       Add(IDR_WALLPAPERMANAGER_MANIFEST,

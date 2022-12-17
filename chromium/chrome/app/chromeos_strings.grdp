@@ -405,8 +405,14 @@
   <message name="IDS_UPDATE_SLIDE_UPDATE_TITLE" desc="Title of educative slide.">
     After this, no waiting for updates
   </message>
+  <message name="IDS_UPDATE_SLIDE_UPDATE_ADDITIONAL_SETTINGS_TITLE" desc="Title of educative slide.">
+    From here on out, no waiting required
+  </message>
   <message name="IDS_UPDATE_SLIDE_UPDATE_TEXT" desc="Text of educative slide.">
     This is the only time you’ll wait for an update. On Chromebooks, software updates happen in the background.
+  </message>
+  <message name="IDS_UPDATE_SLIDE_UPDATE_ADDITIONAL_SETTINGS_TEXT" desc="Text of educative slide.">
+    After this, software updates will happen in the background. You can review update preferences in Settings.
   </message>
   <message name="IDS_UPDATE_SLIDE_ANTIVIRUS_TITLE" desc="Title of educative slide.">
     Built-in virus protection
@@ -431,6 +437,12 @@
   </message>
   <message name="IDS_UPDATE_BATTERY_WARNING_TEXT" desc="Text of battery warning which is shown during update process if battery is running out.">
     Looks like your Chromebook will run out of power before the update is complete. Make sure it's charging correctly to avoid interruption.
+  </message>
+  <message name="IDS_UPDATE_NO_UPDATE_AVAILABLE_TITLE" desc="Title of the screen that is shown when there is no update available.">
+    Your device is up to date
+  </message>
+  <message name="IDS_UPDATE_NO_UPDATE_AVAILABLE_TEXT" desc="Text of the screen that is shown when there is no update available.">
+    Your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> updates automatically in the background to give you the latest features and security improvements. You can review update preferences in Settings.
   </message>
   <message name="IDS_UPDATE_SLIDE_LABEL" desc="Text of slide label for accessibility.">
     Extra content <ph name="CURRENT_ELEMENT">$1<ex>1</ex></ph> out of <ph name="TOTAL_ELEMENTS">$2<ex>2</ex></ph>
@@ -512,9 +524,6 @@
   </message>
   <message name="IDS_NETWORK_ADD_WI_FI_LIST_ITEM_NAME" desc="OOBE network screen list entry that opens 'Add New WiFi Network' dialog">
     Add other WiFi network
-  </message>
-  <message name="IDS_NETWORK_OFFLINE_DEMO_SETUP_LIST_ITEM_NAME" desc="OOBE network screen list entry that starts offline demo mode setup">
-    Offline demo mode
   </message>
   <message name="IDS_AUTOSTART_WARNING_TITLE" desc="Title of the kiosk autostart screen">
     Auto-launch permission requested
@@ -955,7 +964,19 @@
     Choose your demo preferences
   </message>
   <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_SCREEN_NEXT_BUTTON_LABEL" desc="The label of the button that is shown on preferences screen and that confirms chosen configuration and shows next demo setup screen.">
-    OK
+    Continue
+  </message>
+  <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_LABEL" desc="Label for retailer id input field on the demo mode setup screen. User should provide the retailer id if assigned.">
+    Retailer-store ID code (optional)
+  </message>
+  <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_PLACEHOLDER" desc="Placeholder for retailer id input field on the demo mode setup screen.">
+    Retailer-store ID code
+  </message>
+  <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_ERROR_TEXT" desc="Help text for retailer id input field on the demo mode setup screen.">
+    Invalid ID. The format you entered is incorrect. Please check the instructions you received to ensure you are entering the ID in the correct format. If you’re unable to resolve this issue, please leave the field blank and continue with installation.
+  </message>
+  <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_RETAILER_ID_INPUT_HELP_TEXT" desc="Help text for retailer id input field on the demo mode setup screen.">
+    Retailer-store ID is ABC-1234 format
   </message>
   <message name="IDS_OOBE_DEMO_SETUP_PREFERENCES_SCREEN_COUNTRY_NOT_SELECTED_TITLE" desc="The title of country not selected option for demo mode preference screen.">
     Please select a country
@@ -1277,13 +1298,14 @@
     No thanks
   </message>
 
-  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_TITLE" desc="The title of the dialog that recommend apps to user">
+  <!-- TODO(crbug.com/1261902): Clean-up old strings once feature is launched. -->
+  <message name="IDS_LOGIN_RECOMMEND_APPS_OLD_SCREEN_TITLE" desc="The title of the dialog that recommend apps to user">
     Find apps for work and play
   </message>
-  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_DESCRIPTION" desc="The description of the 'Recommend Apps' section">
+  <message name="IDS_LOGIN_RECOMMEND_APPS_OLD_SCREEN_DESCRIPTION" desc="The description of the 'Recommend Apps' section">
     Get creative, be productive, and stay entertained with apps on the Google Play Store
   </message>
-  <message name="IDS_LOGIN_RECOMMEND_APPS_SELECT_ALL" desc="The label on the button that selects all recommended apps">
+  <message name="IDS_LOGIN_RECOMMEND_APPS_OLD_SELECT_ALL" desc="The label on the button that selects all recommended apps">
     Select all
   </message>
   <message name="IDS_LOGIN_RECOMMEND_APPS_DO_IT_LATER" desc="The label on the button that skips installing any recomended apps">
@@ -1292,9 +1314,38 @@
   <message name="IDS_LOGIN_RECOMMEND_APPS_DONE" desc="The label on the button that installs the user selected apps">
     Done
   </message>
+
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_TITLE" desc="The title of the dialog that recommend apps to user">
+    Install apps for your <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> from the Google Play Store
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_DESCRIPTION" desc="The description of the 'Recommend Apps' section">
+    Find the apps you need, from productivity to entertainment, on the Google Play Store. You can install apps anytime.
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SELECT_ALL" desc="The label on the button that selects all recommended apps">
+    Select and install popular apps
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_IN_APP_PURCHASES" desc="Part of an app description message.">
+    In-app purchases
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_WAS_INSTALLED" desc="Part of an app description message.">
+    Installed on your other devices
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_CONTAINS_ADS" desc="Part of an app description message.">
+    Contains ads
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_DESCRIPTION_EXPAND_BUTTON" desc="An expand button description message announced to ChromeVox users.">
+    More about <ph name="APP_NAME">$1<ex>Google Maps</ex></ph>
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_SKIP" desc="The label on the button that skips installing any recomended apps">
+    Skip
+  </message>
+  <message name="IDS_LOGIN_RECOMMEND_APPS_INSTALL" desc="The label on the button that installs the user selected apps">
+    Install
+  </message>
   <message name="IDS_LOGIN_RECOMMEND_APPS_SCREEN_LOADING" desc="Message shown while the recommended app list is being downloaded.">
     Please wait...
   </message>
+
   <message name="IDS_LOGIN_APP_DOWNLOADING_SCREEN_TITLE" desc="The title of the dialog that tells the user the selected Android Apps are downloading.">
     Apps downloading
   </message>
@@ -2925,6 +2976,9 @@
   <message name="IDS_ENTERPRISE_ENROLLMENT_SCREEN_TITLE" desc="The title on the enterprise enrollment dialog.">
     Enterprise enrollment
   </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_SCREEN_PROGRESS_LABEL" desc="The a11y label for enrollment in progress dialog with spinner.">
+    Enterprise enrollment in progress
+  </message>
   <message name="IDS_ENTERPRISE_ACCOUNT_CHECK_TITLE" desc="The title of spinner dialog shown during account check.">
     Checking eligibility
   </message>
@@ -2974,10 +3028,13 @@
     Confirm kiosk and signage device enrollment?
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_KIOSK_CONFIRM_MESSAGE" desc="Message of kiosk confirm enrollment screen.">
-    You will use a Kiosk &amp; Signage Upgrade which only allows the device to run in kiosk or signage mode. If you would like users to sign into the device, please go back and enroll using Chrome Enterpirse Upgrade.
+    You will use a Kiosk &amp; Signage Upgrade which only allows the device to run in kiosk or signage mode. If you would like users to sign into the device, please go back and enroll using Chrome Enterprise Upgrade.
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_KIOSK_CONFIRM_POWERWASH_MESSAGE" desc="Message of kiosk confirm enrollment screen.">
     If you want to switch after enrollment, you will need to factory reset (powerwash) your device.
+  </message>
+  <message name="IDS_ENTERPRISE_ENROLLMENT_KIOSK_CANCEL_BUTTON" desc="Label for the decline button on the cofirm kiosk enrollment screen in the enterprise enrollment dialog.">
+    Decline
   </message>
   <message name="IDS_ENTERPRISE_ENROLLMENT_KIOSK_CONFIRM_BUTTON" desc="Label for the confirm button on the cofirm kiosk enrollment screen in the enterprise enrollment dialog.">
     Confirm
@@ -3985,20 +4042,11 @@
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_OWNER" desc="Message in the consolidated consent screen to opt-in for metrics when the user is the device owner.">
     Help improve Chrome and ChromeOS features and performance by automatically sending crash reports as well as diagnostic and usage data to Google. Some aggregate data will also help Android apps and Google partners. If the Web &amp; App Activity setting is turned on for your Google Account, your Android data may be saved to your Google Account.
   </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN" desc="Message in the consolidated consent screen to opt-in for metrics.">
-    Help improve Chrome and ChromeOS features and performance by automatically sending diagnostic and usage data to Google. Some aggregate data will also help Android apps and Google partners. If the Web &amp; App Activity setting is turned on for your Google Account, your Android data may be saved to your Google Account.
-  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_CHILD_OWNER" desc="Message in the consolidated consent screen to opt-in for metrics for a child device owner account.">
     Help improve Chrome and ChromeOS features and performance by automatically sending crash reports as well as diagnostic and usage data to Google. Some aggregate data will also help Android apps and Google partners. If the Web &amp; App Activity setting is turned on for your child's Google Account, your child's Android data may be saved to your child's Google Account.
   </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_CHILD" desc="Message in the consolidated consent screen to opt-in for metrics for a child account.">
-    Help improve Chrome and ChromeOS features and performance by automatically sending diagnostic and usage data to Google. Some aggregate data will also help Android apps and Google partners. If the Web &amp; App Activity setting is turned on for your child's Google Account, your child's Android data may be saved to your child's Google Account.
-  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_ARC_DISABLED_OWNER" desc="Message in the consolidated consent screen to opt-in for metrics when ARC is disabled for device owner.">
     Help improve Chrome and ChromeOS features and performance by automatically sending crash reports as well as diagnostic and usage data to Google.
-  </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_ARC_DISABLED" desc="Message in the consolidated consent screen to opt-in for metrics when ARC is disabled.">
-    Help improve Chrome and ChromeOS features and performance by automatically sending diagnostic and usage data to Google.
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_LINK" desc="Learn more about usage opt in">
     Learn more about diagnostic and usage data
@@ -4008,46 +4056,21 @@
     <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your ChromeOS device settings. If you’re a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>If the Web &amp; App Activity setting is turned on for your Google Account, your Android data may be saved to your Google Account. You can see your data, delete it, and change your account settings at account.google.com.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
   </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in.">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing your ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like which features you use, how much memory you typically use, Android app diagnostic and usage data, and errors. Some aggregate data will also help Google apps and partners, such as Android developers.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your ChromeOS device settings. If you’re a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>If the Web &amp; App Activity setting is turned on for your Google Account, your Android data may be saved to your Google Account. You can see your data, delete it, and change your account settings at account.google.com.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the device owner turns on "Send usage and diagnostic data", crash reports might also be uploaded to Google.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_CHILD_OWNER" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in for a child device owner account.">
     <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like when ChromeOS crashes, which features were used, how much memory was typically used, and Android app diagnostic and usage data. Some aggregate data will also help Google apps and partners, such as Android developers.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your child's ChromeOS device settings. If you're a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect this device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the Web &amp; App Activity setting is turned on for your child's Google Account, your child's data may be saved to their Google Account. Learn more about these settings and how to adjust them at families.google.com.<ph name="END_PARAGRAPH4">&lt;/p&gt;</ph>
   </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_CHILD" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in for a child account.">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like which features were used, how much memory was typically used, and Android app diagnostic and usage data. Some aggregate data will also help Google apps and partners, such as Android developers.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your child's ChromeOS device settings. If you're a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect this device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the Web &amp; App Activity setting is turned on for your child's Google Account, your child's data may be saved to their Google Account. Learn more about these settings and how to adjust them at families.google.com.<ph name="END_PARAGRAPH4">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the device owner turns on "Send usage and diagnostic data", crash reports might also be uploaded to Google.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_ARC_DISABLED_OWNER" desc="Text shown in a pop-up dialog in the consolidated consent screen when the device owner clicks on the learn more for metrics opt-in when ARC is disabled.">
     <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing your ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like when ChromeOS crashes, which features you use and how much memory you typically use.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your Chrome device settings. If you’re a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect your device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
   </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_ARC_DISABLED" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in when ARC is disabled.">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing your ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like which features you use and how much memory you typically use.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your Chrome device settings. If you’re a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect your device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the device owner turns on "Send usage and diagnostic data", crash reports might also be uploaded to Google.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-  </message>
   <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_ARC_DISABLED_CHILD_OWNER" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in when ARC is disabled in a child account.">
     <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like when ChromeOS crashes, which features were used, and how much memory was typically used.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your child's ChromeOS device settings. If you're a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
     <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect this device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-  </message>
-  <message name="IDS_CONSOLIDATED_CONSENT_USAGE_OPT_IN_LEARN_MORE_ARC_DISABLED_CHILD" desc="Text shown in a pop-up dialog in the consolidated consent screen when the user clicks on the learn more for metrics opt-in when ARC is disabled in a child account.">
-    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph>Allowing ChromeOS devices to send automatic reports helps us prioritize what to fix and improve in ChromeOS. These reports can include things like when which features were used, and how much memory was typically used.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>You can start or stop allowing these reports any time in your child's ChromeOS device settings. If you're a domain administrator, you can change this setting in the admin console.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH3">&lt;p&gt;</ph>Turning off this feature doesn't affect this device's ability to send the information needed for essential services such as system updates and security.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
-    <ph name="BEGIN_PARAGRAPH4">&lt;p&gt;</ph>If the device owner turns on "Send usage and diagnostic data", crash reports might also be uploaded to Google.<ph name="END_PARAGRAPH3">&lt;/p&gt;</ph>
   </message>
   <message name="IDS_CONSOLIDATED_CONSENT_BACKUP_OPT_IN_TITLE" desc="Title for the message in the consolidated consent screen to opt-in for back-up.">
     Back up Android apps to Google Drive.
@@ -4238,9 +4261,8 @@
   </message>
 
   <!-- Lacros data migration screen. -->
-  <!-- TODO(crbug.com/1266669): Remove translateable tag when the string is finalized. -->
   <message translateable="false" name="IDS_LACROS_DATA_MIGRATION_SCREEN_TITLE" desc="Title of the data migration screen.">
-    Updating Chrome browser (alpha)
+    Updating Chrome browser
   </message>
   <message name="IDS_LACROS_DATA_MIGRATION_SCREEN_SUBTITLE" desc="Shows the % of progress.">
     <ph name="PERCENT">$1<ex>100</ex></ph>% completed
@@ -4346,20 +4368,6 @@
   </message>
   <message name="IDS_USB_PRINTER_NOTIFICATION_CONFIGURATION_REQUIRED_MESSAGE" desc="Message displayed when the USB printer is connected but needs configuration.">
     <ph name="PRINTER_NAME">$1<ex> Google InkJet 1234</ex></ph> is connected but needs configuration
-  </message>
-
-  <!-- RequestPin dialog messages -->
-  <message name="IDS_REQUEST_PIN_DIALOG_HEADER" desc="The text displayed in the certificate provider PIN request dialog.">
-    "<ph name="EXTENSION_NAME">$1<ex>My Extension</ex></ph>" is requesting your <ph name="CODE_TYPE">$2<ex>PIN</ex></ph>
-  </message>
-  <message name="IDS_REQUEST_PIN_DIALOG_PROCESSING" desc="The text displayed while the certificate provider API is waiting for response from extension.">
-    Processing request...
-  </message>
-  <message name="IDS_REQUEST_PIN_DIALOG_PIN" desc="The Provider Identification Number abbreviation">
-    PIN
-  </message>
-  <message name="IDS_REQUEST_PIN_DIALOG_PUK" desc="The Personal Unlocking Key (as used in mobile phones) abbreviation">
-    PUK
   </message>
 
   <message name="IDS_USB_PRINTER_UNKNOWN_DISPLAY_NAME" desc="Display string used for USB printers where we have identified neither the correct manufactuer nor model strings. USB stands for Universal Serial Bus, it indicates how the printer is attached to the computer.">
@@ -4731,13 +4739,13 @@
     Configuring Linux
   </message>
   <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_SUBTEXT" desc="Description for dialog warning user of unavailable Linux container until software configurations are applied.">
-    Linux is being configured by your administrator. Configuration will take a few minutes.
+    Linux is currently being configured. Configuration will take a few minutes.
   </message>
   <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_LABEL" desc="Label for Crostini software config dialog when there is an error in Ansible playbook application or installation.">
     Error configuring Linux
   </message>
   <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_SUBTEXT" desc="Text shown for Crostini software config dialog when there is an error in Ansible playbook application or installation.">
-    There was an error while configuring Linux. Please contact your administrator.
+    There was an error while configuring Linux.
   </message>
   <message name="IDS_CROSTINI_ANSIBLE_SOFTWARE_CONFIG_ERROR_OFFLINE_LABEL" desc="Label for dialog warning user of missing internet connection required for container configuration.">
     <ph name="DEVICE_TYPE">$1<ex>Chromebook</ex></ph> is offline
@@ -4938,6 +4946,11 @@
     Resize Linux disk
   </message>
 
+  <!-- Bruschetta -->
+  <message name="IDS_BRUSCHETTA_NAME" desc="Bruschetta" translateable="false">
+    Bruschetta
+  </message>
+
   <!-- Time limit notification -->
   <message name="IDS_SCREEN_TIME_NOTIFICATION_TITLE" desc="The title of the notification when screen usage limit reaches before locking the device.">
     Almost time for a break
@@ -5037,6 +5050,12 @@
   <message name="IDS_EASY_UNLOCK_SCREENLOCK_TOOLTIP_LOGIN_DISABLED" desc="Tooltip for an icon on user's sign-in screen pod shown by EasyUnlock when the feature is only enabled for unlock, not sign-in.">
     To use Smart Lock to sign in to your Google Account, go to Settings &gt; Connected devices &gt; Your phone &gt; Smart Lock.
   </message>
+  <message name="IDS_SMART_LOCK_SIGN_IN_REMOVED_NOTIFICATION_TITLE" desc="Title for notification shown to users who had Sign in with Smart Lock enabled after the Sign in with Smart Lock subfeature is deprecated.">
+    Smart Lock has changed
+  </message>
+  <message name="IDS_SMART_LOCK_SIGN_IN_REMOVED_NOTIFICATION_MESSAGE" desc="Message for notification shown to users who had Sign in with Smart Lock enabled after the Sign in with Smart Lock subfeature is deprecated.">
+    Signing in with Smart Lock is no longer available. You can still unlock with Smart Lock.
+  </message>
   <message name="IDS_SMART_LOCK_SCREENLOCK_TOOLTIP_HARDLOCK_REAUTH_USER" desc="Tooltip text shown on a user's lock screen pod to reauthenticate the user before setting up Smart Lock. A password has to be entered to unlock the device.">
     To set up Smart Lock for Chromebook, Google needs to make sure it’s you—type your password to get started.
   </message>
@@ -5055,7 +5074,7 @@
 
   <!-- Strings for EcheApp -->
   <message name="IDS_ECHE_APP_SCREEN_LOCK_SETTINGS_BUTTON" desc="Label for the button in the screen lock notification of EcheApp to open the settings app.">
-    Open Settings
+    Settings
   </message>
   <message name="IDS_ECHE_APP_SCREEN_LOCK_LEARN_MORE" desc="Learn more link text in screen lock notification of EcheApp.">
     Learn more
@@ -5063,14 +5082,14 @@
   <message name="IDS_ECHE_APP_NOTIFICATION_TRY_AGAIN_BUTTON" desc="Label for the connection lost button of EcheApp to try again.">
     Try again
   </message>
-  <message name="IDS_ECHE_APP_NOTIFICATION_HELP_BUTTON" desc="Help link text in connection lost notification of EcheApp.">
-    Help
+  <message name="IDS_ECHE_APP_NOTIFICATION_LEARN_MORE_BUTTON" desc="Learn more link text in connection lost notification of EcheApp.">
+    Learn more
   </message>
   <message name="IDS_ECHE_APP_SCREEN_LOCK_NOTIFICATION_TITLE" desc="Title for notification shown when screen lock is not enabled while using app stream of EcheApp.">
-    Couldn’t open <ph name="APP_NAME">$1<ex>the app</ex></ph>
+    Can't open <ph name="APP_NAME">$1<ex>the app</ex></ph>
   </message>
   <message name="IDS_ECHE_APP_SCREEN_LOCK_NOTIFICATION_MESSAGE" desc="Message for the notification shown when screen lock is not enabled while using app stream of EcheApp.">
-    Set a pin or password on this Chromebook to protect access to your phone’s apps.
+    Turn on "Show lock screen when waking from sleep" and try again
   </message>
   <message name="IDS_ECHE_APP_NOTIFICATION_OPEN_AGAIN_BUTTON" desc="Label for the inactivity notification button of EcheApp to open open.">
     Open again
@@ -5595,15 +5614,6 @@
   </message>
 
   <!-- Strings for Account Manager screens -->
-  <message name="IDS_ACCOUNT_MANAGER_WELCOME_TITLE" desc="Title for the ChromeOS Account Manager Welcome screen.">
-    Sign-in has changed
-  </message>
-  <message name="IDS_ACCOUNT_MANAGER_WELCOME_TEXT" desc="Text body for the ChromeOS Account Manager Welcome screen.">
-    You can now manage all of your Google Accounts in one place. Access and permissions you've granted to apps, websites, and extensions in Chrome and Google Play may now apply to all of your signed-in accounts. <ph name="LINK_BEGIN">&lt;a target="_blank" href="$1<ex>https://support.google.com/chromebook/?p=google_accounts</ex>"&gt;</ph>Learn more<ph name="LINK_END">&lt;/a&gt;</ph>
-  </message>
-  <message name="IDS_ACCOUNT_MANAGER_WELCOME_BUTTON" desc="Label for the button to view accounts on the ChromeOS Account Manager Welcome screen.">
-    View accounts
-  </message>
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_TITLE" desc="Title for the ChromeOS 'Add account' dialog.">
     Sign in to add a Google account
   </message>
@@ -5636,6 +5646,9 @@ Permissions you've already given to apps may apply to this account. You can cont
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_ADD_ACCOUNT_LABEL" desc="Label of the Add account button on Account picker screen.">
     Add Google Account
   </message>
+  <message name="IDS_ACCOUNT_MANAGER_DIALOG_ADD_SCHOOL_ACCOUNT_LABEL" desc="Label of the button to add a school/EDU account on Account picker screen.">
+    Add school account
+  </message>
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_WELCOME_CHECKBOX" desc="Checkbox text for the Welcome screen in ChromeOS 'Add account' dialog. If user checks this checkbox, this screen will not be shown the next time they open the dialog.">
     Don't remind me next time
   </message>
@@ -5657,13 +5670,23 @@ Permissions you've already given to apps may apply to this account. You can cont
     Please try again later.
   </message>
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_TITLE" desc="Title for the sign-in blocked by policy screen in ChromeOS 'Add account' dialog.">
-    Sign-in blocked by your admin
+    Can't sign in with this account
   </message>
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_BODY" desc="Text body for the sign-in blocked by policy screen in ChromeOS 'Add account' dialog.">
-    <ph name="USER_EMAIL">$1<ex>john.doe@example.com</ex></ph> is managed by <ph name="MANAGER">$2<ex>example.com</ex></ph> and your admin has blocked sign-in as a secondary account
+    <ph name="BEGIN_PARAGRAPH1">&lt;p&gt;</ph><ph name="USER_EMAIL">$1<ex>john.doe@example.com</ex></ph> is managed by <ph name="MANAGER">$2<ex>example.com</ex></ph>. You can't add this email as an additional account.<ph name="END_PARAGRAPH1">&lt;/p&gt;</ph>
+    <ph name="BEGIN_PARAGRAPH2">&lt;p&gt;</ph>To use <ph name="USER_EMAIL">$1<ex>john.doe@example.com</ex></ph>, first sign out of your <ph name="DEVICE_TYPE">$3<ex>Chromebook</ex></ph>. Then at the bottom of the login screen, select Add Person.<ph name="END_PARAGRAPH2">&lt;/p&gt;</ph>
   </message>
   <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_BLOCKED_BY_POLICY_IMAGE_ALT" desc="Alternate text for image on the sign-in blocked by policy screen in ChromeOS 'Add account' dialog.">
    Restriction image
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_ERROR_TITLE" desc="Title for the sign-in error screen in ChromeOS 'Add account' dialog.">
+    Something went wrong
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_ERROR_BODY" desc="Text body for the sign-in error screen in ChromeOS 'Add account' dialog.">
+    Your email address or password couldn't be verified. Try signing in again.
+  </message>
+  <message name="IDS_ACCOUNT_MANAGER_DIALOG_SIGNIN_SPINNER_TEXT" desc="Text for the spinner during sign-in flow on ChromeOS 'Add account' dialog.">
+    Verifying account...
   </message>
 
   <!-- Strings for per-account Migration welcome screen -->
@@ -5828,6 +5851,9 @@ Permissions you've already given to apps may apply to this account. You can cont
   </message>
   <message name="IDS_BOREALIS_FEEDBACK_NOTIFICATION_SOURCE" desc="Source of notification that prompts users for feedback">
     Chromebook Gaming
+  </message>
+  <message name="IDS_BOREALIS_SPLASHSCREEN_MESSAGE" desc="Message on splashscreen when starting Steam on Chrome OS.">
+    starting up...
   </message>
 
   <!-- TPM firmware auto-update notifications -->
@@ -6163,19 +6189,7 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
     You can restore your previous apps
   </message>
 
-   <!-- Strings for Projector-->
-  <message name="IDS_SELFIE_CAM_TITLE" desc="The title for the selfie camera dialog.">
-    Selfie Camera
-  </message>
-
-  <message name="IDS_SELFIE_CAMERA_BUBBLE_EXPANDED" desc="Tooltip for the selfie camera resize button in expanded state">
-    2x
-  </message>
-
-  <message name="IDS_SELFIE_CAMERA_BUBBLE_COLLAPSED" desc="Tooltip for the selfie camera resize button in collapsed state">
-    1x
-  </message>
-
+  <!-- Strings for Projector-->
   <message name="IDS_PROJECTOR_APP_NAME" desc="Name for the Projector app in the launcher">
     Screencast
   </message>
@@ -6198,27 +6212,27 @@ Your <ph name="DEVICE_TYPE">{0}<ex>Chromebook</ex></ph> will be locked now.
 
   <!-- Theme Selection -->
   <message name="IDS_THEME_SELECTION_TITLE" desc="Title of the theme selection screen.">
-    Before we let you go...
+    Personalize your display theme
   </message>
   <message name="IDS_THEME_SELECTION_DESCRIPTION" desc="Description of the theme selection screen.">
-    You can adjust the schedule in Personalisation Hub, as well as set Wallpaper, Screensaver, and customize system colors.
+    Choose the theme that fits your needs. To change your theme, wallpaper, screen saver, and more, just right-click on the desktop.
   </message>
   <message name="IDS_THEME_LIGHT_LABEL" desc="Name of the light theme button">
-    Light mode
+    Light theme
   </message>
   <message name="IDS_THEME_LIGHT_DESCRIPTION" desc="Description of the light theme button">
-    Keep things light and airy.
+    Keep things bright and airy
   </message>
   <message name="IDS_THEME_DARK_LABEL" desc="Name of the dark theme button">
-    Dark mode
+    Dark theme
   </message>
   <message name="IDS_THEME_DARK_DESCRIPTION" desc="Description of the dark theme button">
-    For those low light rooms. Optimize for your battery life, too.
+    Helpful in low light and saves battery
   </message>
   <message name="IDS_THEME_AUTO_LABEL" desc="Name of the auto theme button">
-    Auto mode
+    Auto
   </message>
   <message name="IDS_THEME_AUTO_DESCRIPTION" desc="Description of the auto theme button">
-    Light mode at sunrise, and dark mode at sunset. It switches automatically for you.
+    Switch themes at sunrise and sunset
   </message>
 </grit-part>

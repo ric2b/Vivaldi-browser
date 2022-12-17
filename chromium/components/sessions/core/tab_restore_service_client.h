@@ -11,6 +11,7 @@
 #include "base/callback.h"
 #include "base/files/file_path.h"
 #include "components/sessions/core/session_id.h"
+#include "components/sessions/core/session_types.h"
 #include "components/sessions/core/sessions_export.h"
 #include "ui/base/ui_base_types.h"
 
@@ -30,7 +31,6 @@ namespace sessions {
 
 class LiveTab;
 class LiveTabContext;
-struct SessionWindow;
 
 // Callback from TabRestoreServiceClient::GetLastSession.
 // The second parameter is the id of the window that was last active.
@@ -49,6 +49,7 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // functionality).
   virtual LiveTabContext* CreateLiveTabContext(
       LiveTabContext* existing_context,
+      SessionWindow::WindowType type,
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,
@@ -59,6 +60,7 @@ class SESSIONS_EXPORT TabRestoreServiceClient {
   // window with the saved viv_ext_data.
   virtual LiveTabContext* CreateLiveTabContext(
       LiveTabContext* existing_context,
+      SessionWindow::WindowType type,
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,

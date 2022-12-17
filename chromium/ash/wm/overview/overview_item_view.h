@@ -76,7 +76,7 @@ class ASH_EXPORT OverviewItemView : public WindowMiniView,
   // OverviewHighlightableView:
   views::View* GetView() override;
   void MaybeActivateHighlightedView() override;
-  void MaybeCloseHighlightedView() override;
+  void MaybeCloseHighlightedView(bool primary_action) override;
   void MaybeSwapHighlightedView(bool right) override;
   bool MaybeActivateHighlightedViewOnOverviewExit(
       OverviewSession* overview_session) override;
@@ -94,6 +94,7 @@ class ASH_EXPORT OverviewItemView : public WindowMiniView,
   void OnGestureEvent(ui::GestureEvent* event) override;
   bool CanAcceptEvent(const ui::Event& event) override;
   void GetAccessibleNodeData(ui::AXNodeData* node_data) override;
+  void OnThemeChanged() override;
 
  private:
   // The OverviewItem which owns the widget which houses this view. Non-null

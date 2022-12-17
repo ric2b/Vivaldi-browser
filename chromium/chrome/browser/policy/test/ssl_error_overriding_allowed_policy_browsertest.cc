@@ -59,11 +59,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should display the proceed link.
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 }
 
 // Test that when SSL error overriding is allowed, the origin list is ignored
@@ -105,11 +105,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should display the proceed link.
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 }
 
 // Test that when SSL error overriding is disabled, the proceed link does not
@@ -140,11 +140,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should not display the proceed link.
   EXPECT_FALSE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 
   // The interstitial should not proceed, even if the command is sent in
   // some other way (e.g., via the keyboard shortcut).
@@ -196,11 +196,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should not display the proceed link.
   EXPECT_FALSE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 
   // The interstitial should not proceed, even if the command is sent in
   // some other way (e.g., via the keyboard shortcut).
@@ -250,11 +250,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should not display the proceed link.
   EXPECT_FALSE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 
   // The interstitial should not proceed, even if the command is sent in
   // some other way (e.g., via the keyboard shortcut).
@@ -301,11 +301,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should not display the proceed link.
   EXPECT_FALSE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 
   // The interstitial should not proceed, even if the command is sent in
   // some other way (e.g., via the keyboard shortcut).
@@ -358,11 +358,11 @@ IN_PROC_BROWSER_TEST_F(SafeBrowsingPolicyTest,
   // proceed link.
   ASSERT_TRUE(NavigateToUrl(https_server_expired.GetURL("/"), this));
   content::WebContents* tab = chrome_test_utils::GetActiveWebContents(this);
-  WaitForInterstitial(tab);
+  ASSERT_TRUE(IsShowingInterstitial(tab));
 
   // The interstitial should display the proceed link.
   EXPECT_TRUE(chrome_browser_interstitials::IsInterstitialDisplayingText(
-      tab->GetMainFrame(), "proceed-link"));
+      tab->GetPrimaryMainFrame(), "proceed-link"));
 }
 
 }  // namespace policy

@@ -29,8 +29,6 @@
 #include "content/browser/renderer_host/render_frame_proxy_host.h"
 #include "content/browser/renderer_host/render_view_host_impl.h"
 #include "content/browser/site_instance_impl.h"
-#include "content/browser/webui/content_web_ui_controller_factory.h"
-#include "content/browser/webui/web_ui_controller_factory_registry.h"
 #include "content/common/content_navigation_policy.h"
 #include "content/common/frame.mojom.h"
 #include "content/public/browser/child_process_security_policy.h"
@@ -76,6 +74,7 @@
 #include "third_party/blink/public/common/security/protocol_handler_security_level.h"
 #include "third_party/blink/public/mojom/frame/fullscreen.mojom.h"
 #include "third_party/blink/public/mojom/image_downloader/image_downloader.mojom.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "third_party/blink/public/mojom/page/page_visibility_state.mojom.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/gfx/geometry/skia_conversions.h"
@@ -148,9 +147,6 @@ class WebContentsImplTest : public RenderViewHostImplTestHarness {
   // Instantiate LacrosService for WakeLock support.
   chromeos::ScopedLacrosServiceTestHelper scoped_lacros_service_test_helper_;
 #endif
-
-  ScopedWebUIControllerFactoryRegistration factory_registration_{
-      ContentWebUIControllerFactory::GetInstance()};
 };
 
 class TestWebContentsObserver : public WebContentsObserver {
@@ -791,6 +787,9 @@ TEST_F(WebContentsImplTest, NavigateFromSitelessUrl) {
   SiteInstanceImpl* orig_instance = contents()->GetSiteInstance();
 
   // Navigate to an URL that will not assign a new SiteInstance.
+  // The url also needs to be defined with an empty scheme.
+  url::ScopedSchemeRegistryForTests scheme_registry;
+  url::AddEmptyDocumentScheme("non-site-url");
   const GURL native_url("non-site-url://stuffandthings");
   browser_client.set_assign_site_for_url(false, native_url);
   NavigationSimulator::NavigateAndCommitFromBrowser(contents(), native_url);
@@ -3199,6 +3198,33 @@ TEST_F(WebContentsImplTest, CanonicalUrlSchemeChromeIsNotAllowed) {
   run_loop.Run();
 
   ASSERT_FALSE(canonical_url) << "canonical_url=" << *canonical_url;
+}
+
+TEST_F(WebContentsImplTest, RequestMediaAccessPermissionNoDelegate) {
+  MediaStreamRequest dummy_request(
+      /*render_process_id=*/0, /*render_frame_id=*/0, /*page_request_id=*/0,
+      /*security_origin=*/GURL(""), /*user_gesture=*/false,
+      blink::MediaStreamRequestType::MEDIA_GENERATE_STREAM,
+      /*requested_audio_device_id=*/"",
+      /*requested_video_device_id=*/"",
+      blink::mojom::MediaStreamType::DISPLAY_AUDIO_CAPTURE,
+      blink::mojom::MediaStreamType::DISPLAY_VIDEO_CAPTURE,
+      /*disable_local_echo=*/false, /*request_pan_tilt_zoom_permission=*/false);
+  bool callback_run = false;
+  contents()->RequestMediaAccessPermission(
+      dummy_request,
+      base::BindLambdaForTesting(
+          [&callback_run](
+              const blink::mojom::StreamDevicesSet& stream_devices_set,
+              blink::mojom::MediaStreamRequestResult result,
+              std::unique_ptr<MediaStreamUI> ui) {
+            EXPECT_TRUE(stream_devices_set.stream_devices.empty());
+            EXPECT_EQ(
+                result,
+                blink::mojom::MediaStreamRequestResult::FAILED_DUE_TO_SHUTDOWN);
+            callback_run = true;
+          }));
+  ASSERT_TRUE(callback_run);
 }
 
 }  // namespace content

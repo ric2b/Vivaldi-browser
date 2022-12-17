@@ -4,8 +4,6 @@
 
 #include "ui/views/accessibility/views_ax_tree_manager.h"
 
-#include <string>
-
 #include "base/bind.h"
 #include "base/callback.h"
 #include "base/check.h"
@@ -105,6 +103,10 @@ ui::AXNode* ViewsAXTreeManager::GetParentNodeFromParentTreeAsAXNode() const {
   return nullptr;
 }
 
+std::string ViewsAXTreeManager::ToString() const {
+  return "<ViewsAXTreeManager>";
+}
+
 void ViewsAXTreeManager::OnViewEvent(View* view, ax::mojom::Event event) {
   DCHECK(view);
   AXAuraObjWrapper* wrapper = cache_.GetOrCreate(view);
@@ -121,15 +123,6 @@ void ViewsAXTreeManager::OnViewEvent(View* view, ax::mojom::Event event) {
 }
 
 void ViewsAXTreeManager::OnWidgetDestroyed(Widget* widget) {
-  // If a widget becomes disconnected from its root view, we shouldn't keep it
-  // in the map or attempt any operations on it.
-  if (widget->is_top_level() || !widget->GetRootView())
-    views::WidgetAXTreeIDMap::GetInstance().RemoveWidget(widget);
-
-  widget_ = nullptr;
-}
-
-void ViewsAXTreeManager::OnWidgetClosing(Widget* widget) {
   // If a widget becomes disconnected from its root view, we shouldn't keep it
   // in the map or attempt any operations on it.
   if (widget->is_top_level() || !widget->GetRootView())

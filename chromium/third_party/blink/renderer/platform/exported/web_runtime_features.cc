@@ -49,10 +49,6 @@ void WebRuntimeFeatures::EnableBrowserVerifiedUserActivationMouse(bool enable) {
   RuntimeEnabledFeatures::SetBrowserVerifiedUserActivationMouseEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnableCapabilityDelegationPaymentRequest(bool enable) {
-  RuntimeEnabledFeatures::SetCapabilityDelegationPaymentRequestEnabled(enable);
-}
-
 void WebRuntimeFeatures::EnableClickPointerEvent(bool enable) {
   RuntimeEnabledFeatures::SetClickPointerEventEnabled(enable);
 }
@@ -142,10 +138,6 @@ void WebRuntimeFeatures::EnableAccessibilityUseAXPositionForDocumentMarkers(
 
 void WebRuntimeFeatures::EnableAdTagging(bool enable) {
   RuntimeEnabledFeatures::SetAdTaggingEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableCacheInlineScriptCode(bool enable) {
-  RuntimeEnabledFeatures::SetCacheInlineScriptCodeEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableCanvas2dImageChromium(bool enable) {
@@ -273,12 +265,6 @@ void WebRuntimeFeatures::EnablePaymentRequestBasicCard(bool enable) {
   RuntimeEnabledFeatures::SetPaymentRequestBasicCardEnabled(enable);
 }
 
-void WebRuntimeFeatures::EnablePaymentRequestRequiresUserActivation(
-    bool enable) {
-  RuntimeEnabledFeatures::SetPaymentRequestRequiresUserActivationEnabled(
-      enable);
-}
-
 void WebRuntimeFeatures::EnablePercentBasedScrolling(bool enable) {
   RuntimeEnabledFeatures::SetPercentBasedScrollingEnabled(enable);
 }
@@ -357,10 +343,6 @@ void WebRuntimeFeatures::EnableWebGLImageChromium(bool enable) {
 
 void WebRuntimeFeatures::EnableOverlayScrollbars(bool enable) {
   ScrollbarThemeSettings::SetOverlayScrollbarsEnabled(enable);
-}
-
-void WebRuntimeFeatures::ForceOverlayFullscreenVideo(bool enable) {
-  RuntimeEnabledFeatures::SetForceOverlayFullscreenVideoEnabled(enable);
 }
 
 void WebRuntimeFeatures::EnableSharedArrayBuffer(bool enable) {
@@ -477,10 +459,6 @@ void WebRuntimeFeatures::EnablePresentationAPI(bool enable) {
 
 void WebRuntimeFeatures::EnableSecurePaymentConfirmation(bool enable) {
   RuntimeEnabledFeatures::SetSecurePaymentConfirmationEnabled(enable);
-}
-
-void WebRuntimeFeatures::EnableSecurePaymentConfirmationAPIV3(bool enable) {
-  RuntimeEnabledFeatures::SetSecurePaymentConfirmationAPIV3Enabled(enable);
 }
 
 void WebRuntimeFeatures::EnableSecurePaymentConfirmationDebug(bool enable) {
@@ -675,6 +653,10 @@ void WebRuntimeFeatures::EnableWebAuthenticationRemoteDesktopSupport(
     bool enable) {
   RuntimeEnabledFeatures::SetWebAuthenticationRemoteDesktopSupportEnabled(
       enable);
+}
+
+void WebRuntimeFeatures::EnableSpeculationRulesPrefetchProxy(bool enable) {
+  RuntimeEnabledFeatures::SetSpeculationRulesPrefetchProxyEnabled(enable);
 }
 
 }  // namespace blink

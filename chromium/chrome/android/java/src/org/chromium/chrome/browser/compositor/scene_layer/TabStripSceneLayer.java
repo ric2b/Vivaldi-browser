@@ -149,8 +149,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         TabStripSceneLayerJni.get().updateNewTabButton(mNativePtr, TabStripSceneLayer.this,
                 newTabButton.getResourceId(), newTabButton.getX() * mDpToPx,
                 newTabButton.getY() * mDpToPx, newTabButton.getWidth() * mDpToPx,
-                newTabButton.getHeight() * mDpToPx, newTabButtonVisible, newTabButton.getTint(),
-                newTabButton.getOpacity(), resourceManager);
+                newTabButton.getHeight() * mDpToPx,
+                layoutHelper.getNewTabBtnTouchTargetOffset() * mDpToPx, newTabButtonVisible,
+                newTabButton.getTint(), newTabButton.getOpacity(), resourceManager);
 
         TabStripSceneLayerJni.get().updateModelSelectorButton(mNativePtr, TabStripSceneLayer.this,
                 modelSelectorButton.getResourceId(), modelSelectorButton.getX() * mDpToPx,
@@ -244,6 +245,15 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         mMainYOffset = yOffset;
     }
 
+    /** Vivaldi **/
+    public void updateLoadingState(
+            ResourceManager resourceManager, StripLayoutHelperManager layoutHelper, int color) {
+        boolean useDark = ColorUtils.shouldUseLightForegroundOnBackground(color);
+        TabStripSceneLayerJni.get().updateLoadingState(mNativePtr, TabStripSceneLayer.this,
+                VivaldiUtils.getLoadingTabsResource(useDark, resourceManager), resourceManager,
+                layoutHelper.getActiveStripLayoutHelper().shouldShowLoading());
+    }
+
     @NativeMethods
     interface Natives {
         long init(TabStripSceneLayer caller);
@@ -256,8 +266,9 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         void updateStripScrim(long nativeTabStripSceneLayer, TabStripSceneLayer caller, float x,
                 float y, float width, float height, int color, float alpha);
         void updateNewTabButton(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
-                int resourceId, float x, float y, float width, float height, boolean visible,
-                int tint, float buttonAlpha, ResourceManager resourceManager);
+                int resourceId, float x, float y, float width, float height,
+                float touchTargetOffset, boolean visible, int tint, float buttonAlpha,
+                ResourceManager resourceManager);
         void updateModelSelectorButton(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
                 int resourceId, float x, float y, float width, float height, boolean incognito,
                 boolean visible, ResourceManager resourceManager);
@@ -281,5 +292,8 @@ public class TabStripSceneLayer extends SceneOverlayLayer {
         // Vivaldi
         void setIsStackStrip(
                 long nativeTabStripSceneLayer, TabStripSceneLayer caller, boolean isStackStrip);
+        // Vivaldi
+        void updateLoadingState(long nativeTabStripSceneLayer, TabStripSceneLayer caller,
+                int resourceId, ResourceManager resourceManager, boolean shouldShowLoading);
     }
 }

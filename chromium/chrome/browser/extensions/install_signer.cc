@@ -37,7 +37,7 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "url/gurl.h"
 
-#if BUILDFLAG(ENABLE_RLZ) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(ENABLE_RLZ)
 #include "rlz/lib/machine_id.h"  // nogncheck crbug.com/1125897
 #endif
 
@@ -87,7 +87,7 @@ GURL GetBackendUrl() {
 // |result|.
 bool HashWithMachineId(const std::string& salt, std::string* result) {
   std::string machine_id;
-#if BUILDFLAG(ENABLE_RLZ) || (defined(VIVALDI_BUILD) && defined(OS_WIN))
+#if BUILDFLAG(ENABLE_RLZ)
   if (!rlz_lib::GetMachineId(&machine_id))
     return false;
 #else

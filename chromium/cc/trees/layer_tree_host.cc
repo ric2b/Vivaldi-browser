@@ -409,6 +409,8 @@ std::unique_ptr<CommitState> LayerTreeHost::WillCommit(
   client_->WillCommit(has_updates ? *result : *pending_commit_state());
   pending_commit_state()->source_frame_number++;
   commit_completion_event_ = std::move(completion);
+  pending_commit_state()->previous_surfaces_visual_update_duration =
+      base::TimeDelta();
   return result;
 }
 
@@ -732,7 +734,7 @@ void LayerTreeHost::SetDebugState(const LayerTreeDebugState& new_debug_state) {
 
 void LayerTreeHost::ApplyPageScaleDeltaFromImplSide(float page_scale_delta) {
   DCHECK(IsMainThread());
-  DCHECK(CommitRequested());
+  DCHECK(syncing_deltas_for_test_ || CommitRequested());
   if (page_scale_delta == 1.f)
     return;
   float page_scale =
@@ -1011,6 +1013,21 @@ void LayerTreeHost::UpdateScrollOffsetFromImpl(
         transform_node->needs_local_transform_update = true;
         transform_node->transform_changed = true;
         transform_tree.set_needs_update(true);
+
+        // If the scroll was realized on the compositor, then its transform node
+        // is already updated (see LayerTreeImpl::DidUpdateScrollOffset) and we
+        // are now "catching up" to it on main, so we don't need a commit.
+        //
+        // But if the scroll was NOT realized on the compositor, we need a
+        // commit to push the transform change.
+        //
+        // Skip this if scroll unification is disabled as we will not set
+        // ScrollNode::is_composited in that case.
+        //
+        if (base::FeatureList::IsEnabled(features::kScrollUnification) &&
+            !scroll_tree.CanRealizeScrollsOnCompositor(*scroll_node)) {
+          SetNeedsCommit();
+        }
       }
 
       // The transform tree has been modified which requires a call to
@@ -1087,6 +1104,11 @@ void LayerTreeHost::NotifyThroughputTrackerResults(
     CustomTrackerResults results) {
   DCHECK(IsMainThread());
   client_->NotifyThroughputTrackerResults(std::move(results));
+}
+
+void LayerTreeHost::ReportEventLatency(
+    std::vector<EventLatencyTracker::LatencyData> latencies) {
+  client_->ReportEventLatency(std::move(latencies));
 }
 
 const base::WeakPtr<CompositorDelegateForInput>&
@@ -1378,7 +1400,7 @@ void LayerTreeHost::SetPageScaleFactorAndLimits(float page_scale_factor,
   // We should never process non-unit page_scale_delta for an OOPIF subframe.
   // TODO(wjmaclean): Remove this dcheck as a pre-condition to closing the bug.
   // https://crbug.com/845097
-  DCHECK(!settings_.is_layer_tree_for_subframe ||
+  DCHECK(settings_.is_for_scalable_page ||
          page_scale_factor == pending_commit_state()->page_scale_factor)
       << "Setting PSF in oopif subframe: old psf = "
       << pending_commit_state()->page_scale_factor
@@ -1505,6 +1527,13 @@ void LayerTreeHost::SetLocalSurfaceIdFromParent(
   pending_commit_state()->local_surface_id_from_parent =
       local_surface_id_from_parent;
 
+  // When we are switching to a new viz::LocalSurfaceId add our current visual
+  // update duration to that of previous surfaces, and clear out the total. So
+  // that we can begin to track the updates for this new Surface.
+  pending_commit_state()->previous_surfaces_visual_update_duration +=
+      pending_commit_state()->visual_update_duration;
+  pending_commit_state()->visual_update_duration = base::TimeDelta();
+
   // If the parent sequence number has not advanced, then there is no need to
   // commit anything. This can occur when the child sequence number has
   // advanced. Which means that child has changed visual properites, and the
@@ -1582,11 +1611,11 @@ void LayerTreeHost::AddLayerShouldPushProperties(Layer* layer) {
 }
 
 void LayerTreeHost::SetPageScaleFromImplSide(float page_scale) {
-  DCHECK(CommitRequested());
+  DCHECK(syncing_deltas_for_test_ || CommitRequested());
   // We should never process non-unit page_scale_delta for an OOPIF subframe.
   // TODO(wjmaclean): Remove this check as a pre-condition to closing the bug.
   // https://crbug.com/845097
-  DCHECK(!settings_.is_layer_tree_for_subframe ||
+  DCHECK(settings_.is_for_scalable_page ||
          page_scale == pending_commit_state()->page_scale_factor)
       << "Setting PSF in oopif subframe: old psf = "
       << pending_commit_state()->page_scale_factor
@@ -1597,7 +1626,7 @@ void LayerTreeHost::SetPageScaleFromImplSide(float page_scale) {
 
 void LayerTreeHost::SetElasticOverscrollFromImplSide(
     gfx::Vector2dF elastic_overscroll) {
-  DCHECK(CommitRequested());
+  DCHECK(syncing_deltas_for_test_ || CommitRequested());
   pending_commit_state()->elastic_overscroll = elastic_overscroll;
 }
 
@@ -1704,6 +1733,9 @@ void LayerTreeHost::SetMutatorsNeedRebuildPropertyTrees() {
 void LayerTreeHost::SetElementFilterMutated(ElementId element_id,
                                             ElementListType list_type,
                                             const FilterOperations& filters) {
+  if (list_type != ElementListType::ACTIVE)
+    return;
+
   if (IsUsingLayerLists()) {
     // In BlinkGenPropertyTrees/CompositeAfterPaint we always have property
     // tree nodes and can set the filter directly on the effect node.
@@ -1721,6 +1753,9 @@ void LayerTreeHost::SetElementBackdropFilterMutated(
     ElementId element_id,
     ElementListType list_type,
     const FilterOperations& backdrop_filters) {
+  if (list_type != ElementListType::ACTIVE)
+    return;
+
   if (IsUsingLayerLists()) {
     // In BlinkGenPropertyTrees/CompositeAfterPaint we always have property
     // tree nodes and can set the backdrop_filter directly on the effect node.
@@ -1739,6 +1774,9 @@ void LayerTreeHost::SetElementOpacityMutated(ElementId element_id,
                                              float opacity) {
   DCHECK_GE(opacity, 0.f);
   DCHECK_LE(opacity, 1.f);
+
+  if (list_type != ElementListType::ACTIVE)
+    return;
 
   if (IsUsingLayerLists()) {
     property_trees()->effect_tree_mutable().OnOpacityAnimated(element_id,
@@ -1767,6 +1805,9 @@ void LayerTreeHost::SetElementTransformMutated(
     ElementId element_id,
     ElementListType list_type,
     const gfx::Transform& transform) {
+  if (list_type != ElementListType::ACTIVE)
+    return;
+
   if (IsUsingLayerLists()) {
     property_trees()->transform_tree_mutable().OnTransformAnimated(element_id,
                                                                    transform);
@@ -1921,12 +1962,6 @@ void LayerTreeHost::SetRenderFrameObserver(
   proxy_->SetRenderFrameObserver(std::move(observer));
 }
 
-void LayerTreeHost::SetEnableFrameRateThrottling(
-    bool enable_frame_rate_throttling) {
-  DCHECK(IsMainThread());
-  proxy_->SetEnableFrameRateThrottling(enable_frame_rate_throttling);
-}
-
 void LayerTreeHost::SetDelegatedInkMetadata(
     std::unique_ptr<gfx::DelegatedInkMetadata> metadata) {
   pending_commit_state()->delegated_ink_metadata = std::move(metadata);
@@ -1946,6 +1981,11 @@ LayerTreeHost::TakeDocumentTransitionCallbacksForTesting() {
 uint32_t LayerTreeHost::GetAverageThroughput() const {
   DCHECK(IsMainThread());
   return proxy_->GetAverageThroughput();
+}
+
+void LayerTreeHost::IncrementVisualUpdateDuration(
+    base::TimeDelta visual_update_duration) {
+  pending_commit_state()->visual_update_duration += visual_update_duration;
 }
 
 }  // namespace cc

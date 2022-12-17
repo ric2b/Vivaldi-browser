@@ -4,6 +4,7 @@
 
 package org.chromium.chrome.browser.touch_to_fill;
 
+import static org.chromium.chrome.browser.password_manager.PasswordManagerHelper.usesUnifiedPasswordManagerUI;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.CREDENTIAL;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FAVICON_OR_FALLBACK;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties.FORMATTED_ORIGIN;
@@ -18,6 +19,9 @@ import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.He
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ON_CLICK_MANAGE;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.SHEET_ITEMS;
 import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.VISIBLE;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.ON_WEBAUTHN_CLICK_LISTENER;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.WEBAUTHN_CREDENTIAL;
+import static org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.WebAuthnCredentialProperties.WEBAUTHN_ICON;
 import static org.chromium.components.embedder_support.util.UrlUtilities.stripScheme;
 
 import android.content.Context;
@@ -31,11 +35,16 @@ import androidx.annotation.StringRes;
 import androidx.appcompat.content.res.AppCompatResources;
 
 import org.chromium.chrome.browser.flags.ChromeFeatureList;
+import org.chromium.chrome.browser.password_manager.PasswordManagerHelper;
+import org.chromium.chrome.browser.password_manager.PasswordManagerResourceProviderFactory;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.CredentialProperties;
 import org.chromium.chrome.browser.touch_to_fill.TouchToFillProperties.ItemType;
 import org.chromium.chrome.browser.touch_to_fill.data.Credential;
+import org.chromium.chrome.browser.touch_to_fill.data.WebAuthnCredential;
 import org.chromium.chrome.browser.ui.favicon.FaviconUtils;
 import org.chromium.components.browser_ui.bottomsheet.BottomSheetController;
+import org.chromium.content_public.browser.ContentFeatureList;
+import org.chromium.content_public.common.ContentFeatures;
 import org.chromium.ui.modelutil.MVCListAdapter;
 import org.chromium.ui.modelutil.PropertyKey;
 import org.chromium.ui.modelutil.PropertyModel;
@@ -85,13 +94,26 @@ class TouchToFillViewBinder {
             ViewGroup parent, @ItemType int itemType) {
         switch (itemType) {
             case ItemType.HEADER:
-                return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_header_item,
+                return new TouchToFillViewHolder(parent,
+                        usesUnifiedPasswordManagerUI() ? R.layout.touch_to_fill_header_item_modern
+                                                       : R.layout.touch_to_fill_header_item,
                         TouchToFillViewBinder::bindHeaderView);
             case ItemType.CREDENTIAL:
-                return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_credential_item,
+                return new TouchToFillViewHolder(parent,
+                        usesUnifiedPasswordManagerUI()
+                                ? R.layout.touch_to_fill_credential_item_modern
+                                : R.layout.touch_to_fill_credential_item,
                         TouchToFillViewBinder::bindCredentialView);
+            case ItemType.WEBAUTHN_CREDENTIAL:
+                return new TouchToFillViewHolder(parent,
+                        usesUnifiedPasswordManagerUI()
+                                ? R.layout.touch_to_fill_webauthn_credential_item_modern
+                                : R.layout.touch_to_fill_webauthn_credential_item,
+                        TouchToFillViewBinder::bindWebAuthnCredentialView);
             case ItemType.FILL_BUTTON:
-                return new TouchToFillViewHolder(parent, R.layout.touch_to_fill_fill_button,
+                return new TouchToFillViewHolder(parent,
+                        usesUnifiedPasswordManagerUI() ? R.layout.touch_to_fill_fill_button_modern
+                                                       : R.layout.touch_to_fill_fill_button,
                         TouchToFillViewBinder::bindFillButtonView);
         }
         assert false : "Cannot create view for ItemType: " + itemType;
@@ -155,6 +177,32 @@ class TouchToFillViewBinder {
     }
 
     /**
+     * Called whenever a WebAuthn credential is bound to this view holder.
+     * @param model The model containing the data for the view
+     * @param view The view to be bound
+     * @param propertyKey The key of the property to be bound
+     */
+    private static void bindWebAuthnCredentialView(
+            PropertyModel model, View view, PropertyKey propertyKey) {
+        WebAuthnCredential credential = model.get(WEBAUTHN_CREDENTIAL);
+        if (propertyKey == ON_WEBAUTHN_CLICK_LISTENER) {
+            view.setOnClickListener(
+                    clickedView -> model.get(ON_WEBAUTHN_CLICK_LISTENER).onResult(credential));
+        } else if (propertyKey == WEBAUTHN_ICON) {
+            ImageView imageView = view.findViewById(R.id.webauthn_icon);
+            imageView.setImageDrawable(
+                    AppCompatResources.getDrawable(view.getContext(), model.get(WEBAUTHN_ICON)));
+        } else if (propertyKey == WEBAUTHN_CREDENTIAL) {
+            TextView usernameText = view.findViewById(R.id.username);
+            usernameText.setText(credential.getUsername());
+            TextView descriptionText = view.findViewById(R.id.display_name);
+            descriptionText.setText(credential.getDisplayName());
+        } else {
+            assert false : "Unhandled update to property:" + propertyKey;
+        }
+    }
+
+    /**
      * Called whenever a fill button for a single credential is bound to this view holder.
      * @param model The model containing the data for the view
      * @param view The view to be bound
@@ -190,7 +238,12 @@ class TouchToFillViewBinder {
      * @return The title of Touch To Fill sheet.
      */
     private static String getTitle(PropertyModel model, Context context) {
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)) {
+        if (ContentFeatureList.isEnabled(ContentFeatures.WEB_AUTH_CONDITIONAL_UI)) {
+            // TODO(https://crbug.com/1318942): This generic title does not mention passwords when
+            // Web Authentication credentials in autofill are enabled but a better string is needed.
+            return context.getString(R.string.touch_to_fill_sheet_generic_title);
+        } else if (ChromeFeatureList.isEnabled(ChromeFeatureList.TOUCH_TO_FILL_PASSWORD_SUBMISSION)
+                || PasswordManagerHelper.usesUnifiedPasswordManagerUI()) {
             return context.getString(R.string.touch_to_fill_sheet_uniform_title);
         } else {
             @StringRes
@@ -243,8 +296,10 @@ class TouchToFillViewBinder {
             sheetSubtitleText.setText(getSubtitle(model, view.getContext()));
 
             ImageView sheetHeaderImage = view.findViewById(R.id.touch_to_fill_sheet_header_image);
-            sheetHeaderImage.setImageDrawable(AppCompatResources.getDrawable(
-                    view.getContext(), model.get(IMAGE_DRAWABLE_ID)));
+            sheetHeaderImage.setImageDrawable(AppCompatResources.getDrawable(view.getContext(),
+                    usesUnifiedPasswordManagerUI() ? PasswordManagerResourceProviderFactory.create()
+                                                             .getPasswordManagerIcon()
+                                                   : model.get(IMAGE_DRAWABLE_ID)));
         } else {
             assert false : "Unhandled update to property:" + key;
         }

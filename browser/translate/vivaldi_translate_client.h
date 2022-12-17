@@ -73,11 +73,6 @@ class VivaldiTranslateClient
   static std::unique_ptr<translate::TranslatePrefs> CreateTranslatePrefs(
       PrefService* prefs);
 
-  // Helper method to return the TranslateAcceptLanguages instance associated
-  // with |browser_context|.
-  static translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages(
-      content::BrowserContext* browser_context);
-
   // Helper method to return the TranslateManager instance associated with
   // |web_contents|, or NULL if there is no such associated instance.
   static translate::TranslateManager* GetManagerFromWebContents(
@@ -98,7 +93,7 @@ class VivaldiTranslateClient
   translate::TranslateDriver* GetTranslateDriver() override;
   PrefService* GetPrefs() override;
   std::unique_ptr<translate::TranslatePrefs> GetTranslatePrefs() override;
-  translate::TranslateAcceptLanguages* GetTranslateAcceptLanguages() override;
+  language::AcceptLanguagesService* GetAcceptLanguagesService() override;
 
   bool ShowTranslateUI(translate::TranslateStep step,
                        const std::string& source_language,

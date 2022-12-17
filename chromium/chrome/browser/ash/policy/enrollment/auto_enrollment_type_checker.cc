@@ -22,6 +22,8 @@ using ::chromeos::system::kFirmwareTypeValueNonchrome;
 using ::chromeos::system::kRlzBrandCodeKey;
 }  // namespace ash::system
 
+namespace policy {
+
 namespace {
 
 // Returns true if this is an official build and the device has Chrome firmware.
@@ -39,8 +41,8 @@ bool IsGoogleBrandedChrome() {
 }
 
 std::string FRERequirementToString(
-    policy::AutoEnrollmentTypeChecker::FRERequirement requirement) {
-  using FRERequirement = policy::AutoEnrollmentTypeChecker::FRERequirement;
+    AutoEnrollmentTypeChecker::FRERequirement requirement) {
+  using FRERequirement = AutoEnrollmentTypeChecker::FRERequirement;
   switch (requirement) {
     case FRERequirement::kDisabled:
       return "Forced Re-Enrollment disabled via command line.";
@@ -56,8 +58,6 @@ std::string FRERequirementToString(
 }
 
 }  // namespace
-
-namespace policy {
 
 // static
 bool AutoEnrollmentTypeChecker::IsFREEnabled() {
@@ -265,9 +265,10 @@ AutoEnrollmentTypeChecker::DetermineAutoEnrollmentCheckType(
       // Fall to the initial state determination check.
       break;
     case FRERequirement::kExplicitlyNotRequired:
-      // Skip FRE check and initial determination check if the device is
-      // explicitly marked as consumer owned.
-      return CheckType::kNone;
+      // Force initial determination check even if explicitly not required.
+      // TODO(igorcov): b/238592446 Return CheckType::kNone when that gets
+      // fixed.
+      break;
     case FRERequirement::kExplicitlyRequired:
       LOG(WARNING) << "Proceeding with FRE check.";
       return CheckType::kForcedReEnrollmentExplicitlyRequired;

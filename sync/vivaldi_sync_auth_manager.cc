@@ -7,7 +7,6 @@
 
 #include <string>
 
-#include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "vivaldi_account/vivaldi_account_manager.h"
 
@@ -90,8 +89,8 @@ void VivaldiSyncAuthManager::ConnectionOpened() {
   connection_open_ = true;
   if (account_manager_->has_refresh_token()) {
     access_token_ = account_manager_->access_token();
-    base::PostTask(FROM_HERE, {content::BrowserThread::UI},
-                   credentials_changed_callback_);
+    content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
+                                                 credentials_changed_callback_);
   }
 }
 

@@ -8,6 +8,7 @@
 #include <utility>
 
 #include "base/containers/adapters.h"
+#include "base/logging.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
@@ -528,8 +529,7 @@ Status IsDocumentTypeXml(
                                "document.contentType", false, &contentType);
   if (status.IsError())
           return status;
-  if (base::LowerCaseEqualsASCII(contentType->GetString(),
-                                 "text/xml"))
+  if (base::EqualsCaseInsensitiveASCII(contentType->GetString(), "text/xml"))
     *is_xml_document = true;
   else
     *is_xml_document = false;
@@ -566,7 +566,7 @@ Status IsElementAttributeEqualToIgnoreCase(
     return status;
   if (result->is_string()) {
     *is_equal =
-        base::LowerCaseEqualsASCII(result->GetString(), attribute_value);
+        base::EqualsCaseInsensitiveASCII(result->GetString(), attribute_value);
   } else {
     *is_equal = false;
   }
@@ -991,17 +991,17 @@ Status GetAXNodeByElementId(Session* session,
   if (status.IsError())
     return status;
 
-  int node_id;
   base::Value element(CreateElement(element_id));
-  status = web_view->GetNodeIdByElement(session->GetCurrentFrameId(), element,
-                                        &node_id);
+  int backend_node_id;
+  status = web_view->GetBackendNodeIdByElement(session->GetCurrentFrameId(),
+                                               element, &backend_node_id);
 
   if (status.IsError())
     return status;
 
   base::DictionaryValue body;
-  body.SetIntKey("nodeId", node_id);
-  body.SetBoolKey("fetchRelatives", false);
+  body.GetIfDict()->Set("backendNodeId", backend_node_id);
+  body.GetIfDict()->Set("fetchRelatives", false);
 
   std::unique_ptr<base::Value> result;
 

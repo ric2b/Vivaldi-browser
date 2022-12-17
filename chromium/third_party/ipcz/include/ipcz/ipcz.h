@@ -130,14 +130,14 @@
 #define IPCZ_FLAG_BIT(bit) ((uint32_t)(1u << bit))
 
 // Opaque handle to an ipcz object.
-typedef uint64_t IpczHandle;
+typedef uintptr_t IpczHandle;
 
 // An IpczHandle value which is always invalid. Note that arbitrary non-zero
 // values are not necessarily valid either, but zero is never valid.
 #define IPCZ_INVALID_HANDLE ((IpczHandle)0)
 
 // Generic result code for all ipcz operations. See IPCZ_RESULT_* values below.
-typedef uint32_t IpczResult;
+typedef int IpczResult;
 
 // Specific meaning of each value depends on context, but IPCZ_RESULT_OK always
 // indicates success. These values are derived from common status code
@@ -187,7 +187,7 @@ typedef uint32_t IpczResult;
 
 // An opaque handle value created by an IpczDriver implementation. ipcz uses
 // such handles to provide relevant context when calling back into the driver.
-typedef uint64_t IpczDriverHandle;
+typedef uintptr_t IpczDriverHandle;
 
 #define IPCZ_INVALID_DRIVER_HANDLE ((IpczDriverHandle)0)
 
@@ -196,14 +196,13 @@ typedef uint64_t IpczDriverHandle;
 typedef uint32_t IpczTransportActivityFlags;
 
 // If set, the driver encountered an unrecoverable error using the transport and
-// ipcz should discard it. This also implies that the driver will not invoke the
-// activity handler again for the same transport. In such cases, ipcz does not
-// invoke DeactivateTransport(), as the transport's deactivation is implied by
-// the error notification.
+// ipcz should discard it. Note that the driver is free to issue such
+// notifications many times as long as it remans active, but ipcz will generally
+// request deactivation ASAP once an error is signaled.
 #define IPCZ_TRANSPORT_ACTIVITY_ERROR IPCZ_FLAG_BIT(0)
 
 // When ipcz wants to deactivate a transport, it invokes the driver's
-// DeactivateTransport function. Once the driver has finished any clean up and
+// DeactivateTransport() function. Once the driver has finished any clean up and
 // can ensure that the transport's activity handler will no longer be invoked,
 // it must then invoke the activity handler one final time with this flag set.
 // This finalizes deactivation and allows ipcz to free any associated resources.
@@ -224,29 +223,31 @@ extern "C" {
 //
 // If the driver encounters an unrecoverable error while performing I/O on the
 // transport, it should invoke this with the IPCZ_TRANSPORT_ACTIVITY_ERROR flag
-// to instigate immediate destruction of the transport. This implies that the
-// driver will not invoke this function ever again for `transport`, and that the
-// transport is automatically deactivated without an explicit call to the
-// driver's DeactivateTransport() function.
+// to instigate deactivation of the transport by ipcz via a subsequent
+// DeactivateTransport() call.
 //
 // `options` is currently unused and must be null.
+//
+// NOTE: It is the driver's responsibility to ensure that calls to this function
+// for the same value of `transport` are mututally exclusive. Overlapping calls
+// are unsafe and will result in undefined behavior.
 typedef IpczResult(IPCZ_API* IpczTransportActivityHandler)(
-    IpczHandle transport,
-    const uint8_t* data,
-    uint32_t num_bytes,
-    const IpczDriverHandle* driver_handles,
-    uint32_t num_driver_handles,
-    IpczTransportActivityFlags flags,
-    const void* options);
+    IpczHandle transport,                    // in
+    const void* data,                        // in
+    size_t num_bytes,                        // in
+    const IpczDriverHandle* driver_handles,  // in
+    size_t num_driver_handles,               // in
+    IpczTransportActivityFlags flags,        // in
+    const void* options);                    // in
 
 // Structure to be filled in by a driver's GetSharedMemoryInfo().
 struct IPCZ_ALIGN(8) IpczSharedMemoryInfo {
   // The exact size of this structure in bytes. Set by ipcz before passing the
   // structure to the driver.
-  uint32_t size;
+  size_t size;
 
   // The size of the shared memory region in bytes.
-  uint64_t region_num_bytes;
+  size_t region_num_bytes;
 };
 
 // IpczDriver is a function table to be populated by the application and
@@ -262,13 +263,13 @@ struct IPCZ_ALIGN(8) IpczSharedMemoryInfo {
 struct IPCZ_ALIGN(8) IpczDriver {
   // The exact size of this structure in bytes. Must be set accurately by the
   // application before passing this structure to any ipcz API functions.
-  uint32_t size;
+  size_t size;
 
   // Called by ipcz to request that the driver release the object identified by
   // `handle`.
-  IpczResult(IPCZ_API* Close)(IpczDriverHandle handle,
-                              uint32_t flags,
-                              const void* options);
+  IpczResult(IPCZ_API* Close)(IpczDriverHandle handle,  // in
+                              uint32_t flags,           // in
+                              const void* options);     // in
 
   // Serializes a driver object identified by `handle` into a collection of
   // bytes and readily transmissible driver objects, for eventual transmission
@@ -317,14 +318,14 @@ struct IPCZ_ALIGN(8) IpczDriver {
   // return IPCZ_RESULT_OK. In this case ipcz relinquishes `handle` and will no
   // longer refer to it unless the driver outputs it back in `handles`, implying
   // that it was already transmissible as-is.
-  IpczResult(IPCZ_API* Serialize)(IpczDriverHandle handle,
-                                  IpczDriverHandle transport,
-                                  uint32_t flags,
-                                  const void* options,
-                                  uint8_t* data,
-                                  uint32_t* num_bytes,
-                                  IpczDriverHandle* handles,
-                                  uint32_t* num_handles);
+  IpczResult(IPCZ_API* Serialize)(IpczDriverHandle handle,     // in
+                                  IpczDriverHandle transport,  // in
+                                  uint32_t flags,              // in
+                                  const void* options,         // in
+                                  void* data,                  // out
+                                  size_t* num_bytes,           // in/out
+                                  IpczDriverHandle* handles,   // out
+                                  size_t* num_handles);        // in/out
 
   // Deserializes a driver object from a collection of bytes and transmissible
   // driver objects which which was originally produced by Serialize() and
@@ -333,14 +334,15 @@ struct IPCZ_ALIGN(8) IpczDriver {
   // Any return value other than IPCZ_RESULT_OK indicates an error and implies
   // that `handle` is unmodified. Otherwise `handle` must contain a valid driver
   // handle to the deserialized object.
-  IpczResult(IPCZ_API* Deserialize)(const uint8_t* data,
-                                    uint32_t num_bytes,
-                                    const IpczDriverHandle* driver_handles,
-                                    uint32_t num_driver_handles,
-                                    IpczDriverHandle transport,
-                                    uint32_t flags,
-                                    const void* options,
-                                    IpczDriverHandle* handle);
+  IpczResult(IPCZ_API* Deserialize)(
+      const void* data,                        // in
+      size_t num_bytes,                        // in
+      const IpczDriverHandle* driver_handles,  // in
+      size_t num_driver_handles,               // in
+      IpczDriverHandle transport,              // in
+      uint32_t flags,                          // in
+      const void* options,                     // in
+      IpczDriverHandle* handle);               // out
 
   // Creates a new pair of entangled bidirectional transports, returning them in
   // `new_transport0` and `new_transport1`.
@@ -354,12 +356,13 @@ struct IPCZ_ALIGN(8) IpczDriver {
   //
   // Any return value other than IPCZ_RESULT_OK indicates an error and implies
   // that `new_transport0` and `new_transport1` are unmodified.
-  IpczResult(IPCZ_API* CreateTransports)(IpczDriverHandle transport0,
-                                         IpczDriverHandle transport1,
-                                         uint32_t flags,
-                                         const void* options,
-                                         IpczDriverHandle* new_transport0,
-                                         IpczDriverHandle* new_transport1);
+  IpczResult(IPCZ_API* CreateTransports)(
+      IpczDriverHandle transport0,        // in
+      IpczDriverHandle transport1,        // in
+      uint32_t flags,                     // in
+      const void* options,                // in
+      IpczDriverHandle* new_transport0,   // out
+      IpczDriverHandle* new_transport1);  // out
 
   // Called by ipcz to activate a transport. `driver_transport` is the
   // driver-side handle assigned to the transport by the driver, either as given
@@ -387,19 +390,25 @@ struct IPCZ_ALIGN(8) IpczDriver {
   // The driver may elicit forced destruction of itself by calling
   // `activity_handler` with the flag IPCZ_TRANSPORT_ACTIVITY_DEACTIVATED.
   IpczResult(IPCZ_API* ActivateTransport)(
-      IpczDriverHandle driver_transport,
-      IpczHandle transport,
-      IpczTransportActivityHandler activity_handler,
-      uint32_t flags,
-      const void* options);
+      IpczDriverHandle driver_transport,              // in
+      IpczHandle transport,                           // in
+      IpczTransportActivityHandler activity_handler,  // in
+      uint32_t flags,                                 // in
+      const void* options);                           // in
 
-  // Called by ipcz to deactivate a transport. Once this returns successfully,
-  // the driver must make no further calls into this transport's activity
-  // handler. ipcz may continue to use the transport for outgoing transmissions
-  // until the driver's Close() is also called on `driver_transport`.
-  IpczResult(IPCZ_API* DeactivateTransport)(IpczDriverHandle driver_transport,
-                                            uint32_t flags,
-                                            const void* options);
+  // Called by ipcz to deactivate a transport. The driver does not need to
+  // complete deactivation synchronously, but it must begin to deactivate the
+  // transport and must invoke the transport's activity handler one final time
+  // with IPCZ_TRANSPORT_ACTIVITY_DEACTIVATED once finished. Beyond that point,
+  // the activity handler must no longer be invoked for that transport.
+  //
+  // Note that even after deactivatoin, ipcz may continue to call into the
+  // transport until it's closed with an explicit call to the driver's Close()
+  // by ipcz.
+  IpczResult(IPCZ_API* DeactivateTransport)(
+      IpczDriverHandle driver_transport,  // in
+      uint32_t flags,                     // in
+      const void* options);               // in
 
   // Called by ipcz to delegate transmission of data and driver handles over the
   // identified transport endpoint. If the driver cannot fulfill the request,
@@ -420,36 +429,38 @@ struct IPCZ_ALIGN(8) IpczDriver {
   //
   // If ipcz only wants to wake the peer node rather than transmit data or
   // handles, `num_bytes` and `num_driver_handles` may both be zero.
-  IpczResult(IPCZ_API* Transmit)(IpczDriverHandle driver_transport,
-                                 const uint8_t* data,
-                                 uint32_t num_bytes,
-                                 const IpczDriverHandle* driver_handles,
-                                 uint32_t num_driver_handles,
-                                 uint32_t flags,
-                                 const void* options);
+  IpczResult(IPCZ_API* Transmit)(IpczDriverHandle driver_transport,       // in
+                                 const void* data,                        // in
+                                 size_t num_bytes,                        // in
+                                 const IpczDriverHandle* driver_handles,  // in
+                                 size_t num_driver_handles,               // in
+                                 uint32_t flags,                          // in
+                                 const void* options);                    // in
 
   // Allocates a shared memory region and returns a driver handle in
   // `driver_memory` which can be used to reference it in other calls to the
   // driver.
-  IpczResult(IPCZ_API* AllocateSharedMemory)(uint64_t num_bytes,
-                                             uint32_t flags,
-                                             const void* options,
-                                             IpczDriverHandle* driver_memory);
+  IpczResult(IPCZ_API* AllocateSharedMemory)(
+      size_t num_bytes,                  // in
+      uint32_t flags,                    // in
+      const void* options,               // in
+      IpczDriverHandle* driver_memory);  // out
 
   // Returns information about the shared memory region identified by
   // `driver_memory`.
-  IpczResult(IPCZ_API* GetSharedMemoryInfo)(IpczDriverHandle driver_memory,
-                                            uint32_t flags,
-                                            const void* options,
-                                            struct IpczSharedMemoryInfo* info);
+  IpczResult(IPCZ_API* GetSharedMemoryInfo)(
+      IpczDriverHandle driver_memory,      // in
+      uint32_t flags,                      // in
+      const void* options,                 // in
+      struct IpczSharedMemoryInfo* info);  // out
 
   // Duplicates a shared memory region handle into a new distinct handle
   // referencing the same underlying region.
   IpczResult(IPCZ_API* DuplicateSharedMemory)(
-      IpczDriverHandle driver_memory,
-      uint32_t flags,
-      const void* options,
-      IpczDriverHandle* new_driver_memory);
+      IpczDriverHandle driver_memory,        // in
+      uint32_t flags,                        // in
+      const void* options,                   // in
+      IpczDriverHandle* new_driver_memory);  // out
 
   // Maps a shared memory region identified by `driver_memory` and returns its
   // mapped address in `address` on success and a driver handle in
@@ -460,17 +471,18 @@ struct IPCZ_ALIGN(8) IpczDriver {
   // of `driver_memory`. That is, if `driver_memory` is closed immediately after
   // this call succeeds, the returned mapping must still remain valid until the
   // mapping itself is closed.
-  IpczResult(IPCZ_API* MapSharedMemory)(IpczDriverHandle driver_memory,
-                                        uint32_t flags,
-                                        const void* options,
-                                        void** address,
-                                        IpczDriverHandle* driver_mapping);
+  IpczResult(IPCZ_API* MapSharedMemory)(
+      IpczDriverHandle driver_memory,     // in
+      uint32_t flags,                     // in
+      const void* options,                // in
+      void** address,                     // out
+      IpczDriverHandle* driver_mapping);  // out
 
   // Generates `num_bytes` bytes of random data to fill `buffer`.
-  IpczResult(IPCZ_API* GenerateRandomBytes)(uint32_t num_bytes,
-                                            uint32_t flags,
-                                            const void* options,
-                                            void* buffer);
+  IpczResult(IPCZ_API* GenerateRandomBytes)(size_t num_bytes,     // in
+                                            uint32_t flags,       // in
+                                            const void* options,  // in
+                                            void* buffer);        // out
 };
 
 #if defined(__cplusplus)
@@ -536,26 +548,26 @@ typedef uint32_t IpczConnectNodeFlags;
 struct IPCZ_ALIGN(8) IpczPutLimits {
   // The exact size of this structure in bytes. Must be set accurately before
   // passing the structure to any API functions.
-  uint32_t size;
+  size_t size;
 
   // Specifies the maximum number of unread parcels to allow in a portal's
   // queue. If a Put() or BeginPut() call specifying this limit would cause the
   // receiver's number of number of queued unread parcels to exceed this value,
   // the call will fail with IPCZ_RESULT_RESOURCE_EXHAUSTED.
-  uint32_t max_queued_parcels;
+  size_t max_queued_parcels;
 
   // Specifies the maximum number of data bytes to allow in a portal's queue.
   // If a Put() or BeginPut() call specifying this limit would cause the number
   // of data bytes across all queued unread parcels to exceed this value, the
   // call will fail with IPCZ_RESULT_RESOURCE_EXHAUSTED.
-  uint32_t max_queued_bytes;
+  size_t max_queued_bytes;
 };
 
 // Options given to Put() to modify its default behavior.
 struct IPCZ_ALIGN(8) IpczPutOptions {
   // The exact size of this structure in bytes. Must be set accurately before
   // passing the structure to Put().
-  uint32_t size;
+  size_t size;
 
   // Optional limits to apply when determining if the Put() should be completed.
   const struct IpczPutLimits* limits;
@@ -577,7 +589,7 @@ typedef uint32_t IpczBeginPutFlags;
 struct IPCZ_ALIGN(8) IpczBeginPutOptions {
   // The exact size of this structure in bytes. Must be set accurately before
   // passing the structure to BeginPut().
-  uint32_t size;
+  size_t size;
 
   // Optional limits to apply when determining if the BeginPut() should be
   // completed.
@@ -636,25 +648,25 @@ typedef uint32_t IpczPortalStatusFlags;
 struct IPCZ_ALIGN(8) IpczPortalStatus {
   // The exact size of this structure in bytes. Must be set accurately before
   // passing the structure to any functions.
-  uint32_t size;
+  size_t size;
 
   // Flags. See the IPCZ_PORTAL_STATUS_* flags described above for the possible
   // flags combined in this value.
   IpczPortalStatusFlags flags;
 
   // The number of unretrieved parcels queued on this portal.
-  uint32_t num_local_parcels;
+  size_t num_local_parcels;
 
   // The number of unretrieved bytes (across all unretrieved parcels) queued on
   // this portal.
-  uint32_t num_local_bytes;
+  size_t num_local_bytes;
 
   // The number of unretrieved parcels queued on the opposite portal.
-  uint32_t num_remote_parcels;
+  size_t num_remote_parcels;
 
   // The number of unretrieved bytes (across all unretrieved parcels) queued on
   // the opposite portal.
-  uint32_t num_remote_bytes;
+  size_t num_remote_bytes;
 };
 
 // Flags given to IpczTrapConditions to indicate which types of conditions a
@@ -722,26 +734,26 @@ typedef uint32_t IpczTrapConditionFlags;
 struct IPCZ_ALIGN(8) IpczTrapConditions {
   // The exact size of this structure in bytes. Must be set accurately before
   // passing the structure to Trap().
-  uint32_t size;
+  size_t size;
 
   // See the IPCZ_TRAP_* flags described above.
   IpczTrapConditionFlags flags;
 
   // See IPCZ_TRAP_ABOVE_MIN_LOCAL_PARCELS. If that flag is not set in `flags`,
   // this field is ignord.
-  uint32_t min_local_parcels;
+  size_t min_local_parcels;
 
   // See IPCZ_TRAP_ABOVE_MIN_LOCAL_BYTES. If that flag is not set in `flags`,
   // this field is ignored.
-  uint32_t min_local_bytes;
+  size_t min_local_bytes;
 
   // See IPCZ_TRAP_BELOW_MAX_REMOTE_PARCELS. If that flag is not set in `flags`,
   // this field is ignored.
-  uint32_t max_remote_parcels;
+  size_t max_remote_parcels;
 
   // See IPCZ_TRAP_BELOW_MAX_REMOTE_BYTES. If that flag is not set in `flags`,
   // this field is ignored.
-  uint32_t max_remote_bytes;
+  size_t max_remote_bytes;
 };
 
 // Structure passed to each IpczTrapEventHandler invocation with details about
@@ -749,11 +761,11 @@ struct IPCZ_ALIGN(8) IpczTrapConditions {
 struct IPCZ_ALIGN(8) IpczTrapEvent {
   // The size of this structure in bytes. Populated by ipcz to indicate which
   // version is being provided to the handler.
-  uint32_t size;
+  size_t size;
 
   // The context value that was given to Trap() when installing the trap that
   // fired this event.
-  uint64_t context;
+  uintptr_t context;
 
   // Flags indicating which condition(s) triggered this event.
   IpczTrapConditionFlags condition_flags;
@@ -794,7 +806,7 @@ struct IPCZ_ALIGN(8) IpczAPI {
   // The exact size of this structure in bytes. Must be set accurately by the
   // application before passing the structure to an implementation of
   // IpczGetAPIFn.
-  uint32_t size;
+  size_t size;
 
   // Releases the object identified by `handle`. If it's a portal, the portal is
   // closed. If it's a node, the node is destroyed. If it's a wrapped driver
@@ -824,9 +836,9 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //        successfully closed by this operation.
   //
   //    IPCZ_RESULT_INVALID_ARGUMENT if `handle` is invalid.
-  IpczResult(IPCZ_API* Close)(IpczHandle handle,
-                              uint32_t flags,
-                              const void* options);
+  IpczResult(IPCZ_API* Close)(IpczHandle handle,     // in
+                              uint32_t flags,        // in
+                              const void* options);  // in
 
   // Initializes a new ipcz node. Applications typically need only one node in
   // each communicating process, but it's OK to create more. Practical use cases
@@ -864,11 +876,11 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //        from operating correctly. For example, the is returned if ipcz was
   //        built against a std::atomic implementation which does not provide
   //        lock-free 32-bit and 64-bit atomics.
-  IpczResult(IPCZ_API* CreateNode)(const struct IpczDriver* driver,
-                                   IpczDriverHandle driver_node,
-                                   IpczCreateNodeFlags flags,
-                                   const void* options,
-                                   IpczHandle* node);
+  IpczResult(IPCZ_API* CreateNode)(const struct IpczDriver* driver,  // in
+                                   IpczDriverHandle driver_node,     // in
+                                   IpczCreateNodeFlags flags,        // in
+                                   const void* options,              // in
+                                   IpczHandle* node);                // out
 
   // Connects `node` to another node in the system using an application-provided
   // driver transport handle in `driver_transport` for communication. If this
@@ -931,12 +943,16 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //    IPCZ_RESULT_INVALID_ARGUMENT if `node` is invalid, `num_initial_portals`
   //        is zero, `initial_portals` is null, or `flags` specifies one or more
   //        flags which are invalid for `node` or invalid when combined.
-  IpczResult(IPCZ_API* ConnectNode)(IpczHandle node,
-                                    IpczDriverHandle driver_transport,
-                                    uint32_t num_initial_portals,
-                                    IpczConnectNodeFlags flags,
-                                    const void* options,
-                                    IpczHandle* initial_portals);
+  //
+  //    IPCZ_RESULT_OUT_OF_RANGE if `num_initial_portals` is larger than the
+  //        ipcz implementation allows. There is no hard limit specified, but
+  //        any ipcz implementation must support at least 8 initial portals.
+  IpczResult(IPCZ_API* ConnectNode)(IpczHandle node,                    // in
+                                    IpczDriverHandle driver_transport,  // in
+                                    size_t num_initial_portals,         // in
+                                    IpczConnectNodeFlags flags,         // in
+                                    const void* options,                // in
+                                    IpczHandle* initial_portals);       // out
 
   // Opens two new portals which exist as each other's opposite.
   //
@@ -961,11 +977,11 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_INVALID_ARGUMENT if `node` is invalid, or if either
   //        `portal0` or `portal1` is null.
-  IpczResult(IPCZ_API* OpenPortals)(IpczHandle node,
-                                    uint32_t flags,
-                                    const void* options,
-                                    IpczHandle* portal0,
-                                    IpczHandle* portal1);
+  IpczResult(IPCZ_API* OpenPortals)(IpczHandle node,       // in
+                                    uint32_t flags,        // in
+                                    const void* options,   // in
+                                    IpczHandle* portal0,   // out
+                                    IpczHandle* portal1);  // out
 
   // Merges two portals into each other, effectively destroying both while
   // linking their respective peer portals with each other. A portal cannot
@@ -1002,10 +1018,10 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_FAILED_PRECONDITION if either `first` or `second` has
   //        already had one or more parcels put into or gotten out of them.
-  IpczResult(IPCZ_API* MergePortals)(IpczHandle first,
-                                     IpczHandle second,
-                                     uint32_t flags,
-                                     const void* options);
+  IpczResult(IPCZ_API* MergePortals)(IpczHandle first,      // in
+                                     IpczHandle second,     // in
+                                     uint32_t flags,        // in
+                                     const void* options);  // out
 
   // Queries specific details regarding the status of a portal, such as the
   // number of unread parcels or data bytes available on the portal or its
@@ -1027,10 +1043,11 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_INVALID_ARGUMENT `portal` is invalid. `status` is null or
   //        invalid.
-  IpczResult(IPCZ_API* QueryPortalStatus)(IpczHandle portal,
-                                          uint32_t flags,
-                                          const void* options,
-                                          struct IpczPortalStatus* status);
+  IpczResult(IPCZ_API* QueryPortalStatus)(
+      IpczHandle portal,                 // in
+      uint32_t flags,                    // in
+      const void* options,               // in
+      struct IpczPortalStatus* status);  // out
 
   // Puts any combination of data and handles into the portal identified by
   // `portal`. Everything put into a portal can be retrieved in the same order
@@ -1073,13 +1090,13 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_NOT_FOUND if it is known that the opposite portal has
   //        already been closed and anything put into this portal would be lost.
-  IpczResult(IPCZ_API* Put)(IpczHandle portal,
-                            const void* data,
-                            uint32_t num_bytes,
-                            const IpczHandle* handles,
-                            uint32_t num_handles,
-                            uint32_t flags,
-                            const struct IpczPutOptions* options);
+  IpczResult(IPCZ_API* Put)(IpczHandle portal,                      // in
+                            const void* data,                       // in
+                            size_t num_bytes,                       // in
+                            const IpczHandle* handles,              // in
+                            size_t num_handles,                     // in
+                            uint32_t flags,                         // in
+                            const struct IpczPutOptions* options);  // in
 
   // Begins a two-phase put operation on `portal`. While a two-phase put
   // operation is in progress on a portal, any other BeginPut() call on the same
@@ -1128,11 +1145,12 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_NOT_FOUND if it is known that the opposite portal has
   //        already been closed and anything put into this portal would be lost.
-  IpczResult(IPCZ_API* BeginPut)(IpczHandle portal,
-                                 IpczBeginPutFlags flags,
-                                 const struct IpczBeginPutOptions* options,
-                                 uint32_t* num_bytes,
-                                 void** data);
+  IpczResult(IPCZ_API* BeginPut)(
+      IpczHandle portal,                          // in
+      IpczBeginPutFlags flags,                    // in
+      const struct IpczBeginPutOptions* options,  // in
+      size_t* num_bytes,                          // out
+      void** data);                               // out
 
   // Ends the two-phase put operation started by the most recent successful call
   // to BeginPut() on `portal`.
@@ -1174,12 +1192,12 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_NOT_FOUND if it is known that the opposite portal has
   //        already been closed and anything put into this portal would be lost.
-  IpczResult(IPCZ_API* EndPut)(IpczHandle portal,
-                               uint32_t num_bytes_produced,
-                               const IpczHandle* handles,
-                               uint32_t num_handles,
-                               IpczEndPutFlags flags,
-                               const void* options);
+  IpczResult(IPCZ_API* EndPut)(IpczHandle portal,          // in
+                               size_t num_bytes_produced,  // in
+                               const IpczHandle* handles,  // in
+                               size_t num_handles,         // in
+                               IpczEndPutFlags flags,      // in
+                               const void* options);       // in
 
   // Retrieves some combination of data and handles from a portal, as placed by
   // a prior put operation on the opposite portal.
@@ -1240,13 +1258,13 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_ALREADY_EXISTS if there is a two-phase get operation in
   //        progress on `portal`.
-  IpczResult(IPCZ_API* Get)(IpczHandle portal,
-                            IpczGetFlags flags,
-                            const void* options,
-                            void* data,
-                            uint32_t* num_bytes,
-                            IpczHandle* handles,
-                            uint32_t* num_handles);
+  IpczResult(IPCZ_API* Get)(IpczHandle portal,     // in
+                            IpczGetFlags flags,    // in
+                            const void* options,   // in
+                            void* data,            // out
+                            size_t* num_bytes,     // in/out
+                            IpczHandle* handles,   // out
+                            size_t* num_handles);  // in/out
 
   // Begins a two-phase get operation on `portal` to retrieve data and handles.
   // While a two-phase get operation is in progress on a portal, all other get
@@ -1300,12 +1318,12 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_ALREADY_EXISTS if there is already a two-phase get operation
   //        in progress on `portal`.
-  IpczResult(IPCZ_API* BeginGet)(IpczHandle portal,
-                                 uint32_t flags,
-                                 const void* options,
-                                 const void** data,
-                                 uint32_t* num_bytes,
-                                 uint32_t* num_handles);
+  IpczResult(IPCZ_API* BeginGet)(IpczHandle portal,     // in
+                                 uint32_t flags,        // in
+                                 const void* options,   // in
+                                 const void** data,     // out
+                                 size_t* num_bytes,     // out
+                                 size_t* num_handles);  // out
 
   // Ends the two-phase get operation started by the most recent successful call
   // to BeginGet() on `portal`.
@@ -1337,12 +1355,12 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_FAILED_PRECONDITION if there was no two-phase get operation
   //        in progress on `portal`.
-  IpczResult(IPCZ_API* EndGet)(IpczHandle portal,
-                               uint32_t num_bytes_consumed,
-                               uint32_t num_handles,
-                               IpczEndGetFlags flags,
-                               const void* options,
-                               IpczHandle* handles);
+  IpczResult(IPCZ_API* EndGet)(IpczHandle portal,          // in
+                               size_t num_bytes_consumed,  // in
+                               size_t num_handles,         // in
+                               IpczEndGetFlags flags,      // in
+                               const void* options,        // in
+                               IpczHandle* handles);       // out
 
   // Attempts to install a trap to catch interesting changes to a portal's
   // state. The condition(s) to observe are specified in `conditions`.
@@ -1390,14 +1408,15 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //        `conditions` which were already satisfied by the portal's state. If
   //        `status` is non-null, a copy of the portal's last known status will
   //        also be stored there.
-  IpczResult(IPCZ_API* Trap)(IpczHandle portal,
-                             const struct IpczTrapConditions* conditions,
-                             IpczTrapEventHandler handler,
-                             uint64_t context,
-                             uint32_t flags,
-                             const void* options,
-                             IpczTrapConditionFlags* satisfied_condition_flags,
-                             struct IpczPortalStatus* status);
+  IpczResult(IPCZ_API* Trap)(
+      IpczHandle portal,                                  // in
+      const struct IpczTrapConditions* conditions,        // in
+      IpczTrapEventHandler handler,                       // in
+      uintptr_t context,                                  // in
+      uint32_t flags,                                     // in
+      const void* options,                                // in
+      IpczTrapConditionFlags* satisfied_condition_flags,  // out
+      struct IpczPortalStatus* status);                   // out
 
   // Boxes an object managed by a node's driver and returns a new IpczHandle to
   // reference the box. If the driver is able to serialize the boxed object, the
@@ -1416,11 +1435,11 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //        returned in `handle`.
   //
   //    IPCZ_RESULT_INVALID_ARGUMENT if `driver_handle` was invalid.
-  IpczResult(IPCZ_API* Box)(IpczHandle node,
-                            IpczDriverHandle driver_handle,
-                            uint32_t flags,
-                            const void* options,
-                            IpczHandle* handle);
+  IpczResult(IPCZ_API* Box)(IpczHandle node,                 // in
+                            IpczDriverHandle driver_handle,  // in
+                            uint32_t flags,                  // in
+                            const void* options,             // in
+                            IpczHandle* handle);             // out
 
   // Unboxes a driver object from an IpczHandle previously produced by Box().
   //
@@ -1435,10 +1454,10 @@ struct IPCZ_ALIGN(8) IpczAPI {
   //
   //    IPCZ_RESULT_INVALID_ARGUMENT if `handle` is invalid or does not
   //        reference a box.
-  IpczResult(IPCZ_API* Unbox)(IpczHandle handle,
-                              IpczUnboxFlags flags,
-                              const void* options,
-                              IpczDriverHandle* driver_handle);
+  IpczResult(IPCZ_API* Unbox)(IpczHandle handle,                 // in
+                              IpczUnboxFlags flags,              // in
+                              const void* options,               // in
+                              IpczDriverHandle* driver_handle);  // out
 };
 
 // A function which populates `api` with a table of ipcz API functions. The

@@ -53,6 +53,7 @@
 #include "components/startup_metric_utils/browser/startup_metric_utils.h"
 #include "content/public/browser/url_data_source.h"
 #include "content/public/browser/web_ui.h"
+#include "third_party/skia/include/core/SkBitmap.h"
 #include "third_party/skia/include/core/SkColor.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/webui/web_ui_util.h"
@@ -208,7 +209,7 @@ base::Value CreateProfileEntry(const ProfileAttributesEntry* entry,
   profile_entry.SetBoolKey("isManaged",
                            AccountInfo::IsManaged(entry->GetHostedDomain()));
   gfx::Image icon =
-      profiles::GetSizedAvatarIcon(entry->GetAvatarIcon(avatar_icon_size), true,
+      profiles::GetSizedAvatarIcon(entry->GetAvatarIcon(avatar_icon_size),
                                    avatar_icon_size, avatar_icon_size);
   std::string icon_url = webui::GetBitmapDataUrl(icon.AsBitmap());
   profile_entry.SetStringKey("avatarIcon", icon_url);
@@ -409,10 +410,9 @@ void ProfilePickerHandler::RegisterMessages() {
       base::BindRepeating(&ProfilePickerHandler::HandleGetProfileStatistics,
                           base::Unretained(this)));
   web_ui()->RegisterDeprecatedMessageCallback(
-      "loadSignInProfileCreationFlow",
-      base::BindRepeating(
-          &ProfilePickerHandler::HandleLoadSignInProfileCreationFlow,
-          base::Unretained(this)));
+      "selectAccountLacros",
+      base::BindRepeating(&ProfilePickerHandler::HandleSelectAccountLacros,
+                          base::Unretained(this)));
   // TODO(crbug.com/1115056): Consider renaming this message to
   // 'createLocalProfile' as this is only used for local profiles.
   web_ui()->RegisterDeprecatedMessageCallback(
@@ -891,7 +891,7 @@ void ProfilePickerHandler::OnProfileStatisticsReceived(
   FireWebUIListener("profile-statistics-received", std::move(dict));
 }
 
-void ProfilePickerHandler::HandleLoadSignInProfileCreationFlow(
+void ProfilePickerHandler::HandleSelectAccountLacros(
     const base::ListValue* args) {
   AllowJavascript();
   CHECK_EQ(2U, args->GetListDeprecated().size());
@@ -1027,7 +1027,7 @@ ProfilePickerHandler::GetProfileAttributes() {
   std::vector<ProfileAttributesEntry*> ordered_entries =
       g_browser_process->profile_manager()
           ->GetProfileAttributesStorage()
-          .GetAllProfilesAttributesSortedByLocalProfilName();
+          .GetAllProfilesAttributesSortedByLocalProfileName();
   base::EraseIf(ordered_entries, [](const ProfileAttributesEntry* entry) {
     return entry->IsOmitted();
   });
@@ -1192,16 +1192,14 @@ void ProfilePickerHandler::UpdateAvailableAccounts() {
   AccountProfileMapper* mapper =
       g_browser_process->profile_manager()->GetAccountProfileMapper();
 
-  if (IsSelectingSecondaryAccount(web_ui())) {
-    GetAccountsAvailableAsSecondary(
-        mapper, GetCurrentProfilePath(web_ui()),
-        base::BindOnce(&ProfilePickerHandler::GetAvailableAccountsInfo,
-                       weak_factory_.GetWeakPtr()));
-    return;
-  }
-  GetAccountsAvailableAsPrimary(
-      mapper,
-      &g_browser_process->profile_manager()->GetProfileAttributesStorage(),
+  // For the profile creation flow, show all accounts available.
+  // For in profile Sign in/ Turn sync on flows, filter accounts already added.
+  base::FilePath profile_path = IsSelectingSecondaryAccount(web_ui())
+                                    ? GetCurrentProfilePath(web_ui())
+                                    : base::FilePath();
+
+  GetAllAvailableAccounts(
+      mapper, profile_path,
       base::BindOnce(&ProfilePickerHandler::GetAvailableAccountsInfo,
                      weak_factory_.GetWeakPtr()));
 }

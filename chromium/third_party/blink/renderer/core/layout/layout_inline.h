@@ -24,6 +24,7 @@
 #ifndef THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_INLINE_H_
 #define THIRD_PARTY_BLINK_RENDERER_CORE_LAYOUT_LAYOUT_INLINE_H_
 
+#include "base/check_op.h"
 #include "base/notreached.h"
 #include "third_party/blink/renderer/core/core_export.h"
 #include "third_party/blink/renderer/core/editing/forward.h"
@@ -355,6 +356,8 @@ class CORE_EXPORT LayoutInline : public LayoutBoxModelObject {
                               LayoutObject* before_child);
   void AddChildIgnoringContinuation(LayoutObject* new_child,
                                     LayoutObject* before_child = nullptr) final;
+  void AddChildAsBlockInInline(LayoutObject* new_child,
+                               LayoutObject* before_child);
 
   void MoveChildrenToIgnoringContinuation(LayoutInline* to,
                                           LayoutObject* start_child);

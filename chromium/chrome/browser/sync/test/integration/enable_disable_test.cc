@@ -19,6 +19,7 @@
 #include "components/sync/base/user_selectable_type.h"
 #include "components/sync/driver/glue/sync_transport_data_prefs.h"
 #include "components/sync/driver/sync_service_impl.h"
+#include "components/sync/engine/cycle/entity_change_metric_recording.h"
 #include "components/sync/test/fake_server/bookmark_entity_builder.h"
 #include "components/sync/test/fake_server/entity_builder_factory.h"
 #include "content/public/test/browser_test.h"
@@ -28,7 +29,6 @@ namespace {
 using syncer::ModelType;
 using syncer::ModelTypeSet;
 using syncer::ModelTypeToDebugString;
-using syncer::SyncUserSettings;
 using syncer::UserSelectableType;
 using syncer::UserSelectableTypeSet;
 
@@ -95,13 +95,10 @@ class EnableDisableSingleClientTest : public SyncTest {
  protected:
   void SetupTest(bool all_types_enabled) {
     ASSERT_TRUE(SetupClients());
-    if (all_types_enabled) {
-      ASSERT_TRUE(GetClient(0)->SetupSync());
-    } else {
-      ASSERT_TRUE(
-          GetClient(0)->SetupSyncNoWaitForCompletion(UserSelectableTypeSet()));
-      ASSERT_TRUE(GetClient(0)->AwaitSyncSetupCompletion());
-    }
+    ASSERT_TRUE(GetClient(0)->SetupSync(base::BindLambdaForTesting(
+        [all_types_enabled](syncer::SyncUserSettings* user_settings) {
+          user_settings->SetSelectedTypes(all_types_enabled, {});
+        })));
 
     registered_data_types_ = GetSyncService(0)->GetRegisteredDataTypesForTest();
     multi_grouped_types_ = MultiGroupTypes(registered_data_types_);
@@ -406,12 +403,12 @@ IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest,
   ASSERT_TRUE(SetupSync());
   ASSERT_TRUE(bookmarks_helper::GetBookmarkModel(0)->IsBookmarked(
       GURL(kSyncedBookmarkURL)));
-  EXPECT_EQ(
-      0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",
-                                         /*REMOTE_NON_INITIAL_UPDATE=*/4));
-  EXPECT_EQ(
-      0, histogram_tester.GetBucketCount("Sync.ModelTypeEntityChange3.BOOKMARK",
-                                         /*REMOTE_INITIAL_UPDATE=*/5));
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.BOOKMARK",
+                   syncer::ModelTypeEntityChange::kRemoteNonInitialUpdate));
+  EXPECT_EQ(0, histogram_tester.GetBucketCount(
+                   "Sync.ModelTypeEntityChange3.BOOKMARK",
+                   syncer::ModelTypeEntityChange::kRemoteInitialUpdate));
 }
 
 IN_PROC_BROWSER_TEST_F(EnableDisableSingleClientTest, ResetsPrefsIfClearData) {

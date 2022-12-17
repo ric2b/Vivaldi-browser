@@ -5,6 +5,7 @@
 #include "third_party/blink/renderer/core/paint/highlight_painting_utils.h"
 
 #include "components/shared_highlighting/core/common/fragment_directives_constants.h"
+#include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/css/style_engine.h"
 #include "third_party/blink/renderer/core/css/style_request.h"
 #include "third_party/blink/renderer/core/dom/element.h"
@@ -98,10 +99,11 @@ Color HighlightThemeForegroundColor(const Document& document,
       if (RuntimeEnabledFeatures::HighlightOverlayPaintingEnabled()) {
         return previous_layer_color;
       } else {
-        // TODO(crbug.com/1147859): Unstyled custom highlights should not be
-        // painted, so here we make the color default to transparent. When the
-        // highlight painting code is updated to match the spec, this should
-        // instead return the equivalent of 'currentColor'.
+        // TODO(crbug.com/1295264): unstyled custom highlights should not change
+        // the foreground color, but for now the best we can do is defaulting to
+        // transparent (pre-HighlightOverlayPainting with double painting). The
+        // correct behaviour is to use the ‘color’ of the next topmost active
+        // highlight (equivalent to 'currentColor').
         return Color::kTransparent;
       }
     default:
@@ -182,12 +184,6 @@ HighlightPseudoStyleWithOriginatingInheritance(
 // highlight color properties default to initial, rather than the UA default.
 // https://drafts.csswg.org/css-pseudo-4/#highlight-cascade
 bool UseUaHighlightColors(PseudoId pseudo, const ComputedStyle& pseudo_style) {
-  // TODO(crbug.com/1024156): spec issue: should we limit this to ::selection?
-  // TODO(crbug.com/1024156): https://github.com/w3c/csswg-drafts/issues/6386
-  // NOTE: to limit this to ::selection without breaking our default highlight
-  // colors for ::target-text, we would need to split HasAuthorHighlightColors
-  // into bits for foreground and background, or impl ::target-text defaults
-  // as a UA stylesheet rule of MarkText on Mark (as recommended by the spec).
   return !pseudo_style.HasAuthorHighlightColors();
 }
 
@@ -213,10 +209,8 @@ Color HighlightColor(const Document& document,
                                                    pseudo_argument);
 
   mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
-  if (pseudo_style &&
-      ((!RuntimeEnabledFeatures::HighlightInheritanceEnabled() &&
-        pseudo != PseudoId::kPseudoIdHighlight) ||
-       !UseUaHighlightColors(pseudo, *pseudo_style))) {
+  if (pseudo_style && (!StyleResolver::UsesHighlightPseudoInheritance(pseudo) ||
+                       !UseUaHighlightColors(pseudo, *pseudo_style))) {
     if (!document.InForcedColorsMode() ||
         pseudo_style->ForcedColorAdjust() != EForcedColorAdjust::kAuto) {
       if (pseudo_style->ColorIsCurrentColor()) {
@@ -246,8 +240,7 @@ scoped_refptr<const ComputedStyle> HighlightPaintingUtils::HighlightPseudoStyle(
     const ComputedStyle& style,
     PseudoId pseudo,
     const AtomicString& pseudo_argument) {
-  if (!RuntimeEnabledFeatures::HighlightInheritanceEnabled() &&
-      pseudo != PseudoId::kPseudoIdHighlight) {
+  if (!StyleResolver::UsesHighlightPseudoInheritance(pseudo)) {
     return HighlightPseudoStyleWithOriginatingInheritance(node, pseudo,
                                                           pseudo_argument);
   }
@@ -288,10 +281,8 @@ Color HighlightPaintingUtils::HighlightBackgroundColor(
       HighlightPseudoStyle(node, style, pseudo, pseudo_argument);
 
   mojom::blink::ColorScheme color_scheme = style.UsedColorScheme();
-  if (pseudo_style &&
-      ((!RuntimeEnabledFeatures::HighlightInheritanceEnabled() &&
-        pseudo != PseudoId::kPseudoIdHighlight) ||
-       !UseUaHighlightColors(pseudo, *pseudo_style))) {
+  if (pseudo_style && (!StyleResolver::UsesHighlightPseudoInheritance(pseudo) ||
+                       !UseUaHighlightColors(pseudo, *pseudo_style))) {
     if (!document.InForcedColorsMode() ||
         pseudo_style->ForcedColorAdjust() != EForcedColorAdjust::kAuto) {
       Color highlight_color =

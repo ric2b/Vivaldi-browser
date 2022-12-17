@@ -46,13 +46,25 @@ extern const base::Feature kClientSideDetectionModelTag{
 const base::Feature kClientSideDetectionReferrerChain{
     "ClientSideDetectionReferrerChain", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kConnectorsScanningAccessToken{
-    "ConnectorsScanningAccessToken", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kClientSideDetectionKillswitch{
+  "ClientSideDetectionKillswitch",
+#if BUILDFLAG(IS_MAC)
+      base::FEATURE_ENABLED_BY_DEFAULT
+#else
+      base::FEATURE_DISABLED_BY_DEFAULT
+#endif
+};
 
-// TODO(b/197749390): Add tests for this feature being enabled when it's
-// finalized.
+const base::Feature kConnectorsScanningAccessToken{
+    "ConnectorsScanningAccessToken", base::FEATURE_ENABLED_BY_DEFAULT};
+
 const base::Feature kConnectorsScanningReportOnlyUI{
-    "ConnectorsScanningReportOnlyUI", base::FEATURE_DISABLED_BY_DEFAULT};
+    "ConnectorsScanningReportOnlyUI", base::FEATURE_ENABLED_BY_DEFAULT};
+
+#if BUILDFLAG(IS_ANDROID)
+const base::Feature kCreateSafebrowsingOnStartup{
+    "CreateSafebrowsingOnStartup", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 const base::Feature kDelayedWarnings{"SafeBrowsingDelayedWarnings",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
@@ -76,6 +88,10 @@ const base::Feature kEnhancedProtection {
 #endif
 };
 
+const base::Feature kEnhancedProtectionPhase2IOS{
+    "SafeBrowsingEnhancedProtectionPhase2IOS",
+    base::FEATURE_DISABLED_BY_DEFAULT};
+
 const base::Feature kExtensionTelemetry{"SafeBrowsingExtensionTelemetry",
                                         base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -86,6 +102,11 @@ const base::Feature kExtensionTelemetryPersistence{
 const base::FeatureParam<int> kExtensionTelemetryUploadIntervalSeconds{
     &kExtensionTelemetry, "UploadIntervalSeconds",
     /*default_value=*/3600};
+
+const base::FeatureParam<int> kExtensionTelemetryWritesPerInterval{
+    &kExtensionTelemetry, "NumberOfWritesInInterval",
+    /*default_value=*/4};
+
 const base::Feature kExtensionTelemetryTabsExecuteScriptSignal{
     "SafeBrowsingExtensionTelemetryTabsExecuteScriptSignal",
     base::FEATURE_DISABLED_BY_DEFAULT};
@@ -110,9 +131,6 @@ const base::Feature kOmitNonUserGesturesFromReferrerChain{
 const base::Feature kSafeBrowsingCsbrrWithToken{
     "SafeBrowsingCsbrrWithToken", base::FEATURE_DISABLED_BY_DEFAULT};
 
-const base::Feature kSafeBrowsingCTDownloadWarning{
-    "SafeBrowsingCTDownloadWarning", base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kSafeBrowsingEnterpriseCsd{
     "SafeBrowsingEnterpriseCsd", base::FEATURE_ENABLED_BY_DEFAULT};
 
@@ -129,17 +147,13 @@ const base::Feature kSafeBrowsingRemoveCookiesInAuthRequests{
 
 const base::Feature kSendSampledPingsForProtegoAllowlistDomains{
     "SafeBrowsingSendSampledPingsForProtegoAllowlistDomains",
-    base::FEATURE_DISABLED_BY_DEFAULT};
+    base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSuspiciousSiteTriggerQuotaFeature{
     "SafeBrowsingSuspiciousSiteTriggerQuota", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kThreatDomDetailsTagAndAttributeFeature{
     "ThreatDomDetailsTagAttributes", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kTriggerThrottlerDailyQuotaFeature{
-    "SafeBrowsingTriggerThrottlerDailyQuota",
-    base::FEATURE_DISABLED_BY_DEFAULT};
 
 const base::Feature kUseNewDownloadWarnings{"UseNewDownloadWarnings",
                                             base::FEATURE_DISABLED_BY_DEFAULT};
@@ -168,6 +182,7 @@ constexpr struct {
     {&kDelayedWarnings, true},
     {&kDownloadBubble, true},
     {&kEnhancedProtection, true},
+    {&kEnhancedProtectionPhase2IOS, true},
     {&kExtensionTelemetry, true},
     {&kExtensionTelemetryReportContactedHosts, true},
     {&kExtensionTelemetryPersistence, true},
@@ -179,7 +194,6 @@ constexpr struct {
     {&kSendSampledPingsForProtegoAllowlistDomains, true},
     {&kSuspiciousSiteTriggerQuotaFeature, true},
     {&kThreatDomDetailsTagAndAttributeFeature, false},
-    {&kTriggerThrottlerDailyQuotaFeature, false},
 };
 
 // Adds the name and the enabled/disabled status of a given feature.

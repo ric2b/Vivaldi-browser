@@ -39,7 +39,6 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/first_run/first_run_screen_delegate.h"
 #import "ios/chrome/browser/ui/first_run/first_run_util.h"
-#include "ios/chrome/browser/ui/first_run/fre_field_trial.h"
 #import "ios/chrome/browser/ui/main/scene_state.h"
 #import "ios/chrome/browser/ui/main/scene_state_browser_agent.h"
 #import "ios/chrome/browser/unified_consent/unified_consent_service_factory.h"
@@ -188,10 +187,6 @@
   self.viewController.enterpriseSignInRestrictions =
       GetEnterpriseSignInRestrictions(authenticationService, prefService,
                                       syncService);
-  self.viewController.identitySwitcherPosition =
-      fre_field_trial::GetSigninSyncScreenUIIdentitySwitcherPosition();
-  self.viewController.stringsSet =
-      fre_field_trial::GetSigninSyncScreenUIStringSet();
 
   self.accountManagerService =
       ChromeAccountManagerServiceFactory::GetForBrowserState(browserState);
@@ -235,7 +230,7 @@
   [self.identityChooserCoordinator stop];
   self.identityChooserCoordinator = nil;
 
-  // If |_addAccountSigninCoordinator| or |_advancedSettingsSigninCoordinator|
+  // If `_addAccountSigninCoordinator` or `_advancedSettingsSigninCoordinator`
   // weren't stopped yet (which can happen when closing the scene), try to
   // call -interruptWithAction: to properly tear down the coordinators.
   SigninCoordinator* signinCoordinator = self.addAccountSigninCoordinator;
@@ -272,27 +267,24 @@
       self.mediator.selectedIdentity;
 }
 
-- (void)signinSyncViewControllerDidTapOnSettings:
-    (SigninSyncViewController*)signinSyncViewController {
-  DCHECK(self.mediator.selectedIdentity);
-
-  AuthenticationFlow* authenticationFlow =
-      [[AuthenticationFlow alloc] initWithBrowser:self.browser
-                                         identity:self.mediator.selectedIdentity
-                                 postSignInAction:POST_SIGNIN_ACTION_NONE
-                         presentingViewController:self.viewController];
-  authenticationFlow.dispatcher = HandlerForProtocol(
-      self.browser->GetCommandDispatcher(), BrowsingDataCommands);
-
-  [self.mediator
-      prepareAdvancedSettingsWithAuthenticationFlow:authenticationFlow];
-}
-
 - (void)signinSyncViewController:
             (SigninSyncViewController*)signinSyncViewController
               addConsentStringID:(const int)stringID {
   [self.consentStringIDs addObject:[NSNumber numberWithInt:stringID]];
 }
+
+- (void)signinSyncViewController:
+            (SigninSyncViewController*)signinSyncViewController
+          logScrollButtonVisible:(BOOL)scrollButtonVisible
+        withAccountPickerVisible:(BOOL)accountButtonVisible {
+  first_run::FirstRunScreenType screenType =
+      accountButtonVisible
+          ? first_run::FirstRunScreenType::kSyncScreenWithIdentityPicker
+          : first_run::FirstRunScreenType::kSyncScreenWithoutIdentityPicker;
+  RecordFirstRunScrollButtonVisibilityMetrics(screenType, scrollButtonVisible);
+}
+
+#pragma mark - PromoStyleViewControllerDelegate
 
 - (void)didTapPrimaryActionButton {
   if (self.mediator.selectedIdentity) {
@@ -306,6 +298,22 @@
   // Cancel sync and sign out the user if needed.
   [self.mediator cancelSyncAndRestoreSigninState:self.signinStateOnStart
                            signinIdentityOnStart:self.signinIdentityOnStart];
+}
+
+- (void)didTapURLInDisclaimer:(NSURL*)URL {
+  // Currently there is only one link to show sync settings in the disclaimer.
+  DCHECK(self.mediator.selectedIdentity);
+
+  AuthenticationFlow* authenticationFlow =
+      [[AuthenticationFlow alloc] initWithBrowser:self.browser
+                                         identity:self.mediator.selectedIdentity
+                                 postSignInAction:POST_SIGNIN_ACTION_NONE
+                         presentingViewController:self.viewController];
+  authenticationFlow.dispatcher = HandlerForProtocol(
+      self.browser->GetCommandDispatcher(), BrowsingDataCommands);
+
+  [self.mediator
+      prepareAdvancedSettingsWithAuthenticationFlow:authenticationFlow];
 }
 
 #pragma mark - IdentityChooserCoordinatorDelegate
@@ -380,7 +388,7 @@
 
 #pragma mark - Private
 
-// Dismisses the Signed Out modal if it is still present and |skipScreens|.
+// Dismisses the Signed Out modal if it is still present and `skipScreens`.
 - (void)dismissSignedOutModalAndSkipScreens:(BOOL)skipScreens {
   [self.enterprisePromptCoordinator stop];
   self.enterprisePromptCoordinator = nil;
@@ -399,7 +407,7 @@
 }
 
 // Completes the presentation of the screen, recording the metrics and notifying
-// the delegate to skip the rest of the FRE if |skipRemainingScreens| is YES, or
+// the delegate to skip the rest of the FRE if `skipRemainingScreens` is YES, or
 // to continue the FRE.
 - (void)finishPresentingAndSkipRemainingScreens:(BOOL)skipRemainingScreens {
   signin::IdentityManager* identityManager =

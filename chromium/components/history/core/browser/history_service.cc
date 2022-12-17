@@ -101,12 +101,11 @@ class HistoryService::BackendDelegate : public HistoryBackend::Delegate {
 
   void NotifyURLVisited(ui::PageTransition transition,
                         const URLRow& row,
-                        const RedirectList& redirects,
                         base::Time visit_time) override {
     service_task_runner_->PostTask(
         FROM_HERE,
         base::BindOnce(&HistoryService::NotifyURLVisited, history_service_,
-                       transition, row, redirects, visit_time));
+                       transition, row, visit_time));
   }
 
   void NotifyURLsModified(const URLRows& changed_urls) override {
@@ -521,6 +520,17 @@ void HistoryService::AddSearchMetadataForVisit(
                base::BindOnce(&HistoryBackend::AddSearchMetadataForVisit,
                               history_backend_, visit_id, search_normalized_url,
                               search_terms));
+}
+
+void HistoryService::AddPageMetadataForVisit(
+    const std::string& alternative_title,
+    VisitID visit_id) {
+  TRACE_EVENT0("browser", "HistoryService::AddPageMetadataForVisit");
+  DCHECK(backend_task_runner_) << "History service being called after cleanup";
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  ScheduleTask(PRIORITY_NORMAL,
+               base::BindOnce(&HistoryBackend::AddPageMetadataForVisit,
+                              history_backend_, visit_id, alternative_title));
 }
 
 void HistoryService::AddPageWithDetails(const GURL& url,
@@ -1051,7 +1061,6 @@ base::CancelableTaskTracker::TaskId HistoryService::GetVisibleVisitCountToHost(
 
 base::CancelableTaskTracker::TaskId HistoryService::QueryMostVisitedURLs(
     int result_count,
-    int days_back,
     QueryMostVisitedURLsCallback callback,
     base::CancelableTaskTracker* tracker) {
   DCHECK(backend_task_runner_) << "History service being called after cleanup";
@@ -1059,7 +1068,7 @@ base::CancelableTaskTracker::TaskId HistoryService::QueryMostVisitedURLs(
   return tracker->PostTaskAndReplyWithResult(
       backend_task_runner_.get(), FROM_HERE,
       base::BindOnce(&HistoryBackend::QueryMostVisitedURLs, history_backend_,
-                     result_count, days_back),
+                     result_count),
       std::move(callback));
 }
 
@@ -1180,6 +1189,18 @@ HistoryService::GetTypedURLSyncControllerDelegate() {
   return std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
       backend_task_runner_,
       base::BindRepeating(&HistoryBackend::GetTypedURLSyncControllerDelegate,
+                          base::Unretained(history_backend_.get())));
+}
+
+std::unique_ptr<syncer::ModelTypeControllerDelegate>
+HistoryService::GetHistorySyncControllerDelegate() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  // Note that a callback is bound for GetHistorySyncControllerDelegate()
+  // because this getter itself must also run in the backend sequence, and the
+  // proxy object below will take care of that.
+  return std::make_unique<syncer::ProxyModelTypeControllerDelegate>(
+      backend_task_runner_,
+      base::BindRepeating(&HistoryBackend::GetHistorySyncControllerDelegate,
                           base::Unretained(history_backend_.get())));
 }
 
@@ -1352,11 +1373,10 @@ void HistoryService::OnDBLoaded() {
 
 void HistoryService::NotifyURLVisited(ui::PageTransition transition,
                                       const URLRow& row,
-                                      const RedirectList& redirects,
                                       base::Time visit_time) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   for (HistoryServiceObserver& observer : observers_)
-    observer.OnURLVisited(this, transition, row, redirects, visit_time);
+    observer.OnURLVisited(this, transition, row, visit_time);
 }
 
 void HistoryService::NotifyURLsModified(const URLRows& changed_urls) {

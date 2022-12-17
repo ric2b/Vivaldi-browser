@@ -9,6 +9,7 @@
 
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_pref_names.h"
+#include "ash/constants/notifier_catalogs.h"
 #include "ash/display/display_color_manager.h"
 #include "ash/display/window_tree_host_manager.h"
 #include "ash/public/cpp/notification_utils.h"
@@ -40,6 +41,7 @@
 #include "ui/display/manager/display_manager.h"
 #include "ui/display/types/display_constants.h"
 #include "ui/display/types/display_snapshot.h"
+#include "ui/display/util/display_util.h"
 #include "ui/gfx/animation/animation_delegate.h"
 #include "ui/gfx/animation/linear_animation.h"
 #include "ui/gfx/geometry/vector3d_f.h"
@@ -273,7 +275,7 @@ void ApplyTemperatureToHost(aura::WindowTreeHost* host, float temperature) {
   // Only apply ambient EQ to internal displays.
   const bool apply_ambient_temperature =
       night_light_controller->GetAmbientColorEnabled() &&
-      display::Display::IsInternalDisplayId(display_id);
+      display::IsInternalDisplayId(display_id);
 
   const SkM44 linear_gamma_space_matrix =
       MatrixFromTemperature(temperature, true, apply_ambient_temperature);
@@ -828,7 +830,8 @@ void NightLightControllerImpl::ShowAutoNightLightNotification() {
           l10n_util::GetStringUTF16(IDS_ASH_AUTO_NIGHT_LIGHT_NOTIFY_BODY),
           std::u16string(), GURL(),
           message_center::NotifierId(
-              message_center::NotifierType::SYSTEM_COMPONENT, kNotifierId),
+              message_center::NotifierType::SYSTEM_COMPONENT, kNotifierId,
+              NotificationCatalogName::kNightLight),
           message_center::RichNotificationData{},
           base::MakeRefCounted<message_center::ThunkNotificationDelegate>(
               weak_ptr_factory_.GetWeakPtr()),

@@ -283,7 +283,7 @@ class DarkLightEnabledTest : public LoginManagerTest {
     LoginDisplayHost::default_host()
         ->GetWizardContext()
         ->defer_oobe_flow_finished_for_tests = false;
-    WizardController::SkipPostLoginScreensForTesting();
+    login_manager_mixin_.SkipPostLoginScreens();
     login_manager_mixin_.WaitForActiveSession();
   }
   LoginManagerMixin login_manager_mixin_{&mixin_host_};
@@ -349,7 +349,7 @@ IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, PRE_OobeLogin) {
 }
 
 // Test focusing different pods.
-IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, OobeLogin) {
+IN_PROC_BROWSER_TEST_F(DarkLightEnabledTest, DISABLED_OobeLogin) {
   ASSERT_EQ(LoginScreenTestApi::GetFocusedUser(), user2);
   EXPECT_FALSE(ash::ColorProvider::Get()->IsDarkModeEnabled());
 

@@ -187,7 +187,7 @@ struct DidOverscrollParams;
 
   // The set of key codes from key down events that we haven't seen the matching
   // key up events yet.
-  // Used for filtering out non-matching NSKeyUp events.
+  // Used for filtering out non-matching NSEventTypeKeyUp events.
   std::set<unsigned short> _keyDownCodes;
 
   // The filter used to guide touch events towards a horizontal or vertical
@@ -204,6 +204,8 @@ struct DidOverscrollParams;
 
   // The parent accessibility element. This is set only in the browser process.
   base::scoped_nsobject<id> _accessibilityParent;
+
+  uint64_t popup_parent_ns_view_id_;
 
   vivaldi::VivaldiScrollType vivaldiScrollType_;
 }
@@ -272,6 +274,10 @@ struct DidOverscrollParams;
 // TODO(lgrey/ellyjones): Remove this in favor of setAccessibilityParent:
 // when we switch to the new accessibility API.
 - (void)setAccessibilityParentElement:(id)accessibilityParent;
+
+// Stores a reference to the popup parent's NSView id, which we can use to
+// retrieve the associated NSView.
+- (void)setPopupParentNSViewId:(uint64_t)view_id;
 
 // Methods previously marked as private.
 - (instancetype)

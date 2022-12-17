@@ -20,10 +20,13 @@
 #include "ash/capture_mode/capture_mode_toggle_button.h"
 #include "ash/capture_mode/capture_mode_type_view.h"
 #include "ash/capture_mode/capture_mode_util.h"
-#include "ash/constants/ash_features.h"
 #include "ash/shell.h"
 #include "ash/style/style_util.h"
 #include "ash/wm/mru_window_tracker.h"
+#include "ash/wm/window_state.h"
+#include "base/containers/flat_map.h"
+#include "base/containers/flat_set.h"
+#include "chromeos/ui/base/chromeos_ui_constants.h"
 #include "ui/accessibility/ax_enums.mojom.h"
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/controls/button/label_button.h"
@@ -44,6 +47,17 @@ constexpr std::array<FineTunePosition, 9> kSelectionTabbingOrder = {
     FineTunePosition::kBottomCenter, FineTunePosition::kBottomLeft,
     FineTunePosition::kLeftCenter};
 
+// We inset the `window_of_interest` by `kWindowOfInterestInset` and outset any
+// other window by `kIntersectingWindowOutset` we intersect with it, so that the
+// resulting points of intersections are inside the bounds of
+// `window_of_interest` and outside the bounds of the intersecting window.
+// `chromeos::kResizeOutsideBoundsSize` is used while outsetting the window as
+// it is the size of the window's resize border, and located events on it are
+// still targeted to the window even though they're outside the window's bounds.
+constexpr int kIntersectingWindowOutset =
+    chromeos::kResizeOutsideBoundsSize + 1;
+constexpr int kWindowOfInterestInset = 1;
+
 std::vector<aura::Window*> GetWindowListIgnoreModalForActiveDesk() {
   return Shell::Get()->mru_window_tracker()->BuildWindowListIgnoreModal(
       DesksMruType::kActiveDesk);
@@ -58,6 +72,171 @@ views::Widget* GetCameraPreviewWidget() {
 CameraPreviewView* GetCameraPreviewView() {
   auto* camera_controller = CaptureModeController::Get()->camera_controller();
   return camera_controller ? camera_controller->camera_preview_view() : nullptr;
+}
+
+// Returns true if the `value` is within the inclusive range of `low` and
+// `high`.
+bool InRange(int value, int low, int high) {
+  return value >= low && value <= high;
+}
+
+// Returns a vector of intersection points of two bounds.
+std::vector<gfx::Point> GetIntersectionPoints(const gfx::Rect& bounds_a,
+                                              const gfx::Rect& bounds_b) {
+  // Calculate the attributes for the `intersection`.
+  const int intersection_x = std::max(bounds_a.x(), bounds_b.x());
+  const int intersection_y = std::max(bounds_a.y(), bounds_b.y());
+  const int intersection_right = std::min(bounds_a.right(), bounds_b.right());
+  const int intersection_bottom =
+      std::min(bounds_a.bottom(), bounds_b.bottom());
+  const auto intersection = gfx::Rect(intersection_x, intersection_y,
+                                      intersection_right - intersection_x,
+                                      intersection_bottom - intersection_y);
+
+  if (intersection.width() <= 0 || intersection.height() <= 0)
+    return {};
+
+  const std::vector<gfx::Point> candidate_points = {
+      intersection.origin(), intersection.bottom_left(),
+      intersection.bottom_right(), intersection.top_right()};
+
+  // Iterate the corners of the `intersection` and check if the point falls on
+  // the edge of the `intersection` and within the range of the edge.
+  std::vector<gfx::Point> intersection_points;
+  for (const auto& point : candidate_points) {
+    if (point.x() == bounds_a.x() &&
+        InRange(point.y(), bounds_a.y(), bounds_a.bottom())) {
+      intersection_points.push_back(point);
+    }
+    if (point.x() == bounds_a.right() &&
+        InRange(point.y(), bounds_a.y(), bounds_a.bottom())) {
+      intersection_points.push_back(point);
+    }
+    if (point.y() == bounds_a.y() &&
+        InRange(point.x(), bounds_a.x(), bounds_a.right())) {
+      intersection_points.push_back(point);
+    }
+    if (point.y() == bounds_a.bottom() &&
+        InRange(point.x(), bounds_a.x(), bounds_a.right())) {
+      intersection_points.push_back(point);
+    }
+  }
+  return intersection_points;
+}
+
+// Returns true if `window_of_interest` is fully occluded with no point on it
+// selectable by hovering the mouse cursor over it, false otherwise. When
+// calculating the intersection point, we always inset the bounds of
+// `window_of_interest` and outset the bounds of other windows which the
+// `window_of_interest` is being compared with to ensure that the intersection
+// point falls within the bounds of `window_of_interest`.
+bool IsWindowFullyOccluded(aura::Window* window_of_interest) {
+  std::stack<gfx::Point> points_stack;
+  // Create a set to track the points that have been calculated and inserted
+  // into the `points_stack` so that they will not be populated again and cause
+  // unnecessary infinite loop.
+  base::flat_set<gfx::Point> visited_points;
+  gfx::Rect window_of_interest_bounds = window_of_interest->GetBoundsInScreen();
+  gfx::Rect insetted_win_of_interest_bounds = window_of_interest_bounds;
+  insetted_win_of_interest_bounds.Inset(kWindowOfInterestInset);
+  points_stack.push(insetted_win_of_interest_bounds.origin());
+  points_stack.push(insetted_win_of_interest_bounds.top_right());
+  points_stack.push(insetted_win_of_interest_bounds.bottom_left());
+  points_stack.push(insetted_win_of_interest_bounds.bottom_right());
+
+  // Create a map: the key is the intersection point, the value is the window
+  // which the `window_of_interest` is being compared with to get the
+  // intersection point.
+  base::flat_map<gfx::Point, aura::Window*> point_to_intersecting_window_map;
+  base::flat_set<aura::Window*> visited;
+  // Create a map to track the windows that have been compared so that we won't
+  // re-insert the intersection points of the two windows into the
+  // `points_stack` again if it has been calculated and inserted before.
+  base::flat_set<std::pair<aura::Window*, aura::Window*>>
+      compared_window_pair_set;
+
+  while (!points_stack.empty()) {
+    const gfx::Point point = points_stack.top();
+    points_stack.pop();
+    auto* top_window =
+        capture_mode_util::GetTopMostCapturableWindowAtPoint(point);
+    if (top_window == nullptr)
+      continue;
+    if (top_window == window_of_interest)
+      return false;
+
+    auto outsetted_top_window_bounds = top_window->GetBoundsInScreen();
+    outsetted_top_window_bounds.Inset(-kIntersectingWindowOutset);
+
+    if (!visited.insert(top_window).second) {
+      auto iter = point_to_intersecting_window_map.find(point);
+      if (iter == point_to_intersecting_window_map.end())
+        continue;
+      // `top_window` has been visited before, so we have already intersected it
+      // with `window_of_interest` and added the intersection points (if any) to
+      // the `points_stack`. However, the current `point` may have resulted from
+      // intersecting `window_of_interest` with a window other than the current
+      // `top_window`. We need to intersect `top_window` and that other window
+      // to get the intersection points that fall inside the bounds of
+      // `window_of_interest` (if any) so that we can check those as well.
+      auto* associated_window = iter->second;
+      if (associated_window == top_window)
+        continue;
+
+      auto outsetted_associated_win_bounds =
+          associated_window->GetBoundsInScreen();
+
+      if (!compared_window_pair_set
+               .insert(std::make_pair(associated_window, top_window))
+               .second ||
+          !compared_window_pair_set
+               .insert(std::make_pair(top_window, associated_window))
+               .second) {
+        continue;
+      }
+
+      outsetted_associated_win_bounds.Inset(-kIntersectingWindowOutset);
+      for (const auto& p : GetIntersectionPoints(
+               outsetted_top_window_bounds, outsetted_associated_win_bounds)) {
+        if (visited_points.insert(p).second &&
+            window_of_interest_bounds.Contains(p)) {
+          points_stack.push(p);
+        }
+
+        // We don't need to insert `p` into `point_to_intersecting_window_map`
+        // here as `p` is not directly from the `window_of_interest`.
+      }
+
+      continue;
+    }
+
+    if (!compared_window_pair_set
+             .insert(std::make_pair(window_of_interest, top_window))
+             .second ||
+        !compared_window_pair_set
+             .insert(std::make_pair(top_window, window_of_interest))
+             .second) {
+      continue;
+    }
+
+    for (const auto& p : GetIntersectionPoints(
+             outsetted_top_window_bounds, insetted_win_of_interest_bounds)) {
+      DCHECK(window_of_interest_bounds.Contains(p));
+
+      if (visited_points.insert(p).second) {
+        point_to_intersecting_window_map.emplace(p, top_window);
+        points_stack.push(p);
+      }
+    }
+  }
+  return true;
+}
+
+bool IsCaptureWindowSelectable(aura::Window* window) {
+  if (WindowState::Get(window)->IsMinimized() || !window->IsVisible())
+    return false;
+
+  return !IsWindowFullyOccluded(window);
 }
 
 }  // namespace
@@ -121,7 +300,7 @@ void CaptureModeSessionFocusCycler::HighlightableView::ClickView() {
 }
 
 // -----------------------------------------------------------------------------
-// HighlightableWindow:
+// CaptureModeSessionFocusCycler::HighlightableWindow:
 
 CaptureModeSessionFocusCycler::HighlightableWindow::HighlightableWindow(
     aura::Window* window,
@@ -185,6 +364,8 @@ CaptureModeSessionFocusCycler::CaptureModeSessionFocusCycler(
       scoped_a11y_overrider_(
           std::make_unique<ScopedA11yOverrideWindowSetter>()) {
   for (auto* window : GetWindowListIgnoreModalForActiveDesk()) {
+    if (!IsCaptureWindowSelectable(window))
+      continue;
     highlightable_windows_.emplace(
         window, std::make_unique<HighlightableWindow>(window, session_));
   }
@@ -374,7 +555,15 @@ void CaptureModeSessionFocusCycler::OnWidgetClosing(views::Widget* widget) {
   // focused.
   if (current_focus_group_ == FocusGroup::kPendingSettings ||
       current_focus_group_ == FocusGroup::kSettingsMenu) {
-    ClearFocus();
+    // When the settings menu is closed while focus is in or about to be in it,
+    // we manually put the focus back on the settings button.
+    current_focus_group_ = FocusGroup::kSettingsClose;
+    focus_index_ = 0u;
+    const auto highlightable_views = GetGroupItems(current_focus_group_);
+    DCHECK_EQ(highlightable_views.size(), 2u);
+    scoped_a11y_overrider_->MaybeUpdateA11yOverrideWindow(
+        GetA11yOverrideWindow());
+    highlightable_views[focus_index_]->PseudoFocus();
   }
   UpdateA11yAnnotation();
 }
@@ -411,9 +600,9 @@ CaptureModeSessionFocusCycler::GetNextGroup(bool reverse) const {
   const auto iter = base::ranges::find(groups_list, current_focus_group_);
   DCHECK(iter != groups_list.end());
   size_t next_group_index = std::distance(groups_list.begin(), iter);
-
+  const auto group_size = groups_list.size();
   do {
-    next_group_index = (next_group_index + increment) % groups_list.size();
+    next_group_index = (group_size + next_group_index + increment) % group_size;
   } while (!IsGroupAvailable(groups_list[next_group_index]));
 
   return groups_list[next_group_index];
@@ -527,8 +716,13 @@ CaptureModeSessionFocusCycler::GetGroupItems(FocusGroup group) const {
     }
     case FocusGroup::kCameraPreview: {
       auto* camera_preview_view = GetCameraPreviewView();
-      if (camera_preview_view)
-        items = {camera_preview_view, camera_preview_view->resize_button()};
+      if (camera_preview_view) {
+        items.push_back(camera_preview_view);
+        // The resize button is forced to be hidden if the camera preview is not
+        // collapsible. Do not advance the focus to it in this case.
+        if (camera_preview_view->is_collapsible())
+          items.push_back(camera_preview_view->resize_button());
+      }
       break;
     }
   }

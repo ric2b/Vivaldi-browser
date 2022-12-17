@@ -14,6 +14,7 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "ash/wm/wm_event.h"
+#include "ash/wm/work_area_insets.h"
 #include "ash/wm/workspace/phantom_window_controller.h"
 #include "ash/wm/workspace_controller.h"
 #include "base/containers/adapters.h"
@@ -21,6 +22,7 @@
 #include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/time/time.h"
+#include "base/timer/timer.h"
 #include "chromeos/ui/wm/features.h"
 #include "ui/aura/client/aura_constants.h"
 #include "ui/aura/test/test_window_delegate.h"
@@ -102,7 +104,8 @@ class WorkspaceWindowResizerTest : public AshTestBase {
     aura::Window* root = Shell::GetPrimaryRootWindow();
     gfx::Rect root_bounds(root->bounds());
     EXPECT_EQ(800, root_bounds.width());
-    Shell::Get()->SetDisplayWorkAreaInsets(root, gfx::Insets());
+    WorkAreaInsets::ForWindow(root)->UpdateWorkAreaInsetsForTest(
+        root, gfx::Rect(), gfx::Insets(), gfx::Insets());
     window_ = std::make_unique<aura::Window>(&delegate_);
     window_->SetType(aura::client::WINDOW_TYPE_NORMAL);
     window_->Init(ui::LAYER_NOT_DRAWN);
@@ -172,6 +175,7 @@ class WorkspaceWindowResizerTest : public AshTestBase {
                                          ::wm::WINDOW_MOVE_SOURCE_MOUSE,
                                          attached_windows);
   }
+
   std::unique_ptr<WorkspaceWindowResizer> CreateWorkspaceResizerForTest(
       aura::Window* window,
       const gfx::Point& point_in_parent,
@@ -182,6 +186,24 @@ class WorkspaceWindowResizerTest : public AshTestBase {
     window_state->CreateDragDetails(gfx::PointF(point_in_parent),
                                     window_component, source);
     return WorkspaceWindowResizer::Create(window_state, attached_windows);
+  }
+
+  void DragToMaximize(aura::Window* window) {
+    std::unique_ptr<WindowResizer> resizer = CreateResizerForTest(window);
+    resizer->Drag(gfx::PointF(400.f, 400.f), 0);
+    resizer->Drag(gfx::PointF(400.f, 2.f), 0);
+    DwellCountdownTimerFireNow();
+    resizer->CompleteDrag();
+    ASSERT_TRUE(WindowState::Get(window)->IsMaximized());
+    resizer.reset();
+  }
+
+  void DragToRestore(aura::Window* window) {
+    std::unique_ptr<WindowResizer> resizer = CreateResizerForTest(window);
+    resizer->Drag(gfx::PointF(200.f, 200.f), 0);
+    resizer->CompleteDrag();
+    ASSERT_FALSE(WindowState::Get(window)->IsMaximized());
+    resizer.reset();
   }
 
   PhantomWindowController* snap_phantom_window_controller() const {
@@ -200,6 +222,10 @@ class WorkspaceWindowResizerTest : public AshTestBase {
 
   void DwellCountdownTimerFireNow() {
     workspace_resizer_->dwell_countdown_timer_.FireNow();
+  }
+
+  void DragToMaximizeBehaviorCheckCountdownTimerFireNow(aura::Window* window) {
+    WindowState::Get(window)->drag_to_maximize_mis_trigger_timer_.FireNow();
   }
 
   TestWindowDelegate delegate_;
@@ -421,7 +447,8 @@ TEST_F(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_2) {
 TEST_F(WorkspaceWindowResizerTest, AttachedResize_BOTTOM_3) {
   UpdateDisplay("600x800");
   aura::Window* root = Shell::GetPrimaryRootWindow();
-  Shell::Get()->SetDisplayWorkAreaInsets(root, gfx::Insets());
+  WorkAreaInsets::ForWindow(root)->UpdateWorkAreaInsetsForTest(
+      root, gfx::Rect(), gfx::Insets(), gfx::Insets());
 
   window_->SetBounds(gfx::Rect(300, 100, 300, 200));
   window2_->SetBounds(gfx::Rect(300, 300, 200, 150));
@@ -871,8 +898,10 @@ TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideRightWorkArea) {
 }
 
 TEST_F(WorkspaceWindowResizerTest, ResizeWindowOutsideBottomWorkArea) {
-  Shell::Get()->SetDisplayWorkAreaInsets(Shell::GetPrimaryRootWindow(),
-                                         gfx::Insets::TLBR(0, 0, 50, 0));
+  aura::Window* root = Shell::GetPrimaryRootWindow();
+  WorkAreaInsets::ForWindow(root)->UpdateWorkAreaInsetsForTest(
+      root, gfx::Rect(), gfx::Insets::TLBR(0, 0, 50, 0),
+      gfx::Insets::TLBR(0, 0, 50, 0));
   int bottom =
       screen_util::GetDisplayWorkAreaBoundsInParent(window_.get()).bottom();
   int delta_to_bottom = 50;
@@ -1537,7 +1566,8 @@ TEST_F(WorkspaceWindowResizerTest, DontExceedMaxHeight) {
 TEST_F(WorkspaceWindowResizerTest, DontExceedMinHeight) {
   UpdateDisplay("600x500");
   aura::Window* root = Shell::GetPrimaryRootWindow();
-  Shell::Get()->SetDisplayWorkAreaInsets(root, gfx::Insets());
+  WorkAreaInsets::ForWindow(root)->UpdateWorkAreaInsetsForTest(
+      root, gfx::Rect(), gfx::Insets(), gfx::Insets());
 
   // Four 100x100 windows flush against eachother, starting at 100,100.
   window_->SetBounds(gfx::Rect(100, 100, 100, 100));
@@ -1919,6 +1949,116 @@ TEST_F(WorkspaceWindowResizerTest, DragToMaximizeStartingInSnapRegion) {
   DwellCountdownTimerFireNow();
   resizer->CompleteDrag();
   EXPECT_TRUE(WindowState::Get(window_.get())->IsMaximized());
+}
+
+TEST_F(WorkspaceWindowResizerTest, DragToMaximizeNumOfMisTriggersMetric) {
+  base::HistogramTester histogram_tester;
+  auto* window = window_.get();
+  auto* window2 = window2_.get();
+  AllowSnap(window);
+  AllowSnap(window2);
+
+  // Drag to maximize `window_` again.
+  DragToMaximize(window);
+
+  // Immediately restore it.
+  DragToRestore(window);
+
+  // Drag to maximize again immediately after it's restored.
+  DragToMaximize(window);
+
+  // Immediately restore it again.
+  DragToRestore(window);
+
+  // Wait for the drag to maximize behavior to be checked.
+  DragToMaximizeBehaviorCheckCountdownTimerFireNow(window);
+
+  window_.reset();
+
+  // Verify that during the lifetime of `window_`, there're 2 drag to maximize
+  // mis-triggers on it.
+  histogram_tester.ExpectBucketCount(
+      "Ash.Window.DragMaximized.NumberOfMisTriggers", 2, 1);
+
+  // Drag to maximize `window2_`.
+  DragToMaximize(window2);
+  // Immediately restore it.
+  DragToRestore(window2);
+
+  DragToMaximizeBehaviorCheckCountdownTimerFireNow(window2);
+
+  window2_.reset();
+
+  // Verify that during the lifetime of `window2_`, there is one drag to
+  // maximize mis-trigger on it.
+  histogram_tester.ExpectBucketCount(
+      "Ash.Window.DragMaximized.NumberOfMisTriggers", 1, 1);
+
+  window3_.reset();
+  // Verify that the number of mis-triggers is not recorded for `window3`, since
+  // it's never been dragged to maximized.
+  histogram_tester.ExpectBucketCount(
+      "Ash.Window.DragMaximized.NumberOfMisTriggers", 0, 0);
+}
+
+TEST_F(WorkspaceWindowResizerTest, DragToMaximizeValidMetric) {
+  base::HistogramTester histogram_tester;
+  auto* window = window_.get();
+  AllowSnap(window);
+
+  // Drag to maximize `window_`.
+  DragToMaximize(window);
+
+  // Now immediately drag to restore `window_`.
+  DragToRestore(window);
+
+  // Wait for the drag to maximize behavior to be checked.
+  DragToMaximizeBehaviorCheckCountdownTimerFireNow(window);
+
+  // Verify that since `window_` is restored immediately after is dragged to
+  // maximized, drag to maximize behavior should be considered as invalid.
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", true, 0);
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", false,
+                                     1);
+
+  // Drag to maximize `window_` again.
+  DragToMaximize(window);
+
+  // Don't restore `window_` and wait for the drag to maximize behavior to be
+  // checked.
+  DragToMaximizeBehaviorCheckCountdownTimerFireNow(window);
+
+  DragToRestore(window);
+
+  // Verify this time the drag to maximize behavior should be considered as
+  // valid since the window is restored after 5 seconds.
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", true, 1);
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", false,
+                                     1);
+
+  // Drag to maximize `window_` again.
+  DragToMaximize(window);
+
+  // Immediately restore it.
+  DragToRestore(window);
+
+  // Drag to maximize again immediately after it's restored.
+  DragToMaximize(window);
+
+  // Verify that the first drag to maximize should be considered as invalid.
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", false,
+                                     2);
+
+  // Immediately restore it again.
+  DragToRestore(window);
+
+  // Wait for the drag to maximize behavior to be checked.
+  DragToMaximizeBehaviorCheckCountdownTimerFireNow(window);
+
+  // Verify that the second drag to maximize should also be considered as
+  // invalid.'
+  histogram_tester.ExpectBucketCount("Ash.Window.DragMaximized.Valid", false,
+                                     3);
 }
 
 // Makes sure that we are not creating any resizer in kiosk mode.

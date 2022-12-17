@@ -165,85 +165,6 @@ public final class ChromePreferenceKeys {
      */
     public static final String CONTENT_SUGGESTIONS_SHOWN = "content_suggestions_shown";
 
-    /** An all-time counter of Contextual Search panel opens triggered by any gesture.*/
-    public static final String CONTEXTUAL_SEARCH_ALL_TIME_OPEN_COUNT =
-            "contextual_search_all_time_open_count";
-    /** An all-time counter of taps that triggered the Contextual Search peeking panel. */
-    public static final String CONTEXTUAL_SEARCH_ALL_TIME_TAP_COUNT =
-            "contextual_search_all_time_tap_count";
-    /**
-     * The number of times a tap gesture caused a Contextual Search Quick Answer to be shown.
-     * Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_ALL_TIME_TAP_QUICK_ANSWER_COUNT =
-            "contextual_search_all_time_tap_quick_answer_count";
-    public static final KeyPrefix CONTEXTUAL_SEARCH_CLICKS_WEEK_PREFIX =
-            new KeyPrefix("contextual_search_clicks_week_*");
-    public static final String CONTEXTUAL_SEARCH_CURRENT_WEEK_NUMBER =
-            "contextual_search_current_week_number";
-    /**
-     * The entity-data impressions count for Contextual Search, i.e. thumbnails shown in the Bar.
-     * Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_ENTITY_IMPRESSIONS_COUNT =
-            "contextual_search_entity_impressions_count";
-    /**
-     * The entity-data opens count for Contextual Search, e.g. Panel opens following thumbnails
-     * shown in the Bar. Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_ENTITY_OPENS_COUNT =
-            "contextual_search_entity_opens_count";
-    public static final KeyPrefix CONTEXTUAL_SEARCH_IMPRESSIONS_WEEK_PREFIX =
-            new KeyPrefix("contextual_search_impressions_week_*");
-    public static final String CONTEXTUAL_SEARCH_LAST_ANIMATION_TIME =
-            "contextual_search_last_animation_time";
-    public static final String CONTEXTUAL_SEARCH_NEWEST_WEEK = "contextual_search_newest_week";
-    public static final String CONTEXTUAL_SEARCH_OLDEST_WEEK = "contextual_search_oldest_week";
-    /**
-     * An encoded set of outcomes of user interaction with Contextual Search, stored as an int.
-     */
-    public static final String CONTEXTUAL_SEARCH_PREVIOUS_INTERACTION_ENCODED_OUTCOMES =
-            "contextual_search_previous_interaction_encoded_outcomes";
-    /**
-     * A user interaction event ID for interaction with Contextual Search, stored as a long.
-     */
-    public static final String CONTEXTUAL_SEARCH_PREVIOUS_INTERACTION_EVENT_ID =
-            "contextual_search_previous_interaction_event_id";
-    /**
-     * A timestamp indicating when we updated the user interaction with Contextual Search, stored
-     * as a long, with resolution in days.
-     */
-    public static final String CONTEXTUAL_SEARCH_PREVIOUS_INTERACTION_TIMESTAMP =
-            "contextual_search_previous_interaction_timestamp";
-    /**
-     * The number of times the Contextual Search panel was opened with the opt-in promo visible.
-     */
-    public static final String CONTEXTUAL_SEARCH_PROMO_OPEN_COUNT =
-            "contextual_search_promo_open_count";
-    /**
-     * The Quick Actions ignored count, i.e. phone numbers available but not dialed.
-     * Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_QUICK_ACTIONS_IGNORED_COUNT =
-            "contextual_search_quick_actions_ignored_count";
-    /**
-     * The Quick Actions taken count for Contextual Search, i.e. phone numbers dialed and similar
-     * actions. Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_QUICK_ACTIONS_TAKEN_COUNT =
-            "contextual_search_quick_actions_taken_count";
-    /**
-     * The Quick Action impressions count for Contextual Search, i.e. actions presented in the Bar.
-     * Cumulative, starting at M-69.
-     */
-    public static final String CONTEXTUAL_SEARCH_QUICK_ACTION_IMPRESSIONS_COUNT =
-            "contextual_search_quick_action_impressions_count";
-    /**
-     * The number of times that a tap triggered the Contextual Search panel to peek since the last
-     * time the panel was opened.  Note legacy string value without "open".
-     */
-    public static final String CONTEXTUAL_SEARCH_TAP_SINCE_OPEN_COUNT =
-            "contextual_search_tap_count";
     /**
      * The number of times a tap gesture caused a Contextual Search Quick Answer to be shown since
      * the last time the panel was opened.  Note legacy string value without "open".
@@ -287,6 +208,19 @@ public final class ChromePreferenceKeys {
 
     public static final KeyPrefix CUSTOM_TABS_DEX_LAST_UPDATE_TIME_PREF_PREFIX =
             new KeyPrefix("pref_local_custom_tabs_module_dex_last_update_time_*");
+
+    /** Package name of the client app that uses CCT service of the last launched CCT. */
+    public static final String CUSTOM_TABS_LAST_CLIENT_PACKAGE =
+            "Chrome.CustomTabs.LastClientPackage";
+    public static final String CUSTOM_TABS_LAST_CLOSE_TIMESTAMP =
+            "Chrome.CustomTabs.LastCloseTimestamp";
+    public static final String CUSTOM_TABS_LAST_CLOSE_TAB_INTERACTION =
+            "Chrome.CustomTabs.LastCloseTabInteraction";
+    /** The referrer URI string of the last launched CCT. */
+    public static final String CUSTOM_TABS_LAST_REFERRER = "Chrome.CustomTabs.LastReferrer";
+    /** {@link Activity#getTaskId()} of the last launched CCT. */
+    public static final String CUSTOM_TABS_LAST_TASK_ID = "Chrome.CustomTabs.LastTaskId";
+    /** Uri of the last launched CCT. */
     public static final String CUSTOM_TABS_LAST_URL = "pref_last_custom_tab_url";
 
     /**
@@ -360,6 +294,11 @@ public final class ChromePreferenceKeys {
             "Chrome.Flags.CrashStreakBeforeCache";
 
     /**
+     * How many runs of Safe Mode for Cached Flags are left before trying a normal run.
+     */
+    public static final String FLAGS_SAFE_MODE_RUNS_LEFT = "Chrome.Flags.SafeModeRunsLeft";
+
+    /**
      * Cached field trial parameters generated by CachedFeatureFlags use this prefix.
      */
     public static final KeyPrefix FLAGS_FIELD_TRIAL_PARAM_CACHED =
@@ -399,19 +338,6 @@ public final class ChromePreferenceKeys {
     public static final String FLAGS_CACHED_NETWORK_SERVICE_WARM_UP_ENABLED =
             "network_service_warm_up_enabled";
     /**
-     * Key for whether PrefetchBackgroundTask should load native in service manager only mode.
-     * Default value is false.
-     */
-    public static final String FLAGS_CACHED_SERVICE_MANAGER_FOR_BACKGROUND_PREFETCH =
-            "service_manager_for_background_prefetch";
-    /**
-     * Key for whether DownloadResumptionBackgroundTask should load native in service manager only
-     * mode.
-     * Default value is false.
-     */
-    public static final String FLAGS_CACHED_SERVICE_MANAGER_FOR_DOWNLOAD_RESUMPTION =
-            "service_manager_for_download_resumption";
-    /**
      * Whether or not the start surface is enabled.
      * Default value is false.
      */
@@ -447,6 +373,8 @@ public final class ChromePreferenceKeys {
     public static final String HOMEPAGE_USE_DEFAULT_URI = "homepage_partner_enabled";
     public static final String HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_URI =
             "Chrome.Homepage.PartnerCustomizedDefaultUri";
+    public static final String HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_GURL =
+            "Chrome.Homepage.PartnerCustomizedDefaultGurl";
 
     /**
      * Key used to save homepage location set by enterprise policy
@@ -694,8 +622,21 @@ public final class ChromePreferenceKeys {
     public static final String PRICE_TRACKING_USER_MANAGED_NOTIFICATIONS_TIMESTAMPS =
             "Chrome.PriceTracking.UserManagedNotificationsTimestamps";
 
-    public static final String PRIVACY_METRICS_REPORTING = "metrics_reporting";
     public static final String PRIVACY_METRICS_IN_SAMPLE = "in_metrics_sample";
+
+    /**
+     * This is deprecated and is going to be removed in the future (See https://crbug.com/1320040).
+     * Use PrivacyPreferencesManagerImpl#isUsageAndCrashReportingPermitted to know if metrics
+     * reporting is allowed.
+     */
+    @Deprecated
+    public static final String PRIVACY_METRICS_REPORTING = "metrics_reporting";
+
+    public static final String PRIVACY_METRICS_REPORTING_PERMITTED_BY_USER =
+            "Chrome.Privacy.UsageAndCrashReportingPermittedByUser";
+
+    public static final String PRIVACY_METRICS_REPORTING_PERMITTED_BY_POLICY =
+            "Chrome.Privacy.UsageAndCrashReportingPermittedByPolicy";
 
     public static final String PROFILES_BOOT_TIMESTAMP =
             "com.google.android.apps.chrome.ChromeMobileApplication.BOOT_TIMESTAMP";
@@ -846,12 +787,6 @@ public final class ChromePreferenceKeys {
     public static final String SIGNIN_AND_SYNC_PROMO_SHOW_COUNT =
             "enhanced_bookmark_signin_promo_show_count";
 
-    public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_BOOKMARKS =
-            "signin_promo_impressions_count_bookmarks";
-    public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP =
-            "Chrome.SigninPromo.NTPImpressions";
-    public static final String SIGNIN_PROMO_IMPRESSIONS_COUNT_SETTINGS =
-            "signin_promo_impressions_count_settings";
     public static final String SIGNIN_PROMO_LAST_SHOWN_ACCOUNT_NAMES =
             "signin_promo_last_shown_account_names";
     public static final String SIGNIN_PROMO_LAST_SHOWN_MAJOR_VERSION =
@@ -962,6 +897,11 @@ public final class ChromePreferenceKeys {
      */
     public static final KeyPrefix WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_TIME_MS_PREFIX =
             new KeyPrefix("Chrome.WebFeed.IntroWebFeedIdShownTimeMs.*");
+    /**
+     * Key used to save the number of times the WebFeed intro for the WebFeed ID was shown.
+     */
+    public static final KeyPrefix WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_COUNT_PREFIX =
+            new KeyPrefix("Chrome.WebFeed.IntroWebFeedIdShownCount.*");
 
     public static final String LOCK_ICON_IN_ADDRESS_BAR_ENABLED =
             "omnibox.lock_icon_in_address_bar_enabled";
@@ -1000,6 +940,9 @@ public final class ChromePreferenceKeys {
     public static final KeyPrefix KEY_ZERO_SUGGEST_HEADER_GROUP_COLLAPSED_BY_DEFAULT_PREFIX =
             new KeyPrefix("zero_suggest_header_group_collapsed_by_default*");
 
+    public static final String BLUETOOTH_NOTIFICATION_IDS = "Chrome.Bluetooth.NotificationIds";
+    public static final String USB_NOTIFICATION_IDS = "Chrome.USB.NotificationIds";
+
     /**
      * These values are currently used as SharedPreferences keys, along with the keys in
      * {@link LegacyChromePreferenceKeys#getKeysInUse()}. Add new SharedPreferences keys
@@ -1018,6 +961,7 @@ public final class ChromePreferenceKeys {
                 APP_LAUNCH_LAST_KNOWN_ACTIVE_TAB_STATE,
                 APP_LAUNCH_SEARCH_ENGINE_HAD_LOGO,
                 APPLICATION_OVERRIDE_LANGUAGE,
+                BLUETOOTH_NOTIFICATION_IDS,
                 CHROME_SURVEY_DOWNLOAD_ATTEMPTS.pattern(),
                 CHROME_SURVEY_PROMPT_DISPLAYED_TIMESTAMP.pattern(),
                 CLIPBOARD_SHARED_URI,
@@ -1034,6 +978,11 @@ public final class ChromePreferenceKeys {
                 CONTEXT_MENU_SEARCH_WITH_GOOGLE_LENS_CLICKED,
                 CONTEXT_MENU_SHOP_IMAGE_WITH_GOOGLE_LENS_CLICKED,
                 CONTINUOUS_SEARCH_DISMISSAL_COUNT,
+                CUSTOM_TABS_LAST_CLIENT_PACKAGE,
+                CUSTOM_TABS_LAST_CLOSE_TAB_INTERACTION,
+                CUSTOM_TABS_LAST_CLOSE_TIMESTAMP,
+                CUSTOM_TABS_LAST_REFERRER,
+                CUSTOM_TABS_LAST_TASK_ID,
                 CRYPTID_LAST_RENDER_TIMESTAMP,
                 DEFAULT_BROWSER_PROMO_LAST_DEFAULT_STATE,
                 DEFAULT_BROWSER_PROMO_LAST_PROMO_TIME,
@@ -1050,9 +999,11 @@ public final class ChromePreferenceKeys {
                 FLAGS_CRASH_STREAK_BEFORE_CACHE,
                 FLAGS_FIELD_TRIAL_PARAM_CACHED.pattern(),
                 FLAGS_LAST_CACHED_MINIMAL_BROWSER_FLAGS_TIME_MILLIS,
+                FLAGS_SAFE_MODE_RUNS_LEFT,
                 HOMEPAGE_LOCATION_POLICY,
                 HOMEPAGE_USE_CHROME_NTP,
                 HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_URI,
+                HOMEPAGE_PARTNER_CUSTOMIZED_DEFAULT_GURL,
                 IMAGE_DESCRIPTIONS_JUST_ONCE_COUNT,
                 IMAGE_DESCRIPTIONS_DONT_ASK_AGAIN,
                 INCOGNITO_TAB_COUNT,
@@ -1101,6 +1052,8 @@ public final class ChromePreferenceKeys {
                 PRICE_TRACKING_TRACK_PRICES_ON_TABS,
                 PRICE_TRACKING_USER_MANAGED_NOTIFICATIONS_TIMESTAMPS,
                 PRIMARY_ACCOUNT_SYNC,
+                PRIVACY_METRICS_REPORTING_PERMITTED_BY_USER,
+                PRIVACY_METRICS_REPORTING_PERMITTED_BY_POLICY,
                 PROMO_IS_DISMISSED.pattern(),
                 PROMO_TIMES_SEEN.pattern(),
                 QUERY_TILES_NEXT_DISPLAY_DECISION_TIME_MS,
@@ -1113,7 +1066,6 @@ public final class ChromePreferenceKeys {
                 SETTINGS_SAFETY_CHECK_RUN_COUNTER,
                 SHARING_LAST_SHARED_COMPONENT_NAME,
                 SHOW_START_SEGMENTATION_RESULT,
-                SIGNIN_PROMO_IMPRESSIONS_COUNT_NTP,
                 SYNC_PROMO_SHOW_COUNT.pattern(),
                 SIGNIN_PROMO_NTP_FIRST_SHOWN_TIME,
                 SIGNIN_PROMO_NTP_LAST_SHOWN_TIME,
@@ -1123,9 +1075,11 @@ public final class ChromePreferenceKeys {
                 TAP_FEED_CARDS_COUNT,
                 TAP_MV_TILES_COUNT,
                 TWA_DISCLOSURE_SEEN_PACKAGES,
+                USB_NOTIFICATION_IDS,
                 VIDEO_TUTORIALS_SHARE_URL_SET,
                 WEB_FEED_INTRO_LAST_SHOWN_TIME_MS,
                 WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_TIME_MS_PREFIX.pattern(),
+                WEB_FEED_INTRO_WEB_FEED_ID_SHOWN_COUNT_PREFIX.pattern(),
                 WEB_SIGNIN_ACCOUNT_PICKER_ACTIVE_DISMISSAL_COUNT
         );
         // clang-format on

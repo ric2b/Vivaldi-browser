@@ -39,8 +39,10 @@
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "ui/gfx/geometry/rect.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 #include "ui/views/view.h"
 #include "ui/views/widget/widget.h"
+#include "ui/wm/core/coordinate_conversion.h"
 
 namespace ash {
 namespace {
@@ -61,14 +63,16 @@ constexpr int kExtraTopOfScreenSpacing = 16;
 gfx::Rect GetWorkAreaForBubble(aura::Window* root_window) {
   display::Display display =
       display::Screen::GetScreen()->GetDisplayNearestWindow(root_window);
-  gfx::Rect work_area = display.work_area();
+  gfx::RectF work_area(display.work_area());
 
   // Subtract the shelf's bounds from the work area, since the shelf should
   // always be shown with the app list bubble. This is done because the work
   // area includes the area under the shelf when the shelf is set to auto-hide.
-  work_area.Subtract(Shelf::ForWindow(root_window)->GetIdealBounds());
+  gfx::RectF shelf_bounds(Shelf::ForWindow(root_window)->GetIdealBounds());
+  wm::TranslateRectToScreen(root_window, &shelf_bounds);
+  work_area.Subtract(shelf_bounds);
 
-  return work_area;
+  return gfx::ToRoundedRect(work_area);
 }
 
 // Returns the preferred size of the bubble widget in DIPs.
@@ -188,6 +192,8 @@ void AppListBubblePresenter::Show(int64_t display_id) {
   is_target_visibility_show_ = true;
   target_page_ = AppListBubblePage::kApps;
 
+  controller_->OnVisibilityWillChange(/*visible=*/true, display_id);
+
   // Refresh the continue tasks before opening the launcher. If a file doesn't
   // exist on disk anymore then the launcher should not create or animate the
   // continue task view for that suggestion.
@@ -264,7 +270,7 @@ void AppListBubblePresenter::OnZeroStateSearchDone(int64_t display_id) {
   // time the bubble is shown to make sure it tracks the right display.
   aura::client::GetFocusClient(bubble_widget_->GetNativeWindow())
       ->AddObserver(this);
-  controller_->OnVisibilityWillChange(/*visible=*/true, display_id);
+
   bubble_widget_->Show();
   // The page must be set before triggering the show animation so the correct
   // animations are triggered.
@@ -336,8 +342,19 @@ bool AppListBubblePresenter::IsShowing() const {
 bool AppListBubblePresenter::IsShowingEmbeddedAssistantUI() const {
   if (!is_target_visibility_show_)
     return false;
-  DCHECK(bubble_widget_);
+
+  // Bubble view is null while the bubble widget is being initialized for show.
+  // In this case, return true iff the app list will show the assistant page
+  // when initialized.
+  if (!bubble_view_)
+    return target_page_ == AppListBubblePage::kAssistant;
+
   return bubble_view_->IsShowingEmbeddedAssistantUI();
+}
+
+void AppListBubblePresenter::UpdateContinueSectionVisibility() {
+  if (bubble_view_)
+    bubble_view_->UpdateContinueSectionVisibility();
 }
 
 void AppListBubblePresenter::UpdateForNewSortingOrder(

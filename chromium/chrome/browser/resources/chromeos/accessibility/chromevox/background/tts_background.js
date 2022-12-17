@@ -7,8 +7,9 @@
  * extension API.
  */
 
-import {AbstractTts} from '../common/abstract_tts.js';
-import {ChromeTtsBase} from '../common/tts_base.js';
+import {AbstractTts} from '/chromevox/common/abstract_tts.js';
+import {PanelCommand, PanelCommandType} from '/chromevox/common/panel_command.js';
+import {ChromeTtsBase} from '/chromevox/common/tts_base.js';
 
 const Utterance = class {
   /**
@@ -202,11 +203,6 @@ export class TtsBackground extends ChromeTtsBase {
       mergedProperties['voiceName'] = this.currentVoice;
     }
 
-    if (queueMode === QueueMode.CATEGORY_FLUSH &&
-        !mergedProperties['category']) {
-      queueMode = QueueMode.FLUSH;
-    }
-
     const utterance = new Utterance(textString, mergedProperties, queueMode);
     this.speakUsingQueue_(utterance);
     // Attempt to queue phonetic speech with property['delay']. This ensures
@@ -385,7 +381,7 @@ export class TtsBackground extends ChromeTtsBase {
     const utterance = this.currentUtterance_;
     const utteranceId = utterance.id;
 
-    utterance.properties['onEvent'] = (event) => {
+    utterance.properties['onEvent'] = event => {
       this.onTtsEvent_(event, utteranceId);
     };
 
@@ -550,7 +546,7 @@ export class TtsBackground extends ChromeTtsBase {
   /** @override */
   isSpeaking() {
     super.isSpeaking();
-    return !!this.currentUtterance_;
+    return Boolean(this.currentUtterance_);
   }
 
   /** @override */
@@ -588,7 +584,7 @@ export class TtsBackground extends ChromeTtsBase {
   /** @override */
   removeCapturingEventListener(listener) {
     this.capturingTtsEventListeners_ =
-        this.capturingTtsEventListeners_.filter((item) => {
+        this.capturingTtsEventListeners_.filter(item => {
           return item !== listener;
         });
   }
@@ -714,7 +710,7 @@ export class TtsBackground extends ChromeTtsBase {
    * @private
    */
   createPunctuationReplace_(clear) {
-    return (match) => {
+    return match => {
       const retain =
           this.retainPunctuation_.indexOf(match) !== -1 ? match : ' ';
       return clear ? retain :
@@ -779,10 +775,10 @@ export class TtsBackground extends ChromeTtsBase {
    * @private
    */
   updateVoice_(voiceName, opt_callback) {
-    chrome.tts.getVoices((voices) => {
+    chrome.tts.getVoices(voices => {
       const systemVoice = {voiceName: constants.SYSTEM_VOICE};
       voices.unshift(systemVoice);
-      const newVoice = voices.find((v) => {
+      const newVoice = voices.find(v => {
         return v.voiceName === voiceName;
       }) ||
           systemVoice;
@@ -802,7 +798,7 @@ export class TtsBackground extends ChromeTtsBase {
    * @private
    */
   updateFromPrefs_(announce, prefs) {
-    prefs.forEach((pref) => {
+    prefs.forEach(pref => {
       let msg;
       let propertyName;
       switch (pref.key) {

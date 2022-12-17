@@ -28,12 +28,7 @@ namespace media {
 class AudioDiscardHelper;
 
 // An AudioDecoder that uses Apple's AudioToolbox to decode audio.
-//
-// Once initialized, the decoding can proceed in the same manner for all
-// currently supported codecs.  The initialization part is highly
-// codec-dependent, though.  That's why this part of the decoder is moved to
-// dedicated implementations of ATCodecHelper.
-class MEDIA_EXPORT ATAudioDecoder : public AudioDecoder {
+class ATAudioDecoder : public AudioDecoder {
  public:
   struct FormatDetection;
 

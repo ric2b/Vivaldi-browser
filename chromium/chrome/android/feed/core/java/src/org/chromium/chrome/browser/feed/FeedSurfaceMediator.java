@@ -10,6 +10,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.view.View;
 
 import androidx.annotation.NonNull;
@@ -96,9 +97,8 @@ public class FeedSurfaceMediator
                         ViewVisibility.VISIBLE);
             }
             if (!mSettingUpStreams) {
-                maybeLogLaunchFinished(DiscoverLaunchResult.SWITCHED_FEED_TABS);
                 logSwitchedFeeds(newStream);
-                bindStream(newStream);
+                bindStream(newStream, /*shouldScrollToTop=*/true);
             }
         }
 
@@ -194,6 +194,7 @@ public class FeedSurfaceMediator
 
     private @Nullable RecyclerView.OnScrollListener mStreamScrollListener;
     private final ObserverList<ScrollListener> mScrollListeners = new ObserverList<>();
+    private HasContentListener mHasContentListener;
     private ContentChangedListener mStreamContentChangedListener;
     private MemoryPressureCallback mMemoryPressureCallback;
     private @Nullable SignInPromo mSignInPromo;
@@ -235,6 +236,7 @@ public class FeedSurfaceMediator
             @FeedSurfaceCoordinator.StreamTabId int openingTabId, FeedActionDelegate actionDelegate,
             FeedOptionsCoordinator optionsCoordinator) {
         mCoordinator = coordinator;
+        mHasContentListener = coordinator;
         mContext = context;
         mSnapScrollHelper = snapScrollHelper;
         mSigninManager = IdentityServicesProvider.get().getSigninManager(
@@ -294,7 +296,7 @@ public class FeedSurfaceMediator
     /** Update the content based on supervised user or enterprise policy. */
     void updateContent() {
         mFeedEnabled = FeedFeatures.isFeedEnabled();
-        if (mFeedEnabled == !mTabToStreamMap.isEmpty()) {
+        if (mFeedEnabled && !mTabToStreamMap.isEmpty()) {
             return;
         }
 
@@ -408,8 +410,9 @@ public class FeedSurfaceMediator
         mSettingUpStreams = false;
 
         if (mSectionHeaderModel.get(SectionHeaderListProperties.IS_SECTION_ENABLED_KEY)) {
-            bindStream(mTabToStreamMap.get(
-                    mSectionHeaderModel.get(SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY)));
+            bindStream(mTabToStreamMap.get(mSectionHeaderModel.get(
+                               SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY)),
+                    /*shouldScrollToTop=*/false);
         } else {
             unbindStream();
         }
@@ -471,6 +474,7 @@ public class FeedSurfaceMediator
         // hasUnreadContent() changes.
         Callback<Boolean> callback = hasUnreadContent -> {
             headerModel.set(SectionHeaderProperties.UNREAD_CONTENT_KEY, hasUnreadContent);
+            mHasContentListener.hasContentChanged(stream.getStreamKind(), hasUnreadContent);
         };
         callback.onResult(stream.hasUnreadContent().addObserver(callback));
     }
@@ -505,7 +509,7 @@ public class FeedSurfaceMediator
      * different from new stream. Once bound, the stream can add/remove contents.
      */
     @VisibleForTesting
-    void bindStream(Stream stream) {
+    void bindStream(Stream stream, boolean shouldScrollToTop) {
         if (mCurrentStream == stream) return;
         if (mCurrentStream != null) {
             unbindStream(/* shouldPlaceSpacer = */ true);
@@ -522,10 +526,13 @@ public class FeedSurfaceMediator
             mRestoreScrollState = getScrollStateForAutoScrollToTop();
         }
 
+        FeedReliabilityLogger reliabilityLogger = mCoordinator.getReliabilityLogger();
         mCurrentStream.bind(mCoordinator.getRecyclerView(), mCoordinator.getContentManager(),
                 mRestoreScrollState, mCoordinator.getSurfaceScope(),
-                mCoordinator.getHybridListRenderer(), mCoordinator.getLaunchReliabilityLogger(),
-                mHeaderCount);
+                mCoordinator.getHybridListRenderer(),
+                reliabilityLogger != null ? reliabilityLogger.getLaunchLogger()
+                                          : new FeedLaunchReliabilityLogger() {},
+                mHeaderCount, shouldScrollToTop);
         mRestoreScrollState = null;
         mCoordinator.getHybridListRenderer().onSurfaceOpened();
     }
@@ -558,7 +565,11 @@ public class FeedSurfaceMediator
 
         // This is the catch-all feed launch end event to ensure a complete flow is logged
         // even if we don't know a more specific reason for the stream unbinding.
-        maybeLogLaunchFinished(DiscoverLaunchResult.FRAGMENT_STOPPED);
+        FeedReliabilityLogger reliabilityLogger = mCoordinator.getReliabilityLogger();
+        if (reliabilityLogger != null) {
+            reliabilityLogger.logLaunchFinishedIfInProgress(
+                    DiscoverLaunchResult.FRAGMENT_STOPPED, /*userMightComeBack=*/false);
+        }
     }
 
     void onSurfaceOpened() {
@@ -601,7 +612,7 @@ public class FeedSurfaceMediator
         Stream stream = mTabToStreamMap.get(
                 mSectionHeaderModel.get(SectionHeaderListProperties.CURRENT_TAB_INDEX_KEY));
         if (stream != null) {
-            bindStream(stream);
+            bindStream(stream, /*shouldScrollToTop=*/false);
         }
     }
 
@@ -677,7 +688,7 @@ public class FeedSurfaceMediator
 
     private void setHeaderIndicatorState(boolean suggestionsVisible) {
         boolean isSignedIn = isSignedIn();
-        boolean isTabMode = isSignedIn && FeedFeatures.isWebFeedUIEnabled();
+        boolean isTabMode = isSignedIn && FeedFeatures.isWebFeedUIEnabled() && suggestionsVisible;
         // If we're in tab mode now, make sure webfeed tab is set up.
         if (isTabMode) {
             setUpWebFeedTab();
@@ -696,11 +707,11 @@ public class FeedSurfaceMediator
         mSectionHeaderModel.set(SectionHeaderListProperties.IS_LOGO_KEY,
                 !isGoogleSearchEngine && isSignedIn && suggestionsVisible);
         ViewVisibility indicatorState;
-        if (!isSignedIn) {
-            // Gone when not signed in to align text to far left.
+        if (!isSignedIn || !suggestionsVisible) {
+            // Gone when not signed in or feed off to align text to far left.
             indicatorState = ViewVisibility.GONE;
-        } else if (!suggestionsVisible || !isGoogleSearchEngine) {
-            // Visible when Google is not the search engine (show logo) or when turned off (eye).
+        } else if (!isGoogleSearchEngine) {
+            // Visible when Google is not the search engine (show logo).
             indicatorState = ViewVisibility.VISIBLE;
         } else {
             // Invisible when we have centered text (signed in and not shown). This
@@ -805,7 +816,7 @@ public class FeedSurfaceMediator
                 TemplateUrlServiceFactory.get().isDefaultSearchEngineGoogle();
         final int sectionHeaderStringId;
 
-        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED) && isSignedIn()) {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_FEED) && isSignedIn() && isExpanded) {
             sectionHeaderStringId = R.string.ntp_discover_on;
         } else if (isDefaultSearchEngineGoogle) {
             sectionHeaderStringId =
@@ -1106,12 +1117,6 @@ public class FeedSurfaceMediator
         }
     }
 
-    private void maybeLogLaunchFinished(DiscoverLaunchResult result) {
-        FeedLaunchReliabilityLogger logger = mCoordinator.getLaunchReliabilityLogger();
-        if (!logger.isLaunchInProgress()) return;
-        logger.logLaunchFinished(System.nanoTime(), result.getNumber());
-    }
-
     private @StreamType int getStreamType(Stream stream) {
         switch (stream.getStreamKind()) {
             case StreamKind.FOR_YOU:
@@ -1124,8 +1129,15 @@ public class FeedSurfaceMediator
     }
 
     private void logSwitchedFeeds(Stream switchedToStream) {
-        mCoordinator.getLaunchReliabilityLogger().logSwitchedFeeds(
-                getStreamType(switchedToStream), System.nanoTime());
+        // Log the end of an ongoing launch and the beginning of a new one.
+        FeedReliabilityLogger reliabilityLogger = mCoordinator.getReliabilityLogger();
+        if (reliabilityLogger == null) {
+            return;
+        }
+        reliabilityLogger.logLaunchFinishedIfInProgress(
+                DiscoverLaunchResult.SWITCHED_FEED_TABS, /*userMightComeBack=*/false);
+        reliabilityLogger.getLaunchLogger().logSwitchedFeeds(
+                getStreamType(switchedToStream), SystemClock.elapsedRealtimeNanos());
     }
 
     private boolean isSuggestionsVisible() {

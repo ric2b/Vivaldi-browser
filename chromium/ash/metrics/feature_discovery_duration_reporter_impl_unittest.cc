@@ -5,9 +5,9 @@
 #include "ash/metrics/feature_discovery_duration_reporter_impl.h"
 #include "ash/public/cpp/ash_prefs.h"
 #include "ash/public/cpp/feature_discovery_metric_util.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
-#include "base/strings/char_traits.h"
 #include "base/test/metrics/histogram_tester.h"
 
 namespace ash {
@@ -20,8 +20,12 @@ constexpr char kPrimaryUserEmail[] = "user1@example.com";
 // A mock secondary user's email.
 constexpr char kSecondaryUserEmail[] = "user2@example.com";
 
-// The mock feature's discovery duration histogram.
+// The mock features' histograms.
 constexpr char kMockHistogram[] = "FeatureDiscoveryTestMockFeature";
+const char kMockFeatureClamshellHistogram[] =
+    "FeatureDiscoveryTestMockFeature.clamshell";
+const char kMockFeatureTabletHistogram[] =
+    "FeatureDiscoveryTestMockFeature.tablet";
 
 SessionControllerImpl* GetSessionController() {
   return Shell::Get()->session_controller();
@@ -48,9 +52,12 @@ class FeatureDiscoveryDurationReporterImplTest : public AshTestBase {
   }
 
   // Returns true if the feature discovery reporter has ongoing observations.
-  bool HasActiveObservation() {
-    return !GetFeatureDiscoveryDurationReporter()
-                ->active_time_recordings_.empty();
+  bool IsMockFeatureUnderActiveObservation() {
+    const auto& active_time_recordings =
+        GetFeatureDiscoveryDurationReporter()->active_time_recordings_;
+    return active_time_recordings.find(
+               feature_discovery::TrackableFeature::kMockFeature) !=
+           active_time_recordings.cend();
   }
 
   // AshTestBase:
@@ -162,7 +169,7 @@ TEST_F(FeatureDiscoveryDurationReporterImplTest, CountDurationInOneSession) {
 
   // Verify that the finished observation does not resume.
   EXPECT_TRUE(IsReporterActive());
-  EXPECT_FALSE(HasActiveObservation());
+  EXPECT_FALSE(IsMockFeatureUnderActiveObservation());
 }
 
 // Verifies that the feature discovery duration is recorded correctly across
@@ -216,16 +223,121 @@ TEST_F(FeatureDiscoveryDurationReporterImplTest,
 // Verifies each feature that is supported by the feature discovery duration
 // reporter has the unique feature name.
 TEST_F(FeatureDiscoveryDurationReporterImplTest, VerifyFeatureNameIsUnique) {
-  auto cmp = [](const char* a, const char* b) {
-    const size_t length = base::CharTraits<char>::length(a);
-    return base::CharTraits<char>::compare(a, b, length) > 0;
-  };
+  auto cmp = [](const char* a, const char* b) { return std::strcmp(a, b) > 0; };
   std::set<const char*, decltype(cmp)> feature_names(cmp);
   for (const auto& feature_info : feature_discovery::kTrackableFeatureArray) {
     bool success = feature_names.emplace(feature_info.name).second;
     EXPECT_TRUE(success) << " " << feature_info.name
                          << " is used more than once";
   }
+}
+
+// Used to verify that collected data can be split by tablet mode states.
+class FeatureDiscoveryDurationReporterDataSplitTest
+    : public FeatureDiscoveryDurationReporterImplTest,
+      public testing::WithParamInterface</*is_tablet=*/bool> {
+ public:
+  FeatureDiscoveryDurationReporterDataSplitTest() = default;
+  FeatureDiscoveryDurationReporterDataSplitTest(
+      const FeatureDiscoveryDurationReporterDataSplitTest&) = delete;
+  FeatureDiscoveryDurationReporterDataSplitTest& operator=(
+      const FeatureDiscoveryDurationReporterDataSplitTest&) = delete;
+  ~FeatureDiscoveryDurationReporterDataSplitTest() override = default;
+
+  // FeatureDiscoveryDurationReporterImplTest:
+  void SetUp() override {
+    FeatureDiscoveryDurationReporterImplTest::SetUp();
+    TabletMode::Get()->SetEnabledForTest(GetParam());
+  }
+};
+
+INSTANTIATE_TEST_SUITE_P(All,
+                         FeatureDiscoveryDurationReporterDataSplitTest,
+                         testing::Bool());
+
+TEST_P(FeatureDiscoveryDurationReporterDataSplitTest, Basics) {
+  EXPECT_FALSE(IsReporterActive());
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  EXPECT_TRUE(IsReporterActive());
+
+  base::HistogramTester histogram_tester;
+  FeatureDiscoveryDurationReporterImpl* reporter =
+      GetFeatureDiscoveryDurationReporter();
+  reporter->MaybeActivateObservation(
+      feature_discovery::TrackableFeature::kModeSeparateMockFeature);
+  constexpr base::TimeDelta delta(base::Minutes(1));
+  task_environment()->FastForwardBy(delta);
+  reporter->MaybeFinishObservation(
+      feature_discovery::TrackableFeature::kModeSeparateMockFeature);
+
+  // Verify that data is recorded with the correct histogram.
+  if (GetParam()) {
+    histogram_tester.ExpectUniqueTimeSample(kMockFeatureTabletHistogram, delta,
+                                            1);
+    histogram_tester.ExpectTotalCount(kMockFeatureClamshellHistogram, 0);
+  } else {
+    histogram_tester.ExpectUniqueTimeSample(kMockFeatureClamshellHistogram,
+                                            delta, 1);
+    histogram_tester.ExpectTotalCount(kMockFeatureTabletHistogram, 0);
+  }
+}
+
+// Verifies that the metric data is correctly reported when the tablet mode
+// switches before the end of observation.
+TEST_P(FeatureDiscoveryDurationReporterDataSplitTest,
+       SwitchModeBeforeMetricReport) {
+  EXPECT_FALSE(IsReporterActive());
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  EXPECT_TRUE(IsReporterActive());
+
+  base::HistogramTester histogram_tester;
+  FeatureDiscoveryDurationReporterImpl* reporter =
+      GetFeatureDiscoveryDurationReporter();
+  reporter->MaybeActivateObservation(
+      feature_discovery::TrackableFeature::kModeSeparateMockFeature);
+  constexpr base::TimeDelta delta1(base::Minutes(1));
+  task_environment()->FastForwardBy(delta1);
+
+  // Toggle the tablet mode. Wait for the time duration of `delta2`. Then finish
+  // the observation.
+  TabletMode::Get()->SetEnabledForTest(!GetParam());
+  constexpr base::TimeDelta delta2(base::Minutes(2));
+  task_environment()->FastForwardBy(delta2);
+  reporter->MaybeFinishObservation(
+      feature_discovery::TrackableFeature::kModeSeparateMockFeature);
+
+  // Verify that data is recorded with the correct histogram.
+  if (GetParam()) {
+    histogram_tester.ExpectUniqueTimeSample(kMockFeatureTabletHistogram,
+                                            delta1 + delta2, 1);
+    histogram_tester.ExpectTotalCount(kMockFeatureClamshellHistogram, 0);
+  } else {
+    histogram_tester.ExpectUniqueTimeSample(kMockFeatureClamshellHistogram,
+                                            delta1 + delta2, 1);
+    histogram_tester.ExpectTotalCount(kMockFeatureTabletHistogram, 0);
+  }
+}
+
+// Verifies the metric data that is not split by tablet mode should be recorded
+// under both clamshell and tablet.
+TEST_P(FeatureDiscoveryDurationReporterDataSplitTest, CheckUnsplitMetric) {
+  EXPECT_FALSE(IsReporterActive());
+  GetSessionControllerClient()->SetSessionState(
+      session_manager::SessionState::ACTIVE);
+  EXPECT_TRUE(IsReporterActive());
+
+  base::HistogramTester histogram_tester;
+  FeatureDiscoveryDurationReporterImpl* reporter =
+      GetFeatureDiscoveryDurationReporter();
+  reporter->MaybeActivateObservation(
+      feature_discovery::TrackableFeature::kMockFeature);
+  constexpr base::TimeDelta delta(base::Minutes(1));
+  task_environment()->FastForwardBy(delta);
+  reporter->MaybeFinishObservation(
+      feature_discovery::TrackableFeature::kMockFeature);
+  histogram_tester.ExpectUniqueTimeSample(kMockHistogram, delta, 1);
 }
 
 }  // namespace ash

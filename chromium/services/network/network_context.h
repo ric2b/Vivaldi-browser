@@ -42,6 +42,7 @@
 #include "net/http/http_auth_preferences.h"
 #include "net/net_buildflags.h"
 #include "services/network/cors/preflight_controller.h"
+#include "services/network/first_party_sets/first_party_sets_access_delegate.h"
 #include "services/network/http_cache_data_counter.h"
 #include "services/network/http_cache_data_remover.h"
 #include "services/network/network_qualities_pref_delegate.h"
@@ -67,10 +68,6 @@
 #include "services/network/url_request_context_owner.h"
 #include "services/network/web_bundle/web_bundle_manager.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
-
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-#include "crypto/scoped_nss_types.h"
-#endif
 
 #if BUILDFLAG(ENABLE_REPORTING)
 #include "net/reporting/reporting_cache_observer.h"
@@ -459,7 +456,7 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
       const absl::optional<base::UnguessableToken>& reporting_source,
       const net::NetworkIsolationKey& network_isolation_key,
       const absl::optional<std::string>& user_agent,
-      base::Value body) override;
+      base::Value::Dict body) override;
   void QueueSignedExchangeReport(
       mojom::SignedExchangeReportPtr report,
       const net::NetworkIsolationKey& network_isolation_key) override;
@@ -735,6 +732,8 @@ class COMPONENT_EXPORT(NETWORK_SERVICE) NetworkContext
 #endif
 
   mojo::Receiver<mojom::NetworkContext> receiver_;
+
+  FirstPartySetsAccessDelegate first_party_sets_access_delegate_;
 
   std::unique_ptr<CookieManager> cookie_manager_;
 

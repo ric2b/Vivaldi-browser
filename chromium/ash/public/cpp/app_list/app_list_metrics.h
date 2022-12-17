@@ -23,6 +23,23 @@ ASH_PUBLIC_EXPORT extern const char
 ASH_PUBLIC_EXPORT extern const char
     kTabletAppListSortOrderOnSessionStartHistogram[];
 
+// The UMA histogram that records the time duration between the app list sort
+// education nudge show and the first sort usage.
+ASH_PUBLIC_EXPORT extern const char kAppListSortDiscoveryDurationAfterNudge[];
+
+// Similar to `kAppListSortDiscoveryDurationAfterNudge`. The only difference is
+// that the metric data is separated by the tablet mode state under which the
+// reorder education nudge shows.
+ASH_PUBLIC_EXPORT extern const char
+    kAppListSortDiscoveryDurationAfterNudgeClamshell[];
+ASH_PUBLIC_EXPORT extern const char
+    kAppListSortDiscoveryDurationAfterNudgeTablet[];
+
+// The UMA histogram that records the time duration between the earliest user
+// session activation with the app list sort enabled and the first sort usage.
+ASH_PUBLIC_EXPORT extern const char
+    kAppListSortDiscoveryDurationAfterActivation[];
+
 // The type of the ChromeSearchResult. This is used for logging so do not
 // change the order of this enum. If you add to this enum update
 // AppListSearchResult in enums.xml.

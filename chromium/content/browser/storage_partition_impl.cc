@@ -34,11 +34,11 @@
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
+#include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/cpp/constants.h"
 #include "components/services/storage/public/cpp/filesystem/filesystem_impl.h"
 #include "components/services/storage/public/mojom/filesystem/directory.mojom.h"
-#include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "components/services/storage/public/mojom/storage_service.mojom.h"
 #include "components/services/storage/shared_storage/shared_storage_manager.h"
 #include "components/services/storage/storage_service_impl.h"
@@ -127,6 +127,7 @@
 #include "storage/browser/quota/quota_settings.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/features.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "third_party/blink/public/common/storage_key/storage_key.h"
 #include "third_party/blink/public/mojom/devtools/inspector_issue.mojom-shared.h"
 #include "third_party/blink/public/mojom/quota/quota_types.mojom.h"
@@ -876,15 +877,14 @@ class StoragePartitionImpl::QuotaManagedDataDeletionHelper {
   QuotaManagedDataDeletionHelper(
       uint32_t remove_mask,
       uint32_t quota_storage_remove_mask,
-      const absl::optional<url::Origin>& storage_origin,
+      const absl::optional<blink::StorageKey>& storage_key,
       base::OnceClosure callback)
       : remove_mask_(remove_mask),
         quota_storage_remove_mask_(quota_storage_remove_mask),
-        storage_origin_(storage_origin),
+        storage_key_(storage_key),
         callback_(std::move(callback)),
         task_count_(0) {
-    DCHECK(!storage_origin_.has_value() ||
-           !storage_origin_->GetURL().is_empty());
+    DCHECK(!storage_key_.has_value() || !storage_key_->origin().opaque());
   }
 
   QuotaManagedDataDeletionHelper(const QuotaManagedDataDeletionHelper&) =
@@ -918,7 +918,7 @@ class StoragePartitionImpl::QuotaManagedDataDeletionHelper {
   // All of these data are accessed on IO thread.
   uint32_t remove_mask_;
   uint32_t quota_storage_remove_mask_;
-  absl::optional<url::Origin> storage_origin_;
+  absl::optional<blink::StorageKey> storage_key_;
   base::OnceClosure callback_;
   int task_count_;
 };
@@ -958,7 +958,7 @@ class StoragePartitionImpl::DataDeletionHelper {
       storage::FileSystemContext* filesystem_context,
       network::mojom::CookieManager* cookie_manager,
       InterestGroupManagerImpl* interest_group_manager,
-      AttributionManagerImpl* attribution_manager,
+      AttributionManager* attribution_manager,
       AggregationServiceImpl* aggregation_service,
       storage::SharedStorageManager* shared_storage_manager,
       bool perform_storage_cleanup,
@@ -969,7 +969,7 @@ class StoragePartitionImpl::DataDeletionHelper {
       const scoped_refptr<storage::QuotaManager>& quota_manager,
       const base::Time begin,
       const base::Time end,
-      const GURL& storage_origin,
+      const blink::StorageKey& storage_key,
       const scoped_refptr<storage::SpecialStoragePolicy>&
           special_storage_policy,
       StoragePartition::OriginMatcherFunction origin_matcher,
@@ -1016,7 +1016,7 @@ void StoragePartitionImpl::DataDeletionHelper::ClearQuotaManagedDataOnIOThread(
     const scoped_refptr<storage::QuotaManager>& quota_manager,
     const base::Time begin,
     const base::Time end,
-    const GURL& storage_origin,
+    const blink::StorageKey& storage_key,
     const scoped_refptr<storage::SpecialStoragePolicy>& special_storage_policy,
     StoragePartition::OriginMatcherFunction origin_matcher,
     bool perform_storage_cleanup,
@@ -1026,9 +1026,8 @@ void StoragePartitionImpl::DataDeletionHelper::ClearQuotaManagedDataOnIOThread(
   StoragePartitionImpl::QuotaManagedDataDeletionHelper* helper =
       new StoragePartitionImpl::QuotaManagedDataDeletionHelper(
           remove_mask_, quota_storage_remove_mask_,
-          storage_origin.is_empty()
-              ? absl::nullopt
-              : absl::make_optional(url::Origin::Create(storage_origin)),
+          storage_key.origin().opaque() ? absl::nullopt
+                                        : absl::make_optional(storage_key),
           std::move(callback));
   helper->ClearDataOnIOThread(quota_manager, begin, end, special_storage_policy,
                               std::move(origin_matcher),
@@ -1192,8 +1191,7 @@ void StoragePartitionImpl::Initialize(
   // Each consumer is responsible for registering its QuotaClient during
   // its construction.
   filesystem_context_ = CreateFileSystemContext(
-      browser_context_, partition_path_, GetBucketBasePath(), is_in_memory(),
-      quota_manager_proxy);
+      browser_context_, partition_path_, is_in_memory(), quota_manager_proxy);
 
   database_tracker_ = storage::DatabaseTracker::Create(
       partition_path_, is_in_memory(),
@@ -1312,8 +1310,16 @@ void StoragePartitionImpl::Initialize(
   }
 
   if (base::FeatureList::IsEnabled(blink::features::kInterestGroupStorage)) {
+    // Auction worklets on non-Android use dedicated processes; on Android due
+    // to high cost of process launch they try to reuse renderers.
     interest_group_manager_ = std::make_unique<InterestGroupManagerImpl>(
-        path, is_in_memory(), GetURLLoaderFactoryForBrowserProcess());
+        path, is_in_memory(),
+#if BUILDFLAG(IS_ANDROID)
+        InterestGroupManagerImpl::ProcessMode::kInRenderer,
+#else
+        InterestGroupManagerImpl::ProcessMode::kDedicated,
+#endif
+        GetURLLoaderFactoryForBrowserProcess());
   }
 
   // The Topics API is not available in Incognito mode.
@@ -1388,10 +1394,6 @@ const StoragePartitionConfig& StoragePartitionImpl::GetConfig() {
 
 base::FilePath StoragePartitionImpl::GetPath() {
   return partition_path_;
-}
-
-base::FilePath StoragePartitionImpl::GetBucketBasePath() {
-  return partition_path_.Append(storage::kWebStorageDirectory);
 }
 
 std::string StoragePartitionImpl::GetPartitionDomain() {
@@ -1648,7 +1650,7 @@ StoragePartitionImpl::GetFileSystemAccessManager() {
   return file_system_access_manager_.get();
 }
 
-AttributionManagerImpl* StoragePartitionImpl::GetAttributionManager() {
+AttributionManager* StoragePartitionImpl::GetAttributionManager() {
   DCHECK(initialized_);
   return attribution_manager_.get();
 }
@@ -1841,9 +1843,21 @@ void StoragePartitionImpl::OnAuthRequired(
     // OnAuthCredentials() with a nullopt that triggers CancelAuth().
     process_id = network::mojom::kInvalidProcessId;
 
-    auto* render_frame_host = context.navigation_or_document()->GetDocument();
-    if (render_frame_host)
-      process_id = render_frame_host->GetGlobalId().child_id;
+    // `navigation_or_document_` can be null when `context` is created with
+    // an invalid render frame host after a page is destroyed.
+    // It is currently possible for the ServiceWorker case above to use
+    // kRenderFrameHostContext for the auth request, after the RenderFrameHost
+    // has been deleted. Treating this as an invalid process ID will cancel the
+    // auth, which is the same outcome as if the ServiceWorker's process were
+    // used.
+    // TODO(https://crbug.com/1322751): Update the ServiceWorker code to
+    // recognize when the RenderFrameHost goes away and not use
+    // CreateForRenderFrameHost above.
+    if (context.navigation_or_document()) {
+      auto* render_frame_host = context.navigation_or_document()->GetDocument();
+      if (render_frame_host)
+        process_id = render_frame_host->GetGlobalId().child_id;
+    }
   }
   OnAuthRequiredContinuation(
       process_id, request_id, url, *is_primary_main_frame, first_auth_attempt,
@@ -2024,7 +2038,7 @@ void StoragePartitionImpl::OnCanSendReportingReports(
   for (auto& origin : origins) {
     bool allowed =
         permission_controller->GetPermissionStatusForOriginWithoutContext(
-            PermissionType::BACKGROUND_SYNC, origin) ==
+            blink::PermissionType::BACKGROUND_SYNC, origin) ==
         blink::mojom::PermissionStatus::GRANTED;
     if (allowed)
       origins_out.push_back(origin);
@@ -2041,7 +2055,7 @@ void StoragePartitionImpl::OnCanSendDomainReliabilityUpload(
       browser_context_->GetPermissionController();
   std::move(callback).Run(
       permission_controller->GetPermissionStatusForOriginWithoutContext(
-          content::PermissionType::BACKGROUND_SYNC,
+          blink::PermissionType::BACKGROUND_SYNC,
           url::Origin::Create(origin)) ==
       blink::mojom::PermissionStatus::GRANTED);
 }
@@ -2301,8 +2315,7 @@ void StoragePartitionImpl::QuotaManagedDataDeletionHelper::
   (*deletion_task_count)++;
   for (const auto& bucket : buckets) {
     // TODO(mkwst): Clean this up, it's slow. http://crbug.com/130746
-    if (storage_origin_.has_value() &&
-        bucket.storage_key.origin() != *storage_origin_)
+    if (storage_key_.has_value() && bucket.storage_key != *storage_key_)
       continue;
 
     if (origin_matcher && !origin_matcher.Run(bucket.storage_key.origin(),
@@ -2392,7 +2405,7 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
     storage::FileSystemContext* filesystem_context,
     network::mojom::CookieManager* cookie_manager,
     InterestGroupManagerImpl* interest_group_manager,
-    AttributionManagerImpl* attribution_manager,
+    AttributionManager* attribution_manager,
     AggregationServiceImpl* aggregation_service,
     storage::SharedStorageManager* shared_storage_manager,
     bool perform_storage_cleanup,
@@ -2447,6 +2460,11 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
     }
   }
 
+  if (remove_mask_ & REMOVE_DATA_MASK_INTEREST_GROUP_PERMISSIONS_CACHE) {
+    if (interest_group_manager)
+      interest_group_manager->ClearPermissionsCache();
+  }
+
   if (remove_mask_ & REMOVE_DATA_MASK_INDEXEDDB ||
       remove_mask_ & REMOVE_DATA_MASK_WEBSQL ||
       remove_mask_ & REMOVE_DATA_MASK_FILE_SYSTEMS ||
@@ -2455,12 +2473,12 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
       remove_mask_ & REMOVE_DATA_MASK_PLUGIN_PRIVATE_DATA) {
     GetIOThreadTaskRunner({})->PostTask(
         FROM_HERE,
-        base::BindOnce(&DataDeletionHelper::ClearQuotaManagedDataOnIOThread,
-                       base::Unretained(this),
-                       base::WrapRefCounted(quota_manager), begin, end,
-                       storage_origin, storage_policy_ref, origin_matcher,
-                       perform_storage_cleanup,
-                       CreateTaskCompletionClosure(TracingDataType::kQuota)));
+        base::BindOnce(
+            &DataDeletionHelper::ClearQuotaManagedDataOnIOThread,
+            base::Unretained(this), base::WrapRefCounted(quota_manager), begin,
+            end, blink::StorageKey(url::Origin::Create(storage_origin)),
+            storage_policy_ref, origin_matcher, perform_storage_cleanup,
+            CreateTaskCompletionClosure(TracingDataType::kQuota)));
   }
 
   if (remove_mask_ & REMOVE_DATA_MASK_LOCAL_STORAGE) {
@@ -2500,9 +2518,15 @@ void StoragePartitionImpl::DataDeletionHelper::ClearDataOnUIThread(
 
   auto filter = CreateGenericOriginMatcher(storage_origin, origin_matcher,
                                            storage_policy_ref);
-  if (attribution_manager && (remove_mask_ & REMOVE_DATA_MASK_CONVERSIONS)) {
+
+  // It is not expected to only delete internal attribution reporting data.
+  DCHECK(!(remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_INTERNAL) ||
+         remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_SITE_CREATED);
+  if (attribution_manager &&
+      (remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_SITE_CREATED)) {
     attribution_manager->ClearData(
         begin, end, filter,
+        remove_mask_ & REMOVE_DATA_MASK_ATTRIBUTION_REPORTING_INTERNAL,
         CreateTaskCompletionClosure(TracingDataType::kConversions));
   }
 
@@ -2786,6 +2810,12 @@ void StoragePartitionImpl::OverrideAggregationServiceForTesting(
     std::unique_ptr<AggregationServiceImpl> aggregation_service) {
   DCHECK(initialized_);
   aggregation_service_ = std::move(aggregation_service);
+}
+
+void StoragePartitionImpl::OverrideAttributionManagerForTesting(
+    std::unique_ptr<AttributionManager> attribution_manager) {
+  DCHECK(initialized_);
+  attribution_manager_ = std::move(attribution_manager);
 }
 
 void StoragePartitionImpl::GetQuotaSettings(

@@ -244,8 +244,10 @@ public class BookmarkActionBar extends SelectableListToolbar<BookmarkId>
                 return true;
             } else if (menuItem.getItemId() == R.id.add_page_to_reading_list_menu_id) {
                 if (mTabbedActivity != null && mTabbedActivity.getActivityTab() != null
-                  && ReadingListUtils.isReadingListSupported(mTabbedActivity.getActivityTab().getUrl())) {
-                    mTabbedActivity.addToReadingList(mTabbedActivity.getActivityTab());
+                        && ReadingListUtils.isReadingListSupported(
+                                   mTabbedActivity.getActivityTab().getUrl())) {
+                    mTabbedActivity.getTabBookMarker().addToReadingList(
+                            mTabbedActivity.getActivityTab());
                 }
                 return true;
             }

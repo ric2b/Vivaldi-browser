@@ -7,7 +7,6 @@
 
 #include "app/vivaldi_apptools.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/post_task.h"
 #include "build/build_config.h"
 #include "chrome/browser/autofill/personal_data_manager_factory.h"
 #include "chrome/browser/bookmarks/bookmark_model_factory.h"

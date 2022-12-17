@@ -4,6 +4,7 @@
 
 #include "chrome/browser/performance_hints/performance_hints_observer.h"
 
+#include "base/command_line.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service.h"
 #include "chrome/browser/optimization_guide/optimization_guide_keyed_service_factory.h"
 #include "chrome/browser/ui/browser.h"
@@ -118,7 +119,7 @@ IN_PROC_BROWSER_TEST_F(PerformanceHintsObserverFencedFrameTest,
                      optimization_guide::proto::PERFORMANCE_FAST);
 
   ASSERT_TRUE(fenced_frame_test_helper().CreateFencedFrame(
-      web_contents()->GetMainFrame(), fenced_frame_url));
+      web_contents()->GetPrimaryMainFrame(), fenced_frame_url));
 
   // The fenced frame URL has a hint for Google, but is not fetched.
   EXPECT_THAT(PerformanceHintsObserver::PerformanceClassForURL(

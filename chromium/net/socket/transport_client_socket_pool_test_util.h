@@ -69,9 +69,6 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
     kDelayedFailing,
     // A stalled socket that never connects at all.
     kStalled,
-    // A stalled socket that never connects at all, but returns a failing
-    // ConnectionAttempt in |GetConnectionAttempts|.
-    kStalledFailing,
     // A socket that can be triggered to connect explicitly, asynchronously.
     kTriggerable,
   };
@@ -80,7 +77,8 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
   struct Rule {
     explicit Rule(Type type,
                   absl::optional<std::vector<IPEndPoint>> expected_addresses =
-                      absl::nullopt);
+                      absl::nullopt,
+                  Error connect_error = ERR_CONNECTION_FAILED);
     ~Rule();
     Rule(const Rule&);
     Rule& operator=(const Rule&);
@@ -89,6 +87,9 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
     // If specified, the addresses that should be passed into
     // `CreateTransportClientSocket`.
     absl::optional<std::vector<IPEndPoint>> expected_addresses;
+    // The error to use if `type` specifies a failing connection. Ignored
+    // otherwise.
+    Error connect_error;
   };
 
   explicit MockTransportClientSocketFactory(NetLog* net_log);
@@ -144,8 +145,8 @@ class MockTransportClientSocketFactory : public ClientSocketFactory {
 
  private:
   raw_ptr<NetLog> net_log_;
-  int allocation_count_;
-  Type client_socket_type_;
+  int allocation_count_ = 0;
+  Type client_socket_type_ = Type::kSynchronous;
   base::span<const Rule> rules_;
   base::TimeDelta delay_;
   base::queue<base::OnceClosure> triggerable_sockets_;

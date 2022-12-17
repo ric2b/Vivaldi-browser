@@ -153,14 +153,15 @@ void ArcWallpaperService::SetDefaultWallpaper() {
       UserManager::Get()->GetPrimaryUser();
   WallpaperControllerClientImpl::Get()->SetDefaultWallpaper(
       primary_user->GetAccountId(),
-      primary_user->is_active() /*show_wallpaper=*/);
+      primary_user->is_active() /*show_wallpaper=*/, base::DoNothing());
 }
 
 void ArcWallpaperService::GetWallpaper(GetWallpaperCallback callback) {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   gfx::ImageSkia image =
       WallpaperControllerClientImpl::Get()->GetWallpaperImage();
-  image.SetReadOnly();
+  if (!image.isNull())
+    image.SetReadOnly();
   base::ThreadPool::PostTaskAndReplyWithResult(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
       base::BindOnce(&EncodeImagePng, image), std::move(callback));

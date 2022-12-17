@@ -193,11 +193,13 @@ RenderWidgetHostViewMac::RenderWidgetHostViewMac(RenderWidgetHost* widget)
                             ui::GestureProviderConfigType::CURRENT_PLATFORM),
                         this),
       accessibility_focus_overrider_(this),
+      ns_view_id_(remote_cocoa::GetNewNSViewId()),
       weak_factory_(this) {
   is_render_widget_host_view_mac_ = true;
   // The NSView is on the other side of |ns_view_|.
   in_process_ns_view_bridge_ =
-      std::make_unique<remote_cocoa::RenderWidgetHostNSViewBridge>(this, this);
+      std::make_unique<remote_cocoa::RenderWidgetHostNSViewBridge>(this, this,
+                                                                   ns_view_id_);
   ns_view_ = in_process_ns_view_bridge_.get();
 
   // Guess that the initial screen we will be on is the screen of the current
@@ -300,7 +302,7 @@ void RenderWidgetHostViewMac::MigrateNSViewBridge(
   mojo::PendingAssociatedReceiver<remote_cocoa::mojom::StubInterface>
       stub_bridge_receiver(view_receiver.PassHandle());
   remote_cocoa_application->CreateRenderWidgetHostNSView(
-      std::move(stub_client), std::move(stub_bridge_receiver));
+      ns_view_id_, std::move(stub_client), std::move(stub_bridge_receiver));
 
   ns_view_ = remote_ns_view_.get();
 
@@ -402,7 +404,7 @@ void RenderWidgetHostViewMac::InitAsPopup(
   SetContentBackgroundColor(SK_ColorTRANSPARENT);
 
   // This path is used by the time/date picker.
-  ns_view_->InitAsPopup(pos);
+  ns_view_->InitAsPopup(pos, popup_parent_host_view_->ns_view_id_);
 }
 
 RenderWidgetHostViewBase*
@@ -470,16 +472,10 @@ void RenderWidgetHostViewMac::NotifyHostAndDelegateOnWasShown(
 
   // If the frame for the renderer is already available, then the
   // tab-switching time is the presentation time for the browser-compositor.
-  DelegatedFrameHost* delegated_frame_host =
-      browser_compositor_->GetDelegatedFrameHost();
-  DCHECK(delegated_frame_host);
-  const bool record_presentation_time = has_saved_frame;
-  delegated_frame_host->WasShown(
-      browser_compositor_->GetRendererLocalSurfaceId(),
-      browser_compositor_->GetRendererSize(),
-      record_presentation_time
-          ? std::move(tab_switch_start_state)
-          : blink::mojom::RecordContentToVisibleTimeRequestPtr());
+  if (has_saved_frame && tab_switch_start_state) {
+    browser_compositor_->RequestPresentationTimeForNextFrame(
+        std::move(tab_switch_start_state));
+  }
 }
 
 void RenderWidgetHostViewMac::RequestPresentationTimeFromHostOrDelegate(
@@ -492,8 +488,8 @@ void RenderWidgetHostViewMac::RequestPresentationTimeFromHostOrDelegate(
   if (browser_compositor_->GetDelegatedFrameHost()->HasSavedFrame()) {
     // If the frame for the renderer is already available, then the
     // tab-switching time is the presentation time for the browser-compositor.
-    browser_compositor_->GetDelegatedFrameHost()
-        ->RequestPresentationTimeForNextFrame(std::move(visible_time_request));
+    browser_compositor_->RequestPresentationTimeForNextFrame(
+        std::move(visible_time_request));
   } else {
     host()->RequestPresentationTimeForNextFrame(
         std::move(visible_time_request));

@@ -7,11 +7,17 @@
  */
 
 import 'chrome://resources/cr_elements/cr_auto_img/cr_auto_img.js';
-import '../../common/styles.js';
+import '../../common/common_style.css.js';
 
 import {PolymerElement} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
+
 import {getLoadingPlaceholderAnimationDelay} from '../../common/utils.js';
+
 import {getTemplate} from './wallpaper_grid_item_element.html.js';
+
+export interface WallpaperGridItem {
+  $: {image: HTMLImageElement};
+}
 
 export class WallpaperGridItem extends PolymerElement {
   static get is() {
@@ -24,7 +30,11 @@ export class WallpaperGridItem extends PolymerElement {
 
   static get properties() {
     return {
-      imageSrc: String,
+      imageSrc: {
+        type: String,
+        observer: 'onImageSrcChanged_',
+      },
+
       index: Number,
       primaryText: String,
       secondaryText: String,
@@ -51,15 +61,20 @@ export class WallpaperGridItem extends PolymerElement {
   /** Whether the grid item is currently selected. */
   selected: boolean;
 
+  // Invoked on changes to |imageSrc|.
+  private onImageSrcChanged_(imageSrc: WallpaperGridItem['imageSrc']) {
+    // Hide the |image| element until it has successfully loaded. Note that it
+    // is intentional that the |image| element remain hidden on failure.
+    this.$.image.setAttribute('hidden', '');
+    this.$.image.onload = (imageSrc && imageSrc.length) ?
+        () => this.$.image.removeAttribute('hidden') :
+        null;
+  }
+
   /** Returns the delay to use for the grid item's placeholder animation. */
   private getItemPlaceholderAnimationDelay_(index: WallpaperGridItem['index']):
       string {
     return getLoadingPlaceholderAnimationDelay(index);
-  }
-
-  /** Whether the image is currently visible. */
-  private isImageVisible_() {
-    return !!this.imageSrc && !!this.imageSrc.length;
   }
 
   /** Whether the primary text is currently visible. */

@@ -70,7 +70,6 @@ public class PrivacySettings
     private static final String PREF_PRIVACY_SANDBOX = "privacy_sandbox";
     private static final String PREF_PRIVACY_REVIEW = "privacy_review";
     private static final String PREF_INCOGNITO_LOCK = "incognito_lock";
-    private static final String PREF_PHONE_AS_A_SECURITY_KEY = "phone_as_a_security_key";
 
     // Vivaldi
     private static final String PREF_CLEAR_SESSION_BROWSING_DATA = "clear_session_browsing_data";
@@ -183,10 +182,6 @@ public class PrivacySettings
         Preference syncAndServicesLink = findPreference(PREF_SYNC_AND_SERVICES_LINK);
         syncAndServicesLink.setSummary(buildSyncAndServicesLink());
         }
-
-        Preference phoneAsASecurityKey = findPreference(PREF_PHONE_AS_A_SECURITY_KEY);
-        phoneAsASecurityKey.setVisible(
-                ChromeFeatureList.isEnabled(ChromeFeatureList.WEB_AUTH_PHONE_SUPPORT));
 
         // Vivaldi
         ChromeSwitchPreference webRtcBroadcastIpPref =

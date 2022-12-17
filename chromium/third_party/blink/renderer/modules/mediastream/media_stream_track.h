@@ -10,6 +10,7 @@
 #include "build/build_config.h"
 #include "third_party/blink/renderer/bindings/core/v8/active_script_wrappable.h"
 #include "third_party/blink/renderer/bindings/core/v8/script_promise.h"
+#include "third_party/blink/renderer/bindings/core/v8/script_promise_resolver.h"
 #include "third_party/blink/renderer/bindings/modules/v8/v8_capture_handle.h"
 #include "third_party/blink/renderer/modules/event_target_modules.h"
 #include "third_party/blink/renderer/modules/modules_export.h"
@@ -22,6 +23,13 @@
 
 namespace blink {
 
+static const char kContentHintStringNone[] = "";
+static const char kContentHintStringAudioSpeech[] = "speech";
+static const char kContentHintStringAudioMusic[] = "music";
+static const char kContentHintStringVideoMotion[] = "motion";
+static const char kContentHintStringVideoDetail[] = "detail";
+static const char kContentHintStringVideoText[] = "text";
+
 class AudioSourceProvider;
 class ImageCapture;
 class MediaTrackCapabilities;
@@ -29,6 +37,22 @@ class MediaTrackConstraints;
 class MediaStream;
 class MediaTrackSettings;
 class ScriptState;
+
+struct TransferredValues {
+  base::UnguessableToken session_id;
+  String kind;
+  String id;
+  String label;
+  bool enabled;
+  bool muted;
+  WebMediaStreamTrack::ContentHintType content_hint;
+  MediaStreamSource::ReadyState ready_state;
+};
+
+String ContentHintToString(
+    const WebMediaStreamTrack::ContentHintType& content_hint);
+
+String ReadyStateToString(const MediaStreamSource::ReadyState& ready_state);
 
 class MODULES_EXPORT MediaStreamTrack
     : public EventTargetWithInlineData,
@@ -42,9 +66,12 @@ class MODULES_EXPORT MediaStreamTrack
     virtual void TrackChangedState() = 0;
   };
 
-  // TODO(1288839): Implement to recreate MST after transfer
-  static MediaStreamTrack* Create(ExecutionContext* context,
-                                  const base::UnguessableToken& token);
+  // Create a MediaStreamTrack instance as a result of a transfer into this
+  // context, eg when receiving a postMessage() with an MST in the transfer
+  // list.
+  // TODO(https://crbug.com/1288839): Implement to recreate MST after transfer
+  static MediaStreamTrack* FromTransferredState(ScriptState* script_state,
+                                                const TransferredValues& data);
 
   // MediaStreamTrack.idl
   virtual String kind() const = 0;
@@ -65,6 +92,8 @@ class MODULES_EXPORT MediaStreamTrack
   virtual ScriptPromise applyConstraints(ScriptState*,
                                          const MediaTrackConstraints*) = 0;
 
+  virtual void applyConstraints(ScriptPromiseResolver*,
+                                const MediaTrackConstraints*) = 0;
   virtual void SetConstraints(const MediaConstraints&) = 0;
 
   DEFINE_ATTRIBUTE_EVENT_LISTENER(mute, kMute)

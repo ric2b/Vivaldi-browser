@@ -7,6 +7,7 @@
 
 #include <string>
 
+#include "components/autofill/core/browser/autofill_client.h"
 #include "components/autofill/core/browser/payments/virtual_card_enrollment_flow.h"
 
 namespace base {
@@ -100,6 +101,10 @@ void LogGetDetailsForEnrollmentRequestAttempt(
     VirtualCardEnrollmentSource source);
 void LogGetDetailsForEnrollmentRequestResult(VirtualCardEnrollmentSource source,
                                              bool succeeded);
+void LogGetDetailsForEnrollmentRequestLatency(
+    VirtualCardEnrollmentSource source,
+    AutofillClient::PaymentsRpcResult result,
+    base::TimeDelta latency);
 
 // UpdateVirtualCardEnrollmentRequest related metrics. Attempts and results
 // should be 1:1 mapping.
@@ -137,6 +142,13 @@ void LogVirtualCardEnrollBubbleCardArtAvailable(
 // when the Virtual Card Enroll Bubble is shown.
 void LogVirtualCardEnrollBubbleLatencySinceUpstream(
     const base::TimeDelta& latency);
+
+// Logs the reason from strikedatabase perspective why virtual card enrollment
+// is not offered.
+void LogVirtualCardEnrollmentNotOfferedDueToMaxStrikes(
+    VirtualCardEnrollmentSource source);
+void LogVirtualCardEnrollmentNotOfferedDueToRequiredDelay(
+    VirtualCardEnrollmentSource source);
 
 // Helper function used to convert VirtualCardEnrollmentBubbleSource enum to
 // name suffix.

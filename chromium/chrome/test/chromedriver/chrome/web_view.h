@@ -263,8 +263,6 @@ class WebView {
 
   virtual bool IsNonBlocking() const = 0;
 
-  virtual bool IsOOPIF(const std::string& frame_id) = 0;
-
   virtual FrameTracker* GetFrameTracker() const = 0;
 
   virtual std::unique_ptr<base::Value> GetCastSinks() = 0;
@@ -273,9 +271,9 @@ class WebView {
 
   virtual void SetFrame(const std::string& new_frame_id) = 0;
 
-  virtual Status GetNodeIdByElement(const std::string& frame,
-                                    const base::Value& element,
-                                    int* node_id) = 0;
+  virtual Status GetBackendNodeIdByElement(const std::string& frame,
+                                           const base::Value& element,
+                                           int* backend_node_id) = 0;
 };
 
 #endif  // CHROME_TEST_CHROMEDRIVER_CHROME_WEB_VIEW_H_

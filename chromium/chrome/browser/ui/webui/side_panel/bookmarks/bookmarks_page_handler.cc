@@ -112,10 +112,7 @@ class BookmarkContextMenu : public ui::SimpleMenuModel,
 BookmarksPageHandler::BookmarksPageHandler(
     mojo::PendingReceiver<side_panel::mojom::BookmarksPageHandler> receiver,
     BookmarksSidePanelUI* bookmarks_ui)
-    : receiver_(this, std::move(receiver)), bookmarks_ui_(bookmarks_ui) {
-  if (auto embedder = bookmarks_ui_->embedder())
-    embedder->ShowUI();
-}
+    : receiver_(this, std::move(receiver)), bookmarks_ui_(bookmarks_ui) {}
 
 BookmarksPageHandler::BookmarksPageHandler(
     mojo::PendingReceiver<side_panel::mojom::BookmarksPageHandler> receiver,
@@ -125,18 +122,26 @@ BookmarksPageHandler::BookmarksPageHandler(
 BookmarksPageHandler::~BookmarksPageHandler() = default;
 
 void BookmarksPageHandler::OpenBookmark(
-    const GURL& url,
+    int64_t node_id,
     int32_t parent_folder_depth,
     ui::mojom::ClickModifiersPtr click_modifiers) {
   Browser* browser = chrome::FindLastActive();
   if (!browser)
     return;
 
+  bookmarks::BookmarkModel* bookmark_model =
+      BookmarkModelFactory::GetForBrowserContext(browser->profile());
+  const bookmarks::BookmarkNode* bookmark_node =
+      bookmarks::GetBookmarkNodeByID(bookmark_model, node_id);
+  if (!bookmark_node)
+    return;
+
   WindowOpenDisposition open_location = ui::DispositionFromClick(
       click_modifiers->middle_button, click_modifiers->alt_key,
       click_modifiers->ctrl_key, click_modifiers->meta_key,
       click_modifiers->shift_key);
-  content::OpenURLParams params(url, content::Referrer(), open_location,
+  content::OpenURLParams params(bookmark_node->url(), content::Referrer(),
+                                open_location,
                                 ui::PAGE_TRANSITION_AUTO_BOOKMARK, false);
   browser->OpenURL(params);
   base::RecordAction(base::UserMetricsAction("SidePanel.Bookmarks.Navigation"));
@@ -168,5 +173,12 @@ void BookmarksPageHandler::ShowContextMenu(const std::string& id_string,
   if (embedder) {
     embedder->ShowContextMenu(point, std::make_unique<BookmarkContextMenu>(
                                          browser, embedder, bookmark));
+  }
+}
+
+void BookmarksPageHandler::ShowUI() {
+  auto embedder = bookmarks_ui_->embedder();
+  if (embedder) {
+    embedder->ShowUI();
   }
 }

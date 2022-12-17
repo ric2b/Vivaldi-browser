@@ -79,8 +79,7 @@ class NotesModelObserverImpl : public vivaldi::NotesModelObserver {
   // |note_tracker_| accordingly. If |node| is a note, it gets marked
   // as deleted and that it requires a commit. If it's a folder, it recurses
   // over all children before processing the folder itself.
-  void ProcessDelete(const vivaldi::NoteNode* parent,
-                     const vivaldi::NoteNode* node);
+  void ProcessDelete(const vivaldi::NoteNode* node);
 
   // Points to the tracker owned by the processor. It keeps the mapping between
   // note nodes and corresponding sync server entities.

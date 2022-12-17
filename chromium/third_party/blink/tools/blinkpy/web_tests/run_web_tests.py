@@ -351,9 +351,9 @@ def parse_args(args):
             optparse.make_option(
                 '--enable-tracing',
                 type='string',
-                help='Capture and write a trace file with the specied '
+                help='Capture and write a trace file with the specified '
                 'categories for each test. Passes appropriate --trace-startup '
-                'flags to the driver.'),
+                'flags to the driver. If in doubt, use "*".'),
             optparse.make_option(
                 '--exit-after-n-crashes-or-timeouts',
                 type='int',
@@ -737,8 +737,7 @@ def _set_up_derived_options(port, options, args):
 
         if not options.test_list:
             options.test_list = []
-        options.test_list.append(
-            port.host.filesystem.join(port.web_tests_dir(), 'SmokeTests'))
+        options.test_list.append(port.path_to_smoke_tests_file())
         if not options.skipped:
             options.skipped = 'always'
 

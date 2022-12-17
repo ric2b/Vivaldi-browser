@@ -127,6 +127,12 @@
     <message name="IDS_VIV_BOOKMARK_BAR_REMOVE" desc="Delete an existing bookmark/folder">
         Delete
     </message>
+    <message name="IDS_VIV_INSPECT_SERVICE_WORKER" desc="Open developertools inspecting the serviceworker used by Vivaldi">
+        Inspect background service-worker
+    </message>
+    <message name="IDS_VIV_INSPECT_PORTAL_DOCUMENT" desc="Open developertools inspecting the document holding portals">
+        Inspect portal-document
+    </message>
 
 
 </grit-part>

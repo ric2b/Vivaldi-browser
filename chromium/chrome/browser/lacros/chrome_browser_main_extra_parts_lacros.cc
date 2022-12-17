@@ -7,6 +7,8 @@
 #include "base/feature_list.h"
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/browser_process.h"
+#include "chrome/browser/chromeos/tablet_mode/tablet_mode_page_behavior.h"
+#include "chrome/browser/lacros/app_mode/chrome_kiosk_launch_controller_lacros.h"
 #include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
 #include "chrome/browser/lacros/arc/arc_icon_cache.h"
 #include "chrome/browser/lacros/automation_manager_lacros.h"
@@ -19,23 +21,29 @@
 #include "chrome/browser/lacros/lacros_butter_bar.h"
 #include "chrome/browser/lacros/lacros_extension_apps_controller.h"
 #include "chrome/browser/lacros/lacros_extension_apps_publisher.h"
+#include "chrome/browser/lacros/lacros_file_system_provider.h"
 #include "chrome/browser/lacros/lacros_memory_pressure_evaluator.h"
 #include "chrome/browser/lacros/launcher_search/search_controller_lacros.h"
 #include "chrome/browser/lacros/screen_orientation_delegate_lacros.h"
 #include "chrome/browser/lacros/standalone_browser_test_controller.h"
 #include "chrome/browser/lacros/sync/sync_explicit_passphrase_client_lacros.h"
 #include "chrome/browser/lacros/task_manager_lacros.h"
+#include "chrome/browser/lacros/vpn_extension_tracker_lacros.h"
 #include "chrome/browser/lacros/web_app_provider_bridge_lacros.h"
 #include "chrome/browser/lacros/web_page_info_lacros.h"
 #include "chrome/browser/lacros/webauthn_request_registrar_lacros.h"
+#include "chrome/browser/memory/oom_kills_monitor.h"
 #include "chrome/browser/metrics/structured/chrome_structured_metrics_recorder.h"
+#include "chrome/browser/profiles/profiles_state.h"
 #include "chrome/browser/sync/sync_service_factory.h"
 #include "chrome/browser/ui/quick_answers/quick_answers_controller_impl.h"
 #include "chromeos/components/quick_answers/public/cpp/controller/quick_answers_controller.h"
 #include "chromeos/components/quick_answers/quick_answers_client.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #include "components/arc/common/intent_helper/arc_icon_cache_delegate.h"
 #include "components/sync/base/features.h"
+#include "extensions/common/features/feature_session_type.h"
 
 namespace {
 
@@ -67,12 +75,35 @@ MaybeCreateSyncExplicitPassphraseClient(Profile* profile) {
       sync_service, &lacros_service->GetRemote<crosapi::mojom::SyncService>());
 }
 
+extensions::mojom::FeatureSessionType GetExtSessionType() {
+  using extensions::mojom::FeatureSessionType;
+
+  if (profiles::IsKioskSession()) {
+    return FeatureSessionType::kKiosk;
+  }
+
+  if (profiles::SessionHasGaiaAccount()) {
+    return FeatureSessionType::kRegular;
+  }
+
+  // TODO: how to implement IsKioskAutolaunchedSession in Lacros
+  // http://b/227564794
+  return FeatureSessionType::kUnknown;
+}
+
 }  // namespace
 
 ChromeBrowserMainExtraPartsLacros::ChromeBrowserMainExtraPartsLacros() =
     default;
 ChromeBrowserMainExtraPartsLacros::~ChromeBrowserMainExtraPartsLacros() =
     default;
+
+void ChromeBrowserMainExtraPartsLacros::PreProfileInit() {
+#if BUILDFLAG(ENABLE_EXTENSIONS)
+  extensions::SetCurrentFeatureSessionType(GetExtSessionType());
+#endif  // BUILDFLAG(ENABLE_EXTENSIONS)
+  tablet_mode_page_behavior_ = std::make_unique<TabletModePageBehavior>();
+}
 
 void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   automation_manager_ = std::make_unique<AutomationManagerLacros>();
@@ -81,13 +112,14 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   desk_template_client_ = std::make_unique<DeskTemplateClientLacros>();
   download_controller_client_ =
       std::make_unique<DownloadControllerClientLacros>();
-  task_manager_provider_ = std::make_unique<crosapi::TaskManagerLacros>();
+  file_system_provider_ = std::make_unique<LacrosFileSystemProvider>();
   kiosk_session_service_ = std::make_unique<KioskSessionServiceLacros>();
-  web_page_info_provider_ =
-      std::make_unique<crosapi::WebPageInfoProviderLacros>();
   screen_orientation_delegate_ =
       std::make_unique<ScreenOrientationDelegateLacros>();
   search_controller_ = std::make_unique<crosapi::SearchControllerLacros>();
+  task_manager_provider_ = std::make_unique<crosapi::TaskManagerLacros>();
+  web_page_info_provider_ =
+      std::make_unique<crosapi::WebPageInfoProviderLacros>();
 
   memory_pressure::MultiSourceMemoryPressureMonitor* monitor =
       static_cast<memory_pressure::MultiSourceMemoryPressureMonitor*>(
@@ -97,7 +129,7 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
         monitor->CreateVoter()));
   }
 
-  if (chromeos::LacrosService::Get()->init_params()->publish_chrome_apps) {
+  if (chromeos::BrowserInitParams::Get()->publish_chrome_apps) {
     chrome_apps_publisher_ = LacrosExtensionAppsPublisher::MakeForChromeApps();
     chrome_apps_publisher_->Initialize();
     chrome_apps_controller_ =
@@ -111,7 +143,7 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
     extensions_controller_->Initialize(extensions_publisher_->publisher());
   }
 
-  if (chromeos::LacrosService::Get()->init_params()->web_apps_enabled) {
+  if (chromeos::BrowserInitParams::Get()->web_apps_enabled) {
     web_app_provider_bridge_ =
         std::make_unique<crosapi::WebAppProviderBridgeLacros>();
   }
@@ -153,10 +185,19 @@ void ChromeBrowserMainExtraPartsLacros::PostBrowserStart() {
   force_installed_tracker_ = std::make_unique<ForceInstalledTrackerLacros>();
   force_installed_tracker_->Start();
 
+  vpn_extension_tracker_ = std::make_unique<VpnExtensionTrackerLacros>();
+  vpn_extension_tracker_->Start();
+
   webauthn_request_registrar_lacros_ =
       std::make_unique<WebAuthnRequestRegistrarLacros>();
 
   metrics::structured::ChromeStructuredMetricsRecorder::Get()->Initialize();
+
+  if (g_browser_process != nullptr &&
+      g_browser_process->local_state() != nullptr) {
+    ::memory::OOMKillsMonitor::GetInstance().Initialize(
+        g_browser_process->local_state());
+  }
 }
 
 void ChromeBrowserMainExtraPartsLacros::PostProfileInit(
@@ -176,4 +217,10 @@ void ChromeBrowserMainExtraPartsLacros::PostProfileInit(
       std::make_unique<quick_answers::QuickAnswersClient>(
           g_browser_process->shared_url_loader_factory(),
           QuickAnswersController::Get()->GetQuickAnswersDelegate()));
+
+  if (chromeos::BrowserInitParams::Get()->session_type ==
+      crosapi::mojom::SessionType::kAppKioskSession) {
+    chrome_kiosk_launch_controller_ =
+        std::make_unique<ChromeKioskLaunchControllerLacros>(*profile);
+  }
 }

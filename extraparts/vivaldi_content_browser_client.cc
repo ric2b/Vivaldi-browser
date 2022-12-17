@@ -32,10 +32,9 @@ VivaldiContentBrowserClient::VivaldiContentBrowserClient()
 VivaldiContentBrowserClient::~VivaldiContentBrowserClient() {}
 
 std::unique_ptr<content::BrowserMainParts>
-VivaldiContentBrowserClient::CreateBrowserMainParts(
-    content::MainFunctionParams parameters) {
+VivaldiContentBrowserClient::CreateBrowserMainParts(bool is_integration_test) {
   std::unique_ptr<content::BrowserMainParts> main_parts =
-      ChromeContentBrowserClient::CreateBrowserMainParts(std::move(parameters));
+      ChromeContentBrowserClient::CreateBrowserMainParts(is_integration_test);
 
   if (vivaldi::IsVivaldiRunning() || vivaldi::ForcedVivaldiRunning()) {
     ChromeBrowserMainParts* main_parts_actual =

@@ -63,7 +63,7 @@ void AwPrintManager::PdfWritingDone(int page_count) {
 
 bool AwPrintManager::PrintNow() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
-  auto* rfh = web_contents()->GetMainFrame();
+  auto* rfh = web_contents()->GetPrimaryMainFrame();
   if (!rfh->IsRenderFrameLive())
     return false;
   GetPrintRenderFrame(rfh)->PrintRequestedPages();
@@ -109,7 +109,7 @@ void AwPrintManager::ScriptedPrint(
 
   printing::RenderParamsFromPrintSettings(*settings_, params->params.get());
   params->params->document_cookie = scripted_params->cookie;
-  params->pages = printing::PageRange::GetPages(settings_->ranges());
+  params->pages = settings_->ranges();
   std::move(callback).Run(std::move(params));
 }
 

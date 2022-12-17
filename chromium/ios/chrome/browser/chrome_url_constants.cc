@@ -41,6 +41,7 @@ const char kChromeUIHistogramHost[] = "histograms";
 const char kChromeUIHistoryHost[] = "history";
 const char kChromeUIInspectHost[] = "inspect";
 const char kChromeUIIntersitialsHost[] = "interstitials";
+const char kChromeUILocalStateHost[] = "local-state";
 const char kChromeUIManagementHost[] = "management";
 const char kChromeUINetExportHost[] = "net-export";
 const char kChromeUINewTabHost[] = "newtab";
@@ -98,6 +99,11 @@ const char kCrashReasonURL[] =
 
 const char kPrivacyLearnMoreURL[] =
     "https://support.google.com/chrome/answer/114836?p=settings_privacy&ios=1";
+
+const char kTermsOfServiceURL[] = "https://policies.google.com/terms";
+
+const char kEmbeddedTermsOfServiceURL[] =
+    "https://policies.google.com/terms/embedded";
 
 const char kDoNotTrackLearnMoreURL[] =
     "https://support.google.com/chrome/answer/"

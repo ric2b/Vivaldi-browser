@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Hewl bide venasîna girêdana Windows-ê bixebitînî<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Di vê malperê de bernameyên xerabkar hene</translation>
 <translation id="1916770123977586577">Bo sazkariyên te yên rojanekirî li ser vê malperê bên sepandin, rûpelê ji nû ve bar bike</translation>
+<translation id="1973351931613083086">lêdana xweberî</translation>
 <translation id="1974060860693918893">Pêşketî</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Nûner û dîwarê parastinê kontrol bike<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Hat weşandin bo: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Vegere</translation>
 <translation id="2539524384386349900">Vebibîne</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> bersiveke nederbasdar şand.</translation>
-<translation id="2609632851001447353">Guherto</translation>
 <translation id="2634124572758952069">Navnîşana IP-yê ya rajekara <ph name="HOST_NAME" /> nehate dîtin.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Gihîştina bo pelê hate redkirin</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Dibe ku êrîşkar hewl didin ku diziya agahiyên te bikin <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (mînak pêborîn, peyam an kartên krediyê). <ph name="BEGIN_LEARN_MORE_LINK" /> Bêhtir tişt fêr bibe<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Guhertina torê hate vedîtin.</translation>
 <translation id="2948083400971632585">Tu dikarî ji rûpela sazkariyê nûneran neçalak bikî yên ku ji bo têkiliyê hatine pevsazkirin.</translation>
+<translation id="2953943267837858202">Mafa lêdana xweberî ya vîdyoyan tune ye</translation>
 <translation id="2991571918955627853">Tu nikarî niha biçî seredana <ph name="SITE" />ê. Ji ber ku malper HSTS bi kar tîne. Çewtî û êrişên torê bi gelemperî demkî ne, loma dibe ku ev rûpel paşê bixebite.</translation>
 <translation id="3005723025932146533">Jêgirtina tomarkirî nîşan bide</translation>
 <translation id="301521992641321250">Bi xweberî hat astengkirin</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Li bişkoka rojanekirinê bitikîne da ku daneyan dîsa bîşînî yên ku ji bo barkirina rûpelê pêdivî ne.</translation>
 <translation id="3234666976984236645">Her dem di vê malperê de naveroka girîng vebibîne</translation>
+<translation id="3291915639428159043">Lêdana xweberî astengkirî ye</translation>
 <translation id="3308738399950580893">reklam</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> niha negihîştî ye.</translation>
 <translation id="3427092606871434483">Maf bide (berdest)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Girêdana te ne taybet e</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Hûrguliyan veşêre</translation>
+<translation id="3620979700683094848">Malper dikarin vîdyoyan bi xweberî lêbidin</translation>
 <translation id="3630155396527302611">Heke ji xwe wekî bernameyeke mafdayî be bo guhîştina torê, hewl bide ku
       ji rêzokê derxîne û dîsa tevlî bike.</translation>
 <translation id="3658742229777143148">Revîzyon</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> hatiye astengkirin</translation>
 <translation id="3987940399970879459">Ji 1 MB-ê kêmtir</translation>
 <translation id="4075732493274867456">Rajegir û rajekar, piştgirî nadin guhertoyekê protokola SSL-a hevpar an komên şîfreyê.</translation>
+<translation id="410351446219883937">Bi xweberî lêbide</translation>
 <translation id="4116663294526079822">Mafê her dem bide vê malperê</translation>
 <translation id="4130226655945681476">Kabloyên torê, modem û berhêlker kontrol bike</translation>
 <translation id="4151403195736952345">Sazkariyên berdest yên giştî bi kar bîne (Lêkolîn bike)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Sazkariyên xwe yên DNS-yê kontrol bike</translation>
 <translation id="6328639280570009161">Hewl bide pêşbîniya torê neçalak bikî</translation>
 <translation id="6328786501058569169">Ev malper xapînok e</translation>
+<translation id="6348220984832452017">Guhertoyên çalak</translation>
 <translation id="6358450015545214790">Ev tên çi wateyê?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> girêdan nayê pejirandin.</translation>
 <translation id="6447842834002726250">Kilor</translation>
@@ -183,11 +188,13 @@
 <translation id="7758069387465995638">Dibe ku girêdan, ji aliyê dîwarê parastinê an jî nermalava vîruskujê ve hatiye astengkirin.</translation>
 <translation id="7800304661137206267">Girêdan hatiye şîfrekirin bi riya <ph name="CIPHER" />ê, li gel <ph name="MAC" /> a ji bo rastnivîsandina peyamê û <ph name="KX" /> wekî mekanîzmaya pevguhertina kilîdê.</translation>
 <translation id="7834399512844817676">Di normalê de <ph name="SITE" /> şîfrekirinê bi kar tîne da ku zanyariyên te biparêze. Vê gavê Vivaldiyê ceriband da ku xwe bi <ph name="SITE" />-ê girê bide, malperê pelên nenormal û nerast şandin. Belkî vê gava, êrîşvanek diceribîne ku xwe wek <ph name="SITE" />-ê nîşan bide an jî belkî dîmendera têketinê ya Wi-Fiyê girêdanê qût kiriye. Zanyariyên te hîn jî di ewlehiyê de ne ji ber ku Vivaldiyê têkilî rawestand berî ku daneyên te werin veguhestin.</translation>
+<translation id="7834693436815575883">Mafa lêdana xweberî heye</translation>
 <translation id="7878562273885520351">Dibe ku ewlehiya pêborîna te were bidestxistin</translation>
 <translation id="7951415247503192394">(32-bit)</translation>
 <translation id="8025119109950072390">Êrîşkar dikarin li ser vê malperê tiştekî xeternak bikin: wekî sazkirina nermalavê an agahiyên te yên kesane eşkere bikin (mînak; pêborîn, hejmarên telefonê an kartên krediyê).</translation>
 <translation id="8037357227543935929">Bipirse (berdest)</translation>
 <translation id="8041940743680923270">Sazkariyên berdest a cîhanî bi kar bîne (Bipirse)</translation>
+<translation id="8044382196220116469">Malperan nehêle ku vîdyoyan bi xweberî lêbidin</translation>
 <translation id="808894953321890993">Pêborînê biguherîne</translation>
 <translation id="8119307142152921512">şopger û reklam</translation>
 <translation id="8149426793427495338">Kombersa te ket xewê.</translation>
@@ -205,6 +212,7 @@
 <translation id="8503813439785031346">Navê bikarhêneriyê</translation>
 <translation id="8703575177326907206">Girêdana te bo <ph name="DOMAIN" />ê ne şîfrekirî ye.</translation>
 <translation id="8740359287975076522">&lt;abbr id="dnsDefinition"&gt; navnîşana DNS ya&lt;/abbr&gt; a pêşkêşkera <ph name="HOST_NAME" /> nehate dîtin. Venasîna pirsgirêkê didome.</translation>
+<translation id="8774017153185436870">Malper belkî karibin vîdyoyan bi xweberî lêbidin</translation>
 <translation id="8820817407110198400">Şûnpel</translation>
 <translation id="8940028675168378100">Astengkirî ji aliyê <ph name="BLOCKER_NAME" />-ê ve</translation>
 <translation id="8963117664422609631">Biçe sazkariyên malperê</translation>
@@ -212,6 +220,7 @@
 <translation id="9008201768610948239">Guh nede</translation>
 <translation id="9025348182339809926">(Nederbasdar)</translation>
 <translation id="9039213469156557790">Wekî din, ev rûpel çavkaniyên din ên ne ewledar dihewîne. Ev çavkanî gava ku tê veguhestin, dibe ku ji hêla kesên din ve bên dîtin û ji hêla êrişkar ve bên guhertin da ku tevgerên rûpelê biguherîne.</translation>
+<translation id="9048224371732578627">Maf bide ku vîdyoyan bi xweberî lêbidin</translation>
 <translation id="9062620674789239642">Dibe ku hatibe livandin, serrastkirin an jî jêbirin.</translation>
 <translation id="9069693763241529744">Ji aliyê pêvekekê ve tê astengkirin</translation>
 <translation id="9073799351042754113">Te hilbijart ku hişyariyên ewlehiyê ji bo vê malperê werin vemirandin.</translation>

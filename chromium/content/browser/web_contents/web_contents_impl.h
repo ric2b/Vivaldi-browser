@@ -133,7 +133,6 @@ class WakeLockContextHost;
 class WebContentsDelegate;
 class WebContentsImpl;
 class WebContentsView;
-class WebContentsViewDelegate;
 struct AXEventNotificationDetails;
 struct LoadNotificationDetails;
 struct MHTMLGenerationParams;
@@ -166,13 +165,6 @@ struct CONTENT_EXPORT CreatedWindow {
 };
 
 using PageVisibilityState = blink::mojom::PageVisibilityState;
-
-// Factory function for the implementations that content knows about. Takes
-// ownership of |delegate|.
-WebContentsView* CreateWebContentsView(
-    WebContentsImpl* web_contents,
-    WebContentsViewDelegate* delegate,
-    RenderViewHostDelegateView** render_view_host_delegate_view);
 
 class CONTENT_EXPORT WebContentsImpl : public WebContents,
                                        public FrameTree::Delegate,
@@ -342,6 +334,7 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   const GURL& GetVisibleURL() override;
   const GURL& GetLastCommittedURL() override;
   RenderFrameHostImpl* GetMainFrame() override;
+  RenderFrameHostImpl* GetPrimaryMainFrame() override;
   PageImpl& GetPrimaryPage() override;
   RenderFrameHostImpl* GetFocusedFrame() override;
   bool IsPrerenderedFrame(int frame_tree_node_id) override;
@@ -506,8 +499,8 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   bool GotResponseToKeyboardLockRequest(bool allowed) override;
   bool HasOpener() override;
   RenderFrameHostImpl* GetOpener() override;
-  bool HasOriginalOpener() override;
-  RenderFrameHostImpl* GetOriginalOpener() override;
+  bool HasLiveOriginalOpenerChain() override;
+  WebContents* GetFirstWebContentsInLiveOriginalOpenerChain() override;
 #if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_MAC)
   void DidChooseColorInColorChooser(SkColor color) override;
   void DidEndColorChooser() override;
@@ -659,6 +652,9 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
       RenderFrameHostImpl* rfh,
       bool is_fullscreen,
       blink::mojom::FullscreenOptionsPtr options) override;
+#if BUILDFLAG(IS_ANDROID)
+  void UpdateUserGestureCarryoverInfo() override;
+#endif
   bool ShouldRouteMessageEvent(RenderFrameHostImpl* target_rfh) const override;
   void EnsureOpenerProxiesExist(RenderFrameHostImpl* source_rfh) override;
   std::unique_ptr<WebUIImpl> CreateWebUIForRenderFrameHost(
@@ -1258,10 +1254,6 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // WebContentsDelegate.
   void SystemDragEnded(RenderWidgetHost* source_rwh);
 
-  // This is similar to SendToAllFrames() in WebContents interface, but also
-  // include pendings frames. See bug: http://crbug.com/1087806
-  int SendToAllFramesIncludingPending(IPC::Message* message);
-
   // These are the content internal equivalents of
   // |WebContents::ForEachRenderFrameHost| whose comment can be referred to
   // for details. Content internals can also access speculative
@@ -1312,6 +1304,10 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // Returns true if a prerender was canceled.
   bool CancelPrerendering(FrameTreeNode* frame_tree_node,
                           PrerenderHost::FinalStatus final_status);
+
+  void set_suppress_ime_events_for_testing(bool suppress) {
+    suppress_ime_events_for_testing_ = suppress;
+  }
 
   void SetVivExtData(const std::string& viv_ext_data) override;
   const std::string& GetVivExtData() const override;
@@ -2180,6 +2176,11 @@ class CONTENT_EXPORT WebContentsImpl : public WebContents,
   // IME-related state for RenderWidgetHosts on the inner WebContents is tracked
   // by the TextInputManager in the outer WebContents.
   std::unique_ptr<TextInputManager> text_input_manager_;
+
+  // Tests can set this to true in order to force this web contents to always
+  // return nullptr for the above `text_input_manager_`, effectively blocking
+  // IME events from propagating out of the renderer.
+  bool suppress_ime_events_for_testing_ = false;
 
   // Stores the RenderWidgetHost that currently holds a mouse lock or nullptr if
   // there's no RenderWidgetHost holding a lock.

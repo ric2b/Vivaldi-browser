@@ -62,9 +62,9 @@
 #include "chrome/browser/ui/webui/management/management_ui_handler_chromeos.h"
 #include "chrome/browser/ui/webui/webui_util.h"
 #include "chrome/grit/chromium_strings.h"
+#include "chromeos/ash/components/network/proxy/proxy_config_handler.h"
+#include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/network/network_state_handler.h"
-#include "chromeos/network/proxy/proxy_config_handler.h"
-#include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "components/enterprise/browser/reporting/common_pref_names.h"
 #include "components/prefs/pref_service.h"
 #include "components/user_manager/user_manager.h"
@@ -561,7 +561,8 @@ void ManagementUIHandler::AddDeviceReportingInfo(
     return;
 
   // Elements appear on the page in the order they are added.
-  if (collector->IsReportingActivityTimes()) {
+  if (collector->IsReportingActivityTimes() ||
+      profile->GetPrefs()->GetBoolean(::prefs::kInsightsExtensionEnabled)) {
     AddDeviceReportingElement(report_sources, kManagementReportActivityTimes,
                               DeviceReportingType::kDeviceActivity);
   } else {
@@ -570,7 +571,8 @@ void ManagementUIHandler::AddDeviceReportingInfo(
                                 DeviceReportingType::kSupervisedUser);
     }
   }
-  if (collector->IsReportingNetworkData()) {
+  if (collector->IsReportingNetworkData() ||
+      profile->GetPrefs()->GetBoolean(::prefs::kInsightsExtensionEnabled)) {
     AddDeviceReportingElement(report_sources, kManagementReportNetworkData,
                               DeviceReportingType::kDevice);
   }

@@ -12,6 +12,8 @@
 
 #include "base/bind.h"
 #include "base/command_line.h"
+#include "base/containers/fixed_flat_set.h"
+#include "base/containers/flat_map.h"
 #include "base/debug/alias.h"
 #include "base/debug/dump_without_crashing.h"
 #include "base/files/file.h"
@@ -21,9 +23,13 @@
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/ranges/algorithm.h"
+#include "base/sequence_checker.h"
 #include "base/strings/strcat.h"
+#include "base/strings/string_split.h"
+#include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/task/thread_pool.h"
+#include "base/thread_annotations.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/time/time.h"
 #include "base/trace_event/trace_event.h"
@@ -59,7 +65,6 @@
 #include "services/network/data_pipe_element_reader.h"
 #include "services/network/origin_policy/origin_policy_constants.h"
 #include "services/network/origin_policy/origin_policy_manager.h"
-#include "services/network/private_network_access_check.h"
 #include "services/network/public/cpp/client_hints.h"
 #include "services/network/public/cpp/constants.h"
 #include "services/network/public/cpp/corb/orb_impl.h"
@@ -399,6 +404,169 @@ T* PtrOrFallback(const mojo::Remote<T>& remote, T* fallback) {
   return remote.is_bound() ? remote.get() : fallback;
 }
 
+// Feature configuration for Cache Transparency is expensive to calculate, so it
+// is cached. Not threadsafe.
+class CacheTransparencySettings {
+ public:
+  // This is not threadsafe, but it doesn't need to be.
+  static const CacheTransparencySettings& Get() {
+    if (!singleton_instance_) {
+      singleton_instance_ = new CacheTransparencySettings();
+    }
+    return *singleton_instance_;
+  }
+
+  static void ResetForTesting() {
+    // `singleton_instance_` needs to be leaked at shutdown but not during
+    // tests.
+    delete singleton_instance_;
+    singleton_instance_ = nullptr;
+  }
+
+  CacheTransparencySettings(CacheTransparencySettings&) = delete;
+  CacheTransparencySettings& operator=(const CacheTransparencySettings&) =
+      delete;
+
+  bool enabled() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return enabled_;
+  }
+
+  bool PervasivePayloadsEnabled() const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    return pervasive_payloads_enabled_;
+  }
+
+  absl::optional<int> GetIndexForURL(const GURL& url) const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    if (!pervasive_payloads_enabled_ || !url.is_valid())
+      return absl::nullopt;
+
+    auto it = map_.find(url.spec());
+    if (it == map_.end()) {
+      return absl::nullopt;
+    }
+    return std::distance(map_.begin(), it);
+  }
+
+  absl::optional<std::string> GetChecksumForURL(const GURL& url) const {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+
+    if (!enabled_ || !url.is_valid())
+      return absl::nullopt;
+
+    auto it = map_.find(url.spec());
+    if (it == map_.end()) {
+      return absl::nullopt;
+    }
+    return it->second;
+  }
+
+ private:
+  using PervasivePayloadsMap = base::flat_map<std::string, std::string>;
+
+  CacheTransparencySettings()
+      : enabled_(
+            base::FeatureList::IsEnabled(features::kCacheTransparency) &&
+            base::FeatureList::IsEnabled(features::kPervasivePayloadsList)),
+        pervasive_payloads_enabled_(
+            base::FeatureList::IsEnabled(features::kPervasivePayloadsList)),
+        map_(CreateMap()) {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+  }
+
+  ~CacheTransparencySettings() = default;
+
+  PervasivePayloadsMap CreateMap() {
+    DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
+    if (!pervasive_payloads_enabled_)
+      return PervasivePayloadsMap();
+
+    const std::string comma_separated =
+        features::kCacheTransparencyPervasivePayloads.Get();
+    auto split = base::SplitStringPiece(
+        comma_separated, ",", base::KEEP_WHITESPACE, base::SPLIT_WANT_ALL);
+    if (split.empty()) {
+      // The code below safely produces an empty map in this case.
+      DLOG(WARNING) << "Pervasive payload list is empty.";
+    } else {
+      const auto version_string = split[0];
+      int version_number = 0;
+      if (StringToInt(version_string, &version_number)) {
+        base::UmaHistogramExactLinear("Network.CacheTransparency.ListVersion",
+                                      version_number, 101);
+      } else {
+        LOG(WARNING) << "Could not parse pervasive payload version number";
+      }
+      // The number of items cannot be large, so this O(N) algorithm is
+      // acceptable.
+      split.erase(split.begin());
+    }
+    if (split.size() % 2 == 1) {
+      DLOG(WARNING)
+          << "Pervasive payload list contains an odd number of elements."
+          << comma_separated;
+    }
+    using Container = PervasivePayloadsMap::container_type;
+    Container pairs;
+    pairs.reserve(split.size() / 2);
+    // `split` has to fit in memory, therefore split.size() cannot be the
+    // largest possible value, therefore adding 1 to i will not overflow.
+    for (size_t i = 0; i + 1 < split.size(); i += 2) {
+      pairs.emplace_back(split[i], split[i + 1]);
+    }
+    return PervasivePayloadsMap(std::move(pairs));
+  }
+
+  SEQUENCE_CHECKER(sequence_checker_);
+  const bool enabled_ GUARDED_BY_CONTEXT(sequence_checker_);
+  const bool pervasive_payloads_enabled_ GUARDED_BY_CONTEXT(sequence_checker_);
+  const PervasivePayloadsMap map_ GUARDED_BY_CONTEXT(sequence_checker_);
+
+  // This is normally leaked to avoid running a destructor. It's only
+  // re-allocated in tests.
+  static CacheTransparencySettings* singleton_instance_;
+};
+
+CacheTransparencySettings* CacheTransparencySettings::singleton_instance_ =
+    nullptr;
+
+bool HasFlagsIncompatibleWithSingleKeyedCache(int load_flags) {
+  return load_flags &
+         (net::LOAD_VALIDATE_CACHE | net::LOAD_BYPASS_CACHE |
+          net::LOAD_SKIP_CACHE_VALIDATION | net::LOAD_ONLY_FROM_CACHE |
+          net::LOAD_DISABLE_CACHE | net::LOAD_SKIP_VARY_CHECK);
+}
+
+bool HasHeadersIncompatibleWithSingleKeyedCache(
+    const net::HttpRequestHeaders& headers) {
+  // These are lowercase to permit case-insensitive matching.
+  auto incompatible_headers = base::MakeFixedFlatSet<base::StringPiece>({
+      "accept-charset",
+      "accept-encoding",
+      "authorization",
+      "cache-control",
+      "if-match",
+      "if-modified-since",
+      "if-none-match",
+      "if-range",
+      "if-unmodified-since",
+      "pragma",
+      "range",
+  });
+  // HttpRequestHeaders::FindHeader() would iterate through the headers for each
+  // name in the above list. To reduce the cost of this function, iterate
+  // manually instead
+  net::HttpRequestHeaders::Iterator it(headers);
+  while (it.GetNext()) {
+    if (incompatible_headers.contains(base::ToLowerASCII(it.name()))) {
+      return true;
+    }
+  }
+  return false;
+}
+
 }  // namespace
 
 URLLoader::MaybeSyncURLLoaderClient::MaybeSyncURLLoaderClient(
@@ -445,7 +613,8 @@ URLLoader::URLLoader(
     mojo::PendingRemote<mojom::URLLoaderNetworkServiceObserver>
         url_loader_network_observer,
     mojo::PendingRemote<mojom::DevToolsObserver> devtools_observer,
-    mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer)
+    mojo::PendingRemote<mojom::AcceptCHFrameObserver> accept_ch_frame_observer,
+    bool third_party_cookies_enabled)
     : url_request_context_(context.GetUrlRequestContext()),
       network_context_client_(context.GetNetworkContextClient()),
       delete_callback_(std::move(delete_callback)),
@@ -478,7 +647,7 @@ URLLoader::URLLoader(
       custom_proxy_pre_cache_headers_(request.custom_proxy_pre_cache_headers),
       custom_proxy_post_cache_headers_(request.custom_proxy_post_cache_headers),
       fetch_window_id_(request.fetch_window_id),
-      target_ip_address_space_(request.target_ip_address_space),
+      private_network_access_checker_(request, &factory_params_, options_),
       trust_token_helper_factory_(std::move(trust_token_helper_factory)),
       origin_access_list_(context.GetOriginAccessList()),
       cookie_observer_remote_(std::move(cookie_observer)),
@@ -496,6 +665,7 @@ URLLoader::URLLoader(
       allow_http1_for_streaming_upload_(
           request.request_body &&
           request.request_body->AllowHTTP1ForStreamingUpload()),
+      third_party_cookies_enabled_(third_party_cookies_enabled),
       accept_ch_frame_observer_(std::move(accept_ch_frame_observer)) {
   TRACE_EVENT("loading", "URLLoader::URLLoader",
               perfetto::Flow::FromPointer(this));
@@ -599,21 +769,6 @@ URLLoader::URLLoader(
 
   if (request.trusted_params) {
     has_user_activation_ = request.trusted_params->has_user_activation;
-
-    if (factory_params_.client_security_state) {
-      // Enforce that only one ClientSecurityState is ever given to us, as this
-      // is an invariant in the current codebase. In case of a compromised
-      // renderer process, we might be passed both, in which case we prefer to
-      // use the factory params' value: contrary to the request params, it is
-      // always sourced from the browser process.
-      DCHECK(!request.trusted_params->client_security_state)
-          << "Must not provide a ClientSecurityState in both "
-             "URLLoaderFactoryParams and ResourceRequest::TrustedParams.";
-    } else {
-      // This might be nullptr, but that does not matter. Clone it anyways.
-      request_client_security_state_ =
-          request.trusted_params->client_security_state.Clone();
-    }
   }
 
   throttling_token_ = network::ScopedThrottlingToken::MaybeCreate(
@@ -630,7 +785,48 @@ URLLoader::URLLoader(
         net::RedirectInfo::FirstPartyURLPolicy::UPDATE_URL_ON_REDIRECT);
   }
 
-  url_request_->SetLoadFlags(request.load_flags);
+  int request_load_flags = request.load_flags;
+
+  if (CacheTransparencySettings::Get().PervasivePayloadsEnabled()) {
+    auto index = CacheTransparencySettings::Get().GetIndexForURL(request.url);
+    if (index.has_value()) {
+      // Remember that a pervasive payload was found so we can annotate the
+      // URLLoaderCompletionStatus with it later.
+      pervasive_payload_requested_ = true;
+      url_request_->set_pervasive_payloads_index_for_logging(index.value());
+      base::UmaHistogramExactLinear("Network.CacheTransparency.URLMatched",
+                                    index.value(), 101);
+      DVLOG(2) << "Found pervasive payload: " << request.url.spec();
+    }
+  }
+
+  if (CacheTransparencySettings::Get().enabled() &&
+      ThirdPartyCookiesEnabled()) {
+    auto checksum =
+        CacheTransparencySettings::Get().GetChecksumForURL(request.url);
+    if (checksum.has_value()) {
+      CacheTransparencyCacheNotUsedReason cache_not_used_reason =
+          CacheTransparencyCacheNotUsedReason::kTryingSingleKeyedCache;
+      if (request.method != net::HttpRequestHeaders::kGetMethod) {
+        cache_not_used_reason =
+            CacheTransparencyCacheNotUsedReason::kIncompatibleRequestType;
+      } else if (HasFlagsIncompatibleWithSingleKeyedCache(request_load_flags)) {
+        cache_not_used_reason =
+            CacheTransparencyCacheNotUsedReason::kIncompatibleRequestLoadFlags;
+      } else if (HasHeadersIncompatibleWithSingleKeyedCache(request.headers)) {
+        cache_not_used_reason =
+            CacheTransparencyCacheNotUsedReason::kIncompatibleRequestHeaders;
+      } else {
+        request_load_flags |= net::LOAD_USE_SINGLE_KEYED_CACHE;
+
+        url_request_->set_expected_response_checksum(checksum.value());
+      }
+      base::UmaHistogramEnumeration("Network.CacheTransparency.CacheNotUsed",
+                                    cache_not_used_reason);
+    }
+  }
+
+  url_request_->SetLoadFlags(request_load_flags);
   SetRequestCredentials(request.url);
 
   url_request_->SetRequestHeadersCallback(base::BindRepeating(
@@ -935,9 +1131,6 @@ URLLoader::~URLLoader() {
   TRACE_EVENT("loading", "URLLoader::~URLLoader",
               perfetto::TerminatingFlow::FromPointer(this));
   RecordBodyReadFromNetBeforePausedIfNeeded();
-  base::UmaHistogramBoolean(
-      "Security.PrivateNetworkAccess.MismatchedAddressSpacesDuringRequest",
-      has_connected_to_mismatched_ip_address_spaces_);
   if (keepalive_ && keepalive_statistics_recorder_) {
     keepalive_statistics_recorder_->OnLoadFinished(
         *factory_params_.top_frame_id, keepalive_request_size_);
@@ -961,9 +1154,9 @@ void URLLoader::FollowRedirect(
   // also calls the devtools observer.
   seen_raw_request_headers_ = false;
 
-  // Reset the response IP address space, so that we don't mistakenly compare
-  // it against the IP address space of the next connection's remote endpoint.
-  response_ip_address_space_ = absl::nullopt;
+  // Reset the state of the PNA checker - redirects should be treated like new
+  // requests by the same client.
+  private_network_access_checker_.ResetForRedirect();
 
   // Removing headers can't make the set of pre-existing headers unsafe, but
   // adding headers can.
@@ -1031,64 +1224,23 @@ void URLLoader::ResumeReadingBodyFromNet() {
   }
 }
 
-// WARNING: This should be kept in sync with similar logic in
-// `network::cors::CorsURLLoader::GetClientSecurityState()`.
-const mojom::ClientSecurityState* URLLoader::GetClientSecurityState() const {
-  // Depending on the type of URL request, we source the client security state
-  // from either the URLRequest's trusted params (for navigations, which share
-  // a factory) or the URLLoaderFactory's params. We prefer the factory params
-  // over the request params, as the former always come from the browser
-  // process.
-  if (factory_params_.client_security_state) {
-    return factory_params_.client_security_state.get();
-  }
-
-  return request_client_security_state_.get();
-}
-
 PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
     const net::TransportInfo& transport_info) {
-  const mojom::IPAddressSpace transport_ip_address_space =
-      TransportInfoToIPAddressSpace(transport_info);
+  PrivateNetworkAccessCheckResult result =
+      private_network_access_checker_.Check(transport_info);
 
-  if (response_ip_address_space_.has_value() &&
-      transport_ip_address_space != *response_ip_address_space_) {
-    // Record this so we can increment a histogram later.
-    //
-    // NOTE(titouan): The above condition is already checked in
-    // `network::PrivateNetworkAccessCheck()`. It would be good to deduplicate
-    // this code.
-    has_connected_to_mismatched_ip_address_spaces_ = true;
-  }
-
-  const mojom::ClientSecurityState* security_state = GetClientSecurityState();
-
-  // Fully-qualify function name to disambiguate it, otherwise it resolves to
-  // `URLLoader::PrivateNetworkAccessCheck()` and fails to compile.
-  PrivateNetworkAccessCheckResult result = network::PrivateNetworkAccessCheck(
-      security_state, target_ip_address_space_, response_ip_address_space_,
-      options_, transport_ip_address_space);
-
-  if (transport_info.type == net::TransportType::kCached) {
-    base::UmaHistogramEnumeration(
-        "Security.PrivateNetworkAccess.CachedResourceCheckResult", result);
-  }
-
-  response_ip_address_space_ = transport_ip_address_space;
+  mojom::IPAddressSpace response_address_space =
+      *private_network_access_checker_.ResponseAddressSpace();
 
   url_request_->net_log().AddEvent(
       net::NetLogEventType::PRIVATE_NETWORK_ACCESS_CHECK, [&] {
-        auto client_address_space = mojom::IPAddressSpace::kUnknown;
-        if (security_state) {
-          client_address_space = security_state->ip_address_space;
-        }
-
         base::Value dict(base::Value::Type::DICTIONARY);
-        dict.SetStringKey("client_address_space",
-                          IPAddressSpaceToStringPiece(client_address_space));
         dict.SetStringKey(
-            "resource_address_space",
-            IPAddressSpaceToStringPiece(transport_ip_address_space));
+            "client_address_space",
+            IPAddressSpaceToStringPiece(
+                private_network_access_checker_.ClientAddressSpace()));
+        dict.SetStringKey("resource_address_space",
+                          IPAddressSpaceToStringPiece(response_address_space));
         dict.SetStringKey("result",
                           PrivateNetworkAccessCheckResultToStringPiece(result));
         return dict;
@@ -1109,12 +1261,14 @@ PrivateNetworkAccessCheckResult URLLoader::PrivateNetworkAccessCheck(
 
   // If `security_state` was nullptr, then `result` should not have mentioned
   // the policy set in `security_state->private_network_request_policy`.
+  const mojom::ClientSecurityState* security_state =
+      private_network_access_checker_.client_security_state();
   DCHECK(security_state);
 
   if (devtools_observer_) {
     devtools_observer_->OnPrivateNetworkRequest(
         devtools_request_id(), url_request_->url(), is_warning,
-        transport_ip_address_space, security_state->Clone());
+        response_address_space, security_state->Clone());
   }
 
   return result;
@@ -1125,21 +1279,18 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
                            net::CompletionOnceCallback callback) {
   DCHECK_EQ(url_request, url_request_.get());
 
-  DVLOG(1) << "Connection obtained for URL request to " << url_request->url()
-           << ": " << info;
-
   // Now that the request endpoint's address has been resolved, check if
   // this request should be blocked per Private Network Access.
   PrivateNetworkAccessCheckResult result = PrivateNetworkAccessCheck(info);
   absl::optional<mojom::CorsError> cors_error =
       PrivateNetworkAccessCheckResultToCorsError(result);
-  DCHECK(response_ip_address_space_.has_value());
   if (cors_error.has_value()) {
     // Remember the CORS error so we can annotate the URLLoaderCompletionStatus
     // with it later, then fail the request with the same net error code as
     // other CORS errors.
-    cors_error_status_ = CorsErrorStatus(*cors_error, target_ip_address_space_,
-                                         *response_ip_address_space_);
+    cors_error_status_ = CorsErrorStatus(
+        *cors_error, private_network_access_checker_.TargetAddressSpace(),
+        *private_network_access_checker_.ResponseAddressSpace());
     if (result == PrivateNetworkAccessCheckResult::
                       kBlockedByInconsistentIpAddressSpace ||
         result ==
@@ -1149,7 +1300,8 @@ int URLLoader::OnConnected(net::URLRequest* url_request,
     return net::ERR_FAILED;
   }
 
-  if (!accept_ch_frame_observer_ || info.accept_ch_frame.empty()) {
+  if (!accept_ch_frame_observer_ || info.accept_ch_frame.empty() ||
+      !base::FeatureList::IsEnabled(features::kAcceptCHFrame)) {
     return net::OK;
   }
 
@@ -1245,11 +1397,12 @@ mojom::URLResponseHeadPtr URLLoader::BuildResponseHead() const {
   response->request_include_credentials = url_request_->allow_credentials();
 
   response->response_address_space =
-      response_ip_address_space_.value_or(mojom::IPAddressSpace::kUnknown);
-
-  const mojom::ClientSecurityState* state = GetClientSecurityState();
+      private_network_access_checker_.ResponseAddressSpace().value_or(
+          mojom::IPAddressSpace::kUnknown);
   response->client_address_space =
-      state ? state->ip_address_space : mojom::IPAddressSpace::kUnknown;
+      private_network_access_checker_.ClientAddressSpace();
+
+  response->has_partitioned_cookie = url_request_->HasPartitionedCookie();
 
   return response;
 }
@@ -1311,24 +1464,6 @@ void URLLoader::OnReceivedRedirect(net::URLRequest* url_request,
                           &redirect_info.new_url, factory_params_,
                           origin_access_list_);
 
-  // The target IP address space is no longer relevant, it only applied to the
-  // URL before the redirect. Consider the following scenario:
-  //
-  // 1. `https://public.example` fetches `http://localhost/foo`
-  // 2. `OnConnected()` notices that the remote endpoint's IP address space is
-  //    `kLocal`, fails the request with
-  //    `CorsError::UnexpectedPrivateNetworkAccess`.
-  // 3. A preflight request is sent with `target_ip_address_space_` set to
-  //    `kLocal`, succeeds.
-  // 4. `http://localhost/foo` redirects the GET request to
-  //    `https://public2.example/bar`.
-  //
-  // The target IP address space `kLocal` should not be applied to the new
-  // connection obtained to `https://public2.example`.
-  //
-  // See also: https://crbug.com/1293891
-  target_ip_address_space_ = mojom::IPAddressSpace::kUnknown;
-
   DCHECK_EQ(emitted_devtools_raw_request_, emitted_devtools_raw_response_);
   response->emitted_extra_info = emitted_devtools_raw_request_;
   url_loader_client_.Get()->OnReceiveRedirect(redirect_info,
@@ -1346,6 +1481,11 @@ bool URLLoader::HasFetchStreamingUploadBody(const ResourceRequest* request) {
   const auto& element = elements->front();
   return element.type() == mojom::DataElementDataView::Tag::kChunkedDataPipe &&
          element.As<network::DataElementChunkedDataPipe>().read_only_once();
+}
+
+// static
+void URLLoader::ResetPervasivePayloadsListForTesting() {
+  CacheTransparencySettings::ResetForTesting();
 }
 
 void URLLoader::OnAuthRequired(net::URLRequest* url_request,
@@ -2001,6 +2141,8 @@ void URLLoader::NotifyCompleted(int error_code) {
       status.ssl_info = url_request_->ssl_info();
     }
 
+    status.pervasive_payload_requested = pervasive_payload_requested_;
+
     url_loader_client_.Get()->OnComplete(status);
   }
 
@@ -2034,15 +2176,8 @@ void URLLoader::SendResponseToClient() {
   DCHECK_EQ(emitted_devtools_raw_request_, emitted_devtools_raw_response_);
   response_->emitted_extra_info = emitted_devtools_raw_request_;
 
-  if (base::FeatureList::IsEnabled(features::kCombineResponseBody)) {
-    url_loader_client_.Get()->OnReceiveResponse(response_->Clone(),
-                                                std::move(consumer_handle_));
-  } else {
-    url_loader_client_.Get()->OnReceiveResponse(
-        response_->Clone(), mojo::ScopedDataPipeConsumerHandle());
-    url_loader_client_.Get()->OnStartLoadingResponseBody(
-        std::move(consumer_handle_));
-  }
+  url_loader_client_.Get()->OnReceiveResponse(response_->Clone(),
+                                              std::move(consumer_handle_));
 }
 
 void URLLoader::CompletePendingWrite(bool success) {
@@ -2148,13 +2283,6 @@ void URLLoader::DispatchOnRawRequest(
 
   seen_raw_request_headers_ = true;
 
-  mojom::ClientSecurityStatePtr client_security_state;
-  if (factory_params_.client_security_state) {
-    client_security_state = factory_params_.client_security_state->Clone();
-  } else if (request_client_security_state_) {
-    client_security_state = request_client_security_state_->Clone();
-  }
-
   net::LoadTimingInfo load_timing_info;
   url_request_->GetLoadTimingInfo(&load_timing_info);
 
@@ -2162,7 +2290,7 @@ void URLLoader::DispatchOnRawRequest(
   devtools_observer_->OnRawRequest(
       devtools_request_id().value(), url_request_->maybe_sent_cookies(),
       std::move(headers), load_timing_info.request_start,
-      std::move(client_security_state));
+      private_network_access_checker_.CloneClientSecurityState());
 }
 
 bool URLLoader::DispatchOnRawResponse() {
@@ -2219,7 +2347,8 @@ bool URLLoader::DispatchOnRawResponse() {
   devtools_observer_->OnRawResponse(
       devtools_request_id().value(), url_request_->maybe_stored_cookies(),
       std::move(header_array), raw_response_headers,
-      response_ip_address_space_.value_or(mojom::IPAddressSpace::kUnknown),
+      private_network_access_checker_.ResponseAddressSpace().value_or(
+          mojom::IPAddressSpace::kUnknown),
       response_headers->response_code());
 
   return true;
@@ -2344,15 +2473,8 @@ URLLoader::BlockResponseForCorbResult URLLoader::BlockResponseForCorb(
   }
   producer_handle.reset();
 
-  if (base::FeatureList::IsEnabled(features::kCombineResponseBody)) {
-    url_loader_client_.Get()->OnReceiveResponse(response_->Clone(),
-                                                std::move(consumer_handle));
-  } else {
-    url_loader_client_.Get()->OnReceiveResponse(
-        response_->Clone(), mojo::ScopedDataPipeConsumerHandle());
-    url_loader_client_.Get()->OnStartLoadingResponseBody(
-        std::move(consumer_handle));
-  }
+  url_loader_client_.Get()->OnReceiveResponse(response_->Clone(),
+                                              std::move(consumer_handle));
 
   // Tell the real URLLoaderClient that the response has been completed.
   if (corb_detachable_) {
@@ -2404,12 +2526,12 @@ void URLLoader::ReportFlaggedResponseCookies() {
          url_request_->maybe_stored_cookies()) {
       if (ShouldNotifyAboutCookie(
               cookie_line_and_access_result.access_result.status)) {
-        mojom::CookieOrLinePtr cookie_or_line = mojom::CookieOrLine::New();
+        mojom::CookieOrLinePtr cookie_or_line;
         if (cookie_line_and_access_result.cookie.has_value()) {
-          cookie_or_line->set_cookie(
+          cookie_or_line = mojom::CookieOrLine::NewCookie(
               cookie_line_and_access_result.cookie.value());
         } else {
-          cookie_or_line->set_cookie_string(
+          cookie_or_line = mojom::CookieOrLine::NewCookieString(
               cookie_line_and_access_result.cookie_string);
         }
 
@@ -2606,6 +2728,12 @@ bool URLLoader::CoepAllowCredentials(const GURL& url) {
 
   // [spec]: 5. Return false.
   return false;
+}
+
+bool URLLoader::ThirdPartyCookiesEnabled() const {
+  return third_party_cookies_enabled_ &&
+         !(options_ & (mojom::kURLLoadOptionBlockThirdPartyCookies |
+                       mojom::kURLLoadOptionBlockAllCookies));
 }
 
 }  // namespace network

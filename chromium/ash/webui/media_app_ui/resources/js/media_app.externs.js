@@ -58,6 +58,19 @@ mediaApp.AbstractFile.prototype.fromClipboard;
  */
 mediaApp.AbstractFile.prototype.error;
 /**
+ * A function that queries the original file's path to see if it is writable
+ * according to Ash. Returns a promise that resolves once this has been
+ * determined.
+ * @type {function(): !Promise<boolean>|undefined}
+ */
+mediaApp.AbstractFile.prototype.isBrowserWritable;
+/**
+ * A function that attempts to launch the file in Photos in editing mode.
+ * Returns a promise that resolves when the launch has initiated.
+ * @type {function(): !Promise<undefined>|undefined}
+ */
+mediaApp.AbstractFile.prototype.editInPhotos;
+/**
  * A function that will overwrite the original file with the provided Blob.
  * Returns a promise that resolves when the write operations are complete. Or
  * rejects. Upon success, `size` will reflect the new file size.
@@ -151,13 +164,20 @@ mediaApp.AbstractFileList.prototype.addObserver = function(observer) {};
 /**
  * Request for the user to be prompted with an open file dialog. Files chosen
  * will be added to the last received file list.
- * TODO(b/203466987): Remove the undefined here once we can ensure all file
+ * TODO(b/230670565): Remove the undefined here once we can ensure all file
  * lists implement a openFilesWithFilePicker function.
  * @type {function(!Array<string>, ?mediaApp.AbstractFile, ?boolean):
  *     !Promise<undefined>|undefined}
  */
 mediaApp.AbstractFileList.prototype.openFilesWithFilePicker = function(
     acceptTypeKeys, startInFolder, isSingleFile) {};
+/**
+ * Filters items represented by this file list in place, possibly changing the
+ * length. Only items for which the filter returns true are kept.
+ * @type {function(function(!mediaApp.AbstractFile): boolean)|undefined}
+ */
+mediaApp.AbstractFileList.prototype.filterInPlace = function(filter) {};
+
 
 /**
  * The delegate which exposes open source privileged WebUi functions to
@@ -223,6 +243,11 @@ mediaApp.ClientApiDelegate.prototype.openInSandboxedViewer = function(
  * @type {function(string)|undefined}
  */
 mediaApp.ClientApiDelegate.prototype.openUrlInBrowserTab = function(url) {};
+/**
+ * Reloads the main frame, reloading launch files.
+ * @type {function()|undefined}
+ */
+mediaApp.ClientApiDelegate.prototype.reloadMainFrame = function() {};
 
 /**
  * The client Api for interacting with the media app instance.

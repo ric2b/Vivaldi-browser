@@ -95,9 +95,9 @@
 #include "chrome/browser/ui/webui/settings/languages_handler.h"
 #endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_CHROMEOS_ASH)
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#if !BUILDFLAG(IS_CHROMEOS)
 #include "components/language/core/common/language_experiments.h"
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
 #include "ash/components/account_manager/account_manager_factory.h"
@@ -272,6 +272,13 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
           password_manager::features::kMuteCompromisedPasswords));
 
   html_source->AddBoolean(
+      "enablePasswordViewPage",
+      base::FeatureList::IsEnabled(
+          password_manager::features::kPasswordViewPageInSettings) ||
+          base::FeatureList::IsEnabled(
+              password_manager::features::kPasswordNotes));
+
+  html_source->AddBoolean(
       "enablePasswordNotes",
       base::FeatureList::IsEnabled(password_manager::features::kPasswordNotes));
 
@@ -279,14 +286,18 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
       "enableSendPasswords",
       base::FeatureList::IsEnabled(password_manager::features::kSendPasswords));
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
-  html_source->AddBoolean("enableDesktopRestructuredLanguageSettings",
-                          base::FeatureList::IsEnabled(
-                              language::kDesktopRestructuredLanguageSettings));
+  // Autofill Assistant on Desktop is currently used only by password change.
+  // As soon as it becomes more widely used, this condition needs to be
+  // adjusted.
+  html_source->AddBoolean(
+      "enableAutofillAssistant",
+      password_manager::features::IsAutomatedPasswordChangeEnabled());
+
+#if !BUILDFLAG(IS_CHROMEOS)
   html_source->AddBoolean(
       "enableDesktopDetailedLanguageSettings",
       base::FeatureList::IsEnabled(language::kDesktopDetailedLanguageSettings));
-#endif  // !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // !BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   html_source->AddBoolean(
@@ -314,8 +325,6 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
 
   bool privacy_guide_enabled =
       !chrome::ShouldDisplayManagedUi(profile) && !profile->IsChild() &&
-      !PrivacySandboxServiceFactory::GetForProfile(profile)
-           ->IsPrivacySandboxRestricted() &&
       base::FeatureList::IsEnabled(features::kPrivacyGuide);
   html_source->AddBoolean("privacyGuideEnabled", privacy_guide_enabled);
 
@@ -367,12 +376,12 @@ SettingsUI::SettingsUI(content::WebUI* web_ui)
                    profile, chrome::FaviconUrlFormat::kFavicon2));
 
   // Privacy Sandbox
-  bool isPrivacySandboxRestricted =
+  bool is_privacy_sandbox_restricted =
       PrivacySandboxServiceFactory::GetForProfile(profile)
           ->IsPrivacySandboxRestricted();
   html_source->AddBoolean("isPrivacySandboxRestricted",
-                          isPrivacySandboxRestricted);
-  if (!isPrivacySandboxRestricted) {
+                          is_privacy_sandbox_restricted);
+  if (!is_privacy_sandbox_restricted) {
     html_source->AddResourcePath(
         "privacySandbox", IDR_SETTINGS_PRIVACY_SANDBOX_PRIVACY_SANDBOX_HTML);
   }

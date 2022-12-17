@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/css/style_rule_import.h"
 #include "third_party/blink/renderer/core/css/style_sheet_contents.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/platform/testing/runtime_enabled_features_test_helpers.h"
 
 namespace blink {
@@ -483,7 +484,7 @@ TEST(CSSParserImplTest, LayeredImportRulesInvalid) {
     auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
     ASSERT_TRUE(parsed);
     EXPECT_FALSE(parsed->IsLayered());
-    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
+    EXPECT_TRUE(parsed->MediaQueries()->HasUnknown());
   }
 
   {
@@ -491,7 +492,7 @@ TEST(CSSParserImplTest, LayeredImportRulesInvalid) {
     auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
     ASSERT_TRUE(parsed);
     EXPECT_FALSE(parsed->IsLayered());
-    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
+    EXPECT_TRUE(parsed->MediaQueries()->HasUnknown());
   }
 
   {
@@ -499,7 +500,7 @@ TEST(CSSParserImplTest, LayeredImportRulesInvalid) {
     auto* parsed = DynamicTo<StyleRuleImport>(ParseRule(*document, rule));
     ASSERT_TRUE(parsed);
     EXPECT_FALSE(parsed->IsLayered());
-    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
+    EXPECT_TRUE(parsed->MediaQueries()->HasUnknown());
   }
 }
 
@@ -528,7 +529,7 @@ TEST(CSSParserImplTest, LayeredImportRulesMultipleLayers) {
     ASSERT_TRUE(parsed->IsLayered());
     ASSERT_EQ(1u, parsed->GetLayerName().size());
     EXPECT_EQ(g_empty_atom, parsed->GetLayerName()[0]);
-    EXPECT_EQ("not all", parsed->MediaQueries()->MediaText());
+    EXPECT_TRUE(parsed->MediaQueries()->HasUnknown());
   }
 
   {

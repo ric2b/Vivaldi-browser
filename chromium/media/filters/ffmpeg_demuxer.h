@@ -200,7 +200,7 @@ class MEDIA_EXPORT FFmpegDemuxerStream : public DemuxerStream {
   DecoderBufferQueue buffer_queue_;
   ReadCB read_cb_;
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   std::unique_ptr<FFmpegBitstreamConverter> bitstream_converter_;
 #endif
 

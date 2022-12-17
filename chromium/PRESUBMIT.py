@@ -4,10 +4,11 @@
 
 """Top-level presubmit script for Chromium.
 
-See http://dev.chromium.org/developers/how-tos/depottools/presubmit-scripts
+See https://www.chromium.org/developers/how-tos/depottools/presubmit-scripts/
 for more details about the presubmit API built into depot_tools.
 """
 
+from typing import Callable
 from typing import Optional
 from typing import Sequence
 from dataclasses import dataclass
@@ -19,11 +20,16 @@ PRESUBMIT_VERSION = '2.0.0'
 USE_PYTHON3 = True
 
 _EXCLUDED_PATHS = (
+    # Generated file
+    (r"chrome[\\/]android[\\/]webapk[\\/]shell_apk[\\/]src[\\/]org[\\/]chromium"
+     r"[\\/]webapk[\\/]lib[\\/]runtime_library[\\/]IWebApkApi.java"),
     # File needs to write to stdout to emulate a tool it's replacing.
     r"chrome[\\/]updater[\\/]mac[\\/]keystone[\\/]ksadmin.mm",
     # Generated file.
     (r"^components[\\/]variations[\\/]proto[\\/]devtools[\\/]"
      r"client_variations.js"),
+    # These are video files, not typescript.
+    r"^media[\\/]test[\\/]data[\\/].*.ts",
     r"^native_client_sdksrc[\\/]build_tools[\\/]make_rules.py",
     r"^native_client_sdk[\\/]src[\\/]build_tools[\\/]make_simple.py",
     r"^native_client_sdk[\\/]src[\\/]tools[\\/].*.mk",
@@ -62,6 +68,13 @@ _IMPLEMENTATION_EXTENSIONS = r'\.(cc|cpp|cxx|mm)$'
 # Fragment of a regular expression that matches C++ and Objective-C++
 # header files.
 _HEADER_EXTENSIONS = r'\.(h|hpp|hxx)$'
+
+
+# Paths with sources that don't use //base.
+_NON_BASE_DEPENDENT_PATHS = (
+    r"^chrome[\\/]browser[\\/]browser_switcher[\\/]bho[\\/]",
+    r"^tools[\\/]win[\\/]",
+)
 
 
 # Regular expression that matches code only used for test binaries
@@ -111,19 +124,19 @@ _TEST_ONLY_WARNING = (
 
 @dataclass
 class BanRule:
-  # String pattern. If the pattern begins with a slash, the pattern will be
-  # treated as a regular expression instead.
-  pattern: str
-  # Explanation as a sequence of strings. Each string in the sequence will be
-  # printed on its own line.
-  explanation: Sequence[str]
-  # Whether or not to treat this ban as a fatal error. If unspecified, defaults
-  # to true.
-  treat_as_error: Optional[bool] = None
-  # Paths that should be excluded from the ban check. Each string is a regular
-  # expression that will be matched against the path of the file being checked
-  # relative to the root of the source tree.
-  excluded_paths: Optional[Sequence[str]] = None
+    # String pattern. If the pattern begins with a slash, the pattern will be
+    # treated as a regular expression instead.
+    pattern: str
+    # Explanation as a sequence of strings. Each string in the sequence will be
+    # printed on its own line.
+    explanation: Sequence[str]
+    # Whether or not to treat this ban as a fatal error. If unspecified,
+    # defaults to true.
+    treat_as_error: Optional[bool] = None
+    # Paths that should be excluded from the ban check. Each string is a regular
+    # expression that will be matched against the path of the file being checked
+    # relative to the root of the source tree.
+    excluded_paths: Optional[Sequence[str]] = None
 
 
 _BANNED_JAVA_IMPORTS : Sequence[BanRule] = (
@@ -659,6 +672,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
        '^chromecast/cast_core/grpc',
        '^chromecast/cast_core/runtime/browser',
        # Fuchsia provides C++ libraries that use std::shared_ptr<>.
+       '^base/fuchsia/filtered_service_directory\.(cc|h)',
+       '^base/fuchsia/service_directory_test_base\.h',
        '.*fuchsia.*test\.(cc|h)',
        # Needed for clang plugin tests
        '^tools/clang/plugins/tests/',
@@ -910,8 +925,8 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
       ),
       False,
       (
-        r'^fuchsia/engine/browser/url_request_rewrite_rules_manager\.cc$',
-        r'^fuchsia/engine/url_request_rewrite_type_converters\.cc$',
+        r'^fuchsia_web/webengine/browser/url_request_rewrite_rules_manager\.cc$',
+        r'^fuchsia_web/webengine/url_request_rewrite_type_converters\.cc$',
         r'^third_party/blink/.*\.(cc|h)$',
         r'^content/renderer/.*\.(cc|h)$',
       ),
@@ -1000,6 +1015,28 @@ _BANNED_CPP_FUNCTIONS : Sequence[BanRule] = (
           r'^base[\\/]win[\\/]scoped_winrt_initializer\.cc$',
       ),
     ),
+    BanRule(
+      r'base::Watchdog',
+      (
+        'base::Watchdog is deprecated because it creates its own thread.',
+        'Instead, manually start a timer on a SequencedTaskRunner.',
+      ),
+      False,
+      (),
+    ),
+    BanRule(
+      'base::Passed',
+      (
+        'Do not use base::Passed. It is a legacy helper for capturing ',
+        'move-only types with base::BindRepeating, but invoking the ',
+        'resulting RepeatingCallback moves the captured value out of ',
+        'the callback storage, and subsequent invocations may pass the ',
+        'value in a valid but undefined state. Prefer base::BindOnce().',
+        'See http://crbug.com/1326449 for context.'
+      ),
+      False,
+      (),
+    ),
 )
 
 _BANNED_MOJOM_PATTERNS : Sequence[BanRule] = (
@@ -1043,8 +1080,11 @@ _KNOWN_TEST_DATA_AND_INVALID_JSON_FILE_PATTERNS = [
     r'testing[\\/]buildbot[\\/]',
     r'^components[\\/]policy[\\/]resources[\\/]policy_templates\.json$',
     r'^third_party[\\/]protobuf[\\/]',
+    r'^third_party[\\/]blink[\\/]perf_tests[\\/]speedometer[\\/]resources[\\/]todomvc[\\/]learn.json',
     r'^third_party[\\/]blink[\\/]renderer[\\/]devtools[\\/]protocol\.json$',
     r'^third_party[\\/]blink[\\/]web_tests[\\/]external[\\/]wpt[\\/]',
+    r'^tools[\\/]perf[\\/]',
+    r'^tools[\\/]traceline[\\/]svgui[\\/]startup-release.json',
 ]
 
 # These are not checked on the public chromium-presubmit trybot.
@@ -1056,6 +1096,7 @@ _ANDROID_SPECIFIC_PYDEPS_FILES = [
 
 
 _GENERIC_PYDEPS_FILES = [
+    'android_webview/test/components/run_webview_component_smoketest.pydeps',
     'android_webview/tools/run_cts.pydeps',
     'base/android/jni_generator/jni_generator.pydeps',
     'base/android/jni_generator/jni_registration_generator.pydeps',
@@ -1095,13 +1136,15 @@ _GENERIC_PYDEPS_FILES = [
     'build/android/gyp/java_cpp_features.pydeps',
     'build/android/gyp/java_cpp_strings.pydeps',
     'build/android/gyp/java_google_api_keys.pydeps',
-    'build/android/gyp/jetify_jar.pydeps',
     'build/android/gyp/jinja_template.pydeps',
     'build/android/gyp/lint.pydeps',
     'build/android/gyp/merge_manifest.pydeps',
+    'build/android/gyp/optimize_resources.pydeps',
     'build/android/gyp/prepare_resources.pydeps',
     'build/android/gyp/process_native_prebuilt.pydeps',
     'build/android/gyp/proguard.pydeps',
+    'build/android/gyp/system_image_apks.pydeps',
+    'build/android/gyp/trace_event_bytecode_rewriter.pydeps',
     'build/android/gyp/turbine.pydeps',
     'build/android/gyp/unused_resources.pydeps',
     'build/android/gyp/validate_static_library_dex_references.pydeps',
@@ -1124,7 +1167,7 @@ _GENERIC_PYDEPS_FILES = [
     'components/module_installer/android/module_desc_java.pydeps',
     'content/public/android/generate_child_service.pydeps',
     'net/tools/testserver/testserver.pydeps',
-    'testing/scripts/run_android_wpt.pydeps',
+    'testing/scripts/run_wpt_tests.pydeps',
     'testing/scripts/run_isolated_script_test.pydeps',
     'testing/merge_scripts/standard_isolated_script_merge.pydeps',
     'testing/merge_scripts/standard_gtest_merge.pydeps',
@@ -1357,15 +1400,22 @@ def CheckNoIOStreamInHeaders(input_api, output_api):
     return []
 
 
-def _CheckNoStrCatRedefines(input_api, output_api):
+def CheckNoStrCatRedefines(input_api, output_api):
     """Checks no windows headers with StrCat redefined are included directly."""
     files = []
+    files_to_check = (r'.+%s' % _HEADER_EXTENSIONS,
+                      r'.+%s' % _IMPLEMENTATION_EXTENSIONS)
+    files_to_skip = (input_api.DEFAULT_FILES_TO_SKIP +
+                     _NON_BASE_DEPENDENT_PATHS)
+    sources_filter = lambda f: input_api.FilterSourceFile(
+        f, files_to_check=files_to_check, files_to_skip=files_to_skip)
+
     pattern_deny = input_api.re.compile(
         r'^#include\s*[<"](shlwapi|atlbase|propvarutil|sphelper).h[">]',
         input_api.re.MULTILINE)
     pattern_allow = input_api.re.compile(
         r'^#include\s"base/win/windows_defines.inc"', input_api.re.MULTILINE)
-    for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
+    for f in input_api.AffectedSourceFiles(sources_filter):
         contents = input_api.ReadFile(f)
         if pattern_deny.search(
                 contents) and not pattern_allow.search(contents):
@@ -1463,7 +1513,17 @@ def CheckForgettingMAYBEInTests(input_api, output_api):
     # false positives with macros wrapping the actual tests name.
     define_maybe_pattern = input_api.re.compile(
         r'^\#define MAYBE_(?P<test_name>\w*[a-z]\w*)')
-    test_maybe_pattern = r'^\s*\w*TEST[^(]*\(\s*\w+,\s*MAYBE_{test_name}\)'
+    # The test_maybe_pattern needs to handle all of these forms. The standard:
+    #   IN_PROC_TEST_F(SyncTest, MAYBE_Start) {
+    # With a wrapper macro around the test name:
+    #   IN_PROC_TEST_F(SyncTest, E2E_ENABLED(MAYBE_Start)) {
+    # And the odd-ball NACL_BROWSER_TEST_f format:
+    #    NACL_BROWSER_TEST_F(NaClBrowserTest, SimpleLoad, {
+    # The optional E2E_ENABLED-style is handled with (\w*\()?
+    # The NACL_BROWSER_TEST_F pattern is handled by allowing a trailing comma or
+    # trailing ')'.
+    test_maybe_pattern = (
+        r'^\s*\w*TEST[^(]*\(\s*\w+,\s*(\w*\()?MAYBE_{test_name}[\),]')
     suite_maybe_pattern = r'^\s*\w*TEST[^(]*\(\s*MAYBE_{test_name}[\),]'
     warnings = []
 
@@ -1505,7 +1565,7 @@ def CheckForgettingMAYBEInTests(input_api, output_api):
 def CheckDCHECK_IS_ONHasBraces(input_api, output_api):
     """Checks to make sure DCHECK_IS_ON() does not skip the parentheses."""
     errors = []
-    pattern = input_api.re.compile(r'DCHECK_IS_ON\b(?!\(\))',
+    pattern = input_api.re.compile(r'\bDCHECK_IS_ON\b(?!\(\))',
                                    input_api.re.MULTILINE)
     for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
         if (not f.LocalPath().endswith(('.cc', '.mm', '.h'))):
@@ -1569,7 +1629,7 @@ def CheckValidHostsInDEPSOnUpload(input_api, output_api):
                                               'third_party', 'depot_tools',
                                               'gclient.py')
         input_api.subprocess.check_output(
-            [input_api.python_executable, gclient_path, 'verify'],
+            [input_api.python3_executable, gclient_path, 'verify'],
             stderr=input_api.subprocess.STDOUT)
         return []
     except input_api.subprocess.CalledProcessError as error:
@@ -1733,6 +1793,8 @@ def CheckNoPragmaOnce(input_api, output_api):
     for f in input_api.AffectedSourceFiles(input_api.FilterSourceFile):
         if not f.LocalPath().endswith('.h'):
             continue
+        if f.LocalPath().endswith('com_imported_mstscax.h'):
+            continue
         contents = input_api.ReadFile(f)
         if pattern.search(contents):
             files.append(f)
@@ -1877,7 +1939,7 @@ def CheckFilePermissions(input_api, output_api):
                                              'tools', 'checkperms',
                                              'checkperms.py')
     args = [
-        input_api.python_executable, checkperms_tool, '--root',
+        input_api.python3_executable, checkperms_tool, '--root',
         input_api.change.RepositoryRoot()
     ]
     with input_api.CreateTemporaryFile() as file_list:
@@ -2088,7 +2150,10 @@ def CheckNoAbbreviationInPngFileName(input_api, output_api):
     """
     errors = []
     files_to_check = [r'.*_[a-z]_.*\.png$|.*_[a-z]\.png$']
-    files_to_skip = [r'^native_client_sdk[\\/]']
+    files_to_skip = [r'^native_client_sdk[\\/]',
+                     r'^services[\\/]test[\\/]',
+                     r'^third_party[\\/]blink[\\/]web_tests[\\/]',
+                    ]
     file_filter = lambda f: input_api.FilterSourceFile(
         f, files_to_check=files_to_check, files_to_skip=files_to_skip)
     for f in input_api.AffectedFiles(include_deletes=False,
@@ -2185,7 +2250,7 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
     # We rely on Gerrit's code-owners to check approvals.
     # input_api.gerrit is always set for Chromium, but other projects
     # might not use Gerrit.
-    if not input_api.gerrit:
+    if not input_api.gerrit or input_api.no_diffs:
         return []
     if (input_api.change.issue and input_api.gerrit.IsOwnersOverrideApproved(
             input_api.change.issue)):
@@ -2217,6 +2282,8 @@ def CheckAddedDepsHaveTargetApprovals(input_api, output_api):
                     '--tbr was specified, skipping OWNERS check for DEPS additions'
                 )
             ]
+        # TODO(dcheng): Make this generate an error on dry runs if the reviewer
+        # is not added, to prevent review serialization.
         if input_api.dry_run:
             return [
                 output_api.PresubmitNotifyResult(
@@ -2315,7 +2382,7 @@ def CheckSpamLogging(input_api, output_api):
             r"^extensions[\\/]renderer[\\/]logging_native_handler\.cc$",
             r"^fuchsia[\\/]base[\\/]init_logging.cc$",
             r"^fuchsia[\\/]engine[\\/]browser[\\/]frame_impl.cc$",
-            r"^fuchsia[\\/]runners[\\/]common[\\/]web_component.cc$",
+            r"^fuchsia_web[\\/]runners[\\/]common[\\/]web_component.cc$",
             r"^headless[\\/]app[\\/]headless_shell\.cc$",
             r"^ipc[\\/]ipc_logging\.cc$",
             r"^native_client_sdk[\\/]",
@@ -2581,6 +2648,11 @@ def _GetJSONParseError(input_api, filename, eat_comments=True):
 def _GetIDLParseError(input_api, filename):
     try:
         contents = input_api.ReadFile(filename)
+        for i, char in enumerate(contents):
+            if not char.isascii():
+                return (
+                    'Non-ascii character "%s" (ord %d) found at offset %d.' %
+                    (char, ord(char), i))
         idl_schema = input_api.os_path.join(input_api.PresubmitLocalPath(),
                                             'tools', 'json_schema_compiler',
                                             'idl_schema.py')
@@ -2721,54 +2793,81 @@ def _MatchesFile(input_api, patterns, path):
     return False
 
 
-def _GetOwnersFilesToCheckForIpcOwners(input_api):
-    """Gets a list of OWNERS files to check for correct security owners.
+def _ChangeHasSecurityReviewer(input_api, owners_file):
+    """Returns True iff the CL has a reviewer from SECURITY_OWNERS.
 
-    Returns:
-      A dictionary mapping an OWNER file to the list of OWNERS rules it must
-      contain to cover IPC-related files with noparent reviewer rules.
+    Args:
+        input_api: The presubmit input API.
+        owners_file: OWNERS file with required reviewers. Typically, this is
+        something like ipc/SECURITY_OWNERS.
+
+    Note: if the presubmit is running for commit rather than for upload, this
+    only returns True if a security reviewer has also approved the CL.
     """
-    # Whether or not a file affects IPC is (mostly) determined by a simple list
-    # of filename patterns.
-    file_patterns = [
-        # Legacy IPC:
-        '*_messages.cc',
-        '*_messages*.h',
-        '*_param_traits*.*',
-        # Mojo IPC:
-        '*.mojom',
-        '*_mojom_traits*.*',
-        '*_struct_traits*.*',
-        '*_type_converter*.*',
-        '*.typemap',
-        # Android native IPC:
-        '*.aidl',
-        # Blink uses a different file naming convention:
-        '*EnumTraits*.*',
-        "*MojomTraits*.*",
-        '*StructTraits*.*',
-        '*TypeConverter*.*',
-    ]
+    # Owners-Override should bypass all additional OWNERS enforcement checks.
+    # A CR+1 vote will still be required to land this change.
+    if (input_api.change.issue and input_api.gerrit.IsOwnersOverrideApproved(
+            input_api.change.issue)):
+        return True
 
-    # These third_party directories do not contain IPCs, but contain files
-    # matching the above patterns, which trigger false positives.
-    exclude_paths = [
-        'third_party/crashpad/*',
-        'third_party/blink/renderer/platform/bindings/*',
-        'third_party/protobuf/benchmarks/python/*',
-        'third_party/win_build_output/*',
-        # These files are just used to communicate between class loaders running
-        # in the same process.
-        'weblayer/browser/java/org/chromium/weblayer_private/interfaces/*',
-        'weblayer/browser/java/org/chromium/weblayer_private/test_interfaces/*',
-    ]
+    owner_email, reviewers = (
+        input_api.canned_checks.GetCodereviewOwnerAndReviewers(
+            input_api,
+            None,
+            approval_needed=input_api.is_committing and not input_api.dry_run))
 
-    # Dictionary mapping an OWNERS file path to Patterns.
-    # Patterns is a dictionary mapping glob patterns (suitable for use in per-file
-    # rules ) to a PatternEntry.
+    security_owners = input_api.owners_client.ListOwners(owners_file)
+    return any(owner in reviewers for owner in security_owners)
+
+
+@dataclass
+class _SecurityProblemWithItems:
+    problem: str
+    items: Sequence[str]
+
+
+@dataclass
+class _MissingSecurityOwnersResult:
+    owners_file_problems: Sequence[_SecurityProblemWithItems]
+    has_security_sensitive_files: bool
+    missing_reviewer_problem: Optional[_SecurityProblemWithItems]
+
+
+def _FindMissingSecurityOwners(input_api,
+                               output_api,
+                               file_patterns: Sequence[str],
+                               excluded_patterns: Sequence[str],
+                               required_owners_file: str,
+                               custom_rule_function: Optional[Callable] = None
+                               ) -> _MissingSecurityOwnersResult:
+    """Find OWNERS files missing per-file rules for security-sensitive files.
+
+    Args:
+        input_api: the PRESUBMIT input API object.
+        output_api: the PRESUBMIT output API object.
+        file_patterns: basename patterns that require a corresponding per-file
+            security restriction.
+        excluded_patterns: path patterns that should be exempted from
+            requiring a security restriction.
+        required_owners_file: path to the required OWNERS file, e.g.
+            ipc/SECURITY_OWNERS
+        cc_alias: If not None, email that will be CCed automatically if the
+            change contains security-sensitive files, as determined by
+            `file_patterns` and `excluded_patterns`.
+        custom_rule_function: If not None, will be called with `input_api` and
+            the current file under consideration. Returning True will add an
+            exact match per-file rule check for the current file.
+    """
+
+    # `to_check` is a mapping of an OWNERS file path to Patterns.
+    #
+    # Patterns is a dictionary mapping glob patterns (suitable for use in
+    # per-file rules) to a PatternEntry.
+    #
     # PatternEntry is a dictionary with two keys:
     # - 'files': the files that are matched by this pattern
     # - 'rules': the per-file rules needed for this pattern
+    #
     # For example, if we expect OWNERS file to contain rules for *.mojom and
     # *_struct_traits*.*, Patterns might look like this:
     # {
@@ -2788,59 +2887,165 @@ def _GetOwnersFilesToCheckForIpcOwners(input_api):
     #   },
     # }
     to_check = {}
+    files_to_review = []
 
-    def AddPatternToCheck(input_file, pattern):
+    def AddPatternToCheck(file, pattern):
         owners_file = input_api.os_path.join(
-            input_api.os_path.dirname(input_file.AbsoluteLocalPath()),
-            'OWNERS')
+            input_api.os_path.dirname(file.LocalPath()), 'OWNERS')
         if owners_file not in to_check:
             to_check[owners_file] = {}
         if pattern not in to_check[owners_file]:
             to_check[owners_file][pattern] = {
                 'files': [],
                 'rules': [
-                    'per-file %s=set noparent' % pattern,
-                    'per-file %s=file://ipc/SECURITY_OWNERS' % pattern,
+                    f'per-file {pattern}=set noparent',
+                    f'per-file {pattern}=file://{required_owners_file}',
                 ]
             }
-        to_check[owners_file][pattern]['files'].append(input_file)
+        to_check[owners_file][pattern]['files'].append(file.LocalPath())
+        files_to_review.append(file.LocalPath())
 
-    # Iterate through the affected files to see what we actually need to check
-    # for. We should only nag patch authors about per-file rules if a file in that
-    # directory would match that pattern. If a directory only contains *.mojom
-    # files and no *_messages*.h files, we should only nag about rules for
-    # *.mojom files.
-    for f in input_api.AffectedFiles(include_deletes=False):
-        # Manifest files don't have a strong naming convention. Instead, try to find
-        # affected .cc and .h files which look like they contain a manifest
-        # definition.
-        manifest_pattern = input_api.re.compile('manifests?\.(cc|h)$')
-        test_manifest_pattern = input_api.re.compile('test_manifests?\.(cc|h)')
-        if (manifest_pattern.search(f.LocalPath())
-                and not test_manifest_pattern.search(f.LocalPath())):
-            # We expect all actual service manifest files to contain at least one
-            # qualified reference to service_manager::Manifest.
-            if 'service_manager::Manifest' in '\n'.join(f.NewContents()):
-                AddPatternToCheck(f, input_api.os_path.basename(f.LocalPath()))
+    # Only enforce security OWNERS rules for a directory if that directory has a
+    # file that matches `file_patterns`. For example, if a directory only
+    # contains *.mojom files and no *_messages*.h files, the check should only
+    # ensure that rules for *.mojom files are present.
+    for file in input_api.AffectedFiles(include_deletes=False):
+        file_basename = input_api.os_path.basename(file.LocalPath())
+        if custom_rule_function is not None and custom_rule_function(
+                input_api, file):
+            AddPatternToCheck(file, file_basename)
+            continue
+
+        if any(
+                input_api.fnmatch.fnmatch(file.LocalPath(), pattern)
+                for pattern in excluded_patterns):
+            continue
+
         for pattern in file_patterns:
-            if input_api.fnmatch.fnmatch(
-                    input_api.os_path.basename(f.LocalPath()), pattern):
-                skip = False
-                for exclude in exclude_paths:
-                    if input_api.fnmatch.fnmatch(f.LocalPath(), exclude):
-                        skip = True
-                        break
-                if skip:
-                    continue
-                AddPatternToCheck(f, pattern)
+            # Unlike `excluded_patterns`, `file_patterns` is checked only against the
+            # file's basename.
+            if input_api.fnmatch.fnmatch(file_basename, pattern):
+                AddPatternToCheck(file, pattern)
                 break
 
-    return to_check
+    has_security_sensitive_files = bool(to_check)
+
+    # Check if any newly added lines in OWNERS files intersect with required
+    # per-file OWNERS lines. If so, ensure that a security reviewer is included.
+    # This is a hack, but is needed because the OWNERS check (by design) ignores
+    # new OWNERS entries; otherwise, a non-owner could add someone as a new
+    # OWNER and have that newly-added OWNER self-approve their own addition.
+    newly_covered_files = []
+    for file in input_api.AffectedFiles(include_deletes=False):
+        if not file.LocalPath() in to_check:
+            continue
+        for _, line in file.ChangedContents():
+            for _, entry in to_check[file.LocalPath()].items():
+                if line in entry['rules']:
+                    newly_covered_files.extend(entry['files'])
+
+    missing_reviewer_problems = None
+    if newly_covered_files and not _ChangeHasSecurityReviewer(
+            input_api, required_owners_file):
+        missing_reviewer_problems = _SecurityProblemWithItems(
+            f'Review from an owner in {required_owners_file} is required for '
+            'the following newly-added files:',
+            [f'{file}' for file in sorted(set(newly_covered_files))])
+
+    # Go through the OWNERS files to check, filtering out rules that are already
+    # present in that OWNERS file.
+    for owners_file, patterns in to_check.items():
+        try:
+            lines = set(
+                input_api.ReadFile(
+                    input_api.os_path.join(input_api.change.RepositoryRoot(),
+                                           owners_file)).splitlines())
+            for entry in patterns.values():
+                entry['rules'] = [
+                    rule for rule in entry['rules'] if rule not in lines
+                ]
+        except IOError:
+            # No OWNERS file, so all the rules are definitely missing.
+            continue
+
+    # All the remaining lines weren't found in OWNERS files, so emit an error.
+    owners_file_problems = []
+
+    for owners_file, patterns in to_check.items():
+        missing_lines = []
+        files = []
+        for _, entry in patterns.items():
+            files.extend(entry['files'])
+            missing_lines.extend(entry['rules'])
+        if missing_lines:
+            joined_missing_lines = '\n'.join(line for line in missing_lines)
+            owners_file_problems.append(
+                _SecurityProblemWithItems(
+                    'Found missing OWNERS lines for security-sensitive files. '
+                    f'Please add the following lines to {owners_file}:\n'
+                    f'{joined_missing_lines}\n\nTo ensure security review for:',
+                    files))
+
+    return _MissingSecurityOwnersResult(owners_file_problems,
+                                        has_security_sensitive_files,
+                                        missing_reviewer_problems)
 
 
-def _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check):
-    """Adds OWNERS files to check for correct Fuchsia security owners."""
+def _CheckChangeForIpcSecurityOwners(input_api, output_api):
+    # Whether or not a file affects IPC is (mostly) determined by a simple list
+    # of filename patterns.
+    file_patterns = [
+        # Legacy IPC:
+        '*_messages.cc',
+        '*_messages*.h',
+        '*_param_traits*.*',
+        # Mojo IPC:
+        '*.mojom',
+        '*_mojom_traits*.*',
+        '*_type_converter*.*',
+        # Android native IPC:
+        '*.aidl',
+    ]
 
+    excluded_patterns = [
+        # These third_party directories do not contain IPCs, but contain files
+        # matching the above patterns, which trigger false positives.
+        'third_party/crashpad/*',
+        'third_party/blink/renderer/platform/bindings/*',
+        'third_party/protobuf/benchmarks/python/*',
+        'third_party/win_build_output/*',
+        # Enum-only mojoms used for web metrics, so no security review needed.
+        'third_party/blink/public/mojom/use_counter/metrics/*',
+        # These files are just used to communicate between class loaders running
+        # in the same process.
+        'weblayer/browser/java/org/chromium/weblayer_private/interfaces/*',
+        'weblayer/browser/java/org/chromium/weblayer_private/test_interfaces/*',
+    ]
+
+    def IsMojoServiceManifestFile(input_api, file):
+        manifest_pattern = input_api.re.compile('manifests?\.(cc|h)$')
+        test_manifest_pattern = input_api.re.compile('test_manifests?\.(cc|h)')
+        if not manifest_pattern.search(file.LocalPath()):
+            return False
+
+        if test_manifest_pattern.search(file.LocalPath()):
+            return False
+
+        # All actual service manifest files should contain at least one
+        # qualified reference to service_manager::Manifest.
+        return any('service_manager::Manifest' in line
+                   for line in file.NewContents())
+
+    return _FindMissingSecurityOwners(
+        input_api,
+        output_api,
+        file_patterns,
+        excluded_patterns,
+        'ipc/SECURITY_OWNERS',
+        custom_rule_function=IsMojoServiceManifestFile)
+
+
+def _CheckChangeForFuchsiaSecurityOwners(input_api, output_api):
     file_patterns = [
         # Component specifications.
         '*.cml',  # Component Framework v2.
@@ -2851,94 +3056,59 @@ def _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check):
     ]
 
     # Don't check for owners files for changes in these directories.
-    exclude_paths = [
+    excluded_patterns = [
         'third_party/crashpad/*',
     ]
 
-    def AddPatternToCheck(input_file, pattern):
-        owners_file = input_api.os_path.join(
-            input_api.os_path.dirname(input_file.LocalPath()), 'OWNERS')
-        if owners_file not in to_check:
-            to_check[owners_file] = {}
-        if pattern not in to_check[owners_file]:
-            to_check[owners_file][pattern] = {
-                'files': [],
-                'rules': [
-                    'per-file %s=set noparent' % pattern,
-                    'per-file %s=file://fuchsia/SECURITY_OWNERS' % pattern,
-                ]
-            }
-        to_check[owners_file][pattern]['files'].append(input_file)
-
-    # Iterate through the affected files to see what we actually need to check
-    # for. We should only nag patch authors about per-file rules if a file in that
-    # directory would match that pattern.
-    for f in input_api.AffectedFiles(include_deletes=False):
-        skip = False
-        for exclude in exclude_paths:
-            if input_api.fnmatch.fnmatch(f.LocalPath(), exclude):
-                skip = True
-        if skip:
-            continue
-
-        for pattern in file_patterns:
-            if input_api.fnmatch.fnmatch(
-                    input_api.os_path.basename(f.LocalPath()), pattern):
-                AddPatternToCheck(f, pattern)
-                break
-
-    return to_check
+    return _FindMissingSecurityOwners(input_api, output_api, file_patterns,
+                                      excluded_patterns,
+                                      'build/fuchsia/SECURITY_OWNERS')
 
 
 def CheckSecurityOwners(input_api, output_api):
-    """Checks that affected files involving IPC have an IPC OWNERS rule."""
-    to_check = _GetOwnersFilesToCheckForIpcOwners(input_api)
-    _AddOwnersFilesToCheckForFuchsiaSecurityOwners(input_api, to_check)
+    """Checks that various security-sensitive files have an IPC OWNERS rule."""
+    ipc_results = _CheckChangeForIpcSecurityOwners(input_api, output_api)
+    fuchsia_results = _CheckChangeForFuchsiaSecurityOwners(
+        input_api, output_api)
 
-    if to_check:
-        # If there are any OWNERS files to check, there are IPC-related changes in
-        # this CL. Auto-CC the review list.
+    if ipc_results.has_security_sensitive_files:
         output_api.AppendCC('ipc-security-reviews@chromium.org')
 
-    # Go through the OWNERS files to check, filtering out rules that are already
-    # present in that OWNERS file.
-    for owners_file, patterns in to_check.items():
-        try:
-            with open(owners_file) as f:
-                lines = set(f.read().splitlines())
-                for entry in patterns.values():
-                    entry['rules'] = [
-                        rule for rule in entry['rules'] if rule not in lines
-                    ]
-        except IOError:
-            # No OWNERS file, so all the rules are definitely missing.
-            continue
-
-    # All the remaining lines weren't found in OWNERS files, so emit an error.
-    errors = []
-    for owners_file, patterns in to_check.items():
-        missing_lines = []
-        files = []
-        for _, entry in patterns.items():
-            missing_lines.extend(entry['rules'])
-            files.extend(['  %s' % f.LocalPath() for f in entry['files']])
-        if missing_lines:
-            errors.append('Because of the presence of files:\n%s\n\n'
-                          '%s needs the following %d lines added:\n\n%s' %
-                          ('\n'.join(files), owners_file, len(missing_lines),
-                           '\n'.join(missing_lines)))
-
     results = []
-    if errors:
-        if input_api.is_committing:
-            output = output_api.PresubmitError
-        else:
-            output = output_api.PresubmitPromptWarning
+
+    missing_reviewer_problems = []
+    if ipc_results.missing_reviewer_problem:
+        missing_reviewer_problems.append(ipc_results.missing_reviewer_problem)
+    if fuchsia_results.missing_reviewer_problem:
+        missing_reviewer_problems.append(
+            fuchsia_results.missing_reviewer_problem)
+
+    # Missing reviewers are an error unless there's no issue number
+    # associated with this branch; in that case, the presubmit is being run
+    # with --all or --files.
+    #
+    # Note that upload should never be an error; otherwise, it would be
+    # impossible to upload changes at all.
+    if input_api.is_committing and input_api.change.issue:
+        make_presubmit_message = output_api.PresubmitError
+    else:
+        make_presubmit_message = output_api.PresubmitNotifyResult
+    for problem in missing_reviewer_problems:
         results.append(
-            output(
-                'Found OWNERS files that need to be updated for IPC security '
-                + 'review coverage.\nPlease update the OWNERS files below:',
-                long_text='\n\n'.join(errors)))
+            make_presubmit_message(problem.problem, items=problem.items))
+
+    owners_file_problems = []
+    owners_file_problems.extend(ipc_results.owners_file_problems)
+    owners_file_problems.extend(fuchsia_results.owners_file_problems)
+
+    for problem in owners_file_problems:
+        # Missing per-file rules are always an error. While swarming and caching
+        # means that uploading a patchset with updated OWNERS files and sending
+        # it to the CQ again should not have a large incremental cost, it is
+        # still frustrating to discover the error only after the change has
+        # already been uploaded.
+        results.append(
+            output_api.PresubmitError(problem.problem, items=problem.items))
 
     return results
 
@@ -2961,11 +3131,9 @@ def _GetFilesUsingSecurityCriticalFunctions(input_api):
         for k, v in _PATTERNS_TO_CHECK.items()
     }
 
-    import os
-
     # We don't want to trigger on strings within this file.
     def presubmit_file_filter(f):
-        return 'PRESUBMIT.py' != os.path.split(f.LocalPath())[1]
+        return 'PRESUBMIT.py' != input_api.os_path.split(f.LocalPath())[1]
 
     # Scan all affected files for changes touching _FUNCTIONS_TO_CHECK.
     files_to_functions = {}
@@ -2994,18 +3162,11 @@ def CheckSecurityChanges(input_api, output_api):
     if not len(files_to_functions):
         return []
 
-    owner_email, reviewers = (
-        input_api.canned_checks.GetCodereviewOwnerAndReviewers(
-            input_api, None, approval_needed=input_api.is_committing))
-
-    # Load the OWNERS file for security changes.
     owners_file = 'ipc/SECURITY_OWNERS'
-    security_owners = input_api.owners_client.ListOwners(owners_file)
-    has_security_owner = any([owner in reviewers for owner in security_owners])
-    if has_security_owner:
+    if _ChangeHasSecurityReviewer(input_api, owners_file):
         return []
 
-    msg = 'The following files change calls to security-sensive functions\n' \
+    msg = 'The following files change calls to security-sensitive functions\n' \
         'that need to be reviewed by {}.\n'.format(owners_file)
     for path, names in files_to_functions.items():
         msg += '  {}\n'.format(path)
@@ -4788,6 +4949,7 @@ def CheckForIncludeGuards(input_api, output_api):
         file_with_path = input_api.os_path.normpath(f.LocalPath())
         return (file_with_path.endswith('.h')
                 and not file_with_path.endswith('_message_generator.h')
+                and not file_with_path.endswith('com_imported_mstscax.h')
                 and (not file_with_path.startswith('third_party')
                      or file_with_path.startswith(
                          input_api.os_path.join('third_party', 'blink'))))
@@ -4912,7 +5074,7 @@ def CheckForWindowsLineEndings(input_api, output_api):
     for f in input_api.AffectedSourceFiles(source_file_filter):
         # Ignore test files that contain crlf intentionally.
         if f.LocalPath().endswith('crlf.txt'):
-          continue
+            continue
         include_file = False
         for line in input_api.ReadFile(f, 'r').splitlines(True):
             if line.endswith('\r\n'):
@@ -5078,9 +5240,6 @@ def CheckChangeOnCommit(input_api, output_api):
         input_api.canned_checks.CheckChangeHasBugField(input_api, output_api))
     results.extend(
         input_api.canned_checks.CheckChangeHasNoUnwantedTags(
-            input_api, output_api))
-    results.extend(
-        input_api.canned_checks.CheckChangeHasDescription(
             input_api, output_api))
     return results
 
@@ -5485,7 +5644,7 @@ def CheckStableMojomChanges(input_api, output_api):
         include_deletes=True,
         file_filter=lambda f: f.LocalPath().endswith(('.mojom')))
 
-    if not changed_mojoms:
+    if not changed_mojoms or input_api.no_diffs:
         return []
 
     delta = []
@@ -5658,13 +5817,13 @@ def CheckMPArchApiUsage(input_api, output_api):
     presence of MPArch features such as bfcache, prerendering, and fenced frames.
     """
 
-    # Only consider top-level directories that (1) can use content APIs, (2)
-    # apply to desktop or android chrome, and (3) are known to have a significant
-    # number of uses of the APIs of concern.
+    # Only consider top-level directories that (1) can use content APIs or
+    # problematic blink APIs, (2) apply to desktop or android chrome, and (3)
+    # are known to have a significant number of uses of the APIs of concern.
     files_to_check = (
-        r'^(chrome|components|content|extensions)[\\/].+%s' %
+        r'^(chrome|components|content|extensions|third_party[\\/]blink[\\/]renderer)[\\/].+%s' %
         _IMPLEMENTATION_EXTENSIONS,
-        r'^(chrome|components|content|extensions)[\\/].+%s' %
+        r'^(chrome|components|content|extensions|third_party[\\/]blink[\\/]renderer)[\\/].+%s' %
         _HEADER_EXTENSIONS,
     )
     files_to_skip = (_EXCLUDED_PATHS + _TEST_CODE_EXCLUDED_PATHS +
@@ -5708,14 +5867,21 @@ def CheckMPArchApiUsage(input_api, output_api):
         'GetMainFrame',
         'GetFrameTreeNodeId',
     ]
+    concerning_rfhi_methods = [
+        'is_main_frame',
+    ]
     concerning_ftn_methods = [
         'IsMainFrame',
+    ]
+    concerning_blink_frame_methods = [
+        'IsCrossOriginToMainFrame',
     ]
     concerning_method_pattern = input_api.re.compile(r'(' + r'|'.join(
         item for sublist in [
             concerning_wco_methods, concerning_nav_handle_methods,
             concerning_web_contents_methods, concerning_rfh_methods,
-            concerning_ftn_methods,
+            concerning_rfhi_methods, concerning_ftn_methods,
+            concerning_blink_frame_methods,
         ] for item in sublist) + r')\(')
 
     used_apis = set()

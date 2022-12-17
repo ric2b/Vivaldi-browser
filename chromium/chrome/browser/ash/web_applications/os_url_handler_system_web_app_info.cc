@@ -10,6 +10,8 @@
 #include "chrome/browser/ash/crosapi/browser_util.h"
 #include "chrome/browser/ash/web_applications/system_web_app_install_utils.h"
 #include "chrome/browser/ui/webui/chrome_web_ui_controller_factory.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
+#include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "chromeos/crosapi/cpp/gurl_os_handler_utils.h"
@@ -33,10 +35,10 @@ SkColor GetBgColor(bool use_dark_mode) {
 
 OsUrlHandlerSystemWebAppDelegate::OsUrlHandlerSystemWebAppDelegate(
     Profile* profile)
-    : web_app::SystemWebAppDelegate(web_app::SystemAppType::OS_URL_HANDLER,
-                                    "OsUrlHandler",
-                                    GURL(chrome::kChromeUIOsUrlAppURL),
-                                    profile) {}
+    : ash::SystemWebAppDelegate(ash::SystemWebAppType::OS_URL_HANDLER,
+                                "OsUrlHandler",
+                                GURL(chrome::kChromeUIOsUrlAppURL),
+                                profile) {}
 
 OsUrlHandlerSystemWebAppDelegate::~OsUrlHandlerSystemWebAppDelegate() = default;
 
@@ -62,7 +64,7 @@ OsUrlHandlerSystemWebAppDelegate::GetWebAppInfo() const {
   info->theme_color = GetBgColor(/*use_dark_mode=*/false);
   info->dark_mode_theme_color = GetBgColor(/*use_dark_mode=*/true);
   info->display_mode = blink::mojom::DisplayMode::kStandalone;
-  info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+  info->user_display_mode = web_app::UserDisplayMode::kStandalone;
 
   return info;
 }

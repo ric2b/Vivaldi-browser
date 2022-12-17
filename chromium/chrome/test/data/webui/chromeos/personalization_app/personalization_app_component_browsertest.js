@@ -29,16 +29,18 @@ var PersonalizationAppComponentBrowserTest = class extends PolymerTest {
 };
 
 [['AmbientPreviewTest', 'ambient_preview_element_test.js'],
- ['AmbientSubpageTest', 'ambient_subpage_element_test.js'],
+ // TODO(crbug/1334962) re-enable this test case.
+ ['AmbientSubpageTest', 'ambient_subpage_element_test.js', 'DISABLED_All'],
  ['AvatarCameraTest', 'avatar_list_element_test.js'],
  ['AvatarListTest', 'avatar_list_element_test.js'],
- ['GooglePhotosAlbums', 'google_photos_albums_element_test.js'],
- ['GooglePhotosCollection', 'google_photos_collection_element_test.js'],
+ ['GooglePhotosAlbumsTest', 'google_photos_albums_element_test.js'],
+ ['GooglePhotosCollectionTest', 'google_photos_collection_element_test.js'],
  [
    'GooglePhotosPhotosByAlbumIdTest',
    'google_photos_photos_by_album_id_element_test.js'
  ],
  ['GooglePhotosPhotosTest', 'google_photos_photos_element_test.js'],
+ ['KeyboardBacklightTest', 'keyboard_backlight_element_test.js'],
  ['LocalImagesTest', 'local_images_element_test.js'],
  [
    'PersonalizationBreadcrumbTest', 'personalization_breadcrumb_element_test.js'

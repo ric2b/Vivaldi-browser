@@ -103,6 +103,7 @@ class AutomationAXTreeWrapper : public ui::AXTreeObserver,
                             ui::AXNode* node);
   bool HasEventListener(api::automation::EventType event_type,
                         ui::AXNode* node);
+  size_t EventListenerCount() const;
 
   // Indicates whether this tree is ignored due to a hosting ancestor tree/node
   // being ignored.
@@ -116,6 +117,7 @@ class AutomationAXTreeWrapper : public ui::AXTreeObserver,
   ui::AXTreeID GetParentTreeID() const override;
   ui::AXNode* GetRootAsAXNode() const override;
   ui::AXNode* GetParentNodeFromParentTreeAsAXNode() const override;
+  std::string ToString() const override;
 
  private:
   // AXTreeObserver overrides.
@@ -132,6 +134,9 @@ class AutomationAXTreeWrapper : public ui::AXTreeObserver,
   void OnAtomicUpdateFinished(ui::AXTree* tree,
                               bool root_changed,
                               const std::vector<Change>& changes) override;
+  void OnIgnoredChanged(ui::AXTree* tree,
+                        ui::AXNode* node,
+                        bool is_ignored_new_value) override;
 
   ui::AXTreeID tree_id_;
   ui::AXTree tree_;

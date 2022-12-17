@@ -40,6 +40,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   // Overridden from LiveTabContext:
   void ShowBrowserWindow() override;
   SessionID GetSessionID() const override;
+  sessions::SessionWindow::WindowType GetWindowType() const override;
   int GetTabCount() const override;
   int GetSelectedIndex() const override;
   std::string GetVivExtData() const override;
@@ -91,6 +92,7 @@ class BrowserLiveTabContext : public sessions::LiveTabContext {
   // see Browser::Create
   static sessions::LiveTabContext* Create(
       Profile* profile,
+      sessions::SessionWindow::WindowType type,
       const std::string& app_name,
       const gfx::Rect& bounds,
       ui::WindowShowState show_state,

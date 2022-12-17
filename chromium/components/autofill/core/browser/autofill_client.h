@@ -59,7 +59,8 @@ namespace autofill {
 
 class AddressNormalizer;
 class AutofillAblationStudy;
-struct AutofillOfferData;
+class AutofillDriver;
+class AutofillOfferData;
 class AutofillProfile;
 class AutocompleteHistoryManager;
 class AutofillOfferManager;
@@ -72,6 +73,7 @@ class FormDataImporter;
 class FormStructure;
 class LogManager;
 class MigratableCreditCard;
+class MerchantPromoCodeManager;
 class OtpUnmaskDelegate;
 enum class OtpUnmaskResult;
 class PersonalDataManager;
@@ -251,7 +253,7 @@ class AutofillClient : public RiskDataLoader {
     PopupOpenArgs();
     PopupOpenArgs(const gfx::RectF& element_bounds,
                   base::i18n::TextDirection text_direction,
-                  std::vector<autofill::Suggestion> suggestions,
+                  std::vector<Suggestion> suggestions,
                   AutoselectFirstSuggestion autoselect_first_suggestion,
                   PopupType popup_type);
     PopupOpenArgs(const PopupOpenArgs&);
@@ -263,7 +265,7 @@ class AutofillClient : public RiskDataLoader {
     gfx::RectF element_bounds;
     base::i18n::TextDirection text_direction =
         base::i18n::TextDirection::UNKNOWN_DIRECTION;
-    std::vector<autofill::Suggestion> suggestions;
+    std::vector<Suggestion> suggestions;
     AutoselectFirstSuggestion autoselect_first_suggestion{false};
     PopupType popup_type = PopupType::kUnspecified;
   };
@@ -303,7 +305,7 @@ class AutofillClient : public RiskDataLoader {
 
   using AddressProfileSavePromptCallback =
       base::OnceCallback<void(SaveAddressProfileOfferUserDecision,
-                              autofill::AutofillProfile profile)>;
+                              AutofillProfile profile)>;
 
   ~AutofillClient() override = default;
 
@@ -316,8 +318,12 @@ class AutofillClient : public RiskDataLoader {
   // Gets the PersonalDataManager instance associated with the client.
   virtual PersonalDataManager* GetPersonalDataManager() = 0;
 
-  // Gets the AutocompleteHistoryManager instance associate with the client.
+  // Gets the AutocompleteHistoryManager instance associated with the client.
   virtual AutocompleteHistoryManager* GetAutocompleteHistoryManager() = 0;
+
+  // Gets the MerchantPromoCodeManager instance associated with the
+  // client (can be null for unsupported platforms).
+  virtual MerchantPromoCodeManager* GetMerchantPromoCodeManager();
 
   // Creates and returns a SingleFieldFormFillRouter using the
   // AutocompleteHistoryManager instance associated with the client.
@@ -423,8 +429,7 @@ class AutofillClient : public RiskDataLoader {
   // AutofillClient. VirtualCardEnrollmentManager is used for virtual card
   // enroll and unenroll related flows. This function may return a nullptr on
   // some platforms.
-  virtual raw_ptr<VirtualCardEnrollmentManager>
-  GetVirtualCardEnrollmentManager();
+  virtual VirtualCardEnrollmentManager* GetVirtualCardEnrollmentManager();
 
   // Shows a dialog for the user to enroll in a virtual card.
   virtual void ShowVirtualCardEnrollDialog(
@@ -654,7 +659,7 @@ class AutofillClient : public RiskDataLoader {
   // Pass the form structures to the password manager to choose correct username
   // and to the password generation manager to detect account creation forms.
   virtual void PropagateAutofillPredictions(
-      content::RenderFrameHost* rfh,
+      AutofillDriver* driver,
       const std::vector<FormStructure*>& forms) = 0;
 
   // Inform the client that the field has been filled.
@@ -685,6 +690,11 @@ class AutofillClient : public RiskDataLoader {
   // Checks whether the current query is the most recent one.
   virtual bool IsQueryIDRelevant(int query_id) = 0;
 #endif
+
+  // Navigates to |url| in a new tab. |url| links to the promo code offer
+  // details page for the offers in a promo code suggestions popup. Every offer
+  // in a promo code suggestions popup links to the same offer details page.
+  virtual void OpenPromoCodeOfferDetailsURL(const GURL& url) = 0;
 };
 
 }  // namespace autofill

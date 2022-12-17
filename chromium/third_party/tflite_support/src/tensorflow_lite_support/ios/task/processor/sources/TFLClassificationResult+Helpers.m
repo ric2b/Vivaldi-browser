@@ -19,26 +19,34 @@
 
 + (TFLClassificationResult *)classificationResultWithCResult:
     (TfLiteClassificationResult *)cClassificationResult {
-  if (cClassificationResult == nil) return nil;
+  if (!cClassificationResult)
+    return nil;
 
   NSMutableArray *classificationHeads = [[NSMutableArray alloc] init];
   for (int i = 0; i < cClassificationResult->size; i++) {
     TfLiteClassifications cClassifications = cClassificationResult->classifications[i];
-    NSMutableArray *classes = [[NSMutableArray alloc] init];
+    NSMutableArray* categories = [[NSMutableArray alloc] init];
     for (int j = 0; j < cClassifications.size; j++) {
       TfLiteCategory cCategory = cClassifications.categories[j];
-
-      TFLCategory *resultCategory = [TFLCategory categoryWithCCategory:&cCategory];
-      [classes addObject:resultCategory];
+      [categories addObject:[TFLCategory categoryWithCCategory:&cCategory]];
     }
-    TFLClassifications *classificationHead = [[TFLClassifications alloc] init];
-    classificationHead.categories = classes;
-    classificationHead.headIndex = i;
-    [classificationHeads addObject:classificationHead];
+
+    NSString* headName = nil;
+
+    if (cClassifications.head_name) {
+      headName = [NSString stringWithCString:cClassifications.head_name
+                                    encoding:NSUTF8StringEncoding];
+    }
+
+    TFLClassifications* classifications = [[TFLClassifications alloc]
+        initWithHeadIndex:cClassifications.head_index
+                 headName:headName
+               categories:categories];
+
+    [classificationHeads addObject:classifications];
   }
 
-  TFLClassificationResult *classificationResult = [[TFLClassificationResult alloc] init];
-  classificationResult.classifications = classificationHeads;
-  return classificationResult;
+  return [[TFLClassificationResult alloc]
+      initWithClassifications:classificationHeads];
 }
 @end

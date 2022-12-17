@@ -12,9 +12,11 @@
 #include "base/bind.h"
 #include "base/strings/string_split.h"
 #include "base/strings/utf_string_conversions.h"
+#include "components/services/storage/privileged/mojom/indexed_db_control.mojom.h"
+#include "components/services/storage/public/cpp/buckets/bucket_locator.h"
 #include "components/services/storage/public/mojom/cache_storage_control.mojom.h"
-#include "components/services/storage/public/mojom/indexed_db_control.mojom.h"
 #include "content/browser/devtools/protocol/browser_handler.h"
+#include "content/browser/devtools/protocol/handler_helpers.h"
 #include "content/browser/devtools/protocol/network.h"
 #include "content/browser/devtools/protocol/network_handler.h"
 #include "content/browser/devtools/protocol/storage.h"
@@ -210,32 +212,37 @@ class StorageHandler::IndexedDBObserver
     storage_keys_.erase(storage_key);
   }
 
-  void OnIndexedDBListChanged(const blink::StorageKey& storage_key) override {
+  void OnIndexedDBListChanged(
+      const storage::BucketLocator& bucket_locator) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (!owner_)
       return;
-    auto found = storage_keys_.find(storage_key);
+    // TODO(crbug.com/1315371): Allow custom bucket names.
+    auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end())
       return;
     // TODO(https://crbug.com/1199077): Pass storage key instead once
     // Chrome DevTools Protocol (CDP) supports it.
-    owner_->NotifyIndexedDBListChanged(storage_key.origin().Serialize());
+    owner_->NotifyIndexedDBListChanged(
+        bucket_locator.storage_key.origin().Serialize());
   }
 
   void OnIndexedDBContentChanged(
-      const blink::StorageKey& storage_key,
+      const storage::BucketLocator& bucket_locator,
       const std::u16string& database_name,
       const std::u16string& object_store_name) override {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
     if (!owner_)
       return;
-    auto found = storage_keys_.find(storage_key);
+    // TODO(crbug.com/1315371): Allow custom bucket names.
+    auto found = storage_keys_.find(bucket_locator.storage_key);
     if (found == storage_keys_.end())
       return;
     // TODO(https://crbug.com/1199077): Pass storage key instead once
     // Chrome DevTools Protocol (CDP) supports it.
-    owner_->NotifyIndexedDBContentChanged(storage_key.origin().Serialize(),
-                                          database_name, object_store_name);
+    owner_->NotifyIndexedDBContentChanged(
+        bucket_locator.storage_key.origin().Serialize(), database_name,
+        object_store_name);
   }
 
  private:
@@ -263,8 +270,7 @@ class StorageHandler::IndexedDBObserver
 };
 
 StorageHandler::StorageHandler()
-    : DevToolsDomainHandler(Storage::Metainfo::domainName),
-      storage_partition_(nullptr) {}
+    : DevToolsDomainHandler(Storage::Metainfo::domainName) {}
 
 StorageHandler::~StorageHandler() {
   DCHECK(!cache_storage_observer_);
@@ -280,6 +286,7 @@ void StorageHandler::SetRenderer(int process_host_id,
                                  RenderFrameHostImpl* frame_host) {
   RenderProcessHost* process = RenderProcessHost::FromID(process_host_id);
   storage_partition_ = process ? process->GetStoragePartition() : nullptr;
+  frame_host_ = frame_host;
 }
 
 Response StorageHandler::Disable() {
@@ -351,6 +358,20 @@ void StorageHandler::ClearCookies(
       base::BindOnce([](std::unique_ptr<ClearCookiesCallback> callback,
                         uint32_t) { callback->sendSuccess(); },
                      std::move(callback)));
+}
+
+Response StorageHandler::GetStorageKeyForFrame(
+    const std::string& frame_id,
+    std::string* serialized_storage_key) {
+  if (!frame_host_)
+    return Response::InvalidParams("Frame host not found");
+  FrameTreeNode* node = protocol::FrameTreeNodeFromDevToolsFrameToken(
+      frame_host_->frame_tree_node(), frame_id);
+  if (!node)
+    return Response::InvalidParams("Frame tree node for given frame not found");
+  RenderFrameHostImpl* rfh = node->current_frame_host();
+  *serialized_storage_key = rfh->storage_key().Serialize();
+  return Response::Success();
 }
 
 void StorageHandler::ClearDataForOrigin(

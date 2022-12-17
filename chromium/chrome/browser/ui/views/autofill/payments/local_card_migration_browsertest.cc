@@ -190,8 +190,8 @@ class LocalCardMigrationBrowserTest
         base::MakeRefCounted<network::WeakWrapperSharedURLLoaderFactory>(
             &test_url_loader_factory_);
     ContentAutofillDriver::GetForRenderFrameHost(
-        GetActiveWebContents()->GetMainFrame())
-        ->browser_autofill_manager()
+        GetActiveWebContents()->GetPrimaryMainFrame())
+        ->autofill_manager()
         ->client()
         ->GetPaymentsClient()
         ->set_url_loader_factory_for_testing(test_shared_loader_factory_);
@@ -199,8 +199,8 @@ class LocalCardMigrationBrowserTest
     // Set up this class as the ObserverForTest implementation.
     local_card_migration_manager_ =
         ContentAutofillDriver::GetForRenderFrameHost(
-            GetActiveWebContents()->GetMainFrame())
-            ->browser_autofill_manager()
+            GetActiveWebContents()->GetPrimaryMainFrame())
+            ->autofill_manager()
             ->client()
             ->GetFormDataImporter()
             ->local_card_migration_manager_.get();

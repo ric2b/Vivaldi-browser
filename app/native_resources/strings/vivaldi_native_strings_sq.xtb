@@ -30,8 +30,8 @@
 <translation id="2441056087170876076">Monstra 2</translation>
 <translation id="2444387452209867610">Vë shënimin</translation>
 <translation id="2486841023299517366">Kafsha 4</translation>
-<translation id="2612127540243995147">Gatim për instalim. Vivaldi do të mbyllet dhe hapet automatikisht.</translation>
-<translation id="2613387515621326337">Tregoj faqen e përditësimit</translation>
+<translation id="2612127540243995147">Gati për instalim. Vivaldi do të mbyllet dhe hapet automatikisht.</translation>
+<translation id="2613387515621326337">Tregoj uebsajtin e përditësimit</translation>
 <translation id="2647368062414805334">Fatkeqësisht, parametrat e Edge nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Edge. Pastaj klikoni Vazhdoj.</translation>
 <translation id="2721334646575696520">Microsoft Edge</translation>
 <translation id="2848085334714181751">Kafsha 3</translation>
@@ -42,7 +42,7 @@
 <translation id="2989805286512600854">Hap në skedë të re</translation>
 <translation id="3027988479108856431">Fatkeqësisht, parametrat e Yandex nuk mund të importohen kur shfletuesi i internetit është ende në punë. Regjistroni dokumentet e nevojshme dhe mbyllni të gjitha dritaret e Yandex. Pastaj klikoni Vazhdoj.</translation>
 <translation id="3084011186245865060">Peizazhi 6</translation>
-<translation id="3093931836425623631">Vivaldi u bë i mundur falë projektit Chromium dhe programeve kompjuterike që mund të përdoren lirisht.</translation>
+<translation id="3093931836425623631">Vivaldi mundësohet falë projektit Chromium dhe programeve kompjuterike që përdoren lirisht.</translation>
 <translation id="3127383884976966729">Kafsha 7</translation>
 <translation id="3156398087075132709">Faqe interesante të re</translation>
 <translation id="3255747772218936245">Instaloj përditësimin</translation>
@@ -144,6 +144,7 @@
 <translation id="8099620695029051217">Kopjoj adresën e faqes</translation>
 <translation id="8197810018650377191">Shtoj te faqet interesante</translation>
 <translation id="8261506727792406068">Fshij</translation>
+<translation id="8263047843452521549">Inspektoj punonjësit e shërbimit në sfond</translation>
 <translation id="8331671104904436324">Hap në skedën në sfond</translation>
 <translation id="8373293945112511707">Peizazhi 1</translation>
 <translation id="8388552048012645975">Shkarkon përditësimin...</translation>
@@ -158,6 +159,7 @@
 <translation id="8651348004684669199">Shtoj skedën aktive</translation>
 <translation id="8669345741879513971">Monstra 10</translation>
 <translation id="867544375504146191">Yandex</translation>
+<translation id="8689295374912158752">Inspektoj dokumentin portal</translation>
 <translation id="8768970203213061953">Peizazhi 14</translation>
 <translation id="8773635261052182196">Nuk do të shfaqen më njoftimet. Mund të aktivizohen sërish te parametrat e Vivaldit.</translation>
 <translation id="8813277370772331957">Më kujto pastaj</translation>

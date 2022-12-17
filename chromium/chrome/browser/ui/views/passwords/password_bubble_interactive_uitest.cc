@@ -408,6 +408,21 @@ IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest, LeakPromptHidesBubble) {
 
   GetController()->OnCredentialLeak(
       password_manager::CredentialLeakFlags::kPasswordSaved,
-      GURL("https://example.com"));
+      GURL("https://example.com"), std::u16string(u"Eve"));
   EXPECT_FALSE(IsBubbleShowing());
+}
+
+// This is a regression test for crbug.com/1335418
+IN_PROC_BROWSER_TEST_F(PasswordBubbleInteractiveUiTest, SaveUiDismissalReason) {
+  base::HistogramTester histogram_tester;
+
+  SetupPendingPassword();
+  ASSERT_TRUE(IsBubbleShowing());
+  PasswordBubbleViewBase::manage_password_bubble()->AcceptDialog();
+  content::RunAllPendingInMessageLoop();
+  ASSERT_FALSE(IsBubbleShowing());
+
+  histogram_tester.ExpectUniqueSample(
+      "PasswordManager.SaveUIDismissalReason",
+      password_manager::metrics_util::CLICKED_ACCEPT, 1);
 }

@@ -6,6 +6,7 @@
 
 #include "base/base64.h"
 #include "base/json/json_writer.h"
+#include "base/strings/escape.h"
 #include "content/browser/renderer_host/render_frame_host_impl.h"
 #include "content/browser/webid/fedcm_metrics.h"
 #include "content/public/browser/identity_request_dialog_controller.h"
@@ -13,9 +14,9 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/color_parser.h"
 #include "mojo/public/cpp/bindings/remote.h"
-#include "net/base/escape.h"
 #include "net/base/isolation_info.h"
 #include "net/base/registry_controlled_domains/registry_controlled_domain.h"
+#include "net/base/url_util.h"
 #include "net/cookies/site_for_cookies.h"
 #include "net/http/http_request_headers.h"
 #include "net/http/http_status_code.h"
@@ -25,7 +26,6 @@
 #include "services/network/public/cpp/simple_url_loader.h"
 #include "services/network/public/mojom/client_security_state.mojom.h"
 #include "services/network/public/mojom/url_response_head.mojom.h"
-#include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/manifest/manifest_icon_selector.h"
 #include "third_party/skia/include/core/SkBitmap.h"
 #include "ui/gfx/color_utils.h"
@@ -87,7 +87,9 @@ constexpr char kClientIdKey[] = "client_id";
 constexpr char kRevokeAccountKey[] = "account_id";
 constexpr char kRevokeRequestKey[] = "request";
 
+// Body content types.
 constexpr char kRequestBodyContentType[] = "application/x-www-form-urlencoded";
+constexpr char kResponseBodyContentType[] = "application/json";
 
 // 1 MiB is an arbitrary upper bound that should account for any reasonable
 // response size that is a part of this protocol.
@@ -136,17 +138,24 @@ void AddCsrfHeader(network::ResourceRequest* request) {
 std::unique_ptr<network::ResourceRequest> CreateCredentialedResourceRequest(
     GURL target_url,
     bool send_referrer,
-    url::Origin initiator,
+    url::Origin rp_origin,
     network::mojom::ClientSecurityStatePtr client_security_state) {
   auto resource_request = std::make_unique<network::ResourceRequest>();
   auto target_origin = url::Origin::Create(target_url);
   auto site_for_cookies = net::SiteForCookies::FromOrigin(target_origin);
   AddCsrfHeader(resource_request.get());
-  resource_request->request_initiator = initiator;
+  // We set the initiator to nullopt to denote browser-initiated so that this
+  // request is considered first-party. We want to send first-party cookies
+  // because this is not a real third-party request as it is mediated by the
+  // browser, and third-party cookies will be going away with 3pc deprecation,
+  // but we still need to send cookies in these requests.
+  // We use nullopt instead of target_origin because we want to send a
+  // `Sec-Fetch-Site: none` header instead of `Sec-Fetch-Site: same-origin`.
+  resource_request->request_initiator = absl::nullopt;
   resource_request->url = target_url;
   resource_request->site_for_cookies = site_for_cookies;
   if (send_referrer) {
-    resource_request->referrer = initiator.GetURL();
+    resource_request->referrer = rp_origin.GetURL();
     // Since referrer_policy only affects redirects and we disable redirects
     // below, we don't need to set referrer_policy here.
   }
@@ -155,7 +164,7 @@ std::unique_ptr<network::ResourceRequest> CreateCredentialedResourceRequest(
   // https://crbug.com/1155312.
   resource_request->redirect_mode = network::mojom::RedirectMode::kError;
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
-                                      kRequestBodyContentType);
+                                      kResponseBodyContentType);
 
   resource_request->credentials_mode =
       network::mojom::CredentialsMode::kInclude;
@@ -290,11 +299,19 @@ void ParseIdentityProviderMetadata(const base::Value& idp_metadata_value,
     }
 
     if (brand_icon_minimum_size && brand_icon_ideal_size) {
+      // As only a single bitmap is selected, select a bitmap which works with
+      // a high density display (if the OS supports high density displays).
+      float max_supported_scale = ui::GetScaleForResourceScaleFactor(
+          ui::GetSupportedResourceScaleFactors().back());
+      int minimum_icon_size_px = brand_icon_minimum_size.value() *
+                                 max_supported_scale /
+                                 kMaskableWebIconSafeZoneRatio;
+      int ideal_icon_size_px = brand_icon_ideal_size.value() *
+                               max_supported_scale /
+                               kMaskableWebIconSafeZoneRatio;
       idp_metadata.brand_icon_url =
           blink::ManifestIconSelector::FindBestMatchingSquareIcon(
-              icons,
-              brand_icon_ideal_size.value() / kMaskableWebIconSafeZoneRatio,
-              brand_icon_minimum_size.value() / kMaskableWebIconSafeZoneRatio,
+              icons, ideal_icon_size_px, minimum_icon_size_px,
               blink::mojom::ManifestImageResource_Purpose::MASKABLE);
     }
   }
@@ -303,6 +320,9 @@ void ParseIdentityProviderMetadata(const base::Value& idp_metadata_value,
 using FetchStatus = content::IdpNetworkRequestManager::FetchStatus;
 FetchStatus GetResponseError(network::SimpleURLLoader* url_loader,
                              std::string* response_body) {
+  if (!url_loader)
+    return FetchStatus::kHttpNotFoundError;
+
   int response_code = -1;
   auto* response_info = url_loader->ResponseInfo();
   if (response_info && response_info->headers)
@@ -381,6 +401,42 @@ IdpNetworkRequestManager::IdpNetworkRequestManager(
 
 IdpNetworkRequestManager::~IdpNetworkRequestManager() = default;
 
+GURL IdpNetworkRequestManager::FixupProviderUrl(const GURL& url) {
+  // We accept both "https://idp.example/foo/" and "https://idp.example/foo" as
+  // valid provider url to locate the manifest. Historically, URLs with a
+  // trailing slash indicate a directory while those without a trailing slash
+  // denote a file. However, to give developers more flexibility, we append a
+  // trailing slash if one is not present.
+  GURL target_url = url;
+  if (target_url.path().empty() || target_url.path().back() != '/') {
+    std::string new_path = target_url.path() + '/';
+    GURL::Replacements replacements;
+    replacements.SetPathStr(new_path);
+    target_url = target_url.ReplaceComponents(replacements);
+  }
+  return target_url;
+}
+
+// static
+absl::optional<GURL> IdpNetworkRequestManager::ComputeManifestListUrl(
+    const GURL& provider) {
+  GURL manifest_list_url;
+  if (net::IsLocalhost(provider)) {
+    manifest_list_url = provider.GetWithEmptyPath();
+  } else {
+    std::string etld_plus_one = GetDomainAndRegistry(
+        provider, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
+
+    if (etld_plus_one.empty())
+      return absl::nullopt;
+    manifest_list_url = GURL(provider.scheme() + "://" + etld_plus_one);
+  }
+
+  GURL::Replacements replacements;
+  replacements.SetPathStr(kManifestListPath);
+  return manifest_list_url.ReplaceComponents(replacements);
+}
+
 void IdpNetworkRequestManager::FetchManifestList(
     FetchManifestListCallback callback) {
   DCHECK(!manifest_list_url_loader_);
@@ -388,11 +444,17 @@ void IdpNetworkRequestManager::FetchManifestList(
 
   manifest_list_callback_ = std::move(callback);
 
-  std::string etld_plus_one = GetDomainAndRegistry(
-      provider_, net::registry_controlled_domains::INCLUDE_PRIVATE_REGISTRIES);
-  GURL url(provider_.scheme() + "://" + etld_plus_one + kManifestListPath);
+  absl::optional<GURL> manifest_list_url =
+      IdpNetworkRequestManager::ComputeManifestListUrl(provider_);
+
+  if (!manifest_list_url) {
+    OnManifestListLoaded(nullptr);
+    return;
+  }
+
   manifest_list_url_loader_ = CreateUncredentialedUrlLoader(
-      url, /* send_referrer= */ false, /* follow_redirects= */ true);
+      *manifest_list_url, /* send_referrer= */ false,
+      /* follow_redirects= */ true);
   manifest_list_url_loader_->DownloadToString(
       loader_factory_.get(),
       base::BindOnce(&IdpNetworkRequestManager::OnManifestListLoaded,
@@ -409,18 +471,7 @@ void IdpNetworkRequestManager::FetchManifest(
 
   idp_manifest_callback_ = std::move(callback);
 
-  // Accepts both "https://idp.example/foo/" and "https://idp.example/foo" as
-  // valid provider url to locate the manifest. Historically, URLs with a
-  // trailing slash indicate a directory while those without a trailing slash
-  // denote a file. However, to give developers more flexibility, we append a
-  // trailing slash if one is not present.
-  GURL target_url = provider_;
-  if (target_url.path().empty() || target_url.path().back() != '/') {
-    std::string new_path = target_url.path() + '/';
-    GURL::Replacements replacements;
-    replacements.SetPathStr(new_path);
-    target_url = target_url.ReplaceComponents(replacements);
-  }
+  GURL target_url = FixupProviderUrl(provider_);
 
   target_url = target_url.Resolve(IdpNetworkRequestManager::kManifestFilePath);
 
@@ -588,8 +639,7 @@ void IdpNetworkRequestManager::OnManifestListLoaded(
   manifest_list_url_loader_.reset();
 
   if (response_error != FetchStatus::kSuccess) {
-    std::move(manifest_list_callback_)
-        .Run(response_error, std::set<std::string>());
+    std::move(manifest_list_callback_).Run(response_error, std::set<GURL>());
     return;
   }
 
@@ -622,7 +672,7 @@ void IdpNetworkRequestManager::OnManifestLoaded(
 
 void IdpNetworkRequestManager::OnManifestListParsed(
     data_decoder::DataDecoder::ValueOrError result) {
-  std::set<std::string> urls;
+  std::set<GURL> urls;
 
   if (GetParsingError(result) == FetchStatus::kInvalidResponseError) {
     std::move(manifest_list_callback_)
@@ -648,10 +698,10 @@ void IdpNetworkRequestManager::OnManifestListParsed(
     const std::string* url = value.GetIfString();
     if (!url) {
       std::move(manifest_list_callback_)
-          .Run(FetchStatus::kInvalidResponseError, std::set<std::string>());
+          .Run(FetchStatus::kInvalidResponseError, std::set<GURL>());
       return;
     }
-    urls.insert(*url);
+    urls.insert(FixupProviderUrl(GURL(*url)));
   }
 
   std::move(manifest_list_callback_).Run(FetchStatus::kSuccess, urls);
@@ -807,7 +857,7 @@ void IdpNetworkRequestManager::FetchClientMetadata(
   client_metadata_callback_ = std::move(callback);
 
   GURL target_url = endpoint.Resolve(
-      "?client_id=" + net::EscapeQueryParamValue(client_id, true));
+      "?client_id=" + base::EscapeQueryParamValue(client_id, true));
 
   url_loader_ =
       CreateUncredentialedUrlLoader(target_url, /* send_referrer= */ true);
@@ -873,7 +923,7 @@ IdpNetworkRequestManager::CreateUncredentialedUrlLoader(
   resource_request->url = target_url;
   resource_request->credentials_mode = network::mojom::CredentialsMode::kOmit;
   resource_request->headers.SetHeader(net::HttpRequestHeaders::kAccept,
-                                      kRequestBodyContentType);
+                                      kResponseBodyContentType);
   AddCsrfHeader(resource_request.get());
   if (send_referrer) {
     resource_request->referrer = relying_party_origin_.GetURL();
@@ -923,10 +973,6 @@ IdpNetworkRequestManager::CreateCredentialedUrlLoader(
   if (request_body)
     loader->AttachStringForUpload(*request_body, kRequestBodyContentType);
   return loader;
-}
-
-bool IdpNetworkRequestManager::IsMockIdpNetworkRequestManager() const {
-  return false;
 }
 
 }  // namespace content

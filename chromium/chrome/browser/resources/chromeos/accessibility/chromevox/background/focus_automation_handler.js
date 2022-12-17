@@ -5,8 +5,10 @@
 /**
  * @fileoverview Handles automation events on the currently focused node.
  */
-import {BaseAutomationHandler} from './base_automation_handler.js';
-import {ChromeVoxEvent} from './custom_automation_event.js';
+import {BaseAutomationHandler} from '/chromevox/background/base_automation_handler.js';
+import {ChromeVoxState} from '/chromevox/background/chromevox_state.js';
+import {Output} from '/chromevox/background/output/output.js';
+import {ChromeVoxEvent} from '/chromevox/common/custom_automation_event.js';
 
 const AutomationEvent = chrome.automation.AutomationEvent;
 const AutomationNode = chrome.automation.AutomationNode;
@@ -16,15 +18,23 @@ const RoleType = chrome.automation.RoleType;
 const StateType = chrome.automation.StateType;
 
 export class FocusAutomationHandler extends BaseAutomationHandler {
+  /** @private */
   constructor() {
     super(null);
 
     /** @private {AutomationNode|undefined} */
     this.previousActiveDescendant_;
 
-    chrome.automation.getDesktop((desktop) => {
+    chrome.automation.getDesktop(desktop => {
       desktop.addEventListener(EventType.FOCUS, this.onFocus.bind(this), false);
     });
+  }
+
+  static init() {
+    if (FocusAutomationHandler.instance) {
+      throw 'Error: Trying to create two instances of singleton FocusAutomationHandler';
+    }
+    FocusAutomationHandler.instance = new FocusAutomationHandler();
   }
 
   /**
@@ -147,3 +157,6 @@ export class FocusAutomationHandler extends BaseAutomationHandler {
     }
   }
 }
+
+/** @type {FocusAutomationHandler} */
+FocusAutomationHandler.instance;

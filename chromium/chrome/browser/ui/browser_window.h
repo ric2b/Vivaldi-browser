@@ -15,6 +15,7 @@
 #include "build/chromeos_buildflags.h"
 #include "chrome/browser/apps/intent_helper/apps_navigation_types.h"
 #include "chrome/browser/lifetime/browser_close_manager.h"
+#include "chrome/browser/share/share_attempt.h"
 #include "chrome/browser/signin/chrome_signin_helper.h"
 #include "chrome/browser/translate/chrome_translate_client.h"
 #include "chrome/browser/ui/bookmarks/bookmark_bar.h"
@@ -23,11 +24,11 @@
 #include "chrome/browser/ui/exclusive_access/exclusive_access_bubble_type.h"
 #include "chrome/browser/ui/hats/hats_service.h"
 #include "chrome/browser/ui/page_action/page_action_icon_type.h"
-#include "chrome/browser/ui/user_education/feature_promo_controller.h"
-#include "chrome/browser/ui/user_education/feature_promo_specification.h"
 #include "chrome/common/buildflags.h"
 #include "components/content_settings/core/common/content_settings_types.h"
 #include "components/translate/core/common/translate_errors.h"
+#include "components/user_education/common/feature_promo_controller.h"
+#include "components/user_education/common/feature_promo_specification.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "ui/base/base_window.h"
 #include "ui/base/interaction/element_identifier.h"
@@ -70,7 +71,6 @@ class Size;
 }
 
 namespace qrcode_generator {
-class QRCodeGeneratorBubbleController;
 class QRCodeGeneratorBubbleView;
 }  // namespace qrcode_generator
 
@@ -79,14 +79,11 @@ enum class AccessPoint;
 }
 
 namespace send_tab_to_self {
-class SendTabToSelfBubbleController;
 class SendTabToSelfBubbleView;
 }  // namespace send_tab_to_self
 
 namespace sharing_hub {
-class ScreenshotCapturedBubbleController;
 class ScreenshotCapturedBubble;
-class SharingHubBubbleController;
 class SharingHubBubbleView;
 }  // namespace sharing_hub
 
@@ -425,33 +422,34 @@ class BrowserWindow : public ui::BaseWindow {
   // Shows the Screenshot bubble.
   virtual sharing_hub::ScreenshotCapturedBubble* ShowScreenshotCapturedBubble(
       content::WebContents* contents,
-      const gfx::Image& image,
-      sharing_hub::ScreenshotCapturedBubbleController* controller) = 0;
+      const gfx::Image& image) = 0;
 
   // Shows the QR Code generator bubble. |url| is the URL for the initial code.
   virtual qrcode_generator::QRCodeGeneratorBubbleView*
-  ShowQRCodeGeneratorBubble(
-      content::WebContents* contents,
-      qrcode_generator::QRCodeGeneratorBubbleController* controller,
-      const GURL& url,
-      bool show_back_button) = 0;
+  ShowQRCodeGeneratorBubble(content::WebContents* contents,
+                            const GURL& url,
+                            bool show_back_button) = 0;
 
-  // Shows the "send tab to self" bubble.
-  virtual send_tab_to_self::SendTabToSelfBubbleView* ShowSendTabToSelfBubble(
-      content::WebContents* contents,
-      send_tab_to_self::SendTabToSelfBubbleController* controller,
-      bool is_user_gesture) = 0;
+  // Shows the "send tab to self" device picker bubble. This must only be called
+  // as a direct result of user action.
+  virtual send_tab_to_self::SendTabToSelfBubbleView*
+  ShowSendTabToSelfDevicePickerBubble(content::WebContents* contents) = 0;
 
-#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Shows the "send tab to self" promo bubble. This must only be called as a
+  // direct result of user action.
+  virtual send_tab_to_self::SendTabToSelfBubbleView*
+  ShowSendTabToSelfPromoBubble(content::WebContents* contents,
+                               bool show_signin_button) = 0;
+
+#if BUILDFLAG(IS_CHROMEOS)
   // Returns the PageActionIconView for the Sharing Hub.
   virtual views::Button* GetSharingHubIconButton() = 0;
 #else
-  // Shows the Sharing Hub bubble.
+  // Shows the Sharing Hub bubble. This must only be called as a direct result
+  // of user action.
   virtual sharing_hub::SharingHubBubbleView* ShowSharingHubBubble(
-      content::WebContents* contents,
-      sharing_hub::SharingHubBubbleController* controller,
-      bool is_user_gesture) = 0;
-#endif
+      share::ShareAttempt attempt) = 0;
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
   // Shows the translate bubble.
   //
@@ -465,13 +463,11 @@ class BrowserWindow : public ui::BaseWindow {
       translate::TranslateErrors::Type error_type,
       bool is_user_gesture) = 0;
 
-#if BUILDFLAG(ENABLE_ONE_CLICK_SIGNIN)
   // Shows the one-click sign in confirmation UI. |email| holds the full email
   // address of the account that has signed in.
   virtual void ShowOneClickSigninConfirmation(
       const std::u16string& email,
       base::OnceCallback<void(bool)> confirmed_callback) = 0;
-#endif
 
   // Whether or not the shelf view is visible.
   virtual bool IsDownloadShelfVisible() const = 0;
@@ -538,21 +534,7 @@ class BrowserWindow : public ui::BaseWindow {
                                             bool user_gesture,
                                             bool in_tab_dragging);
 
-  // Shows the avatar bubble on the window frame off of the avatar button with
-  // the given mode. The Service Type specified by GAIA is provided as well.
-  // |access_point| indicates the access point used to open the Gaia sign in
-  // page.
-  enum AvatarBubbleMode {
-    AVATAR_BUBBLE_MODE_DEFAULT,
-    AVATAR_BUBBLE_MODE_SIGNIN,
-    AVATAR_BUBBLE_MODE_ADD_ACCOUNT,
-    AVATAR_BUBBLE_MODE_REAUTH,
-    AVATAR_BUBBLE_MODE_CONFIRM_SIGNIN
-  };
-  virtual void ShowAvatarBubbleFromAvatarButton(
-      AvatarBubbleMode mode,
-      signin_metrics::AccessPoint access_point,
-      bool is_source_accelerator) = 0;
+  virtual void ShowAvatarBubbleFromAvatarButton(bool is_source_accelerator) = 0;
 
   // Attempts showing the In-Produce-Help for profile Switching. This is called
   // after creating a new profile or opening an existing profile. If the profile
@@ -598,7 +580,8 @@ class BrowserWindow : public ui::BaseWindow {
 
   // Gets the windows's FeaturePromoController which manages display of
   // in-product help. Will return null in incognito and guest profiles.
-  virtual FeaturePromoController* GetFeaturePromoController() = 0;
+  virtual user_education::FeaturePromoController*
+  GetFeaturePromoController() = 0;
 
   // Returns whether the promo bubble associated with `iph_feature` is visible.
   // If `include_continued_promos` is true, will also return true if
@@ -612,9 +595,10 @@ class BrowserWindow : public ui::BaseWindow {
   // In cases where there is no promo controller, immediately returns false.
   virtual bool MaybeShowFeaturePromo(
       const base::Feature& iph_feature,
-      FeaturePromoSpecification::StringReplacements body_text_replacements = {},
-      FeaturePromoController::BubbleCloseCallback close_callback =
-          base::DoNothing()) = 0;
+      user_education::FeaturePromoSpecification::StringReplacements
+          body_text_replacements = {},
+      user_education::FeaturePromoController::BubbleCloseCallback
+          close_callback = base::DoNothing()) = 0;
 
   // Closes the in-product help promo for `iph_feature` if it is showing;
   // returns true if the promo was closed, false if it was not showing.
@@ -624,8 +608,8 @@ class BrowserWindow : public ui::BaseWindow {
   // handle that can be used to end the promo when it is destructed. The handle
   // will be valid (i.e. have a true boolean value) if the promo was showing,
   // invalid otherwise.
-  virtual FeaturePromoController::PromoHandle CloseFeaturePromoAndContinue(
-      const base::Feature& iph_feature) = 0;
+  virtual user_education::FeaturePromoController::PromoHandle
+  CloseFeaturePromoAndContinue(const base::Feature& iph_feature) = 0;
 
   // Records that the user has engaged with a particular feature that has an
   // associated promo; this information is used to determine whether to show
@@ -638,11 +622,9 @@ class BrowserWindow : public ui::BaseWindow {
   // Shows an Incognito history disclaimer dialog.
   virtual void ShowIncognitoHistoryDisclaimerDialog() = 0;
 
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
   virtual bool IsSideSearchPanelVisible() const = 0;
   virtual void MaybeRestoreSideSearchStatePerWindow(
       const std::map<std::string, std::string>& extra_data) = 0;
-#endif
 
  protected:
   friend class BrowserCloseManager;

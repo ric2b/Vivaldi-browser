@@ -652,21 +652,9 @@ class GTestTest(RemoteTest):
       os.remove(self._on_device_script)
 
     if self._test_launcher_summary_output and self._rdb_client:
-      if not os.path.exists(self._test_launcher_summary_output):
-        logging.error('Unable to locate %s in order to upload results to RDB.',
-                      self._test_launcher_summary_output)
-        return
-      with open(self._test_launcher_summary_output) as f:
-        raw_results = json.load(f)
-      parsed_results = json_results.ParseResultsFromJson(raw_results)
-      for r in parsed_results:
-        self._rdb_client.Post(
-            r.GetName(),
-            r.GetType(),
-            r.GetDuration(),
-            r.GetLog(),
-            None,
-            failure_reason=r.GetFailureReason())
+      logging.error('Native ResultDB integration is not supported for GTests. '
+                    'Upload results via result_adapter instead. '
+                    'See crbug.com/1330441.')
 
 
 def device_test(args, unknown_args):
@@ -729,11 +717,17 @@ def host_cmd(args, cmd_args):
 
   test_env = setup_env()
   if args.deploy_chrome or args.deploy_lacros:
-    # Mounting ash-chrome gives it enough disk space to not need stripping.
-    cros_run_test_cmd.extend([
-        '--deploy-lacros', '--lacros-launcher-script',
-        LACROS_LAUNCHER_SCRIPT_PATH
-    ] if args.deploy_lacros else ['--deploy', '--mount', '--nostrip'])
+    if args.deploy_lacros:
+      cros_run_test_cmd.extend([
+          '--deploy-lacros', '--lacros-launcher-script',
+          LACROS_LAUNCHER_SCRIPT_PATH
+      ])
+    else:
+      # Mounting ash-chrome gives it enough disk space to not need stripping
+      # most of the time.
+      cros_run_test_cmd.extend(['--deploy', '--mount'])
+      if not args.strip_chrome:
+        cros_run_test_cmd.append('--nostrip')
 
     cros_run_test_cmd += [
         '--build-dir',
@@ -856,6 +850,10 @@ def main():
       '--deploy-lacros',
       action='store_true',
       help='Deploy a lacros-chrome instead of ash-chrome.')
+  host_cmd_parser.add_argument(
+      '--strip-chrome',
+      action='store_true',
+      help='Strips symbols from ash-chrome before deploying to the device.')
 
   gtest_parser = subparsers.add_parser(
       'gtest', help='Runs a device-side gtest.')

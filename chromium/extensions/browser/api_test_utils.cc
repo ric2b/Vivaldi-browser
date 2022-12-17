@@ -50,7 +50,7 @@ bool SendResponseHelper::GetResponse() {
 }
 
 void SendResponseHelper::OnResponse(ExtensionFunction::ResponseType response,
-                                    base::Value results,
+                                    base::Value::List results,
                                     const std::string& error) {
   ASSERT_NE(ExtensionFunction::BAD_MESSAGE, response);
   response_ = std::make_unique<bool>(response == ExtensionFunction::SUCCEEDED);
@@ -66,53 +66,52 @@ std::unique_ptr<base::DictionaryValue> ParseDictionary(
   return base::DictionaryValue::From(ParseJSON(data));
 }
 
-bool GetBoolean(const base::Value::DictStorage& dict, const std::string& key) {
-  auto iter = dict.find(key);
-  if (iter == dict.end() || !iter->second.is_bool()) {
+bool GetBoolean(const base::Value::Dict& dict, const std::string& key) {
+  absl::optional<bool> value = dict.FindBool(key);
+  if (!value.has_value()) {
     ADD_FAILURE() << key << " does not exist or is not a boolean.";
     return false;
   }
-  return iter->second.GetBool();
+  return *value;
 }
 
-int GetInteger(const base::Value::DictStorage& dict, const std::string& key) {
-  auto iter = dict.find(key);
-  if (iter == dict.end() || !iter->second.is_int()) {
+int GetInteger(const base::Value::Dict& dict, const std::string& key) {
+  absl::optional<int> value = dict.FindInt(key);
+  if (!value.has_value()) {
     ADD_FAILURE() << key << " does not exist or is not an integer.";
     return 0;
   }
-  return iter->second.GetInt();
+  return *value;
 }
 
-std::string GetString(const base::Value::DictStorage& dict,
-                      const std::string& key) {
-  auto iter = dict.find(key);
-  if (iter == dict.end() || !iter->second.is_string()) {
+std::string GetString(const base::Value::Dict& dict, const std::string& key) {
+  const std::string* value = dict.FindString(key);
+  if (!value) {
     ADD_FAILURE() << key << " does not exist or is not a string.";
     return "";
   }
-  return iter->second.GetString();
+  return *value;
 }
 
-std::unique_ptr<base::ListValue> GetList(const base::Value::DictStorage& dict,
+std::unique_ptr<base::ListValue> GetList(const base::Value::Dict& dict,
                                          const std::string& key) {
-  auto iter = dict.find(key);
-  if (iter == dict.end() || !iter->second.is_list()) {
+  const base::Value::List* value = dict.FindList(key);
+  if (!value) {
     ADD_FAILURE() << key << " does not exist or is not a list.";
     return std::make_unique<base::ListValue>();
   }
   return base::ListValue::From(
-      base::Value::ToUniquePtrValue(iter->second.Clone()));
+      base::Value::ToUniquePtrValue(base::Value(value->Clone())));
 }
 
-base::Value::DictStorage GetDict(const base::Value::DictStorage& dict,
-                                 const std::string& key) {
-  auto iter = dict.find(key);
-  if (iter == dict.end() || !iter->second.is_dict()) {
+base::Value::Dict GetDict(const base::Value::Dict& dict,
+                          const std::string& key) {
+  const base::Value::Dict* value = dict.FindDict(key);
+  if (!value) {
     ADD_FAILURE() << key << " does not exist or is not a dict.";
-    return base::Value::DictStorage();
+    return base::Value::Dict();
   }
-  return iter->second.Clone().TakeDictDeprecated();
+  return value->Clone();
 }
 
 std::unique_ptr<base::Value> RunFunctionWithDelegateAndReturnSingleResult(
@@ -136,10 +135,8 @@ std::unique_ptr<base::Value> RunFunctionWithDelegateAndReturnSingleResult(
   RunFunction(function.get(), std::move(args), std::move(dispatcher), flags);
   EXPECT_TRUE(function->GetError().empty()) << "Unexpected error: "
                                             << function->GetError();
-  if (function->GetResultList() &&
-      !function->GetResultList()->GetListDeprecated().empty()) {
-    const base::Value& single_result =
-        function->GetResultList()->GetListDeprecated()[0];
+  if (function->GetResultList() && !function->GetResultList()->empty()) {
+    const base::Value& single_result = (*function->GetResultList())[0];
     return std::make_unique<base::Value>(single_result.Clone());
   }
   return nullptr;
@@ -181,10 +178,9 @@ std::string RunFunctionAndReturnError(ExtensionFunction* function,
   RunFunction(function, args, std::move(dispatcher), flags);
   // When sending a response, the function will set an empty list value if there
   // is no specified result.
-  const base::ListValue* results = function->GetResultList();
+  const base::Value::List* results = function->GetResultList();
   CHECK(results);
-  EXPECT_TRUE(results->GetListDeprecated().empty())
-      << "Did not expect a result";
+  EXPECT_TRUE(results->empty()) << "Did not expect a result";
   CHECK(function->response_type());
   EXPECT_EQ(ExtensionFunction::FAILED, *function->response_type());
   return function->GetError();

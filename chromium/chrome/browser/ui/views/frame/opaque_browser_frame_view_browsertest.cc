@@ -25,6 +25,7 @@
 #include "chrome/browser/ui/web_applications/app_browser_controller.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
+#include "chrome/browser/web_applications/user_display_mode.h"
 #include "chrome/browser/web_applications/web_app_install_info.h"
 #include "chrome/test/base/in_process_browser_test.h"
 #include "chrome/test/base/ui_test_utils.h"
@@ -266,7 +267,7 @@ IN_PROC_BROWSER_TEST_F(WebAppOpaqueBrowserFrameViewTest, OriginTextVisibility) {
     // Make sure the navigation has finished before proceeding.
     url_observer.Wait();
     ASSERT_TRUE(ExecJs(
-        browser_view_->GetActiveWebContents()->GetMainFrame(),
+        browser_view_->GetActiveWebContents()->GetPrimaryMainFrame(),
         "var meta = document.head.appendChild(document.createElement('meta'));"
         "meta.name = 'theme-color';"
         "meta.content = '#123456';"));
@@ -326,7 +327,7 @@ class WebAppOpaqueBrowserFrameViewWindowControlsOverlayTest
     web_app_info->start_url = start_url;
     web_app_info->scope = start_url.GetWithoutFilename();
     web_app_info->display_mode = blink::mojom::DisplayMode::kStandalone;
-    web_app_info->user_display_mode = blink::mojom::DisplayMode::kStandalone;
+    web_app_info->user_display_mode = web_app::UserDisplayMode::kStandalone;
     web_app_info->title = u"A Web App";
     web_app_info->display_override = {
         blink::mojom::DisplayMode::kWindowControlsOverlay};

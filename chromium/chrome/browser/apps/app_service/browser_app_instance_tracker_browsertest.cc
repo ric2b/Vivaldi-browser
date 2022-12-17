@@ -8,6 +8,7 @@
 #include "chrome/browser/apps/app_service/browser_app_instance.h"
 #include "chrome/browser/apps/app_service/browser_app_instance_observer.h"
 #include "chrome/browser/apps/app_service/browser_app_instance_tracker.h"
+#include "chrome/browser/ash/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/ash/web_applications/crosh_system_web_app_info.h"
 #include "chrome/browser/devtools/devtools_window_testing.h"
 #include "chrome/browser/profiles/profile_manager.h"
@@ -16,7 +17,6 @@
 #include "chrome/browser/ui/browser_finder.h"
 #include "chrome/browser/ui/browser_navigator.h"
 #include "chrome/browser/ui/browser_window.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
 #include "chrome/browser/web_applications/web_app_helpers.h"
 #include "chrome/browser/web_applications/web_app_id.h"
@@ -288,7 +288,7 @@ class BrowserAppInstanceTrackerTest : public InProcessBrowserTest {
   }
 
   web_app::AppId InstallWebApp(const std::string& start_url,
-                               blink::mojom::DisplayMode user_display_mode) {
+                               web_app::UserDisplayMode user_display_mode) {
     auto info = std::make_unique<WebAppInstallInfo>();
     info->start_url = GURL(start_url);
     info->user_display_mode = user_display_mode;
@@ -299,11 +299,11 @@ class BrowserAppInstanceTrackerTest : public InProcessBrowserTest {
   }
 
   web_app::AppId InstallWebAppOpeningAsTab(const std::string& start_url) {
-    return InstallWebApp(start_url, blink::mojom::DisplayMode::kBrowser);
+    return InstallWebApp(start_url, web_app::UserDisplayMode::kBrowser);
   }
 
   web_app::AppId InstallWebAppOpeningAsWindow(const std::string& start_url) {
-    return InstallWebApp(start_url, blink::mojom::DisplayMode::kStandalone);
+    return InstallWebApp(start_url, web_app::UserDisplayMode::kStandalone);
   }
 
   void UninstallWebApp(const web_app::AppId& app_id) {
@@ -718,10 +718,8 @@ IN_PROC_BROWSER_TEST_F(BrowserAppInstanceTrackerTest, WindowedWebApp) {
 IN_PROC_BROWSER_TEST_F(BrowserAppInstanceTrackerTest, TabbedSystemWebApp) {
   // Make sure we can use crosh.
   Profile* profile = ProfileManager::GetPrimaryUserProfile();
-  DCHECK(web_app::WebAppProvider::GetForSystemWebApps(profile));
-  web_app::WebAppProvider::GetForSystemWebApps(profile)
-      ->system_web_app_manager()
-      .InstallSystemAppsForTesting();
+  DCHECK(ash::SystemWebAppManager::Get(profile));
+  ash::SystemWebAppManager::Get(profile)->InstallSystemAppsForTesting();
 
   Browser* browser = nullptr;
   aura::Window* window = nullptr;

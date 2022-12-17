@@ -37,13 +37,6 @@ const base::Feature kRecordSnapshotSize{"RecordSnapshotSize",
 const base::Feature kSetRequestAttribution{"SetRequestAttribution",
                                            base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kWebViewNativeContextMenuPhase2{
-    "WebViewNativeContextMenuPhase2", base::FEATURE_DISABLED_BY_DEFAULT};
-
-const base::Feature kWebViewNativeContextMenuPhase2Screenshot{
-    "WebViewNativeContextMenuPhase2Screenshot",
-    base::FEATURE_DISABLED_BY_DEFAULT};
-
 const base::Feature kDefaultWebViewContextMenu{
     "DefaultWebViewContextMenu", base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -53,14 +46,11 @@ const base::Feature kDisableNonHTMLScreenshotOnIOS15{
 const base::Feature kIOSSharedHighlightingColorChange{
     "IOSSharedHighlightingColorChange", base::FEATURE_ENABLED_BY_DEFAULT};
 
-const base::Feature kCreatePendingItemForPostFormSubmission{
-    "CreatePendingItemForPostFormSubmission", base::FEATURE_ENABLED_BY_DEFAULT};
-
 const base::Feature kEnableNewDownloadAPI{"EnableNewDownloadAPI",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kSynthesizedRestoreSession{
-    "SynthesizedRestoreSession", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SynthesizedRestoreSession", base::FEATURE_ENABLED_BY_DEFAULT};
 
 const base::Feature kEnableUnrealizedWebStates{
     "EnableUnrealizedWebStates", base::FEATURE_ENABLED_BY_DEFAULT};
@@ -71,7 +61,7 @@ const base::Feature kMediaPermissionsControl{"MediaPermissionsControl",
 extern const base::Feature kEnableFullscreenAPI{
     "EnableFullscreenAPI", base::FEATURE_DISABLED_BY_DEFAULT};
 
-extern const base::Feature kUseLoadSimulatedRequestForErrorPageNavigation{
+extern const base::Feature kUseLoadSimulatedRequestForOfflinePage{
     "UseLoadSimulatedRequestForErrorPageNavigation",
     base::FEATURE_DISABLED_BY_DEFAULT};
 
@@ -102,8 +92,7 @@ bool IsMediaPermissionsControlEnabled() {
 
 bool IsLoadSimulatedRequestAPIEnabled() {
   if (@available(iOS 15, *)) {
-    return base::FeatureList::IsEnabled(
-        kUseLoadSimulatedRequestForErrorPageNavigation);
+    return base::FeatureList::IsEnabled(kUseLoadSimulatedRequestForOfflinePage);
   }
   return false;
 }

@@ -14,7 +14,7 @@
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"  // nogncheck
-#include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #endif
 
 namespace chromeos {
@@ -38,7 +38,8 @@ DeviceType GetDeviceType() {
 
   // Most devices are Chromebooks, so we will also consider reference boards
   // as Chromebooks.
-  if (value == "CHROMEBOOK" || value == "REFERENCE")
+  if (value == "CHROMEBOOK" || value == "REFERENCE" || value == "CHROMESLATE" ||
+      value == "CLAMSHELL" || value == "CONVERTIBLE" || value == "DETACHABLE")
     return DeviceType::kChromebook;
   if (value == "CHROMEBASE")
     return DeviceType::kChromebase;
@@ -51,7 +52,7 @@ DeviceType GetDeviceType() {
   return DeviceType::kUnknown;
 
 #elif BUILDFLAG(IS_CHROMEOS_LACROS)
-  auto device_type = LacrosService::Get()->init_params()->device_type;
+  auto device_type = BrowserInitParams::Get()->device_type;
   switch (device_type) {
     case crosapi::mojom::BrowserInitParams::DeviceType::kChromebook:
       return chromeos::DeviceType::kChromebook;

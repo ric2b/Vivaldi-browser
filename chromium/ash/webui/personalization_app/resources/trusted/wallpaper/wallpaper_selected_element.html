@@ -61,9 +61,10 @@
   </template>
   <template is="dom-if" if="[[showImage_]]">
     <div id="imageContainer" class="preview-image-container">
+      <div class="preview-image-border"></div>
       <img class="preview-image" src$="[[getImageSrc_(image_)]]" aria-hidden="true">
     </div>
-    <h2 id="textContainer" class="preview-text-container" aria-live="polite" aria-label$="[[getAriaLabel_(image_)]]">
+    <h2 id="textContainer" class="preview-text-container" aria-live="polite" aria-label$="[[getAriaLabel_(image_, dailyRefreshState_)]]">
       <span id="currentlySet" aria-hidden="true">$i18n{currentlySet}</span>
       <span id="imageTitle" title$="[[imageTitle_]]" aria-hidden="true">
         [[imageTitle_]]
@@ -92,11 +93,11 @@
       </template>
       <template is="dom-if" if="[[showCollectionOptions_]]">
         <div id="collectionOptions">
-          <cr-button id="dailyRefresh" data-collection-id$="[[collectionId]]"
+          <cr-button id="dailyRefresh"
               aria-label="$i18n{ariaLabelChangeDaily}"
-              data-daily-refresh-collection-id$="[[dailyRefreshCollectionId_]]"
               aria-pressed$="[[ariaPressed_]]"
-              on-click="onClickDailyRefreshToggle_">
+              on-click="onClickDailyRefreshToggle_"
+              hidden$="[[!showDailyRefreshButton_]]"">
             <iron-icon icon="[[dailyRefreshIcon_]]"></iron-icon>
             <div class="text">$i18n{changeDaily}</div>
           </cr-button>

@@ -48,12 +48,14 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   void SetCursorLocation(const gfx::Rect& rect) override;
   void SetSurroundingText(const std::u16string& text,
                           const gfx::Range& selection_range) override;
-  void SetContentType(TextInputType input_type,
-                      int input_flags,
+  void SetContentType(TextInputType type,
+                      TextInputMode mode,
+                      uint32_t flags,
                       bool should_do_learning) override;
+  void UpdateFocus(bool has_client,
+                   TextInputType old_type,
+                   TextInputType new_type) override;
   void Reset() override;
-  void Focus() override;
-  void Blur() override;
   VirtualKeyboardController* GetVirtualKeyboardController() override;
 
   // VirtualKeyboardController overrides:
@@ -80,6 +82,8 @@ class WaylandInputMethodContext : public LinuxInputMethodContext,
   void OnModifiersMap(std::vector<std::string> modifiers_map) override;
 
  private:
+  void Focus();
+  void Blur();
   void UpdatePreeditText(const std::u16string& preedit_text);
   void MaybeUpdateActivated();
 

@@ -17,6 +17,7 @@
 #include "components/safe_browsing/buildflags.h"
 #include "components/safe_browsing/core/browser/referrer_chain_provider.h"
 #include "components/safe_browsing/core/browser/safe_browsing_token_fetcher.h"
+#include "components/safe_browsing/core/browser/test_safe_browsing_token_fetcher.h"
 #include "components/safe_browsing/core/browser/verdict_cache_manager.h"
 #include "components/safe_browsing/core/common/features.h"
 #include "components/safe_browsing/core/common/safe_browsing_prefs.h"
@@ -44,28 +45,6 @@ constexpr char kTestUrl[] = "http://example.test/";
 constexpr char kTestReferrerUrl[] = "http://example.referrer/";
 constexpr char kTestSubframeUrl[] = "http://iframe.example.test/";
 constexpr char kTestSubframeReferrerUrl[] = "http://iframe.example.referrer/";
-
-class TestSafeBrowsingTokenFetcher : public SafeBrowsingTokenFetcher {
- public:
-  TestSafeBrowsingTokenFetcher() = default;
-  ~TestSafeBrowsingTokenFetcher() override {
-    // Like SafeBrowsingTokenFetchTracer, trigger the callback when destroyed.
-    RunAccessTokenCallback("");
-  }
-
-  // SafeBrowsingTokenFetcher:
-  void Start(Callback callback) override { callback_ = std::move(callback); }
-
-  void RunAccessTokenCallback(std::string token) {
-    if (callback_)
-      std::move(callback_).Run(token);
-  }
-
-  MOCK_METHOD1(OnInvalidAccessToken, void(const std::string&));
-
- private:
-  Callback callback_;
-};
 
 class MockReferrerChainProvider : public ReferrerChainProvider {
  public:
@@ -1149,17 +1128,18 @@ TEST_F(RealTimeUrlLookupServiceTest, TestShutdown_CallbackNotPostedOnShutdown) {
 
 TEST_F(RealTimeUrlLookupServiceTest, TestShutdown_CacheManagerReset) {
   GURL url("https://a.example.test/path1/path2");
-  // Post a task to cache_manager_ to cache the verdict.
-  MayBeCacheRealTimeUrlVerdict(url, RTLookupResponse::ThreatInfo::DANGEROUS,
-                               RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING,
-                               60, "a.example.test/path1/path2",
-                               RTLookupResponse::ThreatInfo::COVERING_MATCH);
 
   // Shutdown and delete depending objects.
   rt_service()->Shutdown();
   cache_manager_.reset();
   content_setting_map_->ShutdownOnUIThread();
   content_setting_map_.reset();
+
+  // Post a task to cache_manager_ to cache the verdict.
+  MayBeCacheRealTimeUrlVerdict(url, RTLookupResponse::ThreatInfo::DANGEROUS,
+                               RTLookupResponse::ThreatInfo::SOCIAL_ENGINEERING,
+                               60, "a.example.test/path1/path2",
+                               RTLookupResponse::ThreatInfo::COVERING_MATCH);
 
   // The task to cache_manager_ should be cancelled and not cause crash.
   task_environment_.RunUntilIdle();
@@ -1226,8 +1206,6 @@ TEST_F(RealTimeUrlLookupServiceTest,
   // Enable extended reporting.
   EnableExtendedReporting();
   rt_service()->set_bypass_probability_for_tests(true);
-  // When feature is not enabled, a sampled ping should not be sent.
-  EXPECT_FALSE(CanSendRTSampleRequest());
   feature_list_.InitAndDisableFeature(
       safe_browsing::kSendSampledPingsForProtegoAllowlistDomains);
   // After enabling the feature, a sampled ping should be sent.

@@ -72,14 +72,11 @@ import org.chromium.url.GURL;
 
 //** Vivaldi */
 import android.os.Build;
-
 import org.chromium.chrome.browser.ChromeApplicationImpl;
-import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
 import org.vivaldi.browser.autofill.AutofillProvider;
 import org.vivaldi.browser.common.VivaldiColorUtils;
 import org.vivaldi.browser.common.VivaldiUrlConstants;
-import org.vivaldi.browser.preferences.VivaldiPreferences;
 import org.vivaldi.browser.embedder.ContentViewWithAutofill;
 
 /**
@@ -220,8 +217,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     private boolean mUsedCriticalPersistedTabData;
 
     //** Vivaldi */
-    private SharedPreferencesManager.Observer mPreferenceObserver;
-    boolean mOverrideUserAgent;
     AutofillProvider mAutofillProvider;
 
     /**
@@ -277,18 +272,9 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         mTabViewManager = new TabViewManagerImpl(this);
         mThemeColorHelper = new TabThemeColorHelper(this, this::updateThemeColor);
         mThemeColor = TabState.UNSPECIFIED_THEME_COLOR;
-        // Vivadi
-        mThemeColor = VivaldiColorUtils.getDefaultToolbarColor(this);
 
         // Vivaldi
-        mPreferenceObserver = key -> {
-            if (key.equalsIgnoreCase(VivaldiPreferences.ALWAYS_SHOW_DESKTOP)) {
-                mOverrideUserAgent = true;
-                updateUserAgent();
-            }
-        };
-        SharedPreferencesManager.getInstance().addObserver(mPreferenceObserver);
-        mOverrideUserAgent = mLaunchType != TabLaunchType.FROM_RESTORE;
+        mThemeColor = VivaldiColorUtils.getDefaultToolbarColor(this);
     }
 
     @Override
@@ -599,18 +585,24 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
     @Override
     public void reload() {
+        NativePage nativePage = getNativePage();
+        if (nativePage != null) {
+            nativePage.reload();
+            return;
+        }
+
         // TODO(dtrainor): Should we try to rebuild the ContentView if it's frozen?
         if (OfflinePageUtils.isOfflinePage(this)) {
             // If current page is an offline page, reload it with custom behavior defined in extra
             // header respected.
             OfflinePageUtils.reload(getWebContents(),
                     /*loadUrlDelegate=*/new OfflinePageUtils.TabOfflinePageLoadUrlDelegate(this));
-        } else {
-            if (getWebContents() != null) {
-                switchUserAgentIfNeeded();
-                getWebContents().getNavigationController().reload(true);
-            }
+            return;
         }
+
+        if (getWebContents() == null) return;
+        switchUserAgentIfNeeded();
+        getWebContents().getNavigationController().reload(true);
     }
 
     @Override
@@ -754,6 +746,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
     @Override
     public void setClosing(boolean closing) {
+        if (mIsClosing == closing) return;
         mIsClosing = closing;
         for (TabObserver observer : mObservers) observer.onClosingStateChanged(this, closing);
     }
@@ -791,8 +784,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             TabImplJni.get().destroy(mNativeTabAndroid);
             assert mNativeTabAndroid == 0;
         }
-        // Vivaldi
-        SharedPreferencesManager.getInstance().removeObserver(mPreferenceObserver);
     }
 
     /**
@@ -1024,8 +1015,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
     void showRenderedPage() {
         updateTitle();
         if (mNativePage != null) hideNativePage(true, null);
-        // Vivaldi
-        updateUserAgent();
     }
 
     void updateWindowAndroid(WindowAndroid windowAndroid) {
@@ -1408,7 +1397,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
 
             assert mNativeTabAndroid != 0;
             TabImplJni.get().initWebContents(mNativeTabAndroid, mIncognito, isDetached(this),
-                    webContents, mSourceTabId, mWebContentsDelegate,
+                    webContents, mWebContentsDelegate,
                     new TabContextMenuPopulatorFactory(
                             mDelegateFactory.createContextMenuPopulatorFactory(this), this));
 
@@ -1452,9 +1441,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
             if (!ChromeApplicationImpl.isVivaldi())
             updateThemeColor(TabState.UNSPECIFIED_THEME_COLOR);
         });
-        // Vivaldi
-        mOverrideUserAgent = VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                VivaldiPreferences.ALWAYS_SHOW_DESKTOP, false);
     }
 
     /**
@@ -1752,18 +1738,6 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
                 /* forcedByUser */ false);
     }
 
-    /** Vivaldi. Update the user agent according to the global setting. */
-    public void updateUserAgent() {
-        boolean prefAlwaysShowDesktop =
-                VivaldiPreferences.getSharedPreferencesManager().readBoolean(
-                        VivaldiPreferences.ALWAYS_SHOW_DESKTOP, false);
-        if (mOverrideUserAgent && getWebContents() != null) {
-            getWebContents().getNavigationController().setUseDesktopUserAgent(
-                    prefAlwaysShowDesktop, !isNativePage());
-            mOverrideUserAgent = false;
-        }
-    }
-
     private boolean isVivaldiPanelPage(String url) {
      return (VivaldiUrlConstants.VIVALDI_BOOKMARKS_URL.equals(url)
                 || VivaldiUrlConstants.VIVALDI_DOWNLOADS_URL.equals(url)
@@ -1795,8 +1769,7 @@ public class TabImpl implements Tab, TabObscuringHandler.Observer {
         void init(TabImpl caller);
         void destroy(long nativeTabAndroid);
         void initWebContents(long nativeTabAndroid, boolean incognito, boolean isBackgroundTab,
-                WebContents webContents, int parentTabId,
-                TabWebContentsDelegateAndroidImpl delegate,
+                WebContents webContents, TabWebContentsDelegateAndroidImpl delegate,
                 ContextMenuPopulatorFactory contextMenuPopulatorFactory);
         void updateDelegates(long nativeTabAndroid, TabWebContentsDelegateAndroidImpl delegate,
                 ContextMenuPopulatorFactory contextMenuPopulatorFactory);

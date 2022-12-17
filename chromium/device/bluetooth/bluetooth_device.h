@@ -23,7 +23,6 @@
 #include "base/strings/string_piece_forward.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "device/bluetooth/bluetooth_common.h"
 #include "device/bluetooth/bluetooth_export.h"
 #include "device/bluetooth/bluetooth_remote_gatt_service.h"
@@ -267,6 +266,10 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Returns the Bluetooth address of the device. This should be used as
   // a unique key to identify the device and copied where needed.
   virtual std::string GetAddress() const = 0;
+
+  // Returns the OUI portion of the Bluetooth address, which refers to the
+  // device's vendor.
+  std::string GetOuiPortionOfBluetoothAddress() const;
 
   // Returns the Bluetooth address type of the device. Currently available on
   // Linux and Chrome OS.
@@ -657,7 +660,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   std::vector<BluetoothRemoteGattService*> GetPrimaryServicesByUUID(
       const BluetoothUUID& service_uuid);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   using ExecuteWriteErrorCallback =
       base::OnceCallback<void(device::BluetoothGattService::GattErrorCode)>;
   using AbortWriteErrorCallback =
@@ -668,7 +671,7 @@ class DEVICE_BLUETOOTH_EXPORT BluetoothDevice {
   // Aborts all the previous prepare writes in a reliable write session.
   virtual void AbortWrite(base::OnceClosure callback,
                           AbortWriteErrorCallback error_callback) = 0;
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_LINUX)
   // Set the battery information for the battery type |info.type|. Overrides

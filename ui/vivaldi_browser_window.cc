@@ -898,6 +898,10 @@ void VivaldiBrowserWindow::ShowEmojiPanel() {
   views_->ShowEmojiPanel();
 }
 
+bool VivaldiBrowserWindow::IsSideSearchPanelVisible() const {
+  return false;
+}
+
 std::string VivaldiBrowserWindow::GetWorkspace() const {
   return views_->GetWorkspace();
 }
@@ -1301,18 +1305,8 @@ bool VivaldiBrowserWindow::VivaldiManagePasswordsIconView::Update() {
   return false;
 }
 
-send_tab_to_self::SendTabToSelfBubbleView*
-VivaldiBrowserWindow::ShowSendTabToSelfBubble(
-    content::WebContents* contents,
-    send_tab_to_self::SendTabToSelfBubbleController* controller,
-    bool is_user_gesture) {
-  return nullptr;
-}
-
 sharing_hub::SharingHubBubbleView* VivaldiBrowserWindow::ShowSharingHubBubble(
-    content::WebContents* contents,
-    sharing_hub::SharingHubBubbleController* controller,
-    bool is_user_gesture) {
+    share::ShareAttempt attempt) {
   return nullptr;
 }
 
@@ -1369,15 +1363,13 @@ VivaldiBrowserWindow::GetAutofillBubbleHandler() {
 sharing_hub::ScreenshotCapturedBubble*
 VivaldiBrowserWindow::ShowScreenshotCapturedBubble(
     content::WebContents* contents,
-    const gfx::Image& image,
-    sharing_hub::ScreenshotCapturedBubbleController* controller) {
+    const gfx::Image& image) {
   return nullptr;
 }
 
 qrcode_generator::QRCodeGeneratorBubbleView*
 VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
     content::WebContents* contents,
-    qrcode_generator::QRCodeGeneratorBubbleController* controller,
     const GURL& url,
     bool show_back_button) {
   sessions::SessionTabHelper* const session_tab_helper =
@@ -1391,6 +1383,19 @@ VivaldiBrowserWindow::ShowQRCodeGeneratorBubble(
           session_tab_helper->session_id().id(), url.spec()),
       browser_->profile());
 
+  return nullptr;
+}
+
+send_tab_to_self::SendTabToSelfBubbleView*
+VivaldiBrowserWindow::ShowSendTabToSelfDevicePickerBubble(
+    content::WebContents* contents) {
+  return nullptr;
+}
+
+send_tab_to_self::SendTabToSelfBubbleView*
+VivaldiBrowserWindow::ShowSendTabToSelfPromoBubble(
+    content::WebContents* contents,
+    bool show_signin_button) {
   return nullptr;
 }
 
@@ -1413,7 +1418,8 @@ std::unique_ptr<content::EyeDropper> VivaldiBrowserWindow::OpenEyeDropper(
   return ShowEyeDropper(frame, listener);
 }
 
-FeaturePromoController* VivaldiBrowserWindow::GetFeaturePromoController() {
+user_education::FeaturePromoController*
+VivaldiBrowserWindow::GetFeaturePromoController() {
   return nullptr;
 }
 
@@ -1425,8 +1431,10 @@ bool VivaldiBrowserWindow::IsFeaturePromoActive(
 
 bool VivaldiBrowserWindow::MaybeShowFeaturePromo(
     const base::Feature& iph_feature,
-    FeaturePromoSpecification::StringReplacements body_text_replacements,
-    FeaturePromoController::BubbleCloseCallback close_callback) {
+    user_education::FeaturePromoSpecification::StringReplacements
+        body_text_replacements,
+    user_education::FeaturePromoController::BubbleCloseCallback
+        close_callback) {
   return false;
 }
 
@@ -1434,14 +1442,8 @@ bool VivaldiBrowserWindow::CloseFeaturePromo(const base::Feature& iph_feature) {
   return false;
 }
 
-FeaturePromoController::PromoHandle
+user_education::FeaturePromoController::PromoHandle
 VivaldiBrowserWindow::CloseFeaturePromoAndContinue(
     const base::Feature& iph_feature) {
   return {};
 }
-
-#if BUILDFLAG(ENABLE_SIDE_SEARCH)
-bool VivaldiBrowserWindow::IsSideSearchPanelVisible() const {
-  return false;
-}
-#endif

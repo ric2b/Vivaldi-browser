@@ -14,6 +14,7 @@
 #include "ash/app_list/test/test_focus_change_listener.h"
 #include "ash/app_list/views/app_list_a11y_announcer.h"
 #include "ash/app_list/views/app_list_toast_container_view.h"
+#include "ash/app_list/views/app_list_toast_view.h"
 #include "ash/app_list/views/app_list_view.h"
 #include "ash/app_list/views/apps_container_view.h"
 #include "ash/app_list/views/apps_grid_view_test_api.h"
@@ -22,6 +23,7 @@
 #include "ash/public/cpp/pagination/pagination_model.h"
 #include "ash/shell.h"
 #include "ash/test/ash_test_base.h"
+#include "ash/test/layer_animation_stopped_waiter.h"
 #include "ash/wm/tablet_mode/tablet_mode_controller.h"
 #include "base/test/bind.h"
 #include "base/test/scoped_feature_list.h"
@@ -29,6 +31,7 @@
 #include "ui/compositor/layer.h"
 #include "ui/compositor/scoped_animation_duration_scale_mode.h"
 #include "ui/views/accessibility/view_accessibility.h"
+#include "ui/views/animation/bounds_animator.h"
 #include "ui/views/controls/button/label_button.h"
 #include "ui/views/controls/textfield/textfield.h"
 
@@ -142,7 +145,7 @@ class PagedAppsGridViewWithNudgeTest : public PagedAppsGridViewTest {
     // Update the toast container to make sure the nudge is shown, if required.
     GetAppListTestHelper()
         ->GetAppsContainerView()
-        ->toast_container_for_test()
+        ->toast_container()
         ->MaybeUpdateReorderNudgeView();
   }
 };
@@ -221,6 +224,13 @@ TEST_F(PagedAppsGridViewTest, GridDimensionsChangesWithDisplaySize) {
   EXPECT_EQ(3, GetPagedAppsGridView()->GetRowsForTesting());
   EXPECT_EQ(5, GetPagedAppsGridView()->cols());
 
+  // Test with a display in landscape mode a with a little more height. This
+  // should have equal rows on the first and second pages.
+  UpdateDisplay("1600x900");
+  EXPECT_EQ(4, GetPagedAppsGridView()->GetFirstPageRowsForTesting());
+  EXPECT_EQ(4, GetPagedAppsGridView()->GetRowsForTesting());
+  EXPECT_EQ(5, GetPagedAppsGridView()->cols());
+
   // Test with a display in landscape mode with more height. This should have
   // more rows.
   UpdateDisplay("1400x1100");
@@ -238,7 +248,7 @@ TEST_F(PagedAppsGridViewTest, GridDimensionsChangesWithDisplaySize) {
   // more rows.
   UpdateDisplay("700x1400");
   EXPECT_EQ(5, GetPagedAppsGridView()->GetFirstPageRowsForTesting());
-  EXPECT_EQ(7, GetPagedAppsGridView()->GetRowsForTesting());
+  EXPECT_EQ(6, GetPagedAppsGridView()->GetRowsForTesting());
   EXPECT_EQ(5, GetPagedAppsGridView()->cols());
 }
 
@@ -468,7 +478,7 @@ TEST_F(PagedAppsGridViewWithNudgeTest, GridDimensionsChangesWithDisplaySize) {
   // more rows.
   UpdateDisplay("700x1400");
   EXPECT_EQ(5, GetPagedAppsGridView()->GetFirstPageRowsForTesting());
-  EXPECT_EQ(7, GetPagedAppsGridView()->GetRowsForTesting());
+  EXPECT_EQ(6, GetPagedAppsGridView()->GetRowsForTesting());
   EXPECT_EQ(5, GetPagedAppsGridView()->cols());
 }
 
@@ -478,7 +488,7 @@ TEST_F(PagedAppsGridViewTest, SortAppsMakesA11yAnnouncement) {
   helper->GetAppsContainerView()->ResetForShowApps();
 
   AppsContainerView* container_view = helper->GetAppsContainerView();
-  views::View* announcement_view = container_view->toast_container_for_test()
+  views::View* announcement_view = container_view->toast_container()
                                        ->a11y_announcer_for_test()
                                        ->announcement_view_for_test();
   ASSERT_TRUE(announcement_view);
@@ -524,13 +534,13 @@ TEST_F(PagedAppsGridViewTest, SortAppsWithItemFocused) {
 
   AppsContainerView* container_view = helper->GetAppsContainerView();
   AppListToastContainerView* reorder_undo_toast_container =
-      container_view->toast_container_for_test();
-  EXPECT_FALSE(reorder_undo_toast_container->is_toast_visible());
+      container_view->toast_container();
+  EXPECT_FALSE(reorder_undo_toast_container->IsToastVisible());
 
   SortAppList(AppListSortOrder::kNameAlphabetical, /*wait=*/true);
 
   // After sorting, the undo toast should be visible.
-  EXPECT_TRUE(reorder_undo_toast_container->is_toast_visible());
+  EXPECT_TRUE(reorder_undo_toast_container->IsToastVisible());
 
   views::View* first_item =
       grid_test_api_->GetViewAtVisualIndex(/*page=*/0, /*slot=*/0);
@@ -587,13 +597,13 @@ TEST_F(PagedAppsGridViewTest, ScrollToShowUndoToastWhenSorting) {
   AppsContainerView* container_view =
       GetAppListTestHelper()->GetAppsContainerView();
   AppListToastContainerView* reorder_undo_toast_container =
-      container_view->toast_container_for_test();
-  EXPECT_FALSE(reorder_undo_toast_container->is_toast_visible());
+      container_view->toast_container();
+  EXPECT_FALSE(reorder_undo_toast_container->IsToastVisible());
 
   SortAppList(AppListSortOrder::kNameAlphabetical, /*wait=*/true);
 
   // After sorting, the undo toast should be visible.
-  EXPECT_TRUE(reorder_undo_toast_container->is_toast_visible());
+  EXPECT_TRUE(reorder_undo_toast_container->IsToastVisible());
 
   pagination_model->SelectPage(total_pages - 1, /*animate=*/false);
 
@@ -607,14 +617,15 @@ TEST_F(PagedAppsGridViewTest, ScrollToShowUndoToastWhenSorting) {
   SortAppList(AppListSortOrder::kColor, /*wait=*/true);
 
   // After sorting, the undo toast should still be visible.
-  EXPECT_TRUE(reorder_undo_toast_container->is_toast_visible());
+  EXPECT_TRUE(reorder_undo_toast_container->IsToastVisible());
 
   // The undo toast should be within the apps container's view port.
   EXPECT_TRUE(apps_container_screen_bounds.Contains(
       reorder_undo_toast_container->GetBoundsInScreen()));
 }
 
-// Test tapping on the close button to dismiss the reorder toast.
+// Test tapping on the close button to dismiss the reorder toast. Also make sure
+// that items animate upward to take the place of the closed toast.
 TEST_F(PagedAppsGridViewTest, CloseReorderToast) {
   ui::ScopedAnimationDurationScaleMode scope_duration(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
@@ -624,26 +635,48 @@ TEST_F(PagedAppsGridViewTest, CloseReorderToast) {
   helper->AddRecentApps(5);
   helper->GetAppsContainerView()->ResetForShowApps();
 
-  AppsContainerView* container_view = helper->GetAppsContainerView();
-
   // Trigger a sort to show the reorder toast.
   SortAppList(AppListSortOrder::kNameAlphabetical, /*wait=*/true);
 
-  EXPECT_TRUE(
-      container_view->toast_container_for_test()->GetToastButton()->HasFocus());
-  EXPECT_TRUE(container_view->toast_container_for_test()->is_toast_visible());
+  AppListToastContainerView* toast_container =
+      helper->GetAppsContainerView()->toast_container();
+  EXPECT_TRUE(toast_container->GetToastButton()->HasFocus());
+  EXPECT_TRUE(toast_container->IsToastVisible());
   EXPECT_EQ(2, GetPagedAppsGridView()->GetFirstPageRowsForTesting());
 
   // Tap on the close button to remove the toast.
-  gfx::Point close_button_point = container_view->toast_container_for_test()
-                                      ->GetCloseButton()
-                                      ->GetBoundsInScreen()
-                                      .CenterPoint();
-  GetEventGenerator()->GestureTapAt(close_button_point);
+  GestureTapOn(toast_container->GetCloseButton());
+
+  // Wait for the toast to finish fade out animation.
+  EXPECT_EQ(toast_container->toast_view()->layer()->GetTargetOpacity(), 0.0f);
+  LayerAnimationStoppedWaiter().Wait(toast_container->toast_view()->layer());
+
+  const views::ViewModelT<AppListItemView>* view_model =
+      GetPagedAppsGridView()->view_model();
+
+  // Item views should animate upwards to take the place of the closed reorder
+  // toast.
+  for (int i = 1; i < view_model->view_size(); i++) {
+    AppListItemView* item_view = view_model->view_at(i);
+    // The items off screen on the second page should not animate.
+    if (i >= grid_test_api_->TilesPerPage(0)) {
+      EXPECT_FALSE(GetPagedAppsGridView()->IsAnimatingView(item_view));
+      continue;
+    }
+
+    // Make sure that no between rows animation is occurring by checking that
+    // all items are animating upward vertically and not horizontally.
+    EXPECT_TRUE(GetPagedAppsGridView()->IsAnimatingView(item_view));
+    gfx::Rect target_bounds =
+        GetPagedAppsGridView()->bounds_animator_for_testing()->GetTargetBounds(
+            item_view);
+    EXPECT_GT(item_view->bounds().y(), target_bounds.y());
+    EXPECT_EQ(item_view->bounds().x(), target_bounds.x());
+  }
 
   // Verify that another row appears once the toast is closed.
   EXPECT_EQ(3, GetPagedAppsGridView()->GetFirstPageRowsForTesting());
-  EXPECT_FALSE(container_view->toast_container_for_test()->is_toast_visible());
+  EXPECT_FALSE(toast_container->IsToastVisible());
 }
 
 }  // namespace

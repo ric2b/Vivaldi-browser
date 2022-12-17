@@ -18,23 +18,30 @@
 
 namespace autofill {
 
-TestAutofillClient::TestAutofillClient()
-    : form_origin_(GURL("https://example.test")),
+TestAutofillClient::TestAutofillClient(
+    std::unique_ptr<TestPersonalDataManager> pdm)
+    : test_personal_data_manager_(
+          pdm ? std::move(pdm) : std::make_unique<TestPersonalDataManager>()),
+      form_origin_(GURL("https://example.test")),
       last_committed_url_(GURL("https://example.test")) {}
 
-TestAutofillClient::~TestAutofillClient() {}
+TestAutofillClient::~TestAutofillClient() = default;
 
 version_info::Channel TestAutofillClient::GetChannel() const {
   return channel_for_testing_;
 }
 
-PersonalDataManager* TestAutofillClient::GetPersonalDataManager() {
-  return &test_personal_data_manager_;
+TestPersonalDataManager* TestAutofillClient::GetPersonalDataManager() {
+  return test_personal_data_manager_.get();
 }
 
 AutocompleteHistoryManager*
 TestAutofillClient::GetAutocompleteHistoryManager() {
   return &mock_autocomplete_history_manager_;
+}
+
+MerchantPromoCodeManager* TestAutofillClient::GetMerchantPromoCodeManager() {
+  return &mock_merchant_promo_code_manager_;
 }
 
 PrefService* TestAutofillClient::GetPrefs() {
@@ -123,7 +130,7 @@ void TestAutofillClient::ShowUnmaskPrompt(
 
 void TestAutofillClient::OnUnmaskVerificationResult(PaymentsRpcResult result) {}
 
-raw_ptr<VirtualCardEnrollmentManager>
+VirtualCardEnrollmentManager*
 TestAutofillClient::GetVirtualCardEnrollmentManager() {
   return form_data_importer_->GetVirtualCardEnrollmentManager();
 }
@@ -284,7 +291,7 @@ bool TestAutofillClient::IsPasswordManagerEnabled() {
 }
 
 void TestAutofillClient::PropagateAutofillPredictions(
-    content::RenderFrameHost* rfh,
+    AutofillDriver* driver,
     const std::vector<FormStructure*>& forms) {}
 
 void TestAutofillClient::DidFillOrPreviewField(
@@ -305,6 +312,8 @@ bool TestAutofillClient::AreServerCardsSupported() const {
 }
 
 void TestAutofillClient::ExecuteCommand(int id) {}
+
+void TestAutofillClient::OpenPromoCodeOfferDetailsURL(const GURL& url) {}
 
 void TestAutofillClient::LoadRiskData(
     base::OnceCallback<void(const std::string&)> callback) {

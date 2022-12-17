@@ -9,11 +9,11 @@
 
 #include <memory>
 #include <string>
-#include <vector>
+#include <utility>
 
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/observer_list.h"
 #include "content/browser/renderer_host/frame_tree.h"
 #include "content/browser/renderer_host/navigator.h"
@@ -29,8 +29,7 @@
 #include "third_party/blink/public/mojom/frame/frame_owner_properties.mojom.h"
 #include "third_party/blink/public/mojom/frame/frame_replication_state.mojom-forward.h"
 #include "third_party/blink/public/mojom/frame/tree_scope_type.mojom.h"
-#include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom.h"
-#include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom-forward.h"
+#include "third_party/blink/public/mojom/frame/user_activation_update_types.mojom-forward.h"
 
 #include "base/time/time.h"
 #include "url/gurl.h"
@@ -153,7 +152,9 @@ class CONTENT_EXPORT FrameTreeNode {
 
   FrameTreeNode* opener() const { return opener_; }
 
-  FrameTreeNode* original_opener() const { return original_opener_; }
+  FrameTreeNode* first_live_main_frame_in_original_opener_chain() const {
+    return first_live_main_frame_in_original_opener_chain_;
+  }
 
   const absl::optional<base::UnguessableToken>& opener_devtools_frame_token() {
     return opener_devtools_frame_token_;
@@ -232,9 +233,6 @@ class CONTENT_EXPORT FrameTreeNode {
     return render_manager_.current_replication_state().origin;
   }
 
-  // Set the current name and notify proxies about the update.
-  void SetFrameName(const std::string& name, const std::string& unique_name);
-
   // Returns the latest frame policy (sandbox flags and container policy) for
   // this frame. This includes flags inherited from parent frames and the latest
   // flags from the <iframe> element hosting this frame. The returned policies
@@ -290,7 +288,7 @@ class CONTENT_EXPORT FrameTreeNode {
   // Reflects the 'anonymous' attribute of the corresponding iframe html
   // element.
   bool anonymous() const { return anonymous_; }
-  void set_anonymous(bool anonymous) { anonymous_ = anonymous; }
+  void SetAnonymous(bool anonymous);
 
   bool HasSameOrigin(const FrameTreeNode& node) const {
     return render_manager_.current_replication_state().origin.IsSameOriginWith(
@@ -524,6 +522,27 @@ class CONTENT_EXPORT FrameTreeNode {
   void SetSrcdocValue(const std::string& srcdoc_value);
   const std::string& srcdoc_value() const { return srcdoc_value_; }
 
+  void set_shared_storage_budget_metadata(
+      FencedFrameURLMapping::SharedStorageBudgetMetadata*
+          shared_storage_budget_metadata) {
+    DCHECK_EQ(fenced_frame_status_,
+              RenderFrameHostImpl::FencedFrameStatus::kFencedFrameRoot);
+    shared_storage_budget_metadata_ = shared_storage_budget_metadata;
+  }
+
+  FencedFrameURLMapping::SharedStorageBudgetMetadata*
+  shared_storage_budget_metadata() const {
+    return shared_storage_budget_metadata_;
+  }
+
+  // Traverse up from this node. The `shared_storage_budget_metadata()` of the
+  // first seen node with a non-null budget metadata will be returned (i.e. this
+  // node inherits that budget metadata), and this node is expected to be an
+  // outermost fenced frame root. Return nullptr if not found (i.e. this node is
+  // not subjected to shared storage budgeting).
+  FencedFrameURLMapping::SharedStorageBudgetMetadata*
+  FindSharedStorageBudgetMetadata();
+
   // Accessor to BrowsingContextState for subframes only. Only main frame
   // navigations can change BrowsingInstances and BrowsingContextStates,
   // therefore for subframes associated BrowsingContextState never changes. This
@@ -592,16 +611,24 @@ class CONTENT_EXPORT FrameTreeNode {
   // is disowned.
   std::unique_ptr<OpenerDestroyedObserver> opener_observer_;
 
-  // The frame that opened this frame, if any. Contrary to opener_, this
-  // cannot be changed unless the original opener is destroyed.
-  raw_ptr<FrameTreeNode> original_opener_ = nullptr;
+  // Unlike `opener_`, the "original opener chain" doesn't reflect
+  // window.opener, which can be suppressed or updated. The "original opener"
+  // is the main frame of the actual opener of this frame. This traces the all
+  // the way back, so if the original opener was closed (deleted or severed due
+  // to COOP), but _it_ had an original opener, this will return the original
+  // opener's original opener, etc. So this value will always be set as long as
+  // there is at least one live frame in the chain whose connection is not
+  // severed due to COOP.
+  raw_ptr<FrameTreeNode> first_live_main_frame_in_original_opener_chain_ =
+      nullptr;
 
   // The devtools frame token of the frame which opened this frame. This is
   // not cleared even if the opener is destroyed or disowns the frame.
   absl::optional<base::UnguessableToken> opener_devtools_frame_token_;
 
-  // An observer that clears this node's |original_opener_| if the opener is
-  // destroyed.
+  // An observer that updates this node's
+  // |first_live_main_frame_in_original_opener_chain_| to the next original
+  // opener in the chain if the original opener is destroyed.
   std::unique_ptr<OpenerDestroyedObserver> original_opener_observer_;
 
   // When created by an opener, the URL specified in window.open(url)
@@ -709,15 +736,38 @@ class CONTENT_EXPORT FrameTreeNode {
   // fenced frame's FrameTree. Note that this could be a field in FrameTree for
   // the MPArch version but for the shadow DOM version we need to keep it here
   // since the fenced frame root is not a main frame for the latter. The value
-  // of the nonce will be the same for all of the the frames inside a fenced
+  // of the nonce will be the same for all of the the iframes inside a fenced
   // frame tree. If there is a nested fenced frame it will have a different
   // nonce than its parent fenced frame. The nonce will stay the same across
-  // navigations because it is always used in conjunction with other fields of
-  // the keys. If the navigation is same-origin/site then the same network stack
-  // partition/storage will be reused and if it's cross-origin/site then other
-  // parts of the key will change and so, even with the same nonce, another
-  // partition will be used.
+  // navigations initiated from the fenced frame tree because it is always used
+  // in conjunction with other fields of the keys and would be good to access
+  // the same storage across same-origin navigations. If the navigation is
+  // same-origin/site then the same network stack partition/storage will be
+  // reused and if it's cross-origin/site then other parts of the key will
+  // change and so, even with the same nonce, another partition will be used.
+  // But if the navigation is initiated from the embedder, the nonce will be
+  // reinitialized irrespective of same or cross origin such that there is no
+  // privacy leak via storage shared between two embedder initiated navigations.
+  // Note that this reinitialization is only implemented for MPArch.
   absl::optional<base::UnguessableToken> fenced_frame_nonce_;
+
+  const RenderFrameHostImpl::FencedFrameStatus fenced_frame_status_ =
+      RenderFrameHostImpl::FencedFrameStatus::kNotNestedInFencedFrame;
+
+  // If this is a fenced frame resulting from a shared storage url selection
+  // operation, this contains the metadata for shared storage budget charging.
+  // This metadata will persist across self navigations, or be replaced by a new
+  // metadata if this gets navigated to another shared storage generated URN.
+  //
+  // This can only be possibly set for the outermost fenced frame root, because
+  // selectURL() is disallowed inside fenced frame, and the URN generated
+  // outside the a fenced frame cannot be recognized from inside, so a nested
+  // fenced frame can never navigate to a shared storage generated URN.
+  //
+  // This metadata is stored to the outermost page's FencedFrameURLMapping, thus
+  // `shared_storage_budget_metadata_` must outlive `this`.
+  raw_ptr<FencedFrameURLMapping::SharedStorageBudgetMetadata>
+      shared_storage_budget_metadata_ = nullptr;
 
   // Manages creation and swapping of RenderFrameHosts for this frame.
   //

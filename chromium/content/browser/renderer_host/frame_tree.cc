@@ -191,6 +191,7 @@ FrameTree::FrameTree(
                  *this,
                  navigator_delegate,
                  navigation_controller_delegate),
+      type_(type),
       root_(new FrameTreeNode(this,
                               nullptr,
                               // The top-level frame must always be in a
@@ -202,7 +203,7 @@ FrameTree::FrameTree(
                               blink::FrameOwnerElementType::kNone,
                               blink::FramePolicy())),
       focused_frame_tree_node_id_(FrameTreeNode::kFrameTreeNodeInvalidId),
-      type_(type) {}
+      load_progress_(0.0) {}
 
 FrameTree::~FrameTree() {
   is_being_destroyed_ = true;
@@ -591,9 +592,10 @@ scoped_refptr<RenderViewHostImpl> FrameTree::CreateRenderViewHost(
   }
   RenderViewHostImpl* rvh =
       static_cast<RenderViewHostImpl*>(RenderViewHostFactory::Create(
-          this, site_instance, render_view_delegate_, render_widget_delegate_,
-          main_frame_routing_id, swapped_out, renderer_initiated_creation,
-          std::move(main_browsing_context_state)));
+          this, static_cast<SiteInstanceImpl*>(site_instance)->group(),
+          site_instance->GetStoragePartitionConfig(), render_view_delegate_,
+          render_widget_delegate_, main_frame_routing_id, swapped_out,
+          renderer_initiated_creation, std::move(main_browsing_context_state)));
   return base::WrapRefCounted(rvh);
 }
 

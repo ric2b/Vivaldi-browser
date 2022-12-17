@@ -129,6 +129,16 @@ UnifiedSystemTrayController::~UnifiedSystemTrayController() {
   }
 }
 
+void UnifiedSystemTrayController::AddObserver(Observer* observer) {
+  if (observer)
+    observers_.AddObserver(observer);
+}
+
+void UnifiedSystemTrayController::RemoveObserver(Observer* observer) {
+  if (observer)
+    observers_.RemoveObserver(observer);
+}
+
 // static
 void UnifiedSystemTrayController::RegisterProfilePrefs(
     PrefRegistrySimple* registry) {
@@ -344,7 +354,8 @@ void UnifiedSystemTrayController::ShowNetworkDetailedView(bool force) {
 
   base::RecordAction(base::UserMetricsAction("StatusArea_Network_Detailed"));
 
-  if (ash::features::IsQuickSettingsNetworkRevampEnabled()) {
+  if (ash::features::IsQuickSettingsNetworkRevampEnabled() &&
+      ash::features::IsBluetoothRevampEnabled()) {
     ShowDetailedView(std::make_unique<NetworkDetailedViewController>(this));
   } else {
     ShowDetailedView(
@@ -409,8 +420,12 @@ void UnifiedSystemTrayController::ShowCalendarView(
 
   calendar_metrics::RecordCalendarShowMetrics(show_source, event_source);
   ShowDetailedView(std::make_unique<UnifiedCalendarViewController>(this));
+
   showing_calendar_view_ = true;
   showing_audio_detailed_view_ = false;
+
+  for (auto& observer : observers_)
+    observer.OnOpeningCalendarView();
 }
 
 void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
@@ -419,8 +434,13 @@ void UnifiedSystemTrayController::ShowMediaControlsDetailedView() {
 }
 
 void UnifiedSystemTrayController::TransitionToMainView(bool restore_focus) {
+  if (showing_calendar_view_) {
+    showing_calendar_view_ = false;
+    for (auto& observer : observers_)
+      observer.OnTransitioningFromCalendarToMainView();
+  }
+
   showing_audio_detailed_view_ = false;
-  showing_calendar_view_ = false;
   detailed_view_controller_.reset();
   unified_view_->ResetDetailedView();
   if (restore_focus)

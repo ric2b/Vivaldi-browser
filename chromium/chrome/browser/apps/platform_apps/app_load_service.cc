@@ -20,7 +20,6 @@
 #include "extensions/common/extension.h"
 
 #include "app/vivaldi_apptools.h"
-#include "base/task/post_task.h"
 #include "content/public/browser/browser_task_traits.h"
 #include "content/public/browser/browser_thread.h"
 #include "extensions/tools/vivaldi_tools.h"
@@ -142,8 +141,8 @@ void AppLoadService::OnExtensionUnloaded(
       attempts--;
 
       const int kRestartAppDelaySec = 4; // wait until app unloading done
-      base::PostDelayedTask(
-          FROM_HERE, {content::BrowserThread::UI},
+      content::GetUIThreadTaskRunner({})->PostDelayedTask(
+          FROM_HERE,
           base::BindRepeating(&AppLoadService::RestartApplication,
                               base::Unretained(this), extension->id()),
           base::Seconds(kRestartAppDelaySec));

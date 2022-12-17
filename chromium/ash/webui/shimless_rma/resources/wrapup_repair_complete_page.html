@@ -3,13 +3,22 @@
     width: 512px;
   }
 
-  #logsDialog [slot=body] {
+  #logsDialog::part(wrapper) {
     height: 480px;
   }
 
-  #logsDialog [slot=footer] {
+  #logsDialog [slot=button-container] {
     padding-bottom: 24px;
     padding-top: 24px;
+  }
+
+  #logsDialog [slot=title] {
+    align-items: center;
+    display: flex;
+    font-size: 15px;
+    height: 32px;
+    justify-content: center;
+    padding: 0 24px 0 24px;
   }
 
   #buttonContainer {
@@ -30,6 +39,10 @@
     justify-content: start;
     padding: 0;
     width: 100%;
+  }
+
+  .button-card:focus {
+    outline: rgba(var(--google-blue-600-rgb), .4) solid 2px;
   }
 
   #diagnosticsButton {
@@ -54,6 +67,16 @@
 
   :host([plugged-in_]) #batteryCutoffInfoIcon {
     color: var(--cros-icon-color-secondary);
+  }
+
+  :host([all-buttons-disabled]) .button-card {
+    color: var(--cros-icon-color-secondary);
+    opacity: 0.38;
+  }
+
+  :host([all-buttons-disabled]) .button-label,
+  :host([all-buttons-disabled]) .button-description {
+    color: var(--cros-text-color-disabled);
   }
 
   .button-label {
@@ -90,9 +113,9 @@
   }
 
   #navigationButtonWrapper {
-    bottom: 56px;
-    margin-inline-start: calc(-1 * var(--page-left-margin) + 6px);
-    position: absolute;
+    bottom: 6px;
+    left: 6px;
+    position: fixed;
   }
 
   .navigation-button {
@@ -108,6 +131,11 @@
 
   #shutDownButton {
     margin-inline-end: 8px;
+  }
+
+  #rebootButton[disabled],
+  #shutDownButton[disabled] {
+    opacity: var(--cr-disabled-opacity);
   }
 
   .navigation-icon {
@@ -126,13 +154,17 @@
     </div>
     <div id="navigationButtonWrapper">
       <cr-button id="shutDownButton" class="navigation-button"
-          on-click="onShutDownButtonClick_" disabled="[[allButtonsDisabled]]">
+          on-click="onShutDownButtonClick_"
+          disabled="[[disableShutdownButtons_(shutdownButtonsDisabled_,
+              allButtonsDisabled)]]">
         <iron-icon icon="shimless-icon:shutdown" class="navigation-icon">
         </iron-icon>
         [[i18n('repairCompleteShutDownButtonText')]]
       </cr-button>
       <cr-button id="rebootButton" class="navigation-button"
-          on-click="onRebootButtonClick_" disabled="[[allButtonsDisabled]]">
+          on-click="onRebootButtonClick_"
+          disabled="[[disableShutdownButtons_(shutdownButtonsDisabled_,
+              allButtonsDisabled)]]">
         <iron-icon icon="shimless-icon:reboot" class="navigation-icon">
         </iron-icon>
         [[i18n('repairCompleteRebootButtonText')]]
@@ -143,8 +175,8 @@
     <div id="buttonContainer">
       <cr-button id="diagnosticsButton" class="button-card"
         on-click="onDiagnosticsButtonClick_" disabled="[[allButtonsDisabled]]">
-        <img id="diagnosticsIcon" class="button-icon" 
-            src="png/diagnostics_app_icon_192.png">
+        <iron-icon icon$="[[getDiagnosticsIcon_(allButtonsDisabled)]]" class="button-icon">
+        </iron-icon>
         <div class="button-text">
           <div class="button-label">
             <span>[[i18n('repairCompletedDiagnosticsButtonText')]]</span>
@@ -156,9 +188,7 @@
       </cr-button>
       <cr-button id="rmaLogButton" class="button-card"
           on-click="onRmaLogButtonClick_" disabled="[[allButtonsDisabled]]">
-        <iron-icon icon="shimless-icon:rma-log" class="button-icon"
-            hidden="[[!checked]]">
-        </iron-icon>
+        <iron-icon icon$="[[getRmaLogIcon_(allButtonsDisabled)]]" class="button-icon"></iron-icon>
         <div class="button-text">
           <div class="button-label">
             <span>[[i18n('repairCompletedLogsButtonText')]]</span>
@@ -174,28 +204,18 @@
             disabled$="[[disableBatteryCutButton_(pluggedIn_,
             allButtonsDisabled)]]">
           <iron-icon id="batteryCutoffIcon"
-              icon="shimless-icon:battery-cutoff-disabled" class="button-icon"
-              hidden="[[!checked]]">
+              icon$="[[getBatteryCutoffIcon_(allButtonsDisabled)]]" class="button-icon">
           </iron-icon>
           <div class="button-text">
             <div class="button-label">
-              <iron-icon id="batteryCutoffInfoIcon" hidden="[[!pluggedIn_]]"
-                  icon="shimless-icon:info-grey">
-              </iron-icon>
               <span>[[i18n('repairCompletedShutoffButtonText')]]</span>
             </div>
             <div class="button-description">
-              [[i18n('repairCompletedShutoffDescriptionText')]]
-            </div>
-            <div class="button-description" hidden="[[!pluggedIn_]]">
-              [[i18n('repairCompletedShutoffInstructionsText')]]
+              [[getRepairCompletedShutoffText_(pluggedIn_)]]
             </div>
           </div>
         </cr-button>
       </div>
-      <paper-tooltip for="batteryCutoffTooltipWrapper" hidden="[[!pluggedIn_]]">
-        [[i18n('batteryShutoffTooltipText')]]
-      </paper-tooltip>
     </div>
   </div>
 </base-page>
@@ -211,8 +231,8 @@
     <cr-button id="closeLogDialogButton" on-click="onCancelClick_">
       [[i18n('rmaLogsCancelButtonText')]]
     </cr-button>
-    <cr-button id="rmaLogButton" class="text-button action-button"
-        on-click="onRmaLogButtonClick_">
+    <cr-button id="saveLogDialogButton" class="text-button action-button"
+        on-click="onSaveLogClick_">
       [[i18n('rmaLogsSaveToUsbButtonText')]]
     </cr-button>
   </div>
@@ -220,7 +240,7 @@
 
 <cr-dialog id="powerwashDialog" close-text="close">
   <div slot="title">
-    [[i18n('repairCompletedPowerwashTitle')]]
+    [[i18n('powerwashDialogTitle')]]
   </div>
   <div slot="body">
     [[getPowerwashDescriptionString_(selectedFinishRmaOption_)]]
@@ -231,7 +251,22 @@
     </cr-button>
     <cr-button id="powerwashButton" class="text-button action-button"
         on-click="onPowerwashButtonClick_">
-      [[i18n('repairCompletedPowerwashButton')]]
+      [[i18n('powerwashDialogPowerwashButton')]]
+    </cr-button>
+  </div>
+</cr-dialog>
+
+<cr-dialog id="batteryCutoffDialog" close-text="close" no-cancel>
+  <div slot="body">
+    [[i18n('repairCompletedBatteryCutoffCountdownDescription')]]
+  </div>
+  <div class="dialog-footer" slot="button-container">
+    <cr-button id="closeBatteryCutoffDialogButton" on-click="onCutoffCancelClick_">
+      [[i18n('cancelButtonLabel')]]
+    </cr-button>
+    <cr-button id="batteryCutoffShutdownButton" class="text-button action-button"
+        on-click="onCutoffShutdownButtonClick_">
+      [[i18n('repairCompletedBatteryCutoffShutdownButton')]]
     </cr-button>
   </div>
 </cr-dialog>

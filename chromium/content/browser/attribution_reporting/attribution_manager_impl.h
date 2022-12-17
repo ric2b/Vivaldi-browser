@@ -50,8 +50,8 @@ class AttributionStorage;
 class AttributionStorageDelegate;
 class CreateReportResult;
 class StoragePartitionImpl;
+class StoredSource;
 
-struct DeactivatedSource;
 struct SendResult;
 
 // UI thread class that manages the lifetime of the underlying attribution
@@ -92,7 +92,8 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void GetActiveSourcesForWebUI(
       base::OnceCallback<void(std::vector<StoredSource>)> callback) override;
   void GetPendingReportsForInternalUse(
-      AttributionReport::ReportType report_type,
+      AttributionReport::ReportTypes report_types,
+      int limit,
       base::OnceCallback<void(std::vector<AttributionReport>)> callback)
       override;
   void SendReportsForWebUI(const std::vector<AttributionReport::Id>& ids,
@@ -100,18 +101,14 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
   void ClearData(base::Time delete_begin,
                  base::Time delete_end,
                  base::RepeatingCallback<bool(const url::Origin&)> filter,
+                 bool delete_rate_limit_data,
                  base::OnceClosure done) override;
-
-  using SourceOrTrigger = absl::variant<StorableSource, AttributionTrigger>;
-
-  void MaybeEnqueueEventForTesting(SourceOrTrigger event);
-
-  void AddAggregatableAttributionForTesting(AttributionReport report);
 
  private:
   friend class AttributionManagerImplTest;
 
   using ReportSentCallback = AttributionReportSender::ReportSentCallback;
+  using SourceOrTrigger = absl::variant<StorableSource, AttributionTrigger>;
 
   AttributionManagerImpl(
       StoragePartitionImpl* storage_partition,
@@ -152,7 +149,7 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
       bool is_debug_report,
       ReportSentCallback callback,
       absl::optional<AggregatableReport> assembled_report,
-      AggregationService::AssemblyStatus status);
+      AggregationService::AssemblyStatus);
   void MarkReportCompleted(AttributionReport::Id report_id);
 
   void OnSourceStored(StorableSource source,
@@ -163,15 +160,10 @@ class CONTENT_EXPORT AttributionManagerImpl : public AttributionManager {
 
   void NotifySourcesChanged();
   void NotifyReportsChanged(AttributionReport::ReportType report_type);
-  void NotifySourceDeactivated(const DeactivatedSource& source);
+  void NotifySourceDeactivated(const StoredSource& source);
   void NotifyReportSent(bool is_debug_report, AttributionReport, SendResult);
 
   bool IsReportAllowed(const AttributionReport&) const;
-
-  // Friend to expose the AttributionStorage for certain tests.
-  friend std::vector<AttributionReport> GetAttributionReportsForTesting(
-      AttributionManagerImpl* manager,
-      base::Time max_report_time);
 
   // Never null.
   const raw_ptr<StoragePartitionImpl> storage_partition_;

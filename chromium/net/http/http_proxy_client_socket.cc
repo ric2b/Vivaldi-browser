@@ -41,9 +41,7 @@ HttpProxyClientSocket::HttpProxyClientSocket(
     const NetworkTrafficAnnotationTag& traffic_annotation)
     : io_callback_(base::BindRepeating(&HttpProxyClientSocket::OnIOComplete,
                                        base::Unretained(this))),
-      next_state_(STATE_NONE),
       socket_(std::move(socket)),
-      is_reused_(false),
       endpoint_(endpoint),
       auth_(http_auth_controller),
       proxy_server_(proxy_server),
@@ -149,11 +147,6 @@ bool HttpProxyClientSocket::GetSSLInfo(SSLInfo* ssl_info) {
   // Do not delegate to `socket_`. While `socket_` may connect to the proxy with
   // TLS, this object represents the tunneled TCP connection to the origin.
   return false;
-}
-
-void HttpProxyClientSocket::GetConnectionAttempts(
-    ConnectionAttempts* out) const {
-  out->clear();
 }
 
 int64_t HttpProxyClientSocket::GetTotalReceivedBytes() const {

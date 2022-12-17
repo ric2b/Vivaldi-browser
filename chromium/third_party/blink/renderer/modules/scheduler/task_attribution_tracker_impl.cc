@@ -12,6 +12,7 @@
 #include "third_party/blink/renderer/bindings/modules/v8/v8_script_wrappable_task_id.h"
 #include "third_party/blink/renderer/modules/scheduler/script_wrappable_task_id.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
+#include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
 #include "third_party/blink/renderer/platform/bindings/to_v8.h"
 #include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 #include "third_party/blink/renderer/platform/wtf/wtf.h"
@@ -53,12 +54,23 @@ TaskAttributionTrackerImpl::GetTaskIdPairFromTaskContainer(TaskId id) {
   return (task_container_[slot]);
 }
 
-TaskAttributionTracker::AncestorStatus TaskAttributionTrackerImpl::IsAncestor(
-    ScriptState* script_state,
-    TaskId ancestor_id) {
+template <typename F>
+TaskAttributionTracker::AncestorStatus
+TaskAttributionTrackerImpl::IsAncestorInternal(ScriptState* script_state,
+                                               F is_ancestor) {
+  DCHECK(script_state);
+  if (!script_state->World().IsMainWorld()) {
+    // As RunningTaskId will not return a TaskId for non-main-world tasks,
+    // there's no point in testing their ancestry.
+    return AncestorStatus::kNotAncestor;
+  }
+
   absl::optional<TaskId> current_task_id = RunningTaskId(script_state);
-  DCHECK(current_task_id);
-  if (current_task_id.value() == ancestor_id) {
+  if (!current_task_id) {
+    // TODO(yoav): This should not happen, but does. See crbug.com/1326872.
+    return AncestorStatus::kNotAncestor;
+  }
+  if (is_ancestor(current_task_id.value())) {
     return AncestorStatus::kAncestor;
   }
 
@@ -81,7 +93,7 @@ TaskAttributionTracker::AncestorStatus TaskAttributionTrackerImpl::IsAncestor(
       // longer know the ancestry.
       return AncestorStatus::kUnknown;
     }
-    if (parent_id.value() == ancestor_id) {
+    if (is_ancestor(parent_id.value())) {
       return AncestorStatus::kAncestor;
     }
     DCHECK(parent_pair.current.value() != current_task_id.value());
@@ -91,31 +103,51 @@ TaskAttributionTracker::AncestorStatus TaskAttributionTrackerImpl::IsAncestor(
   return AncestorStatus::kNotAncestor;
 }
 
+TaskAttributionTracker::AncestorStatus TaskAttributionTrackerImpl::IsAncestor(
+    ScriptState* script_state,
+    TaskId ancestor_id) {
+  return IsAncestorInternal(script_state, [&](const TaskId& task_id) {
+    return task_id == ancestor_id;
+  });
+}
+
+TaskAttributionTracker::AncestorStatus
+TaskAttributionTrackerImpl::HasAncestorInSet(
+    ScriptState* script_state,
+    const WTF::HashSet<scheduler::TaskIdType>& set) {
+  return IsAncestorInternal(script_state, [&](const TaskId& task_id) {
+    return set.Contains(task_id.value());
+  });
+}
+
 std::unique_ptr<TaskAttributionTracker::TaskScope>
 TaskAttributionTrackerImpl::CreateTaskScope(
     ScriptState* script_state,
     absl::optional<TaskId> parent_task_id) {
+  absl::optional<TaskId> previous_task_id = running_task_id_;
+  DCHECK(v8_adapter_);
+  absl::optional<TaskId> previous_v8_task_id =
+      v8_adapter_->GetValue(script_state);
+
   next_task_id_ = next_task_id_.NextTaskId();
   running_task_id_ = next_task_id_;
 
   InsertTaskIdPair(next_task_id_, parent_task_id);
-  running_task_ids_.push_back(next_task_id_);
+  if (observer_) {
+    observer_->OnCreateTaskScope(next_task_id_);
+  }
 
   SaveTaskIdStateInV8(script_state, next_task_id_);
-  return std::make_unique<TaskScopeImpl>(script_state, this, next_task_id_);
+  return std::make_unique<TaskScopeImpl>(script_state, this, next_task_id_,
+                                         previous_task_id, previous_v8_task_id);
 }
 
-void TaskAttributionTrackerImpl::TaskScopeCompleted(ScriptState* script_state,
-                                                    TaskId scope_id) {
-  DCHECK(!running_task_ids_.IsEmpty());
-  DCHECK(running_task_ids_.back() == scope_id);
-  running_task_ids_.pop_back();
-  if (!running_task_ids_.IsEmpty()) {
-    running_task_id_ = running_task_ids_.back();
-  } else {
-    running_task_id_ = absl::nullopt;
-  }
-  SaveTaskIdStateInV8(script_state, running_task_id_);
+void TaskAttributionTrackerImpl::TaskScopeCompleted(
+    const TaskScopeImpl& task_scope) {
+  DCHECK(running_task_id_ == task_scope.GetTaskId());
+  running_task_id_ = task_scope.PreviousTaskId();
+  SaveTaskIdStateInV8(task_scope.GetScriptState(),
+                      task_scope.PreviousV8TaskId());
 }
 
 void TaskAttributionTrackerImpl::SaveTaskIdStateInV8(
@@ -130,13 +162,17 @@ void TaskAttributionTrackerImpl::SaveTaskIdStateInV8(
 TaskAttributionTrackerImpl::TaskScopeImpl::TaskScopeImpl(
     ScriptState* script_state,
     TaskAttributionTrackerImpl* task_tracker,
-    TaskId scope_task_id)
+    TaskId scope_task_id,
+    absl::optional<TaskId> previous_task_id,
+    absl::optional<TaskId> previous_v8_task_id)
     : task_tracker_(task_tracker),
       scope_task_id_(scope_task_id),
+      previous_task_id_(previous_task_id),
+      previous_v8_task_id_(previous_v8_task_id),
       script_state_(script_state) {}
 
 TaskAttributionTrackerImpl::TaskScopeImpl::~TaskScopeImpl() {
-  task_tracker_->TaskScopeCompleted(script_state_, scope_task_id_);
+  task_tracker_->TaskScopeCompleted(*this);
 }
 
 // V8Adapter's implementation
@@ -148,6 +184,7 @@ absl::optional<TaskId> TaskAttributionTrackerImpl::V8Adapter::GetValue(
     return absl::nullopt;
   }
 
+  ScriptState::Scope scope(script_state);
   v8::Local<v8::Context> context = script_state->GetContext();
   DCHECK(!context.IsEmpty());
   v8::Local<v8::Value> v8_value =
@@ -157,6 +194,9 @@ absl::optional<TaskId> TaskAttributionTrackerImpl::V8Adapter::GetValue(
   }
   v8::Isolate* isolate = script_state->GetIsolate();
   DCHECK(isolate);
+  if (isolate->IsExecutionTerminating()) {
+    return absl::nullopt;
+  }
   // If not empty, the value must be a ScriptWrappableTaskId.
   NonThrowableExceptionState exception_state;
   ScriptWrappableTaskId* script_wrappable_task_id =
@@ -173,9 +213,13 @@ void TaskAttributionTrackerImpl::V8Adapter::SetValue(
   if (!script_state->ContextIsValid()) {
     return;
   }
+  CHECK(!ScriptForbiddenScope::IsScriptForbidden());
   ScriptState::Scope scope(script_state);
   v8::Isolate* isolate = script_state->GetIsolate();
   DCHECK(isolate);
+  if (isolate->IsExecutionTerminating()) {
+    return;
+  }
   v8::Local<v8::Context> context = script_state->GetContext();
   DCHECK(!context.IsEmpty());
 

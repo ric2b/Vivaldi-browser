@@ -18,7 +18,7 @@ class VivaldiContentBrowserClient : public ChromeContentBrowserClient {
   ~VivaldiContentBrowserClient() override;
 
   std::unique_ptr<content::BrowserMainParts> CreateBrowserMainParts(
-      content::MainFunctionParams parameters) override;
+      bool is_integration_test) override;
 
 #if !BUILDFLAG(IS_ANDROID)
   std::vector<std::unique_ptr<content::NavigationThrottle>>

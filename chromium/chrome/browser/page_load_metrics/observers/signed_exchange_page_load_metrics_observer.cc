@@ -105,6 +105,16 @@ SignedExchangePageLoadMetricsObserver::SignedExchangePageLoadMetricsObserver() {
 }
 
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+SignedExchangePageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class is interested only in events that are preprocessed and
+  // dispatched also to the outermost page at PageLoadTracker. So, this class
+  // doesn't need to forward events for FencedFrames.
+  return STOP_OBSERVING;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 SignedExchangePageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
   if (navigation_handle->IsSignedExchangeInnerResponse()) {

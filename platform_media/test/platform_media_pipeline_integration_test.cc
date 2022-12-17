@@ -9,7 +9,6 @@
 
 #include "base/command_line.h"
 #include "base/path_service.h"
-#include "base/vivaldi_paths.h"
 #include "build/build_config.h"
 #include "media/base/audio_decoder_config.h"
 #include "media/base/media_log.h"
@@ -19,8 +18,11 @@
 #include "media/filters/file_data_source.h"
 #include "media/test/test_media_source.h"
 
+#include "base/vivaldi_paths.h"
 #include "platform_media/renderer/decoders/ipc_demuxer.h"
+#include "platform_media/renderer/decoders/ipc_factory.h"
 #include "platform_media/test/ipc_pipeline_test_setup.h"
+
 #if BUILDFLAG(IS_MAC)
 #include "base/mac/mac_util.h"
 #endif
@@ -51,6 +53,50 @@ const base::FilePath::CharType kPlatformMediaTestDataPath[] =
 base::FilePath GetPlatformMediaTestDataPath() {
   return base::FilePath(kPlatformMediaTestDataPath);
 }
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+// IPCDemuxer expects that the pipeline host is already initialized when
+// Chromium calls its Initialize from Demuxer interface using StartIPC() call.
+// This subclass overrides Initialize to call StartIPC() first as this provides
+// a convinient place to perform an asynchronous init.
+class TestIPCDemuxer : public IPCDemuxer {
+ public:
+  TestIPCDemuxer(DataSource* data_source,
+                 scoped_refptr<base::SequencedTaskRunner> media_task_runner,
+                 std::string mime_type,
+                 MediaLog* media_log)
+      : IPCDemuxer(std::move(media_task_runner), media_log),
+        data_source_(data_source),
+        mime_type_(std::move(mime_type)) {}
+
+  void Initialize(DemuxerHost* host,
+                  PipelineStatusCallback status_cb) override {
+    DataSource* data_source = data_source_;
+    data_source_ = nullptr;
+
+    // Unretained() is safe as the callback can only be called before the parent
+    // class destructor is called.
+    StartIPC(
+        data_source, std::move(mime_type_),
+        base::BindOnce(&TestIPCDemuxer::OnHostInitialized,
+                       base::Unretained(this), host, std::move(status_cb)));
+  }
+
+  void OnHostInitialized(DemuxerHost* host,
+                         PipelineStatusCallback status_cb,
+                         bool success) {
+    if (!success) {
+      std::move(status_cb).Run(PIPELINE_ERROR_INITIALIZATION_FAILED);
+      return;
+    }
+    IPCDemuxer::Initialize(host, std::move(status_cb));
+  }
+
+ private:
+  DataSource* data_source_ = nullptr;
+  std::string mime_type_;
+};
+#endif
 
 }  // namespace
 
@@ -93,42 +139,41 @@ class PlatformMediaPipelineIntegrationTest
       registered = true;
     }
   }
-  PipelineStatus StartVivaldiWithFile(
-      const std::string& filename,
-      CdmContext* cdm_context,
-      uint8_t test_type,
-      CreateVideoDecodersCB prepend_video_decoders_cb = CreateVideoDecodersCB(),
-      CreateAudioDecodersCB prepend_audio_decoders_cb =
-          CreateAudioDecodersCB()) {
-    std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
-    base::FilePath file_path(GetVivaldiTestDataFilePath(filename));
-    CHECK(file_data_source->Initialize(file_path))
-        << "Is " << file_path.value() << " missing?";
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-    filepath_ = file_path;
-#endif
-    return StartInternal(std::move(file_data_source), cdm_context, test_type,
-                         prepend_video_decoders_cb, prepend_audio_decoders_cb);
-  }
 
-  PipelineStatus StartVivaldi(const std::string& filename) {
-    return StartVivaldiWithFile(filename, nullptr, kNormal);
+  PipelineStatus Start(const std::string& filename, uint8_t test_type = kNormal) {
+    filepath_ = GetTestDataFilePath(filename);
+    std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
+    CHECK(file_data_source->Initialize(filepath_))
+        << "Is " << filepath_.value() << " missing?";
+    return StartInternal(std::move(file_data_source), nullptr, test_type);
   }
 
   PipelineStatus StartVivaldi(const std::string& filename,
-                              CdmContext* cdm_context) {
-    return StartVivaldiWithFile(filename, cdm_context, kNormal);
+                              uint8_t test_type = kNormal) {
+    filepath_ = GetVivaldiTestDataFilePath(filename);
+    std::unique_ptr<FileDataSource> file_data_source(new FileDataSource());
+    CHECK(file_data_source->Initialize(filepath_))
+        << "Is " << filepath_.value() << " missing?";
+    return StartInternal(std::move(file_data_source), nullptr, test_type);
   }
-  PipelineStatus StartVivaldi(
-      const std::string& filename,
-      uint8_t test_type,
-      CreateVideoDecodersCB prepend_video_decoders_cb = CreateVideoDecodersCB(),
-      CreateAudioDecodersCB prepend_audio_decoders_cb =
-          CreateAudioDecodersCB()) {
-    return StartVivaldiWithFile(filename, nullptr, test_type,
-                                prepend_video_decoders_cb,
-                                prepend_audio_decoders_cb);
+
+#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
+  Demuxer* VivaldiCreatePlatformDemuxer(
+      std::unique_ptr<DataSource>& data_source,
+      base::test::TaskEnvironment& task_environment_,
+      MediaLog* media_log) override {
+    GURL url("file://" + filepath_.AsUTF8Unsafe());
+    std::string adjusted_mime_type =
+        IPCDemuxer::CanPlayType(std::string(), url);
+    CHECK(!adjusted_mime_type.empty());
+
+    return new TestIPCDemuxer(data_source.get(),
+                              task_environment_.GetMainThreadTaskRunner(),
+                              std::move(adjusted_mime_type), media_log);
   }
+#endif
+
+  base::FilePath filepath_;
   IPCPipelineTestSetup ipc_pipeline_test_setup_;
 };
 
@@ -265,8 +310,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, PlayInLoop) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, TruncatedMedia) {
-  ASSERT_EQ(PIPELINE_OK,
-            StartVivaldi("vivaldi-bear_truncated.mp4"));
+  ASSERT_EQ(PIPELINE_OK, StartVivaldi("vivaldi-bear_truncated.mp4"));
 
   Play();
   WaitUntilCurrentTimeIsAfter(base::Microseconds(1066666));
@@ -334,8 +378,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, Rotated_Metadata_270) {
 // Configuration change happens only on Windows.
 #if BUILDFLAG(IS_WIN)
 TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
-  ASSERT_EQ(PIPELINE_OK,
-            StartVivaldi("vivaldi-config_change_audio.mp4"));
+  ASSERT_EQ(PIPELINE_OK, StartVivaldi("vivaldi-config_change_audio.mp4"));
 
   Play();
 
@@ -352,8 +395,7 @@ TEST_F(PlatformMediaPipelineIntegrationTest, AudioConfigChange) {
 }
 
 TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
-  ASSERT_EQ(PIPELINE_OK,
-            StartVivaldi("vivaldi-config_change_video.mp4"));
+  ASSERT_EQ(PIPELINE_OK, StartVivaldi("vivaldi-config_change_video.mp4"));
 
   Play();
 
@@ -370,12 +412,10 @@ TEST_F(PlatformMediaPipelineIntegrationTest, VideoConfigChange) {
 #endif  // BUILDFLAG(IS_WIN)
 
 TEST_F(PlatformMediaPipelineIntegrationTest, BasicPlaybackPositiveStartTime) {
-  ASSERT_EQ(PIPELINE_OK,
-            StartVivaldi("vivaldi-nonzero-start-time.mp4"));
+  ASSERT_EQ(PIPELINE_OK, StartVivaldi("vivaldi-nonzero-start-time.mp4"));
   Play();
   ASSERT_TRUE(WaitUntilOnEnded());
-  ASSERT_EQ(base::Microseconds(390000),
-            demuxer_->GetStartTime());
+  ASSERT_EQ(base::Microseconds(390000), demuxer_->GetStartTime());
 }
 
 #endif  // BUILDFLAG(IS_MAC) || BUILDFLAG(IS_WIN)

@@ -59,6 +59,7 @@
 #include "content/renderer/worker/dedicated_worker_host_factory_client.h"
 #include "content/renderer/worker/worker_thread_registry.h"
 #include "device/gamepad/public/cpp/gamepads.h"
+#include "gin/array_buffer.h"  // TODO(crbug.com/1321521) remove import once resolved.
 #include "gpu/command_buffer/client/gles2_interface.h"
 #include "gpu/config/gpu_driver_bug_workarounds.h"
 #include "gpu/config/gpu_finch_features.h"
@@ -202,12 +203,6 @@ RendererBlinkPlatformImpl::RendererBlinkPlatformImpl(
 
   top_level_blame_context_.Initialize();
   main_thread_scheduler_->SetTopLevelBlameContext(&top_level_blame_context_);
-
-  {
-    base::AutoLock lock(code_cache_host_lock_);
-    GetBrowserInterfaceBroker()->GetInterface(
-        code_cache_host_remote_.InitWithNewPipeAndPassReceiver());
-  }
 
   auto io_task_runner = GetIOTaskRunner();
   if (io_task_runner) {
@@ -359,48 +354,12 @@ blink::UserAgentMetadata RendererBlinkPlatformImpl::UserAgentMetadata() {
   return render_thread->GetUserAgentMetadata();
 }
 
-void RendererBlinkPlatformImpl::CacheMetadata(
-    blink::mojom::CodeCacheType cache_type,
-    const blink::WebURL& url,
-    base::Time response_time,
-    const uint8_t* data,
-    size_t size) {
-  // The browser-side GeneratedCodeCache ignores writes over 2GB.
-  if (size > std::numeric_limits<int32_t>::max())
-    return;
-  // Let the browser know we generated cacheable metadata for this resource.
-  // The browser may cache it and return it on subsequent responses to speed
-  // the processing of this resource.
-  GetCodeCacheHost()->DidGenerateCacheableMetadata(
-      cache_type, url, response_time,
-      mojo_base::BigBuffer(base::make_span(data, size)));
-}
-
-void RendererBlinkPlatformImpl::FetchCachedCode(
-    blink::mojom::CodeCacheType cache_type,
-    const blink::WebURL& url,
-    FetchCachedCodeCallback callback) {
-  GetCodeCacheHost()->FetchCachedCode(
-      cache_type, url,
-      base::BindOnce(
-          [](FetchCachedCodeCallback callback, base::Time time,
-             mojo_base::BigBuffer data) {
-            std::move(callback).Run(time, std::move(data));
-          },
-          std::move(callback)));
-}
-
-void RendererBlinkPlatformImpl::ClearCodeCacheEntry(
-    blink::mojom::CodeCacheType cache_type,
-    const GURL& url) {
-  GetCodeCacheHost()->ClearCodeCacheEntry(cache_type, url);
-}
-
 bool RendererBlinkPlatformImpl::IsRedirectSafe(const GURL& from_url,
                                                const GURL& to_url) {
   return IsSafeRedirectTarget(from_url, to_url) &&
          (!GetContentClient()->renderer() ||  // null in unit tests.
-          GetContentClient()->renderer()->IsSafeRedirectTarget(to_url));
+          GetContentClient()->renderer()->IsSafeRedirectTarget(from_url,
+                                                               to_url));
 }
 
 blink::WebResourceRequestSenderDelegate*
@@ -431,21 +390,6 @@ RendererBlinkPlatformImpl::CreateWebSocketHandshakeThrottleProvider() {
   return GetContentClient()
       ->renderer()
       ->CreateWebSocketHandshakeThrottleProvider();
-}
-
-void RendererBlinkPlatformImpl::CacheMetadataInCacheStorage(
-    const blink::WebURL& url,
-    base::Time response_time,
-    const uint8_t* data,
-    size_t size,
-    const blink::WebSecurityOrigin& cacheStorageOrigin,
-    const blink::WebString& cacheStorageCacheName) {
-  // Let the browser know we generated cacheable metadata for this resource in
-  // CacheStorage. The browser may cache it and return it on subsequent
-  // responses to speed the processing of this resource.
-  GetCodeCacheHost()->DidGenerateCacheableMetadataInCacheStorage(
-      url, response_time, mojo_base::BigBuffer(base::make_span(data, size)),
-      cacheStorageOrigin, cacheStorageCacheName.Utf8());
 }
 
 WebString RendererBlinkPlatformImpl::DefaultLocale() {
@@ -907,6 +851,17 @@ RendererBlinkPlatformImpl::CreateWebGPUGraphicsContext3DProvider(
   constexpr bool support_locking = false;
   constexpr bool support_grcontext = true;
 
+  // WebGPU GPUBuffers, which are backed by shared memory transfer buffers, may
+  // be accessed as ArrayBuffers from JavaScript. As such, the underlying
+  // buffers need to be mapped using the ArrayBuffer shared memory mapper. As
+  // there is currently no way of specifying a custom mapper per buffer, we
+  // have to map all buffers created by this provider using the custom mapper.
+  // TODO(crbug.com/1321521) instead of mapping all buffers created by this
+  // provider with the array buffer mapper, only map those that will actually
+  // be used as ArrayBuffers and remove this per-provider mapper again.
+  base::SharedMemoryMapper* buffer_mapper =
+      gin::GetSharedMemoryMapperForArrayBuffers();
+
   scoped_refptr<viz::ContextProviderCommandBuffer> provider(
       new viz::ContextProviderCommandBuffer(
           std::move(gpu_channel_host),
@@ -915,7 +870,7 @@ RendererBlinkPlatformImpl::CreateWebGPUGraphicsContext3DProvider(
           gpu::kNullSurfaceHandle, GURL(top_document_web_url),
           automatic_flushes, support_locking, support_grcontext,
           gpu::SharedMemoryLimits::ForWebGPUContext(), attributes,
-          viz::command_buffer_metrics::ContextType::WEBGPU));
+          viz::command_buffer_metrics::ContextType::WEBGPU, buffer_mapper));
   return std::make_unique<WebGraphicsContext3DProviderImpl>(
       std::move(provider));
 #endif
@@ -1022,16 +977,6 @@ void RendererBlinkPlatformImpl::CreateServiceWorkerSubresourceLoaderFactory(
 
 //------------------------------------------------------------------------------
 
-void RendererBlinkPlatformImpl::RecordMetricsForBackgroundedRendererPurge() {
-  auto* render_thread = RenderThreadImpl::current();
-  // RenderThreadImpl is null in some tests.
-  if (!render_thread)
-    return;
-  render_thread->RecordMetricsForBackgroundedRendererPurge();
-}
-
-//------------------------------------------------------------------------------
-
 // The returned BatchingMediaLog can be used on any thread, but must be
 // destroyed on |owner_task_runner|. The aggregated MediaLogRecords will be
 // sent back to the Browser via Mojo objects bound to |owner_task_runner|.
@@ -1113,20 +1058,6 @@ SkBitmap* RendererBlinkPlatformImpl::GetSadPageBitmap() {
 }
 
 //------------------------------------------------------------------------------
-
-mojo::SharedRemote<blink::mojom::CodeCacheHost>
-RendererBlinkPlatformImpl::GetCodeCacheHost() {
-  base::AutoLock lock(code_cache_host_lock_);
-  if (!code_cache_host_) {
-    code_cache_host_ = mojo::SharedRemote<blink::mojom::CodeCacheHost>(
-        std::move(code_cache_host_remote_),
-        base::ThreadPool::CreateSequencedTaskRunner({}));
-  }
-  // mojo::SharedRemote is not thread-safe itself, but it's safe to copy to
-  // other threads. So, return the code cache host by copy, rather than
-  // accessing the underlying interface directly.
-  return code_cache_host_;
-}
 
 std::unique_ptr<blink::WebV8ValueConverter>
 RendererBlinkPlatformImpl::CreateWebV8ValueConverter() {

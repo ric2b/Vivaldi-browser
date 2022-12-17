@@ -1,5 +1,0 @@
-specific_include_rules = {
-  "web_engine_.*_provider_mojom_traits\.h": [
-    "+fuchsia/mojom/fidl_interface_request_mojom_traits.h",
-  ],
-}

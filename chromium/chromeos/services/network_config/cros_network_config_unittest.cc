@@ -15,6 +15,7 @@
 #include "base/strings/stringprintf.h"
 #include "base/test/bind.h"
 #include "base/test/task_environment.h"
+#include "chromeos/ash/components/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/components/onc/onc_utils.h"
 #include "chromeos/dbus/shill/fake_shill_device_client.h"
 #include "chromeos/login/login_state/login_state.h"
@@ -34,7 +35,6 @@
 #include "chromeos/network/network_type_pattern.h"
 #include "chromeos/network/policy_util.h"
 #include "chromeos/network/prohibited_technologies_handler.h"
-#include "chromeos/network/proxy/ui_proxy_config_service.h"
 #include "chromeos/network/system_token_cert_db_storage.h"
 #include "chromeos/services/network_config/public/cpp/cros_network_config_test_observer.h"
 #include "chromeos/services/network_config/public/mojom/cros_network_config.mojom-shared.h"
@@ -842,6 +842,7 @@ TEST_F(CrosNetworkConfigTest, GetNetworkState) {
   EXPECT_EQ(kCellularTestIccid, cellular->iccid);
   EXPECT_EQ(mojom::OncSource::kDevice, network->source);
   EXPECT_TRUE(cellular->sim_locked);
+  EXPECT_TRUE(cellular->sim_lock_enabled);
 
   network = GetNetworkState("vpn_l2tp_guid");
   ASSERT_TRUE(network);
@@ -1873,6 +1874,7 @@ TEST_F(CrosNetworkConfigTest, GetGlobalPolicy) {
   base::RunLoop().RunUntilIdle();
   mojom::GlobalPolicyPtr policy = GetGlobalPolicy();
   ASSERT_TRUE(policy);
+  EXPECT_EQ(false, policy->allow_cellular_sim_lock);
   EXPECT_EQ(false, policy->allow_only_policy_cellular_networks);
   EXPECT_EQ(true, policy->allow_only_policy_networks_to_autoconnect);
   EXPECT_EQ(false, policy->allow_only_policy_wifi_networks_to_connect);
@@ -1888,6 +1890,8 @@ TEST_F(CrosNetworkConfigTest, GlobalPolicyApplied) {
   EXPECT_EQ(0, observer()->GetPolicyAppliedCount(/*userhash=*/std::string()));
 
   base::DictionaryValue global_config;
+  global_config.SetBoolKey(::onc::global_network_config::kAllowCellularSimLock,
+                           true);
   global_config.SetBoolKey(
       ::onc::global_network_config::kAllowOnlyPolicyCellularNetworks, true);
   global_config.SetBoolKey(
@@ -1898,6 +1902,7 @@ TEST_F(CrosNetworkConfigTest, GlobalPolicyApplied) {
   base::RunLoop().RunUntilIdle();
   mojom::GlobalPolicyPtr policy = GetGlobalPolicy();
   ASSERT_TRUE(policy);
+  EXPECT_EQ(true, policy->allow_cellular_sim_lock);
   EXPECT_EQ(true, policy->allow_only_policy_cellular_networks);
   EXPECT_EQ(false, policy->allow_only_policy_networks_to_autoconnect);
   EXPECT_EQ(false, policy->allow_only_policy_wifi_networks_to_connect);

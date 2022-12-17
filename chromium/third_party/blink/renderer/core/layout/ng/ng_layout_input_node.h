@@ -89,7 +89,6 @@ class CORE_EXPORT NGLayoutInputNode {
     return IsFloating() || IsOutOfFlowPositioned();
   }
   bool IsReplaced() const { return box_->IsLayoutReplaced(); }
-  bool IsFrame() const { return box_->IsFrame(); }
   bool IsAbsoluteContainer() const {
     return box_->CanContainAbsolutePositionObjects();
   }
@@ -139,6 +138,7 @@ class CORE_EXPORT NGLayoutInputNode {
   bool IsNGTable() const { return IsTable() && box_->IsLayoutNGObject(); }
 
   bool IsTableCaption() const { return IsBlock() && box_->IsTableCaption(); }
+  bool IsTableSection() const { return IsBlock() && box_->IsTableSection(); }
 
   // Section with empty rows is considered empty.
   bool IsEmptyTableSection() const;

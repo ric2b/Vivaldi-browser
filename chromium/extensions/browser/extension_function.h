@@ -32,7 +32,6 @@
 #include "third_party/blink/public/mojom/service_worker/service_worker_object.mojom-forward.h"
 
 namespace base {
-class ListValue;
 class Value;
 }
 
@@ -106,8 +105,9 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
     BAD_MESSAGE
   };
 
-  using ResponseCallback = base::OnceCallback<
-      void(ResponseType type, base::Value results, const std::string& error)>;
+  using ResponseCallback = base::OnceCallback<void(ResponseType type,
+                                                   base::Value::List results,
+                                                   const std::string& error)>;
 
   ExtensionFunction();
 
@@ -138,7 +138,8 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
     virtual bool Apply() = 0;
 
    protected:
-    void SetFunctionResults(ExtensionFunction* function, base::Value results);
+    void SetFunctionResults(ExtensionFunction* function,
+                            base::Value::List results);
     void SetFunctionError(ExtensionFunction* function, std::string error);
   };
   typedef std::unique_ptr<ResponseValueObject> ResponseValue;
@@ -227,8 +228,8 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // base::Value of type LIST.
   void SetArgs(base::Value args);
 
-  // Retrieves the results of the function as a ListValue.
-  const base::ListValue* GetResultList() const;
+  // Retrieves the results of the function as a base::Value::List.
+  const base::Value::List* GetResultList() const;
 
   // Retrieves any error string from the function.
   virtual const std::string& GetError() const;
@@ -378,14 +379,6 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   ResponseValue TwoArguments(base::Value arg1, base::Value arg2);
   // Success, a list of arguments |results| to pass to caller.
   ResponseValue ArgumentList(std::vector<base::Value> results);
-  // TODO(crbug.com/1139221): Deprecate this when Create() returns a base::Value
-  // instead of a std::unique_ptr<>.
-  //
-  // Success, a list of arguments |results| to pass to caller.
-  // - a std::unique_ptr<> for convenience, since callers usually get this from
-  //   the result of a Create(...) call on the generated Results struct. For
-  //   example, alarms::Get::Results::Create(alarm).
-  ResponseValue ArgumentList(std::unique_ptr<base::ListValue> results);
   // Error. chrome.runtime.lastError.message will be set to |error|.
   ResponseValue Error(std::string error);
   // Error with formatting. Args are processed using
@@ -405,9 +398,6 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // It shouldn't be possible to have both an error *and* some arguments.
   // Some legacy APIs do rely on it though, like webstorePrivate.
   ResponseValue ErrorWithArguments(std::vector<base::Value> args,
-                                   const std::string& error);
-  // TODO(crbug.com/1139221): Deprecate this in favor of the variant above.
-  ResponseValue ErrorWithArguments(std::unique_ptr<base::ListValue> args,
                                    const std::string& error);
   // Bad message. A ResponseValue equivalent to EXTENSION_FUNCTION_VALIDATE(),
   // so this will actually kill the renderer and not respond at all.
@@ -528,7 +518,7 @@ class ExtensionFunction : public base::RefCountedThreadSafe<
   // The results of the API. This should be populated through the Respond()/
   // RespondNow() methods. In legacy implementations, this is set directly, and
   // should be set before calling SendResponse().
-  std::unique_ptr<base::ListValue> results_;
+  absl::optional<base::Value::List> results_;
 
   // Any detailed error from the API. This should be populated by the derived
   // class before Run() returns.

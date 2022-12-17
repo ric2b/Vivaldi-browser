@@ -140,6 +140,9 @@ bool WaylandDataDragController::StartSession(const OSExchangeData& data,
     if (icon_surface_->Initialize()) {
       // Corresponds to actual scale factor of the origin surface.
       icon_surface_->SetSurfaceBufferScale(origin_window->window_scale());
+      // Icon surface do not need input.
+      const gfx::Rect empty_region_px;
+      icon_surface_->SetInputRegion(&empty_region_px);
       icon_surface_->ApplyPendingState();
 
       auto icon_offset = -data.provider().GetDragImageOffset();
@@ -292,7 +295,6 @@ void WaylandDataDragController::OnDragMotion(const gfx::PointF& location) {
     last_drag_location_ = location;
     return;
   }
-
   DCHECK(data_offer_);
   int available_operations =
       DndActionsToDragOperations(data_offer_->source_actions());
@@ -360,6 +362,10 @@ void WaylandDataDragController::OnDataSourceFinish(bool completed) {
   offered_exchange_data_provider_.reset();
   data_device_->ResetDragDelegate();
   state_ = State::kIdle;
+}
+
+const WaylandWindow* WaylandDataDragController::GetDragTarget() const {
+  return window_;
 }
 
 void WaylandDataDragController::OnDataSourceSend(const std::string& mime_type,
@@ -468,10 +474,11 @@ void WaylandDataDragController::PropagateOnDragEnter(
     const gfx::PointF& location,
     std::unique_ptr<OSExchangeData> data) {
   DCHECK(window_);
-
-  window_->OnDragEnter(
-      location, std::move(data),
-      DndActionsToDragOperations(data_offer_->source_actions()));
+  {
+    window_->OnDragEnter(
+        location, std::move(data),
+        DndActionsToDragOperations(data_offer_->source_actions()));
+  }
   OnDragMotion(location);
 }
 

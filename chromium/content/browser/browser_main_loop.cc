@@ -22,7 +22,6 @@
 #include "base/memory/memory_pressure_monitor.h"
 #include "base/memory/ptr_util.h"
 #include "base/metrics/field_trial.h"
-#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/metrics/user_metrics.h"
 #include "base/no_destructor.h"
@@ -96,6 +95,7 @@
 #include "content/browser/tracing/tracing_controller_impl.h"
 #include "content/browser/utility_process_host.h"
 #include "content/browser/webrtc/webrtc_internals.h"
+#include "content/browser/webui/content_web_ui_configs.h"
 #include "content/browser/webui/content_web_ui_controller_factory.h"
 #include "content/browser/webui/url_data_manager.h"
 #include "content/common/content_switches_internal.h"
@@ -168,7 +168,6 @@
 #include "content/browser/android/tracing_controller_android.h"
 #include "content/browser/font_unique_name_lookup/font_unique_name_lookup.h"
 #include "content/browser/screen_orientation/screen_orientation_delegate_android.h"
-#include "content/common/android/cpu_affinity_setter.h"
 #include "media/base/android/media_drm_bridge_client.h"
 #include "ui/android/screen_android.h"
 #include "ui/display/screen.h"
@@ -510,38 +509,14 @@ void BrowserMainLoop::Init() {
     parameters_.startup_data.reset();
   }
 
-  // As of https://crrev.com/c/3244976 + https://crrev.com/c/3187153, embedders
-  // no longer own running `ui_task`. Some still query its boolean value
-  // however, fake it here. TODO(gab): As a follow-up, update
-  // ContentBrowserClient::CreateBrowserMainParts to take a `bool
-  // is_integration_test` instead of the entire `MainFunctionParams` which none
-  // of the parts impl use beyond ui_task's boolean value:
-  // https://bit.ly/3Eq9v36
-  MainFunctionParams fake_params(parameters_.command_line);
-  if (parameters_.ui_task)
-    fake_params.ui_task = base::DoNothing();
   parts_ = GetContentClient()->browser()->CreateBrowserMainParts(
-      std::move(fake_params));
+      !!parameters_.ui_task);
 }
 
 // BrowserMainLoop stages ==================================================
 
 int BrowserMainLoop::EarlyInitialization() {
   TRACE_EVENT0("startup", "BrowserMainLoop::EarlyInitialization");
-
-#if BUILDFLAG(IS_ANDROID)
-  if (base::GetFieldTrialParamByFeatureAsBool(
-          features::kBigLittleScheduling,
-          features::kBigLittleSchedulingBrowserMainBiggerParam, false)) {
-    SetCpuAffinityForCurrentThread(base::HasBiggerCpuCores()
-                                       ? base::CpuAffinityMode::kBiggerCoresOnly
-                                       : base::CpuAffinityMode::kBigCoresOnly);
-  } else if (base::GetFieldTrialParamByFeatureAsBool(
-                 features::kBigLittleScheduling,
-                 features::kBigLittleSchedulingBrowserMainBigParam, false)) {
-    SetCpuAffinityForCurrentThread(base::CpuAffinityMode::kBigCoresOnly);
-  }
-#endif
 
 #if BUILDFLAG(USE_ZYGOTE_HANDLE)
   // The initialization of the sandbox host ends up with forking the Zygote
@@ -703,6 +678,7 @@ void BrowserMainLoop::PostCreateMainMessageLoop() {
                  "BrowserMainLoop::Subsystem:ContentWebUIController");
     WebUIControllerFactory::RegisterFactory(
         ContentWebUIControllerFactory::GetInstance());
+    RegisterContentWebUIConfigs();
   }
 
   {
@@ -958,7 +934,7 @@ int BrowserMainLoop::PostCreateThreads() {
 
   tracing_controller_ = std::make_unique<content::TracingControllerImpl>();
   content::BackgroundTracingManagerImpl::GetInstance()
-      ->AddMetadataGeneratorFunction();
+      .AddMetadataGeneratorFunction();
 
   if (parts_)
     parts_->PostCreateThreads();
@@ -988,11 +964,7 @@ int BrowserMainLoop::PreMainMessageLoopRun() {
   FirstPartySetsHandlerImpl::GetInstance()->Init(
       GetContentClient()->browser()->GetFirstPartySetsDirectory(),
       base::CommandLine::ForCurrentProcess()->GetSwitchValueASCII(
-          network::switches::kUseFirstPartySet),
-      base::BindOnce([](const base::flat_map<net::SchemefulSite,
-                                             net::SchemefulSite>& sets) {
-        content::GetNetworkService()->SetFirstPartySets(sets);
-      }));
+          network::switches::kUseFirstPartySet));
 
   variations::MaybeScheduleFakeCrash();
 

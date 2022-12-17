@@ -24,6 +24,7 @@
 #include "chrome/browser/profiles/profile_key.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/common/chrome_paths.h"
+#include "components/component_updater/pref_names.h"
 #include "components/leveldb_proto/public/proto_database_provider.h"
 #include "components/optimization_guide/core/command_line_top_host_provider.h"
 #include "components/optimization_guide/core/hints_processing_util.h"
@@ -40,6 +41,8 @@
 #include "components/optimization_guide/core/tab_url_provider.h"
 #include "components/optimization_guide/core/top_host_provider.h"
 #include "components/optimization_guide/proto/models.pb.h"
+#include "components/prefs/pref_service.h"
+#include "components/variations/synthetic_trials.h"
 #include "content/public/browser/browser_context.h"
 #include "content/public/browser/browser_thread.h"
 #include "content/public/browser/navigation_handle.h"
@@ -58,22 +61,28 @@
 
 namespace {
 
-const char kOldOptimizationGuideHintStore[] = "previews_hint_cache_store";
+const char kOldOptimizationGuidePredictionModelAndFeaturesStore[] =
+    "optimization_guide_model_and_features_store";
 
 // Deletes old store paths that were written in incorrect locations.
 void DeleteOldStorePaths(const base::FilePath& profile_path) {
+  // Added 05/2022.
+
+  // Delete profile_path/optimization_guide_model_and_features_store/...
+  // as it contains pointers to the bad model download location.
   base::ThreadPool::PostTask(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(
-          base::GetDeletePathRecursivelyCallback(),
-          profile_path.AddExtensionASCII(kOldOptimizationGuideHintStore)));
+      base::GetDeletePathRecursivelyCallback(profile_path.AppendASCII(
+          kOldOptimizationGuidePredictionModelAndFeaturesStore)));
+
+  // Delete the Chrome-wide model download location that wasn't previously
+  // getting cleaned up when profiles were getting deleted.
+  base::FilePath models_dir;
+  base::PathService::Get(chrome::DIR_OPTIMIZATION_GUIDE_PREDICTION_MODELS,
+                         &models_dir);
   base::ThreadPool::PostTask(
       FROM_HERE, {base::MayBlock(), base::TaskPriority::BEST_EFFORT},
-      base::BindOnce(
-          base::GetDeletePathRecursivelyCallback(),
-          profile_path.AddExtension(
-              optimization_guide::
-                  kOptimizationGuidePredictionModelAndFeaturesStore)));
+      base::GetDeletePathRecursivelyCallback(models_dir));
 }
 
 // Returns the profile to use for when setting up the keyed service when the
@@ -107,8 +116,7 @@ void LogFeatureFlagsInfo(OptimizationGuideLogger* optimization_guide_logger,
     OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
                            "FEATURE_FLAG Hints component disabled");
   }
-  if (!optimization_guide::features::IsRemoteFetchingEnabled(
-          profile->GetPrefs())) {
+  if (!optimization_guide::features::IsRemoteFetchingEnabled()) {
     OPTIMIZATION_GUIDE_LOG(optimization_guide_logger,
                            "FEATURE_FLAG remote fetching feature disabled");
   }
@@ -165,6 +173,11 @@ OptimizationGuideKeyedService::BackgroundDownloadServiceProvider() {
   return BackgroundDownloadServiceFactory::GetForKey(profile->GetProfileKey());
 }
 
+bool OptimizationGuideKeyedService::ComponentUpdatesEnabledProvider() const {
+  return g_browser_process->local_state()->GetBoolean(
+      ::prefs::kComponentUpdatesEnabled);
+}
+
 void OptimizationGuideKeyedService::Initialize() {
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
 
@@ -208,7 +221,8 @@ void OptimizationGuideKeyedService::Initialize() {
                           optimization_guide_fetching_enabled);
     ChromeMetricsServiceAccessor::RegisterSyntheticFieldTrial(
         "SyntheticOptimizationGuideRemoteFetching",
-        optimization_guide_fetching_enabled ? "Enabled" : "Disabled");
+        optimization_guide_fetching_enabled ? "Enabled" : "Disabled",
+        variations::SyntheticTrialAnnotationMode::kCurrentLog);
 
 #if BUILDFLAG(IS_ANDROID)
     tab_url_provider_ = std::make_unique<
@@ -231,15 +245,14 @@ void OptimizationGuideKeyedService::Initialize() {
             : nullptr;
     hint_store = hint_store_ ? hint_store_->AsWeakPtr() : nullptr;
 
-    prediction_model_and_features_store_ =
-        std::make_unique<optimization_guide::OptimizationGuideStore>(
-            proto_db_provider,
-            profile_path.Append(
-                optimization_guide::
-                    kOptimizationGuidePredictionModelAndFeaturesStore),
-            base::ThreadPool::CreateSequencedTaskRunner(
-                {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
-            profile->GetPrefs());
+    prediction_model_and_features_store_ = std::make_unique<
+        optimization_guide::OptimizationGuideStore>(
+        proto_db_provider,
+        profile_path.Append(
+            optimization_guide::kOptimizationGuidePredictionModelMetadataStore),
+        base::ThreadPool::CreateSequencedTaskRunner(
+            {base::MayBlock(), base::TaskPriority::BEST_EFFORT}),
+        profile->GetPrefs());
     prediction_model_and_features_store =
         prediction_model_and_features_store_->AsWeakPtr();
   }
@@ -250,24 +263,39 @@ void OptimizationGuideKeyedService::Initialize() {
       tab_url_provider_.get(), url_loader_factory,
       MaybeCreatePushNotificationManager(profile),
       optimization_guide_logger_.get());
-  base::FilePath models_dir;
-  base::PathService::Get(chrome::DIR_OPTIMIZATION_GUIDE_PREDICTION_MODELS,
-                         &models_dir);
+  base::FilePath model_downloads_dir;
+  if (!profile->IsOffTheRecord()) {
+    // Do not explicitly hand off the model downloads directory to
+    // off-the-record profiles. Underneath the hood, this variable is only used
+    // in non off-the-record profiles to know where to download the model files
+    // to. Off-the-record profiles read the model locations from the original
+    // profiles they are associated with.
+    model_downloads_dir = profile_path.Append(
+        optimization_guide::kOptimizationGuidePredictionModelDownloads);
+  }
 
   prediction_manager_ = std::make_unique<optimization_guide::PredictionManager>(
       prediction_model_and_features_store, url_loader_factory,
       profile->GetPrefs(), profile->IsOffTheRecord(),
-      g_browser_process->GetApplicationLocale(), models_dir,
+      g_browser_process->GetApplicationLocale(), model_downloads_dir,
       optimization_guide_logger_.get(),
       base::BindOnce(
           &OptimizationGuideKeyedService::BackgroundDownloadServiceProvider,
           // It's safe to use |base::Unretained(this)| here because
           // |this| owns |prediction_manager_|.
+          base::Unretained(this)),
+      base::BindRepeating(
+          &OptimizationGuideKeyedService::ComponentUpdatesEnabledProvider,
+          // It's safe to use |base::Unretained(this)| here because
+          // |this| owns |prediction_manager_|.
           base::Unretained(this)));
 
-  // The previous store paths were written in incorrect locations. Delete the
-  // old paths. Remove this code in 04/2022 since it should be assumed that all
-  // clients that had the previous path have had their previous stores deleted.
+  // Some previous paths were written in incorrect locations. Delete the
+  // old paths.
+  //
+  // TODO(crbug.com/1328981): Remove this code in 05/2023 since it should be
+  // assumed that all clients that had the previous path have had their previous
+  // stores deleted.
   DeleteOldStorePaths(profile_path);
 
   OPTIMIZATION_GUIDE_LOG(optimization_guide_logger_,

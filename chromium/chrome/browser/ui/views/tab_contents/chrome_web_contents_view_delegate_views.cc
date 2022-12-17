@@ -4,6 +4,7 @@
 
 #include "chrome/browser/ui/views/tab_contents/chrome_web_contents_view_delegate_views.h"
 
+#include <memory>
 #include <utility>
 
 #include "chrome/browser/defaults.h"
@@ -124,7 +125,7 @@ void ChromeWebContentsViewDelegateViews::OnPerformDrop(
   HandleOnPerformDrop(web_contents_, drop_data, std::move(callback));
 }
 
-content::WebContentsViewDelegate* CreateWebContentsViewDelegate(
+std::unique_ptr<content::WebContentsViewDelegate> CreateWebContentsViewDelegate(
     content::WebContents* web_contents) {
-  return new ChromeWebContentsViewDelegateViews(web_contents);
+  return std::make_unique<ChromeWebContentsViewDelegateViews>(web_contents);
 }

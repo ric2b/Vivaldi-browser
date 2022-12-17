@@ -78,6 +78,10 @@
 #include "chrome/browser/sync/wifi_configuration_sync_service_factory.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "components/signin/public/base/signin_switches.h"
+#endif  // BUILDFLAG(IS_CHROMEOS_LACROS)
+
 #include "app/vivaldi_apptools.h"
 #include "sync/vivaldi_sync_service_impl.h"
 #include "sync/vivaldi_sync_service_factory.h"
@@ -123,8 +127,9 @@ std::unique_ptr<KeyedService> BuildSyncService(
     // roaming profile location the sync service will not be created.
     UMA_HISTOGRAM_BOOLEAN("Sync.Local.RoamingProfileUnavailable",
                           local_sync_backend_folder.empty());
-    if (local_sync_backend_folder.empty())
+    if (local_sync_backend_folder.empty()) {
       return nullptr;
+    }
 
     init_params.start_behavior = syncer::SyncServiceImpl::AUTO_START;
   }
@@ -152,10 +157,8 @@ std::unique_ptr<KeyedService> BuildSyncService(
     // those two cases. Bug 88109.
     bool is_auto_start = browser_defaults::kSyncAutoStarts;
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
-    // TODO(https://crbug.com/1194983): Figure out how split sync settings will
-    // work here. For now, we will mimic Ash's behaviour of having sync turned
-    // on by default.
-    if (profile->IsMainProfile()) {
+    if (profile->IsMainProfile() &&
+        !base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles)) {
       is_auto_start = true;
     }
 #endif

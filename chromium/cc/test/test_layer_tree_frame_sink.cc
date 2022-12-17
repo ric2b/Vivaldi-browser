@@ -80,14 +80,14 @@ bool TestLayerTreeFrameSink::BindToClient(LayerTreeFrameSinkClient* client) {
   std::unique_ptr<viz::DisplayCompositorMemoryAndTaskController>
       display_controller;
   std::unique_ptr<viz::OutputSurface> display_output_surface;
-  if (renderer_settings_.use_skia_renderer) {
+  const bool gpu_accelerated = context_provider();
+  if (gpu_accelerated) {
     display_controller = test_client_->CreateDisplayController();
     auto output_surface =
-        test_client_->CreateDisplaySkiaOutputSurface(display_controller.get());
+        test_client_->CreateSkiaOutputSurface(display_controller.get());
     display_output_surface = std::move(output_surface);
   } else {
-    display_output_surface =
-        test_client_->CreateDisplayOutputSurface(context_provider());
+    display_output_surface = test_client_->CreateSoftwareOutputSurface();
   }
 
   std::unique_ptr<viz::DisplayScheduler> scheduler;

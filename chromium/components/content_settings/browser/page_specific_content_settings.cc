@@ -408,6 +408,9 @@ bool PageSpecificContentSettings::IsContentBlocked(
   if (content_type == ContentSettingsType::IMAGES ||
       content_type == ContentSettingsType::JAVASCRIPT ||
       content_type == ContentSettingsType::COOKIES ||
+#if defined(VIVALDI_BUILD)
+      content_type == ContentSettingsType::AUTOPLAY ||
+#endif  // VIVALDI_BUILD
       content_type == ContentSettingsType::POPUPS ||
       content_type == ContentSettingsType::MIXEDSCRIPT ||
       content_type == ContentSettingsType::MEDIASTREAM_MIC ||
@@ -435,6 +438,9 @@ bool PageSpecificContentSettings::IsContentAllowed(
   // This method currently only returns meaningful values for the types listed
   // below.
   if (content_type != ContentSettingsType::COOKIES &&
+#if defined(VIVALDI_BUILD)
+      content_type != ContentSettingsType::AUTOPLAY &&
+#endif  // VIVALDI_BUILD
       content_type != ContentSettingsType::MEDIASTREAM_MIC &&
       content_type != ContentSettingsType::MEDIASTREAM_CAMERA &&
       content_type != ContentSettingsType::PPAPI_BROKER &&
@@ -804,6 +810,9 @@ void PageSpecificContentSettings::OnContentSettingChanged(
         geolocation_was_just_granted_on_site_level_ = true;
       [[fallthrough]];
     }
+#if defined(VIVALDI_BUILD)
+    case ContentSettingsType::AUTOPLAY:
+#endif  // defined(VIVALDI_BUILD)
     case ContentSettingsType::IMAGES:
     case ContentSettingsType::JAVASCRIPT:
     case ContentSettingsType::COOKIES:

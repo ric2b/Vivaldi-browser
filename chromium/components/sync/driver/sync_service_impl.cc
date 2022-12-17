@@ -20,9 +20,9 @@
 #include "base/observer_list.h"
 #include "base/time/time.h"
 #include "build/build_config.h"
-#include "build/chromeos_buildflags.h"
 #include "components/invalidation/public/invalidation_service.h"
 #include "components/signin/public/base/signin_metrics.h"
+#include "components/signin/public/base/signin_switches.h"
 #include "components/signin/public/identity_manager/account_info.h"
 #include "components/signin/public/identity_manager/accounts_in_cookie_jar_info.h"
 #include "components/signin/public/identity_manager/identity_manager.h"
@@ -710,10 +710,8 @@ void SyncServiceImpl::DataTypePreconditionChanged(ModelType type) {
   data_type_manager_->DataTypePreconditionChanged(type);
 }
 
-void SyncServiceImpl::OnEngineInitialized(
-    const WeakHandle<DataTypeDebugInfoListener>& debug_info_listener,
-    bool success,
-    bool is_first_time_sync_configure) {
+void SyncServiceImpl::OnEngineInitialized(bool success,
+                                          bool is_first_time_sync_configure) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
 
   // TODO(treib): Based on some crash reports, it seems like the user could have
@@ -739,8 +737,7 @@ void SyncServiceImpl::OnEngineInitialized(
 
   data_type_manager_ =
       sync_client_->GetSyncApiComponentFactory()->CreateDataTypeManager(
-          debug_info_listener, &data_type_controllers_, &crypto_, engine_.get(),
-          this);
+          &data_type_controllers_, &crypto_, engine_.get(), this);
 
   crypto_.SetSyncEngine(GetAccountInfo(), engine_.get());
 
@@ -832,13 +829,13 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
       // Sync-the-feature remains off.
       StopAndClear();
 
-#if !BUILDFLAG(IS_CHROMEOS_ASH) && !BUILDFLAG(IS_CHROMEOS_LACROS)
-      // TODO(https://crbug.com/1233933): Update this when Lacros profiles
-      //     support signed-in-but-not-consented-to-sync state.
-
-      // On every platform except ChromeOS, revoke the Sync consent in
-      // IdentityManager after a dashboard clear.
+#if !BUILDFLAG(IS_CHROMEOS_ASH)
+      // On every platform except ash, revoke the Sync consent/Clear primary
+      // account after a dashboard clear.
       if (!IsLocalSyncEnabled() &&
+#if BUILDFLAG(IS_CHROMEOS_LACROS)
+          base::FeatureList::IsEnabled(switches::kLacrosNonSyncingProfiles) &&
+#endif
           identity_manager_->HasPrimaryAccount(signin::ConsentLevel::kSync)) {
         signin::PrimaryAccountMutator* account_mutator =
             identity_manager_->GetPrimaryAccountMutator();
@@ -861,9 +858,9 @@ void SyncServiceImpl::OnActionableError(const SyncProtocolError& error) {
         account_mutator->RevokeSyncConsent(
             signin_metrics::SERVER_FORCED_DISABLE,
             signin_metrics::SignoutDelete::kIgnoreMetric);
-#endif
+#endif  // BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
       }
-#endif
+#endif  // !BUILDFLAG(IS_CHROMEOS_ASH)
       break;
     case STOP_SYNC_FOR_DISABLED_ACCOUNT:
       // Sync disabled by domain admin. Stop syncing until next restart.
@@ -918,7 +915,12 @@ void SyncServiceImpl::OnConfigureDone(
 
   NotifyObservers();
 
+  // Update configured data types and start handling incoming invalidations. The
+  // order is important to guarantee that data types are configured to prevent
+  // filtering out invalidations. If there are incoming invalidations, they will
+  // be handled immediately after StartHandlingInvalidations() call.
   UpdateDataTypesForInvalidations();
+  engine_->StartHandlingInvalidations();
 
   if (migrator_.get() && migrator_->state() != BackendMigrator::IDLE) {
     // Migration in progress.  Let the migrator know we just finished
@@ -1188,6 +1190,14 @@ void SyncServiceImpl::ConfigureDataTypeManager(ConfigureReason reason) {
             UserSelectableTypeToCanonicalModelType(type));
         base::UmaHistogramEnumeration("Sync.CustomSync3", canonical_model_type);
       }
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+      for (UserSelectableOsType type : user_settings_->GetSelectedOsTypes()) {
+        ModelTypeForHistograms canonical_model_type = ModelTypeHistogramValue(
+            UserSelectableOsTypeToCanonicalModelType(type));
+        base::UmaHistogramEnumeration("Sync.CustomOSSync",
+                                      canonical_model_type);
+      }
+#endif  // BUILDFLAG(IS_CHROMEOS_ASH)
     }
   }
 }

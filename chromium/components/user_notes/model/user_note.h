@@ -23,11 +23,12 @@ class UserNote {
                     std::unique_ptr<UserNoteMetadata> metadata,
                     std::unique_ptr<UserNoteBody> body,
                     std::unique_ptr<UserNoteTarget> target);
+
   ~UserNote();
   UserNote(const UserNote&) = delete;
   UserNote& operator=(const UserNote&) = delete;
 
-  base::SafeRef<UserNote> GetSafeRef();
+  base::SafeRef<UserNote> GetSafeRef() const;
 
   const base::UnguessableToken& id() const { return id_; }
   const UserNoteMetadata& metadata() const { return *metadata_; }

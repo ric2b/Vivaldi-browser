@@ -53,6 +53,12 @@ class AnnotatorMessageHandlerTest : public testing::Test {
     web_ui().HandleReceivedMessage("onUndoRedoAvailabilityChanged", &list_args);
   }
 
+  void SendCanvasInitialized(bool success) {
+    base::ListValue list_args;
+    list_args.Append(base::Value(success));
+    web_ui().HandleReceivedMessage("onCanvasInitialized", &list_args);
+  }
+
   content::TestWebUI& web_ui() { return web_ui_; }
   AnnotatorMessageHandler* handler() { return message_handler_.get(); }
   MockProjectorController& controller() { return controller_; }
@@ -78,13 +84,6 @@ TEST_F(AnnotatorMessageHandlerTest, SetTool) {
 
   AnnotatorTool requested_tool = AnnotatorTool::FromValue(*call_data.arg2());
   EXPECT_EQ(requested_tool, expected_tool);
-
-  // Now let's check that when the tool has been set, we notify the callback.
-  EXPECT_CALL(controller(), OnToolSet(expected_tool));
-
-  base::ListValue list_args;
-  list_args.Append(expected_tool.ToValue());
-  web_ui().HandleReceivedMessage("onToolSet", &list_args);
 }
 
 TEST_F(AnnotatorMessageHandlerTest, Undo) {
@@ -111,6 +110,14 @@ TEST_F(AnnotatorMessageHandlerTest, UndoRedoAvailabilityChanged) {
 
   EXPECT_CALL(controller(), OnUndoRedoAvailabilityChanged(false, true));
   SendUndoRedoAvailableChanged(false, true);
+}
+
+TEST_F(AnnotatorMessageHandlerTest, CanvasInitialized) {
+  EXPECT_CALL(controller(), OnCanvasInitialized(true));
+  SendCanvasInitialized(true);
+
+  EXPECT_CALL(controller(), OnCanvasInitialized(false));
+  SendCanvasInitialized(false);
 }
 
 }  // namespace ash

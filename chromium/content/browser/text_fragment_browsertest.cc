@@ -722,11 +722,13 @@ IN_PROC_BROWSER_TEST_F(TextFragmentAnchorBrowserTest,
   EXPECT_DID_SCROLL(false);
 }
 
-// Test that Tab key press puts focus from the start of selection.
+// Test that Tab key press puts focus from the start of the text directive that
+// was scrolled into view.
 IN_PROC_BROWSER_TEST_F(TextFragmentAnchorBrowserTest, TabFocus) {
   ASSERT_TRUE(embedded_test_server()->Start());
-  GURL url(embedded_test_server()->GetURL(
-      "/scrollable_page_with_anchor.html#:~:text=text"));
+  GURL url(
+      embedded_test_server()->GetURL("/scrollable_page_with_anchor.html#:~:"
+                                     "text=nonexistent&text=text&text=more"));
   WebContents* main_contents = shell()->web_contents();
   RenderFrameSubmissionObserver frame_observer(main_contents);
   EXPECT_TRUE(NavigateToURL(shell(), url));
@@ -734,7 +736,7 @@ IN_PROC_BROWSER_TEST_F(TextFragmentAnchorBrowserTest, TabFocus) {
   frame_observer.WaitForScrollOffsetAtTop(
       /*expected_scroll_offset_at_top=*/false);
 
-  DOMMessageQueue msg_queue;
+  DOMMessageQueue msg_queue(main_contents);
   SimulateKeyPress(main_contents, ui::DomKey::TAB, ui::DomCode::TAB,
                    ui::VKEY_TAB, false, false, false, false);
 

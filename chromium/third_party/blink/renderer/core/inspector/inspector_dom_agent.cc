@@ -41,6 +41,7 @@
 #include "third_party/blink/renderer/core/css/css_container_rule.h"
 #include "third_party/blink/renderer/core/css/css_property_name.h"
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
+#include "third_party/blink/renderer/core/document_transition/document_transition_utils.h"
 #include "third_party/blink/renderer/core/dom/attr.h"
 #include "third_party/blink/renderer/core/dom/character_data.h"
 #include "third_party/blink/renderer/core/dom/container_node.h"
@@ -90,6 +91,7 @@
 #include "third_party/blink/renderer/core/loader/document_loader.h"
 #include "third_party/blink/renderer/core/page/frame_tree.h"
 #include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/scroll/scroll_into_view_util.h"
 #include "third_party/blink/renderer/core/svg/svg_svg_element.h"
 #include "third_party/blink/renderer/core/xml/document_xpath_evaluator.h"
 #include "third_party/blink/renderer/core/xml/xpath_result.h"
@@ -106,6 +108,21 @@ namespace {
 
 const size_t kMaxTextSize = 10000;
 const UChar kEllipsisUChar[] = {0x2026, 0};
+
+template <typename Functor>
+void ForEachSupportedPseudo(const Element* element, Functor& func) {
+  for (PseudoId pseudo_id :
+       {kPseudoIdBefore, kPseudoIdAfter, kPseudoIdMarker}) {
+    if (!PseudoElement::IsWebExposed(pseudo_id, element))
+      continue;
+    if (PseudoElement* pseudo_element = element->GetPseudoElement(pseudo_id))
+      func(pseudo_element);
+  }
+  if (element == element->GetDocument().documentElement()) {
+    DocumentTransitionUtils::ForEachTransitionPseudo(element->GetDocument(),
+                                                     func);
+  }
+}
 
 }  // namespace
 
@@ -368,12 +385,10 @@ void InspectorDOMAgent::Unbind(Node* node) {
 
   auto* element = DynamicTo<Element>(node);
   if (element) {
-    if (element->GetPseudoElement(kPseudoIdBefore))
-      Unbind(element->GetPseudoElement(kPseudoIdBefore));
-    if (element->GetPseudoElement(kPseudoIdAfter))
-      Unbind(element->GetPseudoElement(kPseudoIdAfter));
-    if (element->GetPseudoElement(kPseudoIdMarker))
-      Unbind(element->GetPseudoElement(kPseudoIdMarker));
+    auto unbind_pseudo = [&](PseudoElement* pseudo_element) {
+      Unbind(pseudo_element);
+    };
+    ForEachSupportedPseudo(element, unbind_pseudo);
   }
 
   NotifyWillRemoveDOMNode(node);
@@ -1410,7 +1425,7 @@ Response InspectorDOMAgent::focus(Maybe<int> node_id,
   element->GetDocument().UpdateStyleAndLayout(DocumentUpdateReason::kInspector);
   if (!element->IsFocusable())
     return Response::ServerError("Element is not focusable");
-  element->focus();
+  element->Focus();
   return Response::Success();
 }
 
@@ -1789,9 +1804,13 @@ std::unique_ptr<protocol::DOM::Node> InspectorDOMAgent::BuildObjectForNode(
 
     if (element->GetPseudoId()) {
       value->setPseudoType(ProtocolPseudoElementType(element->GetPseudoId()));
+      if (auto tag = To<PseudoElement>(element)->document_transition_tag())
+        value->setPseudoIdentifier(tag);
     } else {
       if (!element->ownerDocument()->xmlVersion().IsEmpty())
         value->setXmlVersion(element->ownerDocument()->xmlVersion());
+      if (auto* slot = element->AssignedSlotWithoutRecalc())
+        value->setAssignedSlot(BuildBackendNode(slot));
     }
     std::unique_ptr<protocol::Array<protocol::DOM::Node>> pseudo_elements =
         BuildArrayForPseudoElements(element, nodes_map);
@@ -1908,19 +1927,25 @@ std::unique_ptr<protocol::Array<protocol::DOM::Node>>
 InspectorDOMAgent::BuildArrayForPseudoElements(Element* element,
                                                NodeToIdMap* nodes_map) {
   protocol::Array<protocol::DOM::Node> pseudo_elements;
-  for (PseudoId pseudo_id :
-       {kPseudoIdBefore, kPseudoIdAfter, kPseudoIdMarker}) {
-    if (!PseudoElement::IsWebExposed(pseudo_id, element))
-      continue;
-    if (PseudoElement* pseudo_element = element->GetPseudoElement(pseudo_id)) {
-      pseudo_elements.emplace_back(
-          BuildObjectForNode(pseudo_element, 0, false, nodes_map));
-    }
-  }
+  auto add_pseudo = [&](PseudoElement* pseudo_element) {
+    pseudo_elements.emplace_back(
+        BuildObjectForNode(pseudo_element, 0, false, nodes_map));
+  };
+  ForEachSupportedPseudo(element, add_pseudo);
+
   if (pseudo_elements.empty())
     return nullptr;
   return std::make_unique<protocol::Array<protocol::DOM::Node>>(
       std::move(pseudo_elements));
+}
+
+std::unique_ptr<protocol::DOM::BackendNode> InspectorDOMAgent::BuildBackendNode(
+    Node* slot_element) {
+  return protocol::DOM::BackendNode::create()
+      .setNodeType(slot_element->getNodeType())
+      .setNodeName(slot_element->nodeName())
+      .setBackendNodeId(IdentifiersFactory::IntIdForNode(slot_element))
+      .build();
 }
 
 std::unique_ptr<protocol::Array<protocol::DOM::BackendNode>>
@@ -1934,14 +1959,7 @@ InspectorDOMAgent::BuildDistributedNodesForSlot(HTMLSlotElement* slot_element) {
   for (auto& node : slot_element->AssignedNodes()) {
     if (ShouldSkipNode(node, IncludeWhitespace()))
       continue;
-
-    std::unique_ptr<protocol::DOM::BackendNode> backend_node =
-        protocol::DOM::BackendNode::create()
-            .setNodeType(node->getNodeType())
-            .setNodeName(node->nodeName())
-            .setBackendNodeId(IdentifiersFactory::IntIdForNode(node))
-            .build();
-    distributed_nodes->emplace_back(std::move(backend_node));
+    distributed_nodes->emplace_back(BuildBackendNode(node));
   }
   return distributed_nodes;
 }
@@ -2516,14 +2534,14 @@ protocol::Response InspectorDOMAgent::scrollIntoViewIfNeeded(
     rect_to_scroll.SetWidth(LayoutUnit(rect.fromJust()->getWidth()));
     rect_to_scroll.SetHeight(LayoutUnit(rect.fromJust()->getHeight()));
   }
-  layout_object->ScrollRectToVisible(
-      rect_to_scroll,
+  scroll_into_view_util::ScrollRectToVisible(
+      *layout_object, rect_to_scroll,
       ScrollAlignment::CreateScrollIntoViewParams(
           ScrollAlignment::CenterIfNeeded(), ScrollAlignment::CenterIfNeeded(),
           mojom::blink::ScrollType::kProgrammatic,
           true /* make_visible_in_visual_viewport */,
           mojom::blink::ScrollBehavior::kInstant,
-          true /* is_for_scroll_sequence */, false /* zoom_into_rect */));
+          true /* is_for_scroll_sequence */));
   return Response::Success();
 }
 
@@ -2540,26 +2558,28 @@ protocol::Response InspectorDOMAgent::getFrameOwner(
     }
 
     if (IsA<LocalFrame>(frame)) {
-      for (HTMLFencedFrameElement* ff :
-           DocumentFencedFrames::From(*(To<LocalFrame>(frame)->GetDocument()))
-               .GetFencedFrames()) {
-        Frame* ff_frame = ff->ContentFrame();
-        if (ff_frame && IdentifiersFactory::FrameId(ff_frame) == frame_id) {
-          found_frame = ff_frame;
-          break;
+      if (auto* fenced_frames = DocumentFencedFrames::Get(
+              *To<LocalFrame>(frame)->GetDocument())) {
+        for (HTMLFencedFrameElement* ff : fenced_frames->GetFencedFrames()) {
+          Frame* ff_frame = ff->ContentFrame();
+          if (ff_frame && IdentifiersFactory::FrameId(ff_frame) == frame_id) {
+            found_frame = ff_frame;
+            break;
+          }
         }
       }
     }
   }
 
   if (!found_frame) {
-    for (PortalContents* portal :
-         DocumentPortals::From(*inspected_frames_->Root()->GetDocument())
-             .GetPortals()) {
-      Frame* portal_frame = portal->GetFrame();
-      if (IdentifiersFactory::FrameId(portal_frame) == frame_id) {
-        found_frame = portal_frame;
-        break;
+    if (auto* portals =
+            DocumentPortals::Get(*inspected_frames_->Root()->GetDocument())) {
+      for (PortalContents* portal : portals->GetPortals()) {
+        Frame* portal_frame = portal->GetFrame();
+        if (IdentifiersFactory::FrameId(portal_frame) == frame_id) {
+          found_frame = portal_frame;
+          break;
+        }
       }
     }
   }

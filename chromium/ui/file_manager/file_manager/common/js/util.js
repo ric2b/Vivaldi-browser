@@ -1034,8 +1034,8 @@ util.getRootTypeLabel = locationInfo => {
     // Drive or subdirectory under it, but not the Shared Drives grand
     // directory. Every Shared Drive and its subdirectories always have
     // individual names (locationInfo.hasFixedLabel is false). So
-    // getRootTypeLabel() is only used by LocationLine.show() to display the
-    // ancestor name in the location line like this:
+    // getRootTypeLabel() is only used by BreadcrumbController.show() to display
+    // the ancestor name in the breadcrumb like this:
     //   Shared Drives > ABC Shared Drive > Folder1
     //   ^^^^^^^^^^^
     // By this reason, we return the label of the Shared Drives grand root here.
@@ -1077,6 +1077,8 @@ util.getRootTypeLabel = locationInfo => {
           return str('MEDIA_VIEW_VIDEOS_ROOT_LABEL');
         case VolumeManagerCommon.MediaViewRootType.AUDIO:
           return str('MEDIA_VIEW_AUDIO_ROOT_LABEL');
+        case VolumeManagerCommon.MediaViewRootType.DOCUMENTS:
+          return str('MEDIA_VIEW_DOCUMENTS_ROOT_LABEL');
       }
       console.error('Unsupported media view root type: ' + mediaViewRootType);
       return locationInfo.volumeInfo.label;
@@ -1324,19 +1326,21 @@ util.isSinglePartitionFormatEnabled = () => {
 };
 
 /**
- * Returns true if  flag is enabled.
- * @return {boolean}
- */
-util.isVideoPlayerJsModulesEnabled = () => {
-  return loadTimeData.getBoolean('VIDEO_PLAYER_JS_MODULES_ENABLED');
-};
-
-/**
  * Returns true if FilesExtractArchive flag is enabled.
  * @return {boolean}
  */
 util.isExtractArchiveEnabled = () => {
   return loadTimeData.getBoolean('EXTRACT_ARCHIVE');
+};
+
+
+/**
+ * Whether the Files app Experimental flag is enabled.
+ * @returns {boolean}
+ */
+util.isFilesAppExperimental = () => {
+  return loadTimeData.valueExists('FILES_APP_EXPERIMENTAL') &&
+      loadTimeData.getBoolean('FILES_APP_EXPERIMENTAL');
 };
 
 /**
@@ -1345,6 +1349,16 @@ util.isExtractArchiveEnabled = () => {
  */
 util.isFuseBoxEnabled = () => {
   return loadTimeData.getBoolean('FUSEBOX');
+};
+
+/**
+ * Returns true if FuseBoxDebug flag is enabled.
+ * @return {boolean}
+ */
+util.isFuseBoxDebugEnabled = () => {
+  return loadTimeData.isInitialized() &&
+      loadTimeData.valueExists('FUSEBOX_DEBUG') &&
+      loadTimeData.getBoolean('FUSEBOX_DEBUG');
 };
 
 /**

@@ -17,6 +17,9 @@
 #include "base/mac/scoped_nsobject.h"
 #include "ui/vivaldi_context_menu.h"
 
+namespace vivaldi {
+class VivaldiRenderViewContextMenu;
+}
 class ToolkitDelegateMac;
 
 @class MenuControllerCocoa;
@@ -24,12 +27,14 @@ class ToolkitDelegateMac;
 // Mac implementation of the context menu display code. Uses a Cocoa NSMenu
 // to display the context menu. Internally uses an obj-c object as the
 // target of the NSMenu, bridging back to this C++ class.
+namespace vivaldi {
 class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
  public:
   ~VivaldiContextMenuMac() override;
   VivaldiContextMenuMac(content::WebContents* web_contents,
                         ui::SimpleMenuModel* menu_model,
-                        const gfx::Rect& rect);
+                        const gfx::Rect& rect,
+                        vivaldi::VivaldiRenderViewContextMenu* context_menu);
   VivaldiContextMenuMac(const VivaldiContextMenuMac&) = delete;
   VivaldiContextMenuMac& operator=(const VivaldiContextMenuMac&) = delete;
 
@@ -39,7 +44,10 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   void SetIcon(const gfx::Image& icon, int id) override;
   void SetParentView(gfx::NativeView parent_view) override;
   bool HasDarkTextColor() override;
-
+  void UpdateItem(int command_id,
+                  bool enabled,
+                  bool hidden,
+                  const std::u16string& title);
  private:
   NSView* GetActiveNativeView();
   // The Cocoa menu controller for this menu.
@@ -49,5 +57,6 @@ class VivaldiContextMenuMac : public vivaldi::VivaldiContextMenu {
   gfx::Rect rect_;
   NSView* parent_view_ = nullptr;
 };
+}  // namespace vivaldi
 
 #endif  // UI_VIVALDI_CONTEXT_MENU_MAC_H_

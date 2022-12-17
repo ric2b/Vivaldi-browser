@@ -18,6 +18,17 @@
 namespace mojo {
 
 template <>
+struct EnumTraits<media::mojom::VideoEncodeAcceleratorSupportedRateControlMode,
+                  media::VideoEncodeAccelerator::SupportedRateControlMode> {
+  static media::mojom::VideoEncodeAcceleratorSupportedRateControlMode ToMojom(
+      media::VideoEncodeAccelerator::SupportedRateControlMode mode);
+
+  static bool FromMojom(
+      media::mojom::VideoEncodeAcceleratorSupportedRateControlMode input,
+      media::VideoEncodeAccelerator::SupportedRateControlMode* out);
+};
+
+template <>
 struct StructTraits<
     media::mojom::VideoEncodeAcceleratorSupportedProfileDataView,
     media::VideoEncodeAccelerator::SupportedProfile> {
@@ -44,6 +55,22 @@ struct StructTraits<
   static uint32_t max_framerate_denominator(
       const media::VideoEncodeAccelerator::SupportedProfile& profile) {
     return profile.max_framerate_denominator;
+  }
+
+  static std::vector<media::VideoEncodeAccelerator::SupportedRateControlMode>
+  rate_control_modes(
+      const media::VideoEncodeAccelerator::SupportedProfile& profile) {
+    std::vector<media::VideoEncodeAccelerator::SupportedRateControlMode> modes;
+    if (profile.rate_control_modes &
+        media::VideoEncodeAccelerator::kConstantMode) {
+      modes.push_back(media::VideoEncodeAccelerator::kConstantMode);
+    }
+    if (profile.rate_control_modes &
+        media::VideoEncodeAccelerator::kVariableMode) {
+      modes.push_back(media::VideoEncodeAccelerator::kVariableMode);
+    }
+
+    return modes;
   }
 
   static const std::vector<media::SVCScalabilityMode>& scalability_modes(
@@ -84,8 +111,7 @@ class StructTraits<media::mojom::VideoBitrateAllocationDataView,
 
   static absl::optional<uint32_t> variable_bitrate_peak(
       const media::VideoBitrateAllocation& bitrate_allocation) {
-    if (bitrate_allocation.GetSumBitrate().mode() ==
-        media::Bitrate::Mode::kConstant) {
+    if (bitrate_allocation.GetMode() == media::Bitrate::Mode::kConstant) {
       return absl::nullopt;
     } else {
       return absl::optional<uint32_t>(
@@ -103,16 +129,16 @@ struct UnionTraits<media::mojom::CodecMetadataDataView,
   static media::mojom::CodecMetadataDataView::Tag GetTag(
       const media::BitstreamBufferMetadata& metadata) {
     if (metadata.h264) {
-      return media::mojom::CodecMetadataDataView::Tag::H264;
+      return media::mojom::CodecMetadataDataView::Tag::kH264;
     } else if (metadata.vp8) {
-      return media::mojom::CodecMetadataDataView::Tag::VP8;
+      return media::mojom::CodecMetadataDataView::Tag::kVp8;
     } else if (metadata.vp9) {
-      return media::mojom::CodecMetadataDataView::Tag::VP9;
+      return media::mojom::CodecMetadataDataView::Tag::kVp9;
     } else if (metadata.av1) {
-      return media::mojom::CodecMetadataDataView::Tag::AV1;
+      return media::mojom::CodecMetadataDataView::Tag::kAv1;
     }
     NOTREACHED();
-    return media::mojom::CodecMetadataDataView::Tag::VP8;
+    return media::mojom::CodecMetadataDataView::Tag::kVp8;
   }
 
   static bool IsNull(const media::BitstreamBufferMetadata& metadata) {

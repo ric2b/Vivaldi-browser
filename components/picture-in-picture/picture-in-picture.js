@@ -42,6 +42,11 @@ var PIP = {
           y > rect.y &&
           x < rect.x + rect.width &&
           y < rect.y + rect.height) {
+        // Don't show button if PIP is disabled for the video, it will not
+        // work. See https://w3c.github.io/picture-in-picture/#disable-pip.
+        if (videos[i].disablePictureInPicture === true) {
+          continue;
+        }
         return videos[i];
       }
     }
@@ -95,14 +100,18 @@ var PIP = {
     // at least one frame. pip should be safe now.
     if (video && video.readyState > 1) {
       const rect = video.getBoundingClientRect();
-      const left = rect.left + rect.width -
-        (rect.width / 2) + window.scrollX - (kButtonWidth / 2);
+      const left =
+        rect.left +
+        rect.width -
+        rect.width / 2 +
+        window.scrollX -
+        kButtonWidth / 2;
       const top = rect.top + window.scrollY;
       // Position our button container to overlap the hovered video element.
       this.containerElm_.style = `left: ${left}px; top: ${top}px;`;
       this.containerElm_.style.zIndex = zIndex;
-      this.containerElm_.classList.remove('transparent');
-      this.containerElm_.classList.remove('initial');
+      this.containerElm_.classList.remove("transparent");
+      this.containerElm_.classList.remove("initial");
       this.createTimer();
     }
   },

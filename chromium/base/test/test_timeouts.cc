@@ -7,6 +7,7 @@
 #include <algorithm>
 #include <string>
 
+#include "base/check_op.h"
 #include "base/clang_profiling_buildflags.h"
 #include "base/command_line.h"
 #include "base/debug/debugger.h"
@@ -46,9 +47,9 @@ void InitializeTimeout(const char* switch_name,
   // For MSan the slowdown depends heavily on the value of msan_track_origins
   // build flag. The multiplier below corresponds to msan_track_origins = 1.
 #if BUILDFLAG(IS_CHROMEOS_ASH)
-  // A handful of tests on ChromeOS run *very* close to the 6x limit used
-  // else where, so it's bumped to 7x.
-  constexpr int kTimeoutMultiplier = 7;
+  // A handful of tests on ChromeOS time out when using the 6x limit used
+  // elsewhere, so it's bumped to 10x.
+  constexpr int kTimeoutMultiplier = 10;
 #else
   constexpr int kTimeoutMultiplier = 6;
 #endif
@@ -66,10 +67,10 @@ void InitializeTimeout(const char* switch_name,
   // On coverage build, tests run 3x slower.
   constexpr int kTimeoutMultiplier = 3;
 #elif !defined(NDEBUG) && BUILDFLAG(IS_CHROMEOS_ASH)
-  // TODO(crbug.com/1058022): reduce the multiplier back to 2x.
+  // TODO(crbug.com/1295825): reduce the multiplier back to 2x.
   // A number of tests on ChromeOS run very close to the base limit, so ChromeOS
-  // gets 3x.
-  constexpr int kTimeoutMultiplier = 3;
+  // gets 4x.
+  constexpr int kTimeoutMultiplier = 4;
 #elif !defined(NDEBUG) && BUILDFLAG(IS_MAC)
   // A lot of browser_tests on Mac debug time out.
   constexpr int kTimeoutMultiplier = 2;

@@ -162,6 +162,8 @@
 #if BUILDFLAG(IS_ANDROID)
 #include "chrome/browser/flags/android/chrome_feature_list.h"
 #include "chrome/browser/ssl/chrome_security_state_client.h"
+#include "chrome/browser/webauthn/android/chrome_webauthn_client_android.h"
+#include "components/webauthn/android/webauthn_client_android.h"
 #else
 #include "chrome/browser/devtools/devtools_auto_opener.h"
 #include "chrome/browser/gcm/gcm_product_util.h"
@@ -195,7 +197,6 @@
 #if BUILDFLAG(ENABLE_PLUGINS)
 #include "chrome/browser/plugins/chrome_plugin_service_filter.h"
 #include "chrome/browser/plugins/plugin_finder.h"
-#include "chrome/browser/plugins/plugins_resource_service.h"
 #include "content/public/browser/plugin_service.h"
 #endif
 
@@ -246,6 +247,10 @@ BrowserProcessImpl::BrowserProcessImpl(StartupData* startup_data)
           startup_data->chrome_feature_list_creator()->TakePrefService()),
       platform_part_(std::make_unique<BrowserProcessPlatformPart>()) {
   g_browser_process = this;
+
+  // Initialize the SessionIdGenerator instance, providing a PrefService to
+  // ensure the persistent storage of current max SessionId.
+  sessions::SessionIdGenerator::GetInstance()->Init(local_state_.get());
 
   DCHECK(local_state_);
   DCHECK(startup_data);
@@ -351,6 +356,13 @@ void BrowserProcessImpl::Init() {
 #if BUILDFLAG(IS_MAC)
   system_media_permissions::LogSystemMediaPermissionsStartupStats();
 #endif
+
+#if BUILDFLAG(IS_ANDROID)
+  if (base::FeatureList::IsEnabled(features::kWebAuthConditionalUI)) {
+    components::WebAuthnClientAndroid::SetClient(
+        std::make_unique<ChromeWebAuthnClientAndroid>());
+  }
+#endif
 }
 
 #if !BUILDFLAG(IS_ANDROID)
@@ -397,9 +409,6 @@ void BrowserProcessImpl::StartTearDown() {
   if (safe_browsing_service_.get())
     safe_browsing_service()->ShutDown();
   network_time_tracker_.reset();
-#if BUILDFLAG(ENABLE_PLUGINS)
-  plugins_resource_service_.reset();
-#endif
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMEOS_ASH)
   // Initial cleanup for ChromeBrowserCloudManagement, shutdown components that
@@ -1105,8 +1114,7 @@ void BrowserProcessImpl::CreateProfileManager() {
   profile_manager_ = std::make_unique<ProfileManager>(user_data_dir);
 }
 
-void BrowserProcessImpl::PreCreateThreads(
-    const base::CommandLine& command_line) {
+void BrowserProcessImpl::PreCreateThreads() {
 #if BUILDFLAG(ENABLE_EXTENSIONS)
   // chrome-extension:// URLs are safe to request anywhere, but may only
   // commit (including in iframes) in extension processes.
@@ -1167,12 +1175,7 @@ void BrowserProcessImpl::PreMainMessageLoopRun() {
   plugin_service->SetFilter(ChromePluginServiceFilter::GetInstance());
 
   // Triggers initialization of the singleton instance on UI thread.
-  PluginFinder::GetInstance()->Init();
-
-  DCHECK(!plugins_resource_service_);
-  plugins_resource_service_ =
-      std::make_unique<PluginsResourceService>(local_state());
-  plugins_resource_service_->Init();
+  PluginFinder::GetInstance();
 #endif  // BUILDFLAG(ENABLE_PLUGINS)
 
 #if !BUILDFLAG(IS_ANDROID)

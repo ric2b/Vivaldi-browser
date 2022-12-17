@@ -61,18 +61,14 @@ void ConvertToOzoneOverlaySurface(
   ozone_candidate->requires_overlay = overlay_candidate.requires_overlay;
   ozone_candidate->priority_hint = overlay_candidate.priority_hint;
   ozone_candidate->rounded_corners = overlay_candidate.rounded_corners;
+  // That can be a solid color quad.
+  if (!overlay_candidate.is_solid_color)
+    ozone_candidate->background_color = overlay_candidate.color;
 }
 
 uint32_t MailboxToUInt32(const gpu::Mailbox& mailbox) {
   return (mailbox.name[0] << 24) + (mailbox.name[1] << 16) +
          (mailbox.name[2] << 8) + mailbox.name[3];
-}
-
-void ReportSharedImageExists(bool exists) {
-  UMA_HISTOGRAM_BOOLEAN(
-      "Compositing.Display.OverlayProcessorOzone."
-      "SharedImageExists",
-      exists);
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -132,7 +128,6 @@ OverlayProcessorOzone::OverlayProcessorOzone(
         NOTREACHED();
     }
   }
-  MaybeObserveHardwareCapabilities();
 }
 
 OverlayProcessorOzone::~OverlayProcessorOzone() = default;
@@ -148,6 +143,8 @@ bool OverlayProcessorOzone::NeedsSurfaceDamageRectList() const {
 void OverlayProcessorOzone::CheckOverlaySupportImpl(
     const OverlayProcessorInterface::OutputSurfaceOverlayPlane* primary_plane,
     OverlayCandidateList* surfaces) {
+  MaybeObserveHardwareCapabilities();
+
   auto full_size = surfaces->size();
   if (primary_plane)
     full_size += 1;
@@ -256,27 +253,42 @@ void OverlayProcessorOzone::CheckOverlaySupportImpl(
 }
 
 void OverlayProcessorOzone::MaybeObserveHardwareCapabilities() {
+  if (tried_observing_hardware_capabilities_) {
+    return;
+  }
+  tried_observing_hardware_capabilities_ = true;
+
   // HardwareCapabilities isn't necessary unless attempting multiple overlays.
   if (max_overlays_config_ <= 1) {
     return;
   }
-  overlay_candidates_->ObserveHardwareCapabilities(
-      base::BindRepeating(&OverlayProcessorOzone::ReceiveHardwareCapabilities,
-                          weak_ptr_factory_.GetWeakPtr()));
+  if (overlay_candidates_) {
+    overlay_candidates_->ObserveHardwareCapabilities(
+        base::BindRepeating(&OverlayProcessorOzone::ReceiveHardwareCapabilities,
+                            weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void OverlayProcessorOzone::ReceiveHardwareCapabilities(
     ui::HardwareCapabilities hardware_capabilities) {
-  // Subtract 1 because one of these overlay capable planes will be needed for
-  // the primary plane.
-  int max_overlays_supported =
-      hardware_capabilities.num_overlay_capable_planes - 1;
-  max_overlays_considered_ =
-      std::min(max_overlays_supported, max_overlays_config_);
+  UMA_HISTOGRAM_BOOLEAN(
+      "Compositing.Display.OverlayProcessorOzone.HardwareCapabilitiesIsValid",
+      hardware_capabilities.is_valid);
+  if (hardware_capabilities.is_valid) {
+    // Subtract 1 because one of these overlay capable planes will be needed for
+    // the primary plane.
+    int max_overlays_supported =
+        hardware_capabilities.num_overlay_capable_planes - 1;
+    max_overlays_considered_ =
+        std::min(max_overlays_supported, max_overlays_config_);
 
-  UMA_HISTOGRAM_COUNTS_100(
-      "Compositing.Display.OverlayProcessorOzone.MaxOverlaysSupported",
-      max_overlays_supported);
+    UMA_HISTOGRAM_COUNTS_100(
+        "Compositing.Display.OverlayProcessorOzone.MaxPlanesSupported",
+        hardware_capabilities.num_overlay_capable_planes);
+  } else {
+    // Default to attempting 1 overlay if we get an invalid response.
+    max_overlays_considered_ = 1;
+  }
 
   // Different hardware capabilities may mean a different result for a specific
   // combination of overlays, so clear this cache.
@@ -300,11 +312,6 @@ bool OverlayProcessorOzone::SetNativePixmapForCandidate(
     bool is_primary) {
   DCHECK(shared_image_interface_);
 
-  UMA_HISTOGRAM_BOOLEAN(
-      "Compositing.Display.OverlayProcessorOzone."
-      "IsCandidateSharedImage",
-      mailbox.IsSharedImage());
-
   if (!mailbox.IsSharedImage())
     return false;
 
@@ -318,10 +325,8 @@ bool OverlayProcessorOzone::SetNativePixmapForCandidate(
     // candidate. We will try again next frame.
     DLOG(ERROR) << "Unable to find the NativePixmap corresponding to the "
                    "overlay candidate";
-    ReportSharedImageExists(false);
     return false;
   }
-  ReportSharedImageExists(true);
 
   if (is_primary && (candidate->buffer_size != native_pixmap->GetBufferSize() ||
                      candidate->format != native_pixmap->GetBufferFormat())) {

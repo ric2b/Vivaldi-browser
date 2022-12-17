@@ -13,6 +13,18 @@
 const base::Feature kNewOverflowMenu{"NewOverflowMenu",
                                      base::FEATURE_DISABLED_BY_DEFAULT};
 
+const base::Feature kNewOverflowMenuCBDAction{
+    "NewOverflowMenuCBDAction", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kNewOverflowMenuSettingsAction{
+    "NewOverflowMenuSettingsAction", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kNewOverflowMenuSimpleDestinationIcons{
+    "NewOverflowMenuSimpleDestinationIcons", base::FEATURE_DISABLED_BY_DEFAULT};
+
+const base::Feature kSmartSortingNewOverflowMenu{
+    "kSmartSortingNewOverflowMenu", base::FEATURE_DISABLED_BY_DEFAULT};
+
 bool IsNewOverflowMenuEnabled() {
   if (@available(iOS 15, *)) {
     return base::FeatureList::IsEnabled(kNewOverflowMenu);
@@ -22,6 +34,21 @@ bool IsNewOverflowMenuEnabled() {
   return false;
 }
 
+bool IsNewOverflowMenuCBDActionEnabled() {
+  return IsNewOverflowMenuEnabled() &&
+         base::FeatureList::IsEnabled(kNewOverflowMenuCBDAction);
+}
+
+bool IsNewOverflowMenuSettingsActionEnabled() {
+  return IsNewOverflowMenuEnabled() &&
+         base::FeatureList::IsEnabled(kNewOverflowMenuSettingsAction);
+}
+
+bool IsNewOverflowMenuSimpleDestinationIconsEnabled() {
+  return IsNewOverflowMenuEnabled() &&
+         base::FeatureList::IsEnabled(kNewOverflowMenuSimpleDestinationIcons);
+}
+
 bool IsPasswordManagerBrandingUpdateEnabled() {
   if (IsNewOverflowMenuEnabled()) {
     return base::FeatureList::IsEnabled(
@@ -29,4 +56,9 @@ bool IsPasswordManagerBrandingUpdateEnabled() {
   }
 
   return false;
+}
+
+bool IsSmartSortingNewOverflowMenuEnabled() {
+  return IsNewOverflowMenuEnabled() &&
+         base::FeatureList::IsEnabled(kSmartSortingNewOverflowMenu);
 }

@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Pokušajte da pokrenete Windows dijagnostiku mreže<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Ovaj sajt sadrži štetne programe</translation>
 <translation id="1916770123977586577">Da bi se primenila nova podešavanja na ovom sajtu, učitajte stranicu ponovo</translation>
+<translation id="1973351931613083086">automatska reprodukcija</translation>
 <translation id="1974060860693918893">Napredno</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />da proverite proksi i zaštitni zid<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Izdato za: <ph name="ORGANIZATION" /> <ph name="JURISDICTION" /></translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Idi nazad</translation>
 <translation id="2539524384386349900">Otkrij</translation>
 <translation id="255002559098805027">Host <ph name="HOST_NAME" /> je poslao nevažeći odgovor.</translation>
-<translation id="2609632851001447353">Varijacije</translation>
 <translation id="2634124572758952069">Nije pronađena IP adresa servera hosta <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Pristup datoteci je odbijen</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Napadači možda pokušavaju da ukradu informacije sa <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (na primer, lozinke, poruke ili kreditne kartice). <ph name="BEGIN_LEARN_MORE_LINK" />Saznajte više<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Otkrivena je promena na mreži.</translation>
 <translation id="2948083400971632585">Možete da onemogućite bilo koji proksi konfigurisan za povezivanje sa stranice podešavanja.</translation>
+<translation id="2953943267837858202">Nije dozvoljena automatska reprodukcija videa</translation>
 <translation id="2991571918955627853">Ne možete posetiti sada <ph name="SITE" /> jer veb-sajt koristi HSTS. Greške i napadi na mreži su obično privremeni, pa će ova stranica verovatno funkcionisati kasnije.</translation>
 <translation id="3005723025932146533">Prikaži sačuvanu kopiju</translation>
 <translation id="301521992641321250">Automatski je blokirano</translation>
@@ -61,6 +62,7 @@ Ako mislite da ne treba da koristite proksi server:
 <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Pritisnite dugme za ponovno učitavanje da biste ponovo poslali podatke potrebne za učitavanje stranice.</translation>
 <translation id="3234666976984236645">Uvek otkrij važan sadržaj na ovom sajtu</translation>
+<translation id="3291915639428159043">Automatska reprodukcija blokirana</translation>
 <translation id="3308738399950580893">reklame</translation>
 <translation id="3422472998109090673">Host <ph name="HOST_NAME" /> trenutno nije dostupan.</translation>
 <translation id="3427092606871434483">Dozvoli (podrazumevano)</translation>
@@ -71,6 +73,7 @@ Ako mislite da ne treba da koristite proksi server:
 <translation id="3566021033012934673">Veza nije privatna</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Sakrij detalje</translation>
+<translation id="3620979700683094848">Sajtovi mogu automatski da reprodukuju video</translation>
 <translation id="3630155396527302611">Ako je već naveden kao program kome je dozvoljen pristup mreži,
 pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="3658742229777143148">Revizija</translation>
@@ -82,6 +85,7 @@ pokušajte da ga uklonite sa liste i ponovo ga dodate.</translation>
 <translation id="3973234410852337861">Host <ph name="HOST_NAME" /> je blokiran</translation>
 <translation id="3987940399970879459">Manje od 1 MB</translation>
 <translation id="4075732493274867456">Klijent i server ne podržavaju istu verziju SSL protokola ili paket za šifrovanje.</translation>
+<translation id="410351446219883937">Automatska reprodukcija</translation>
 <translation id="4116663294526079822">Uvek dozvoli na ovom sajtu</translation>
 <translation id="4130226655945681476">da proverite mrežne kablove, modem i ruter</translation>
 <translation id="4151403195736952345">Koristi globalnu podrazumevanu vrednost (Otkrij)</translation>
@@ -147,6 +151,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="6321917430147971392">Proverite DNS podešavanja</translation>
 <translation id="6328639280570009161">Pokušajte da onemogućite predviđanje mreže</translation>
 <translation id="6328786501058569169">Ovaj sajt je obmanjujuć</translation>
+<translation id="6348220984832452017">Aktivne varijacije</translation>
 <translation id="6358450015545214790">Šta ovo znači?</translation>
 <translation id="6433595998831338502">Host <ph name="HOST_NAME" /> je odbio povezivanje.</translation>
 <translation id="6447842834002726250">Kolačići</translation>
@@ -165,6 +170,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7113310725918019676">Dozvoli <ph name="BLOCKED_TYPE" /> od <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Host <ph name="HOST_NAME" /> ne poštuje bezbednosne standarde.</translation>
 <translation id="7219179957768738017">Veza koristi <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">prikazuje obaveštenja</translation>
 <translation id="7260504762447901703">Opozovi pristup</translation>
 <translation id="7353601530677266744">Komandna linija</translation>
 <translation id="7364115444476960850">Stranicu kojoj ste pokušavali da pristupite je blokirao Vivaldi-jev <ph name="BLOCKER_NAME" /></translation>
@@ -183,11 +189,13 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="7758069387465995638">Možda je zaštitni zid ili antivirusni softver blokirao vezu.</translation>
 <translation id="7800304661137206267">Veza je šifrovana pomoću <ph name="CIPHER" /> i koristi <ph name="MAC" /> za potvrdu verodostojnosti poruka i <ph name="KX" /> kao mehanizam za razmenu ključeva.</translation>
 <translation id="7834399512844817676"><ph name="SITE" /> obično koristi šifrovanje da bi zaštitio vaše informacije. Kada je Vivaldi ovog puta pokušao da se poveže sa <ph name="SITE" />, veb sajt je vratio neuobičajene i netačne podatke za prijavljivanje. Ovo se može dogoditi kada napadač pokušava da se predstavi kao <ph name="SITE" /> ili je ekran za prijavljivanje na Wi-Fi prekinuo vezu. Vaše informacije su i dalje bezbedne zato što je Vivaldi prekinuo vezu pre nego što su razmenjeni bilo kakvi podaci.</translation>
+<translation id="7834693436815575883">Automatska reprodukcija dozvoljena</translation>
 <translation id="7878562273885520351">Vaša lozinka je možda ugrožena</translation>
 <translation id="7951415247503192394">(32 bita)</translation>
 <translation id="8025119109950072390">Napadači na ovom sajtu mogu da vas prevare da biste uradili nešto opasno, na primer, da instalirate softver ili otkrijete lične podatke (poput lozinki, brojeva telefona ili brojeva kreditnih kartica).</translation>
 <translation id="8037357227543935929">Pitaj (podrazumevano)</translation>
 <translation id="8041940743680923270">Koristi globalnu podrazumevanu vrednost (Pitaj)</translation>
+<translation id="8044382196220116469">Ne dozvoli sajtovima da automatski reprodukuju video</translation>
 <translation id="808894953321890993">Promeni lozinku</translation>
 <translation id="8119307142152921512">praćenja i reklame</translation>
 <translation id="8149426793427495338">Računar je prešao u stanje mirovanja.</translation>
@@ -205,6 +213,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="8503813439785031346">Korisničko ime</translation>
 <translation id="8703575177326907206">Vaša veza sa domenom <ph name="DOMAIN" /> nije šifrovana.</translation>
 <translation id="8740359287975076522">Nije pronađena &lt;abbr id="dnsDefinition"&gt;DNS adresa&lt;/abbr&gt; hosta <ph name="HOST_NAME" />. U toku je dijagnostika problema.</translation>
+<translation id="8774017153185436870">Sajtovi bi mogli automatski da reprodukuju video</translation>
 <translation id="8820817407110198400">Obeleživači</translation>
 <translation id="8940028675168378100">Blokirao <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Idi na podešavanja sajta</translation>
@@ -212,6 +221,7 @@ ili druge mrežne uređaje koje možda koristite.</translation>
 <translation id="9008201768610948239">Zanemari</translation>
 <translation id="9025348182339809926">(nevažeći)</translation>
 <translation id="9039213469156557790">Pored toga, ova stranica sadrži i druge resurse koji nisu bezbedni. Ove resurse mogu da vide i drugi dok su u prolazu i napadač može da ih izmeni kako bi promenio ponašanje stranice.</translation>
+<translation id="9048224371732578627">Dozvoljena automatska reprodukcija videa</translation>
 <translation id="9062620674789239642">Možda je premeštena, izmenjena ili izbrisana.</translation>
 <translation id="9069693763241529744">Blokirano proširenjem</translation>
 <translation id="9073799351042754113">Odabrali ste da isključite bezbednosna upozorenja za ovaj sajt.</translation>

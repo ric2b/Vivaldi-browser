@@ -100,10 +100,6 @@ void PersonalDataManagerCleaner::SyncStarted(syncer::ModelType model_type) {
 }
 
 void PersonalDataManagerCleaner::ApplyAddressFixesAndCleanups() {
-  // TODO(crbug.com/1288863): Remove prefs in M102 or above.
-  pref_service_->ClearPref(prefs::kAutofillLastVersionValidated);
-  pref_service_->ClearPref(prefs::kAutofillProfileValidity);
-
   // One-time fix, otherwise NOP.
   RemoveOrphanAutofillTableRows();
 
@@ -157,7 +153,8 @@ void PersonalDataManagerCleaner::RemoveOrphanAutofillTableRows() {
 
 void PersonalDataManagerCleaner::RemoveInaccessibleProfileValues() {
   if (!base::FeatureList::IsEnabled(
-          features::kAutofillRemoveInaccessibleProfileValues)) {
+          features::kAutofillRemoveInaccessibleProfileValues) ||
+      !features::kAutofillRemoveInaccessibleProfileValuesOnStartup.Get()) {
     return;
   }
 
@@ -247,20 +244,20 @@ void PersonalDataManagerCleaner::DedupeProfiles(
   AutofillMetrics::LogNumberOfProfilesConsideredForDedupe(
       existing_profiles->size());
 
-  // Sort the profiles by frecency with all the verified profiles at the end.
-  // That way the most relevant profiles will get merged into the less relevant
-  // profiles, which keeps the syntax of the most relevant profiles data.
-  // Verified profiles are put at the end because they do not merge into other
-  // profiles, so the loop can be stopped when we reach those. However they need
-  // to be in the vector because an unverified profile trying to merge into a
-  // similar verified profile will be discarded.
+  // Sort the profiles by ranking score with all the verified profiles at the
+  // end. That way the most relevant profiles will get merged into the less
+  // relevant profiles, which keeps the syntax of the most relevant profiles
+  // data. Verified profiles are put at the end because they do not merge into
+  // other profiles, so the loop can be stopped when we reach those. However
+  // they need to be in the vector because an unverified profile trying to merge
+  // into a similar verified profile will be discarded.
   base::Time comparison_time = AutofillClock::Now();
   std::sort(existing_profiles->begin(), existing_profiles->end(),
             [comparison_time](const std::unique_ptr<AutofillProfile>& a,
                               const std::unique_ptr<AutofillProfile>& b) {
               if (a->IsVerified() != b->IsVerified())
                 return !a->IsVerified();
-              return a->HasGreaterFrecencyThan(b.get(), comparison_time);
+              return a->HasGreaterRankingThan(b.get(), comparison_time);
             });
 
   AutofillProfileComparator comparator(personal_data_manager_->app_locale());
@@ -336,7 +333,7 @@ void PersonalDataManagerCleaner::UpdateCardsBillingAddressReference(
   for (auto* credit_card : personal_data_manager_->GetCreditCards()) {
     // If the credit card is not associated with a billing address, skip it.
     if (credit_card->billing_address_id().empty())
-      break;
+      continue;
 
     // If the billing address profile associated with the card has been merged,
     // replace it by the id of the profile in which it was merged. Repeat the

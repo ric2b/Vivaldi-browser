@@ -569,38 +569,7 @@
     ]
   },
   "OptimizationGuideFetchingEnabled": {
-    "os": [
-      "win",
-      "linux",
-      "mac",
-      "chromeos_ash",
-      "chromeos_lacros",
-      "android"
-    ],
-    "policy_pref_mapping_tests": [
-      {
-        "policies": {
-          "OptimizationGuideFetchingEnabled": true
-        },
-        "prefs": {
-          "optimization_guide.fetching_enabled": {
-            "location": "user_profile",
-            "value": true
-          }
-        }
-      },
-      {
-        "policies": {
-          "OptimizationGuideFetchingEnabled": false
-        },
-        "prefs": {
-          "optimization_guide.fetching_enabled": {
-            "location": "user_profile",
-            "value": false
-          }
-        }
-      }
-    ]
+    "reason_for_missing_test": "Policy was removed"
   },
   "RemoteAccessClientFirewallTraversal": {
     "reason_for_missing_test": "Policy was removed"
@@ -5366,6 +5335,79 @@
       }
     ]
   },
+  "DefaultClipboardSetting": {
+    "os": [
+      "win",
+      "linux",
+      "mac",
+      "chromeos_ash",
+      "chromeos_lacros"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "DefaultClipboardSetting": 2
+        },
+        "prefs": {
+          "profile.managed_default_content_settings.clipboard": {
+            "value": 2
+          }
+        }
+      },
+      {
+        "policies": {
+          "DefaultClipboardSetting": 3
+        },
+        "prefs": {
+          "profile.managed_default_content_settings.clipboard": {
+            "value": 3
+          }
+        }
+      }
+    ]
+  },
+  "ClipboardAllowedForUrls": {
+    "os": [
+      "win",
+      "linux",
+      "mac",
+      "chromeos_ash",
+      "chromeos_lacros"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "ClipboardAllowedForUrls": [
+            "[*.]google.com"
+          ]
+        },
+        "prefs": {
+          "profile.managed_clipboard_allowed_for_urls": {}
+        }
+      }
+    ]
+  },
+  "ClipboardBlockedForUrls": {
+    "os": [
+      "win",
+      "linux",
+      "mac",
+      "chromeos_ash",
+      "chromeos_lacros"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "ClipboardBlockedForUrls": [
+            "[*.]google.com"
+          ]
+        },
+        "prefs": {
+          "profile.managed_clipboard_blocked_for_urls": {}
+        }
+      }
+    ]
+  },
   "JavaScriptJitAllowedForSites": {
     "os": [
       "win",
@@ -7446,7 +7488,8 @@
       "linux",
       "mac",
       "chromeos_ash",
-      "chromeos_lacros"
+      "chromeos_lacros",
+      "android"
     ],
     "policy_pref_mapping_tests": [
       {
@@ -10144,13 +10187,25 @@
           "ArcEnabled": false
         },
         "prefs": {
-          "arc.enabled": {}
+          "arc.enabled": {
+            "value": false
+          }
+        }
+      },
+      {
+        "policies": {
+          "ArcEnabled": true
+        },
+        "prefs": {
+          "arc.enabled": {
+            "value": true
+          }
         }
       }
     ]
   },
   "ArcPolicy": {
-    "reason_for_missing_test": "TODO(crbug.com/1213429) add test case"
+    "reason_for_missing_test": "This policy is not mapped to prefs. It's value is sent to ARC side via mojo."
   },
   "AllowScreenLock": {
     "os": [
@@ -13322,15 +13377,38 @@
   },
   "EnableSyncConsent": {
     "os": [
-      "chromeos_ash"
+      "chromeos_ash",
+      "chromeos_lacros"
     ],
     "policy_pref_mapping_tests": [
+      {
+        "note": "Default value (no policies set).",
+        "policies": {
+        },
+        "prefs": {
+          "sync_consent.enabled": {
+            "default_value": true
+          }
+        }
+      },
       {
         "policies": {
           "EnableSyncConsent": false
         },
         "prefs": {
-          "sync_consent.enabled": {}
+          "sync_consent.enabled": {
+            "value": false
+          }
+        }
+      },
+      {
+        "policies": {
+          "EnableSyncConsent": true
+        },
+        "prefs": {
+          "sync_consent.enabled": {
+            "value": true
+          }
         }
       }
     ]
@@ -15455,6 +15533,23 @@
       }
     ]
   },
+  "RendererAppContainerEnabled": {
+    "os": [
+      "win"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "RendererAppContainerEnabled": true
+        },
+        "prefs": {
+          "renderer_app_container_enabled": {
+            "location": "local_state"
+          }
+        }
+      }
+    ]
+  },
   "BrowserLegacyExtensionPointsBlocked": {
     "os": [
       "win"
@@ -15827,6 +15922,37 @@
       }
     ]
   },
+  "ScreenTimeEnabled": {
+    "os": [
+      "mac"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {},
+        "prefs": {
+          "policy.screen_time": {
+            "default_value": true
+          }
+        }
+      },
+      {
+        "policies": { "ScreenTimeEnabled": true },
+        "prefs": {
+          "policy.screen_time": {
+            "value": true
+          }
+        }
+      },
+      {
+        "policies": { "ScreenTimeEnabled": false },
+        "prefs": {
+          "policy.screen_time": {
+            "value": false
+          }
+        }
+      }
+    ]
+  },
   "ShowFullUrlsInAddressBar": {
     "os": [
       "win",
@@ -15848,24 +15974,7 @@
     ]
   },
   "LockIconInAddressBarEnabled": {
-    "os": [
-      "win",
-      "linux",
-      "mac",
-      "chromeos_ash",
-      "chromeos_lacros",
-      "android"
-    ],
-    "policy_pref_mapping_tests": [
-      {
-        "policies": {
-          "LockIconInAddressBarEnabled": true
-        },
-        "prefs": {
-          "omnibox.lock_icon_in_address_bar_enabled": {}
-        }
-      }
-    ]
+    "reason_for_missing_test": "Policy was removed"
   },
   "DesktopSharingHubEnabled": {
     "os": [
@@ -17719,7 +17828,7 @@
         "policies": {},
         "prefs": {
           "ash.projector.allow_by_policy": {
-            "default_value": false
+            "default_value": true
           }
         }
       },
@@ -17782,7 +17891,7 @@
         "note": "Check default values (no policies set)",
         "prefs": {
           "first_party_sets.enabled": {
-            "location": "local_state",
+            "location": "user_profile",
             "default_value": true
           }
         }
@@ -17794,7 +17903,7 @@
         },
         "prefs": {
           "first_party_sets.enabled": {
-            "location": "local_state",
+            "location": "user_profile",
             "value": true
           }
         }
@@ -17806,7 +17915,7 @@
         },
         "prefs": {
           "first_party_sets.enabled": {
-            "location": "local_state",
+            "location": "user_profile",
             "value": false
           }
         }
@@ -18258,6 +18367,28 @@
       }
     ]
   },
+  "UnthrottledNestedTimeoutEnabled": {
+    "os": [
+      "win",
+      "linux",
+      "mac",
+      "chromeos_ash",
+      "chromeos_lacros",
+      "android"
+    ],
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+          "UnthrottledNestedTimeoutEnabled": true
+        },
+        "prefs": {
+          "policy.unthrottled_nested_timeout": {
+            "location": "user_profile"
+          }
+        }
+      }
+    ]
+  },
   "WarnBeforeQuittingEnabled": {
     "os": [
       "mac"
@@ -18346,6 +18477,65 @@
       }
     }
   ]
+  },
+  "OsColorMode": {
+    "os": [
+      "chromeos_ash"
+    ],
+    "can_be_recommended": true,
+    "policy_pref_mapping_tests": [
+      {
+        "policies": {
+        },
+        "prefs": {
+          "ash.dark_mode.enabled": {
+            "check_for_mandatory": false,
+            "check_for_recommended": true,
+            "value": false
+          },
+          "ash.dark_mode.schedule_type": {
+            "check_for_mandatory": false,
+            "check_for_recommended": true,
+            "value": 0
+          }
+        }
+      },
+      {
+        "policies": {
+          "OsColorMode": "dark"
+        },
+        "prefs": {
+          "ash.dark_mode.enabled": {
+            "value": true
+          },
+          "ash.dark_mode.schedule_type": {
+            "value": 0
+          }
+        }
+      },
+      {
+        "policies": {
+          "OsColorMode": "light"
+        },
+        "prefs": {
+          "ash.dark_mode.enabled": {
+            "value": false
+          },
+          "ash.dark_mode.schedule_type": {
+            "value": 0
+          }
+        }
+      },
+      {
+        "policies": {
+          "OsColorMode": "auto"
+        },
+        "prefs": {
+          "ash.dark_mode.schedule_type": {
+            "value": 1
+          }
+        }
+      }
+    ]
+  }
 }
-}
-

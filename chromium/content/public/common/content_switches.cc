@@ -55,11 +55,6 @@ const char kChangeStackGuardOnForkDisabled[] = "disable";
 // Causes the Conversion Measurement API to run without delays or noise.
 const char kConversionsDebugMode[] = "conversions-debug-mode";
 
-// Enable restricted APIs for a set of origins, specified as a
-// comma-separated list. For example:
-//   --restricted-api-origins=https://www.foo.com,https://www.bar.com
-const char kRestrictedApiOrigins[] = "restricted-api-origins";
-
 // Enables gating of getDisplayMedia by the display-capture permissions-policy.
 // This switch supports the shipping of display-capture, as it allows admins to
 // temporarily disable display-capture gating with an Enterprise policy.
@@ -340,6 +335,10 @@ const char kEnableExperimentalCookieFeatures[] =
 const char kEnableExperimentalWebAssemblyFeatures[] =
     "enable-experimental-webassembly-features";
 
+// Enables experimental WebAssembly stack switching.
+const char kEnableExperimentalWebAssemblyStackSwitching[] =
+    "enable-experimental-webassembly-stack-switching";
+
 // Enables Web Platform features that are in development.
 const char kEnableExperimentalWebPlatformFeatures[] =
     "enable-experimental-web-platform-features";
@@ -468,10 +467,6 @@ const char kFileUrlPathAlias[] = "file-url-path-alias";
 // string. Locks major version to 99.
 const char kForceMajorVersionToMinorPosition[] = "force-major-version-to-minor";
 
-// Forces use of hardware overlay for fullscreen video playback. Useful for
-// testing the Android overlay fullscreen functionality on other platforms.
-const char kForceOverlayFullscreenVideo[]   = "force-overlay-fullscreen-video";
-
 // This forces pages to be loaded as presentation receivers.  Useful for testing
 // behavior specific to presentation receivers.
 // Spec: https://www.w3.org/TR/presentation-api/#interface-presentationreceiver
@@ -482,12 +477,6 @@ const char kForcePresentationReceiverForTesting[] =
 // a screen reader is detected. The disable-renderer-accessibility switch
 // overrides this if present.
 const char kForceRendererAccessibility[]    = "force-renderer-accessibility";
-
-// For development / testing only. When running content_browsertests,
-// saves output of failing accessibility tests to their expectations files in
-// content/test/data/accessibility/, overwriting existing file content.
-const char kGenerateAccessibilityTestExpectations[] =
-    "generate-accessibility-test-expectations";
 
 // Extra command line options for launching the GPU process (normally used
 // for debugging). Use like renderer-cmd-prefix.
@@ -509,6 +498,11 @@ const char kInProcessGPU[]                  = "in-process-gpu";
 // connection from the browser before killing itself.
 const char kIPCConnectionTimeout[]          = "ipc-connection-timeout";
 
+// Enable Isolated App restrictions for a set of origins, specified as a
+// comma-separated list. For example:
+//   --isolated-app-origins=https://www.foo.com,https://www.bar.com
+const char kIsolatedAppOrigins[] = "isolated-app-origins";
+
 // Require dedicated processes for a set of origins, specified as a
 // comma-separated list. For example:
 //   --isolate-origins=https://www.foo.com,https://www.bar.com
@@ -526,9 +520,6 @@ const char kDisableJavaScriptHarmonyShipping[] =
 
 // Enables experimental Harmony (ECMAScript 6) features.
 const char kJavaScriptHarmony[]             = "javascript-harmony";
-
-// Enables unsafe fast JS calls between Blink and V8.
-const char kEnableUnsafeFastJSCalls[] = "enable-unsafe-fast-js-calls";
 
 // Flag to launch tests in the browser process.
 const char kLaunchAsBrowser[] = "as-browser";

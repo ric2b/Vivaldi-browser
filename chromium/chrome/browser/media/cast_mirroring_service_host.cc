@@ -46,6 +46,7 @@
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/viz/public/mojom/gpu.mojom.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/display/display.h"
 #include "ui/display/screen.h"
 #include "url/origin.h"
@@ -113,8 +114,9 @@ content::DesktopMediaID BuildMediaIdForWebContents(
     return media_id;
   media_id.type = content::DesktopMediaID::TYPE_WEB_CONTENTS;
   media_id.web_contents_id = content::WebContentsMediaCaptureId(
-      contents->GetMainFrame()->GetProcess()->GetID(),
-      contents->GetMainFrame()->GetRoutingID(), true /* disable_local_echo */);
+      contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
+      contents->GetPrimaryMainFrame()->GetRoutingID(),
+      true /* disable_local_echo */);
   return media_id;
 }
 
@@ -155,8 +157,8 @@ void CastMirroringServiceHost::GetForDesktop(
     const content::DesktopMediaID media_id =
         content::DesktopStreamsRegistry::GetInstance()->RequestMediaForStreamId(
             desktop_stream_id,
-            initiator_contents->GetMainFrame()->GetProcess()->GetID(),
-            initiator_contents->GetMainFrame()->GetRoutingID(),
+            initiator_contents->GetPrimaryMainFrame()->GetProcess()->GetID(),
+            initiator_contents->GetPrimaryMainFrame()->GetRoutingID(),
             url::Origin::Create(initiator_contents->GetVisibleURL()),
             &original_extension_name, content::kRegistryStreamTypeDesktop);
     mojo::MakeSelfOwnedReceiver(
@@ -453,12 +455,20 @@ void CastMirroringServiceHost::ShowCaptureIndicator() {
       !web_contents()) {
     return;
   }
-  const blink::MediaStreamDevice device(
-      ConvertVideoStreamType(source_media_id_.type),
-      source_media_id_.ToString(), /* name */ std::string());
+
+  blink::mojom::StreamDevices devices;
+  const blink::mojom::MediaStreamType stream_type =
+      ConvertVideoStreamType(source_media_id_.type);
+  blink::MediaStreamDevice device = blink::MediaStreamDevice(
+      stream_type, source_media_id_.ToString(), /* name */ std::string());
+  if (blink::IsAudioInputMediaType(stream_type))
+    devices.audio_device = device;
+  else if (blink::IsVideoInputMediaType(stream_type))
+    devices.video_device = device;
+  DCHECK(devices.audio_device.has_value() || devices.video_device.has_value());
   media_stream_ui_ = MediaCaptureDevicesDispatcher::GetInstance()
                          ->GetMediaStreamCaptureIndicator()
-                         ->RegisterMediaStream(web_contents(), {device});
+                         ->RegisterMediaStream(web_contents(), devices);
   media_stream_ui_->OnStarted(
       base::RepeatingClosure(), content::MediaStreamUI::SourceCallback(),
       /*label=*/std::string(), /*screen_capture_ids=*/{},

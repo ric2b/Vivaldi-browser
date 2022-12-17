@@ -30,6 +30,7 @@ executable("notification_helper") {
     "//chrome/common:version_header",
     "//chrome/install_static:install_static_util",
     "//chrome/install_static:primary_module",
+    "//chrome/installer/util:with_no_strings",
     "//components/crash/core/app",
     "//components/crash/core/app:crash_export_thunks",
     "//components/version_info:channel",
@@ -88,6 +89,7 @@ test("notification_helper_unittests") {
     "//chrome/installer/setup:lib",
     "//chrome/installer/util:with_no_strings",
     "//testing/gtest",
+
   ]
 
   data_deps = [ ":notification_helper" ]

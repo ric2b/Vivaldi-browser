@@ -219,22 +219,15 @@ RuntimePrivateSetFeatureEnabledFunction::Run() {
 }
 
 ExtensionFunction::ResponseAction RuntimePrivateIsGuestSessionFunction::Run() {
-  using vivaldi::runtime_private::IsGuestSession::Params;
   namespace Results = vivaldi::runtime_private::IsGuestSession::Results;
-
-  std::unique_ptr<Params> params = Params::Create(args());
-  EXTENSION_FUNCTION_VALIDATE(params.get());
 
   bool is_guest = false;
   PrefService* service = g_browser_process->local_state();
   DCHECK(service);
   if (service->GetBoolean(prefs::kBrowserGuestModeEnabled)) {
-    for (auto* browser : *BrowserList::GetInstance()) {
-      if (browser->session_id().id() == params->id) {
-        is_guest = browser->profile()->IsGuestSession();
-        break;
-      }
-    }
+    content::WebContents* web_contents = GetSenderWebContents();
+    Profile* profile = Profile::FromBrowserContext(web_contents->GetBrowserContext());
+    is_guest = profile->IsGuestSession();
   }
   return RespondNow(ArgumentList(Results::Create(is_guest)));
 }

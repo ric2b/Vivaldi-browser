@@ -32,10 +32,6 @@
     "args": ["--js-flags=--future"]
   },
   {
-    "name": "layout-ng-fragment-item",
-    "args": ["--enable-blink-features=LayoutNGFragmentItem"]
-  },
-  {
     "name": "new-system-colors",
     "args": ["--enable-blink-features=NewSystemColors"]
   },
@@ -47,7 +43,7 @@
     "name": "skia-vulkan-swiftshader",
     "args": [
           "--enable-gpu-rasterization",
-          "--enable-features=UseSkiaRenderer,Vulkan",
+          "--enable-features=Vulkan",
           "--use-vulkan=swiftshader",
           "--disable-vulkan-fallback-to-gl-for-testing"
     ]

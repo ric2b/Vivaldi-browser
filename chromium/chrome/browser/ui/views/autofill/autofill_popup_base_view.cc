@@ -35,6 +35,7 @@
 #include "ui/views/accessibility/view_accessibility.h"
 #include "ui/views/border.h"
 #include "ui/views/bubble/bubble_border.h"
+#include "ui/views/controls/menu/menu_config.h"
 #include "ui/views/focus/focus_manager.h"
 #include "ui/views/layout/fill_layout.h"
 #include "ui/views/widget/widget.h"
@@ -91,9 +92,21 @@ class AutofillPopupBaseView::Widget : public views::Widget {
   const raw_ptr<AutofillPopupBaseView> autofill_popup_base_view_;
 };
 
+// static
 int AutofillPopupBaseView::GetCornerRadius() {
   return ChromeLayoutProvider::Get()->GetCornerRadiusMetric(
       views::Emphasis::kMedium);
+}
+
+// static
+int AutofillPopupBaseView::GetHorizontalMargin() {
+  return views::MenuConfig::instance().item_horizontal_padding +
+         GetCornerRadius();
+}
+
+// static
+int AutofillPopupBaseView::GetHorizontalPadding() {
+  return GetHorizontalMargin();
 }
 
 SkColor AutofillPopupBaseView::GetBackgroundColor() const {
@@ -176,6 +189,26 @@ bool AutofillPopupBaseView::DoShow() {
 }
 
 void AutofillPopupBaseView::DoHide() {
+  if (is_ax_menu_start_event_fired_) {
+    // Fire menu end event.
+    // The menu start event is delayed until the user
+    // navigates into the menu, otherwise some screen readers will ignore
+    // any focus events outside of the menu, including a focus event on
+    // the form control itself.
+    NotifyAccessibilityEvent(ax::mojom::Event::kMenuEnd, true);
+    GetViewAccessibility().EndPopupFocusOverride();
+
+    // Also fire an accessible focus event on what currently has focus,
+    // typically the widget associated with this popup.
+    if (parent_widget_) {
+      if (views::FocusManager* focus_manager =
+              parent_widget_->GetFocusManager()) {
+        if (View* focused_view = focus_manager->GetFocusedView())
+          focused_view->GetViewAccessibility().FireFocusAfterMenuClose();
+      }
+    }
+  }
+
   // The controller is no longer valid after it hides us.
   delegate_ = nullptr;
 
@@ -189,32 +222,6 @@ void AutofillPopupBaseView::DoHide() {
     GetWidget()->Close();
   } else {
     delete this;
-  }
-}
-
-void AutofillPopupBaseView::VisibilityChanged(View* starting_from,
-                                              bool is_visible) {
-  if (!is_visible) {
-    if (is_ax_menu_start_event_fired_) {
-      // Fire menu end event.
-      // The menu start event is delayed until the user
-      // navigates into the menu, otherwise some screen readers will ignore
-      // any focus events outside of the menu, including a focus event on
-      // the form control itself.
-      NotifyAccessibilityEvent(ax::mojom::Event::kMenuEnd, true);
-      GetViewAccessibility().EndPopupFocusOverride();
-
-      // Also fire an accessible focus event on what currently has focus,
-      // typically the widget associated with this popup.
-      if (parent_widget_) {
-        if (views::FocusManager* focus_manager =
-                parent_widget_->GetFocusManager()) {
-          if (View* focused_view = focus_manager->GetFocusedView())
-            focused_view->GetViewAccessibility().FireFocusAfterMenuClose();
-        }
-      }
-    }
-    is_ax_menu_start_event_fired_ = false;
   }
 }
 
@@ -413,7 +420,7 @@ bool AutofillPopupBaseView::DoUpdateBoundsAndRedrawPopup() {
 std::unique_ptr<views::Border> AutofillPopupBaseView::CreateBorder() {
   auto border = std::make_unique<views::BubbleBorder>(
       views::BubbleBorder::NONE, views::BubbleBorder::STANDARD_SHADOW,
-      GetBackgroundColor());
+      ui::kColorDropdownBackground);
   border->SetCornerRadius(GetCornerRadius());
   border->set_md_shadow_elevation(
       ChromeLayoutProvider::Get()->GetShadowElevationMetric(

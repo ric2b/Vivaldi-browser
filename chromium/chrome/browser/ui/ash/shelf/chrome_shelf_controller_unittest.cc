@@ -104,7 +104,6 @@
 #include "chrome/browser/ui/tabs/tab_strip_model.h"
 #include "chrome/browser/ui/web_applications/test/web_app_browsertest_util.h"
 #include "chrome/browser/web_applications/externally_installed_web_app_prefs.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/browser/web_applications/system_web_apps/test/test_system_web_app_manager.h"
 #include "chrome/browser/web_applications/test/fake_web_app_provider.h"
 #include "chrome/browser/web_applications/test/web_app_install_test_utils.h"
@@ -122,7 +121,7 @@
 #include "chrome/test/base/test_browser_window_aura.h"
 #include "chrome/test/base/testing_profile.h"
 #include "chrome/test/base/testing_profile_manager.h"
-#include "chromeos/dbus/concierge/concierge_client.h"
+#include "chromeos/ash/components/dbus/concierge/concierge_client.h"
 #include "chromeos/dbus/dbus_thread_manager.h"
 #include "components/account_id/account_id.h"
 #include "components/app_constants/constants.h"
@@ -426,7 +425,7 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
     command_line->AppendSwitch(switches::kDisableDefaultApps);
 
     chromeos::DBusThreadManager::Initialize();
-    chromeos::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
+    ash::ConciergeClient::InitializeFake(/*fake_cicerone_client=*/nullptr);
 
     app_list::AppListSyncableServiceFactory::SetUseInTesting(true);
 
@@ -606,7 +605,7 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
     shelf_controller_ = nullptr;
     shelf_item_factory_.reset();
     BrowserWithTestWindowTest::TearDown();
-    chromeos::ConciergeClient::Shutdown();
+    ash::ConciergeClient::Shutdown();
     chromeos::DBusThreadManager::Shutdown();
     app_list::AppListSyncableServiceFactory::SetUseInTesting(false);
   }
@@ -929,8 +928,6 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
             result += "Platform_App";
           } else if (app == arc_support_host_->id()) {
             result += "Play Store";
-          } else if (app == crostini::kCrostiniTerminalSystemAppId) {
-            result += "Terminal";
           } else if (app == arc::kSettingsAppId) {
             result += "Android Settings";
           } else {
@@ -1038,6 +1035,15 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
 
   std::string AddArcAppAndShortcut(const arc::mojom::AppInfo& app_info) {
     ArcAppListPrefs* const prefs = arc_test_.arc_app_list_prefs();
+
+    absl::optional<uint64_t> app_size_in_bytes;
+    absl::optional<uint64_t> data_size_in_bytes;
+
+    if (!app_info.app_storage.is_null()) {
+      app_size_in_bytes = app_info.app_storage->app_size_in_bytes;
+      data_size_in_bytes = app_info.app_storage->data_size_in_bytes;
+    }
+
     // Adding app to the prefs, and check that the app is accessible by id.
     prefs->AddAppAndShortcut(
         app_info.name, app_info.package_name, app_info.activity,
@@ -1045,7 +1051,7 @@ class ChromeShelfControllerTestBase : public BrowserWithTestWindowTest {
         app_info.version_name, false /* sticky */,
         true /* notifications_enabled */, true /* app_ready */,
         false /* suspended */, false /* shortcut */, true /* launchable */,
-        ArcAppListPrefs::WindowLayout());
+        ArcAppListPrefs::WindowLayout(), app_size_in_bytes, data_size_in_bytes);
     const std::string app_id =
         ArcAppListPrefs::GetAppId(app_info.package_name, app_info.activity);
     EXPECT_TRUE(prefs->GetApp(app_id));
@@ -1362,7 +1368,7 @@ class V2App {
     // in a random RenderFrameHost is Good Enough™.
     window_->Init(GURL(std::string()),
                   new extensions::AppWindowContentsImpl(window_),
-                  creator_web_contents_->GetMainFrame(), params);
+                  creator_web_contents_->GetPrimaryMainFrame(), params);
   }
 
   V2App(const V2App&) = delete;
@@ -1689,6 +1695,20 @@ TEST_F(ChromeShelfControllerLacrosPrimaryTest, ChromeAppWindows) {
   window2.reset();
   VerifyInstance(kDummyAppId, window2.get(), apps::InstanceState::kDestroyed);
   EXPECT_FALSE(proxy()->InstanceRegistry().ContainsAppId(kDummyAppId));
+}
+
+// Regression test for crash. crbug.com/1296949
+TEST_F(ChromeShelfControllerLacrosPrimaryTest, WithoutAppService) {
+  Profile* const controller_profile = profile()->GetOffTheRecordProfile(
+      Profile::OTRProfileID::CreateUniqueForTesting(),
+      /*create_if_needed=*/true);
+  EXPECT_FALSE(apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(
+      controller_profile));
+
+  ChromeShelfPrefs::SkipPinnedAppsFromSyncForTest();
+  ash::ShelfModel model;
+  FakeChromeShelfItemFactory shelf_item_factory(controller_profile);
+  ChromeShelfController(controller_profile, &model, &shelf_item_factory).Init();
 }
 
 TEST_F(ChromeShelfControllerWithArcTest, ArcAppsHiddenFromLaunchCanBePinned) {
@@ -5093,39 +5113,12 @@ TEST_F(ChromeShelfControllerDemoModeTest, PinnedAppsOffline) {
             GetPinnableForAppID(web_app_id, profile()));
 }
 
-TEST_P(ChromeShelfControllerTest, CrostiniTerminalPinUnpin) {
-  InitShelfController();
-
-  // Load pinned Terminal from prefs without Crostini UI being allowed
-  syncer::SyncChangeList sync_list;
-  InsertAddPinChange(&sync_list, 1, crostini::kCrostiniTerminalSystemAppId);
-  SendPinChanges(sync_list, true);
-  EXPECT_EQ("Chrome", GetPinnedAppStatus());
-
-  // Reload after allowing Crostini UI
-  crostini::CrostiniTestHelper test_helper(profile());
-  test_helper.ReInitializeAppServiceIntegration();
-  // TODO(crubug.com/918739): Fix pins are not refreshed on enabling Crostini.
-  // As a workaround add any app that triggers pin update.
-  AddExtension(extension1_.get());
-  EXPECT_EQ("Chrome, Terminal", GetPinnedAppStatus());
-
-  // Unpin the Terminal
-  shelf_controller_->UnpinAppWithID(crostini::kCrostiniTerminalSystemAppId);
-  EXPECT_EQ("Chrome", GetPinnedAppStatus());
-
-  // Pin Terminal again.
-  PinAppWithIDToShelf(crostini::kCrostiniTerminalSystemAppId);
-  EXPECT_EQ("Chrome, Terminal", GetPinnedAppStatus());
-}
-
 // Tests behavior for ensuring some component apps can be marked unpinnable.
 TEST_P(ChromeShelfControllerTest, UnpinnableComponentApps) {
   InitShelfController();
 
   const char* kPinnableApp = file_manager::kFileManagerAppId;
-  const char* kNoPinApps[] = {extension_misc::kFeedbackExtensionId,
-                              ash::eche_app::kEcheAppId};
+  const char* kNoPinApps[] = {ash::eche_app::kEcheAppId};
 
   EXPECT_EQ(AppListControllerDelegate::PIN_EDITABLE,
             GetPinnableForAppID(kPinnableApp, profile()));

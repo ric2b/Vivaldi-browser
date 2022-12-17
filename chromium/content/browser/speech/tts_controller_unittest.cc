@@ -72,11 +72,12 @@ class MockTtsPlatformImpl : public TtsPlatform {
   std::string GetError() override { return error_; }
   void ClearError() override { error_.clear(); }
   void Shutdown() override {}
-  bool PreferEngineDelegateVoices() override { return false; }
+  void FinalizeVoiceOrdering(std::vector<VoiceData>& voices) override {}
   void GetVoicesForBrowserContext(
       content::BrowserContext* browser_context,
       const GURL& source_url,
       std::vector<content::VoiceData>* out_voices) override {}
+  void RefreshVoices() override {}
 
   void SetPlatformImplSupported(bool state) { platform_supported_ = state; }
   void SetPlatformImplInitialized(bool state) { platform_initialized_ = state; }

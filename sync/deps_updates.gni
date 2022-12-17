@@ -54,25 +54,3 @@ if (!is_android) {
     ]
   }
 }
-
-update_target("//components/sync/engine:engine") {
-  deps += [
-    "//vivaldi/sync/test:fake_server",
-  ]
-  allow_circular_includes_from = [
-    "//components/sync/base:base",
-    "//vivaldi/sync/test:fake_server",
-  ]
-}
-
-update_target("//components/sync_sessions:sync_sessions") {
-  deps += [
-    "//vivaldi/prefs:prefs_files_generator",
-  ]
-}
-
-update_target("//components/sync/protocol:util") {
-  allow_circular_includes_from = [
-    "//components/sync/base:base",
-  ]
-}

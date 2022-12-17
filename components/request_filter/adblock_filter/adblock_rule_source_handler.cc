@@ -15,7 +15,6 @@
 #include "base/json/json_string_value_serializer.h"
 #include "base/rand_util.h"
 #include "base/strings/string_number_conversions.h"
-#include "base/task/post_task.h"
 #include "components/request_filter/adblock_filter/adblock_ruleset_file_parser.h"
 #include "components/request_filter/adblock_filter/ddg_rules_parser.h"
 #include "components/request_filter/adblock_filter/parse_result.h"
@@ -388,7 +387,7 @@ void RuleSourceHandler::RulesReader::Start(
               allow_abp_snippets, delete_after_read)
       .Read(read_result.get());
 
-  base::PostTask(FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(FROM_HERE,
                  base::BindOnce(std::move(callback), std::move(read_result)));
 }
 
@@ -538,10 +537,10 @@ void RuleSourceHandler::Clear() {
 
   file_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(base::GetDeleteFileCallback(), rules_list_path_));
+      base::BindOnce(base::GetDeleteFileCallback(rules_list_path_)));
   file_task_runner_->PostTask(
       FROM_HERE,
-      base::BindOnce(base::GetDeleteFileCallback(), tracker_infos_path_));
+      base::BindOnce(base::GetDeleteFileCallback(tracker_infos_path_)));
 }
 
 void RuleSourceHandler::StartUpdateTimer() {

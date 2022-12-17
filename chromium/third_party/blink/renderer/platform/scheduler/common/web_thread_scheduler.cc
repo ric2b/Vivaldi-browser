@@ -63,12 +63,6 @@ WebThreadScheduler::DefaultTaskRunner() {
 }
 
 scoped_refptr<base::SingleThreadTaskRunner>
-WebThreadScheduler::InputTaskRunner() {
-  NOTREACHED();
-  return nullptr;
-}
-
-scoped_refptr<base::SingleThreadTaskRunner>
 WebThreadScheduler::CompositorTaskRunner() {
   NOTREACHED();
   return nullptr;
@@ -141,10 +135,6 @@ void WebThreadScheduler::DidAnimateForInputOnCompositorThread() {
   NOTREACHED();
 }
 
-void WebThreadScheduler::DidScheduleBeginMainFrame() {
-  NOTREACHED();
-}
-
 void WebThreadScheduler::DidRunBeginMainFrame() {
   NOTREACHED();
 }
@@ -184,10 +174,6 @@ void WebThreadScheduler::SetTopLevelBlameContext(
 }
 
 void WebThreadScheduler::SetRendererProcessType(WebRendererProcessType type) {
-  NOTREACHED();
-}
-
-void WebThreadScheduler::OnMainFrameRequestedForInput() {
   NOTREACHED();
 }
 

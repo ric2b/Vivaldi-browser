@@ -7,12 +7,10 @@ package org.chromium.chrome.browser.tasks.tab_management;
 import static org.chromium.chrome.browser.tasks.tab_management.TabListModel.CardProperties.CARD_ALPHA;
 
 import android.content.res.ColorStateList;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
-import android.graphics.drawable.Drawable;
-import android.graphics.drawable.InsetDrawable;
 import android.graphics.Matrix;
 import android.text.TextUtils;
+import android.util.Size;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewGroup.LayoutParams;
@@ -20,15 +18,16 @@ import android.widget.ImageView;
 import android.widget.ImageView.ScaleType;
 import android.widget.TextView;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import androidx.core.content.res.ResourcesCompat;
 import androidx.core.graphics.drawable.DrawableCompat;
 import androidx.core.view.ViewCompat;
 import androidx.vectordrawable.graphics.drawable.AnimatedVectorDrawableCompat;
 
 import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
+import org.chromium.chrome.browser.tab.TabUtils;
 import org.chromium.chrome.tab_ui.R;
 import org.chromium.components.browser_ui.widget.chips.ChipView;
 import org.chromium.ui.modelutil.PropertyKey;
@@ -110,21 +109,10 @@ class TabGridViewBinder {
             tabTitleView.setContentDescription(
                     view.getResources().getString(R.string.accessibility_tabstrip_tab, title));
         } else if (TabProperties.IS_SELECTED == propertyKey) {
-            if (TabUiThemeProvider.themeRefactorEnabled()) {
-                updateColor(view, model.get(TabProperties.IS_INCOGNITO),
-                        model.get(TabProperties.IS_SELECTED));
-                updateThumbnail(view, model);
-                updateFavicon(view, model);
-            } else {
-                int selectedTabBackground =
-                        model.get(TabProperties.SELECTED_TAB_BACKGROUND_DRAWABLE_ID);
-                Resources res = view.getResources();
-                Resources.Theme theme = view.getContext().getTheme();
-                Drawable drawable = new InsetDrawable(
-                        ResourcesCompat.getDrawable(res, selectedTabBackground, theme),
-                        (int) res.getDimension(R.dimen.tab_list_selected_inset));
-                view.setForeground(model.get(TabProperties.IS_SELECTED) ? drawable : null);
-            }
+            updateColor(view, model.get(TabProperties.IS_INCOGNITO),
+                    model.get(TabProperties.IS_SELECTED));
+            updateThumbnail(view, model);
+            updateFavicon(view, model);
             if (TabUiFeatureUtilities.ENABLE_SEARCH_CHIP.getValue()) {
                 ChipView pageInfoButton = (ChipView) view.fastFindViewById(R.id.page_info_button);
                 pageInfoButton.getPrimaryTextView().setTextAlignment(
@@ -348,11 +336,15 @@ class TabGridViewBinder {
         // Use placeholder drawable before the real thumbnail is available.
         thumbnail.setColorThumbnailPlaceHolder(
                 model.get(TabProperties.IS_INCOGNITO), model.get(TabProperties.IS_SELECTED));
+
         Callback<Bitmap> callback = result -> {
             if (result != null) {
                 if (TabUiFeatureUtilities.isTabletGridTabSwitcherPolishEnabled(view.getContext())) {
                     // Adjust bitmap to thumbnail.
-                    updateThumbnailMatrix(thumbnail, result, model);
+                    final Size thumbnailSize =
+                            TabUtils.deriveThumbnailSize(model.get(TabProperties.GRID_CARD_WIDTH),
+                                    model.get(TabProperties.GRID_CARD_HEIGHT), view.getContext());
+                    updateThumbnailMatrix(thumbnail, result, thumbnailSize);
                 } else {
                     thumbnail.setScaleType(ScaleType.FIT_CENTER);
                     thumbnail.setAdjustViewBounds(true);
@@ -368,15 +360,16 @@ class TabGridViewBinder {
     }
 
     /**
-     * Update @{@link Matrix} of ImageView. Bitmap is scaled to larger of the two dimens, then top-center
-     * aligned.
+     * Update @{@link Matrix} of ImageView. Bitmap is scaled to larger of the two dimens, then
+     * top-center aligned.
      * @param thumbnail Destination image view @{@link TabGridThumbnailView}.
      * @param source Image bitmap to resize.
-     * @param model PropertyModel containing the destination properties.
+     * @param destinationSize Desired width and height for source.
      */
-    private static void updateThumbnailMatrix(TabGridThumbnailView thumbnail, Bitmap source,  PropertyModel model) {
-        int newWidth = model.get(TabProperties.GRID_CARD_WIDTH);
-        int newHeight = model.get(TabProperties.GRID_CARD_HEIGHT);
+    private static void updateThumbnailMatrix(
+            TabGridThumbnailView thumbnail, Bitmap source, Size destinationSize) {
+        int newWidth = destinationSize.getWidth();
+        int newHeight = destinationSize.getHeight();
         if (newWidth <= 0 || newHeight <= 0
                 || (newWidth == source.getWidth() && newHeight == source.getHeight())) {
             thumbnail.setScaleType(ScaleType.FIT_CENTER);
@@ -435,7 +428,7 @@ class TabGridViewBinder {
                 (ChromeImageView) rootView.fastFindViewById(R.id.background_view);
 
         cardView.getBackground().mutate();
-        int backgroundColor = TabUiThemeProvider.getCardViewBackgroundColor(
+        final @ColorInt int backgroundColor = TabUiThemeProvider.getCardViewBackgroundColor(
                 cardView.getContext(), isIncognito, isSelected);
         ViewCompat.setBackgroundTintList(cardView, ColorStateList.valueOf(backgroundColor));
 

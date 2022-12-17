@@ -606,12 +606,15 @@ void NoteRemoteUpdatesHandler::ProcessDelete(
   notes_model_->Remove(node);
 }
 
+// This method doesn't explicitly handle conflicts as a result of re-encryption:
+// remote update wins even if there wasn't a real change in specifics. However,
+// this scenario is very unlikely and hence the implementation is less
+// sophisticated than in ClientTagBasedModelTypeProcessor (it would require
+// introducing base hash specifics to track remote changes).
 const SyncedNoteTrackerEntity* NoteRemoteUpdatesHandler::ProcessConflict(
     const syncer::UpdateResponseData& update,
     const SyncedNoteTrackerEntity* tracked_entity) {
   const syncer::EntityData& update_entity = update.entity;
-  // TODO(crbug.com/516866): Handle the case of conflict as a result of
-  // re-encryption request.
 
   // Can only conflict with existing nodes.
   DCHECK(tracked_entity);
@@ -706,8 +709,9 @@ void NoteRemoteUpdatesHandler::RemoveEntityAndChildrenFromTracker(
   DCHECK(entity);
   note_tracker_->Remove(entity);
 
-  for (const auto& child : node->children())
+  for (const auto& child : node->children()) {
     RemoveEntityAndChildrenFromTracker(child.get());
+  }
 }
 
 const vivaldi::NoteNode* NoteRemoteUpdatesHandler::GetParentNode(

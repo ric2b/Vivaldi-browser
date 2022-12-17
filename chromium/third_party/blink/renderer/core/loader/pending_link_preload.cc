@@ -7,6 +7,7 @@
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/loader/link_loader.h"
 #include "third_party/blink/renderer/core/loader/preload_helper.h"
+#include "third_party/blink/renderer/core/loader/render_blocking_resource_manager.h"
 #include "third_party/blink/renderer/platform/heap/prefinalizer.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_finish_observer.h"
 
@@ -65,8 +66,6 @@ void PendingLinkPreload::AddResource(Resource* resource) {
 
 // https://html.spec.whatwg.org/C/#link-type-modulepreload
 void PendingLinkPreload::NotifyModuleLoadFinished(ModuleScript* module) {
-  // Step 13. "Unblock rendering on element."
-  UnblockRendering();
   if (loader_)
     loader_->NotifyModuleLoadFinished(module);
   document_->RemovePendingLinkHeaderPreloadIfNeeded(*this);

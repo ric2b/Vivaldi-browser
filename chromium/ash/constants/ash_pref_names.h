@@ -61,6 +61,8 @@ extern const char kLoginDisplayPasswordButtonEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSuggestedContentEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kLauncherContinueSectionHidden[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kLauncherFeedbackOnContinueSectionSent[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kLauncherResultEverLaunched[];
@@ -237,8 +239,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kMessageCenterLockScreenModeHideSensitive[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kAmbientColorEnabled[];
-COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kColorModeThemed[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkModeEnabled[];
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkLightModeNudge[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDarkModeScheduleType[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kNightLightEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kNightLightTemperature[];
@@ -312,6 +314,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSuggestLogoutAfterClosingLastWindow[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kUserWallpaperInfo[];
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kRecentDailyGooglePhotosWallpapers[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kWallpaperColors[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kSyncableWallpaperInfo[];
 
@@ -321,6 +325,8 @@ COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSystemBluetoothAdapterEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kSystemTrayExpanded[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kUserCameraAllowed[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kTapDraggingEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kTouchpadEnabled[];
@@ -424,6 +430,9 @@ COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kDeskTemplatesEnabled[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kPreconfiguredDeskTemplates[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kProjectorAnnotatorLastUsedMarkerColor[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kProjectorCreationFlowEnabled[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
@@ -434,6 +443,9 @@ extern const char kProjectorGalleryOnboardingShowCount[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kProjectorViewerOnboardingShowCount[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kProjectorExcludeTranscriptDialogShown[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS)
 extern const char kProjectorAllowByPolicy[];
@@ -454,6 +466,9 @@ extern const char kLoginScreenWebUILazyLoading[];
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kFloatingWorkspaceEnabled[];
 
 COMPONENT_EXPORT(ASH_CONSTANTS) extern const char kShowPostRebootNotification[];
+
+COMPONENT_EXPORT(ASH_CONSTANTS)
+extern const char kPersonalizationKeyboardBacklightColor[];
 }  // namespace prefs
 }  // namespace ash
 

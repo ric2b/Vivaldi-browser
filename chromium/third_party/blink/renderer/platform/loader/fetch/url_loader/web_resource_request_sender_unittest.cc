@@ -105,7 +105,8 @@ class TestResourceRequestSenderDelegate
                             std::vector<std::string>*) override {
       return false;
     }
-    void OnReceivedResponse(network::mojom::URLResponseHeadPtr head) override {
+    void OnReceivedResponse(network::mojom::URLResponseHeadPtr head,
+                            base::TimeTicks response_arrival) override {
       response_head_ = std::move(head);
     }
     void OnStartLoadingResponseBody(
@@ -141,7 +142,8 @@ class MockRequestPeer : public WebRequestPeer {
     last_load_timing_ = head->load_timing;
     return true;
   }
-  void OnReceivedResponse(network::mojom::URLResponseHeadPtr head) override {
+  void OnReceivedResponse(network::mojom::URLResponseHeadPtr head,
+                          base::TimeTicks response_arrival) override {
     last_load_timing_ = head->load_timing;
     received_response_ = true;
     if (cancel_on_receive_response_) {
@@ -219,15 +221,15 @@ class WebResourceRequestSenderTest : public testing::Test,
     NOTREACHED();
   }
 
-  void CallOnReceiveResponse(network::mojom::URLLoaderClient* client) {
+  void CallOnReceiveResponse(network::mojom::URLLoaderClient* client,
+                             mojo::ScopedDataPipeConsumerHandle body) {
     auto head = network::mojom::URLResponseHead::New();
     std::string raw_headers(kTestPageHeaders);
     std::replace(raw_headers.begin(), raw_headers.end(), '\n', '\0');
     head->headers = new net::HttpResponseHeaders(raw_headers);
     head->mime_type = kTestPageMimeType;
     head->charset = kTestPageCharset;
-    client->OnReceiveResponse(std::move(head),
-                              mojo::ScopedDataPipeConsumerHandle());
+    client->OnReceiveResponse(std::move(head), std::move(body));
   }
 
   std::unique_ptr<network::ResourceRequest> CreateResourceRequest() {
@@ -322,15 +324,14 @@ TEST_F(WebResourceRequestSenderTest, DelegateTest) {
       std::move(loader_and_clients_[0].second));
   loader_and_clients_.clear();
 
-  // The wrapper eats all messages until RequestComplete message is sent.
-  CallOnReceiveResponse(client.get());
-
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
   auto options = DataPipeOptions();
   ASSERT_EQ(mojo::CreateDataPipe(&options, producer_handle, consumer_handle),
             MOJO_RESULT_OK);
-  client->OnStartLoadingResponseBody(std::move(consumer_handle));
+
+  // The wrapper eats all messages until RequestComplete message is sent.
+  CallOnReceiveResponse(client.get(), std::move(consumer_handle));
 
   uint32_t size = static_cast<uint32_t>(strlen(kTestPageContents));
   auto result = producer_handle->WriteData(kTestPageContents, &size,
@@ -371,13 +372,13 @@ TEST_F(WebResourceRequestSenderTest, CancelDuringCallbackWithWrapperPeer) {
       std::move(loader_and_clients_[0].second));
   loader_and_clients_.clear();
 
-  CallOnReceiveResponse(client.get());
   mojo::ScopedDataPipeProducerHandle producer_handle;
   mojo::ScopedDataPipeConsumerHandle consumer_handle;
   auto options = DataPipeOptions();
   ASSERT_EQ(mojo::CreateDataPipe(&options, producer_handle, consumer_handle),
             MOJO_RESULT_OK);
-  client->OnStartLoadingResponseBody(std::move(consumer_handle));
+
+  CallOnReceiveResponse(client.get(), std::move(consumer_handle));
   uint32_t size = static_cast<uint32_t>(strlen(kTestPageContents));
   auto result = producer_handle->WriteData(kTestPageContents, &size,
                                            MOJO_WRITE_DATA_FLAG_NONE);
@@ -493,14 +494,14 @@ class CompletionTimeConversionTest : public WebResourceRequestSenderTest {
     // copied.
     response_head->load_timing.request_start_time =
         base::Time() + base::Seconds(99);
-    client->OnReceiveResponse(std::move(response_head),
-                              mojo::ScopedDataPipeConsumerHandle());
 
     mojo::ScopedDataPipeProducerHandle producer_handle;
     mojo::ScopedDataPipeConsumerHandle consumer_handle;
     ASSERT_EQ(mojo::CreateDataPipe(nullptr, producer_handle, consumer_handle),
               MOJO_RESULT_OK);
-    client->OnStartLoadingResponseBody(std::move(consumer_handle));
+
+    client->OnReceiveResponse(std::move(response_head),
+                              std::move(consumer_handle));
     producer_handle.reset();  // The response is empty.
 
     network::URLLoaderCompletionStatus status;

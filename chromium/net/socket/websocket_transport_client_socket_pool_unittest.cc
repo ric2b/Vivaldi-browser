@@ -41,7 +41,6 @@
 #include "net/socket/transport_client_socket_pool_test_util.h"
 #include "net/socket/transport_connect_job.h"
 #include "net/socket/websocket_endpoint_lock_manager.h"
-#include "net/socket/websocket_transport_connect_job.h"
 #include "net/test/gtest_util.h"
 #include "net/test/test_with_task_environment.h"
 #include "testing/gmock/include/gmock/gmock.h"
@@ -61,6 +60,12 @@ namespace {
 const int kMaxSockets = 32;
 const int kMaxSocketsPerGroup = 6;
 const RequestPriority kDefaultPriority = LOW;
+
+IPAddress ParseIP(const std::string& ip) {
+  IPAddress address;
+  CHECK(address.AssignFromIPLiteral(ip));
+  return address;
+}
 
 // RunLoop doesn't support this natively but it is easy to emulate.
 void RunLoopForTimePeriod(base::TimeDelta period) {
@@ -176,8 +181,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest, Basic) {
   TestLoadTimingInfoConnectedNotReused(handle);
 }
 
-// Make sure that WebSocketTransportConnectJob passes on its priority to its
-// HostResolver request on Init.
+// Make sure that the ConnectJob passes on its priority to its HostResolver
+// request on Init.
 TEST_F(WebSocketTransportClientSocketPoolTest, SetResolvePriorityOnInit) {
   for (int i = MINIMUM_PRIORITY; i <= MAXIMUM_PRIORITY; ++i) {
     RequestPriority priority = static_cast<RequestPriority>(i);
@@ -211,6 +216,9 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitHostResolutionFailure) {
                   &pool_, NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_NAME_NOT_RESOLVED));
   EXPECT_THAT(handle.resolve_error_info().error, IsError(ERR_DNS_TIMED_OUT));
+  EXPECT_THAT(handle.connection_attempts(),
+              testing::ElementsAre(
+                  ConnectionAttempt(IPEndPoint(), ERR_NAME_NOT_RESOLVED)));
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest, InitConnectionFailure) {
@@ -226,6 +234,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitConnectionFailure) {
                   ClientSocketPool::ProxyAuthCallback(), &pool_,
                   NetLogWithSource()));
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_FAILED));
+  EXPECT_THAT(
+      handle.connection_attempts(),
+      testing::ElementsAre(ConnectionAttempt(
+          IPEndPoint(IPAddress::IPv4Localhost(), 80), ERR_CONNECTION_FAILED)));
 
   // Make the host resolutions complete synchronously this time.
   host_resolver_->set_synchronous_mode(true);
@@ -236,6 +248,10 @@ TEST_F(WebSocketTransportClientSocketPoolTest, InitConnectionFailure) {
                   ClientSocketPool::RespectLimits::ENABLED, callback.callback(),
                   ClientSocketPool::ProxyAuthCallback(), &pool_,
                   NetLogWithSource()));
+  EXPECT_THAT(
+      handle.connection_attempts(),
+      testing::ElementsAre(ConnectionAttempt(
+          IPEndPoint(IPAddress::IPv4Localhost(), 80), ERR_CONNECTION_FAILED)));
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest, PendingRequestsFinishFifo) {
@@ -632,8 +648,8 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
           MockTransportClientSocketFactory::Type::kStalled)};
 
   client_socket_factory_.SetRules(rules);
-  client_socket_factory_.set_delay(
-      base::Milliseconds(TransportConnectJob::kIPv6FallbackTimerInMs + 50));
+  client_socket_factory_.set_delay(TransportConnectJob::kIPv6FallbackTime +
+                                   base::Milliseconds(50));
 
   // Resolve an AddressList with an IPv6 address first and then an IPv4 address.
   host_resolver_->rules()->AddIPLiteralRule(
@@ -783,7 +799,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, IPv6RapidFail) {
   base::TimeTicks start(base::TimeTicks::Now());
   EXPECT_THAT(callback.WaitForResult(), IsOk());
   EXPECT_LT(base::TimeTicks::Now() - start,
-            base::Milliseconds(TransportConnectJob::kIPv6FallbackTimerInMs));
+            TransportConnectJob::kIPv6FallbackTime);
   ASSERT_TRUE(handle.socket());
 
   IPEndPoint endpoint;
@@ -832,8 +848,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, FirstSuccessWins) {
 TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::Type::kDelayedFailing);
-  base::TimeDelta delay =
-      base::Milliseconds(TransportConnectJob::kIPv6FallbackTimerInMs / 3);
+  base::TimeDelta delay = TransportConnectJob::kIPv6FallbackTime / 3;
   client_socket_factory_.set_delay(delay);
 
   // Resolve an AddressList with 4 IPv6 addresses and 2 IPv4 addresses.
@@ -863,6 +878,85 @@ TEST_F(WebSocketTransportClientSocketPoolTest, LastFailureWins) {
   EXPECT_THAT(callback.WaitForResult(), IsError(ERR_CONNECTION_FAILED));
 
   EXPECT_GE(base::TimeTicks::Now() - start, delay * 5);
+
+  // The order is slightly timing-dependent, so don't assert on the order.
+  EXPECT_THAT(handle.connection_attempts(),
+              testing::UnorderedElementsAre(
+                  ConnectionAttempt(IPEndPoint(ParseIP("1:abcd::3:4:ff"), 80),
+                                    ERR_CONNECTION_FAILED),
+                  ConnectionAttempt(IPEndPoint(ParseIP("2:abcd::3:4:ff"), 80),
+                                    ERR_CONNECTION_FAILED),
+                  ConnectionAttempt(IPEndPoint(ParseIP("3:abcd::3:4:ff"), 80),
+                                    ERR_CONNECTION_FAILED),
+                  ConnectionAttempt(IPEndPoint(ParseIP("4:abcd::3:4:ff"), 80),
+                                    ERR_CONNECTION_FAILED),
+                  ConnectionAttempt(IPEndPoint(ParseIP("1.1.1.1"), 80),
+                                    ERR_CONNECTION_FAILED),
+                  ConnectionAttempt(IPEndPoint(ParseIP("2.2.2.2"), 80),
+                                    ERR_CONNECTION_FAILED)));
+}
+
+// Test that, if an address fails due to `ERR_NETWORK_IO_SUSPENDED`, we do not
+// try subsequent addresses.
+TEST_F(WebSocketTransportClientSocketPoolTest, Suspend) {
+  // Resolve an AddressList with 4 IPv6 addresses and 2 IPv4 addresses.
+  host_resolver_->rules()->AddIPLiteralRule("*",
+                                            "1:abcd::3:4:ff,2:abcd::3:4:ff,"
+                                            "3:abcd::3:4:ff,4:abcd::3:4:ff,"
+                                            "1.1.1.1,2.2.2.2",
+                                            std::string());
+
+  // The first connection attempt will fail, after which no more will be
+  // attempted.
+  MockTransportClientSocketFactory::Rule rule(
+      MockTransportClientSocketFactory::Type::kFailing,
+      std::vector{IPEndPoint(ParseIP("1:abcd::3:4:ff"), 80)},
+      ERR_NETWORK_IO_SUSPENDED);
+  client_socket_factory_.SetRules(base::make_span(&rule, 1));
+
+  TestCompletionCallback callback;
+  ClientSocketHandle handle;
+  int rv =
+      handle.Init(group_id_, params_, absl::nullopt /* proxy_annotation_tag */,
+                  LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                  callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                  &pool_, NetLogWithSource());
+  EXPECT_THAT(callback.GetResult(rv), IsError(ERR_NETWORK_IO_SUSPENDED));
+  EXPECT_THAT(handle.connection_attempts(),
+              testing::ElementsAre(
+                  ConnectionAttempt(IPEndPoint(ParseIP("1:abcd::3:4:ff"), 80),
+                                    ERR_NETWORK_IO_SUSPENDED)));
+}
+
+// Same as above, but with a asynchronous failure.
+TEST_F(WebSocketTransportClientSocketPoolTest, SuspendAsync) {
+  // Resolve an AddressList with 4 IPv6 addresses and 2 IPv4 addresses.
+  host_resolver_->rules()->AddIPLiteralRule("*",
+                                            "1:abcd::3:4:ff,2:abcd::3:4:ff,"
+                                            "3:abcd::3:4:ff,4:abcd::3:4:ff,"
+                                            "1.1.1.1,2.2.2.2",
+                                            std::string());
+
+  // The first connection attempt will fail, after which no more will be
+  // attempted.
+  MockTransportClientSocketFactory::Rule rule(
+      MockTransportClientSocketFactory::Type::kPendingFailing,
+      std::vector{IPEndPoint(ParseIP("1:abcd::3:4:ff"), 80)},
+      ERR_NETWORK_IO_SUSPENDED);
+  client_socket_factory_.SetRules(base::make_span(&rule, 1));
+
+  TestCompletionCallback callback;
+  ClientSocketHandle handle;
+  int rv =
+      handle.Init(group_id_, params_, absl::nullopt /* proxy_annotation_tag */,
+                  LOW, SocketTag(), ClientSocketPool::RespectLimits::ENABLED,
+                  callback.callback(), ClientSocketPool::ProxyAuthCallback(),
+                  &pool_, NetLogWithSource());
+  EXPECT_THAT(callback.GetResult(rv), IsError(ERR_NETWORK_IO_SUSPENDED));
+  EXPECT_THAT(handle.connection_attempts(),
+              testing::ElementsAre(
+                  ConnectionAttempt(IPEndPoint(ParseIP("1:abcd::3:4:ff"), 80),
+                                    ERR_NETWORK_IO_SUSPENDED)));
 }
 
 // Global timeout for all connects applies. This test is disabled by default
@@ -1064,8 +1158,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   }
   // Now we have |kMaxSockets| IPv6 sockets stalled in connect. No IPv4 sockets
   // are started yet.
-  RunLoopForTimePeriod(
-      base::Milliseconds(TransportConnectJob::kIPv6FallbackTimerInMs));
+  RunLoopForTimePeriod(TransportConnectJob::kIPv6FallbackTime);
   // Now we have |kMaxSockets| IPv6 sockets and one IPv4 socket stalled in
   // connect, and |kMaxSockets - 1| IPv4 sockets waiting for the endpoint lock.
   pool_.FlushWithError(ERR_FAILED, "Very good reason");
@@ -1182,7 +1275,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest, NetworkIsolationKey) {
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest,
-       WebSocketTransportConnectJobWithDnsAliases) {
+       TransportConnectJobWithDnsAliases) {
   host_resolver_->set_synchronous_mode(true);
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::Type::kSynchronous);
@@ -1200,7 +1293,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
           SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>());
 
-  WebSocketTransportConnectJob transport_connect_job(
+  TransportConnectJob transport_connect_job(
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_, params,
       &test_delegate, nullptr /* net_log */);
 
@@ -1214,7 +1307,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
 }
 
 TEST_F(WebSocketTransportClientSocketPoolTest,
-       WebSocketTransportConnectJobWithNoAdditionalDnsAliases) {
+       TransportConnectJobWithNoAdditionalDnsAliases) {
   host_resolver_->set_synchronous_mode(true);
   client_socket_factory_.set_default_client_socket_type(
       MockTransportClientSocketFactory::Type::kSynchronous);
@@ -1233,7 +1326,7 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
           SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
           /*supported_alpns=*/base::flat_set<std::string>());
 
-  WebSocketTransportConnectJob transport_connect_job(
+  TransportConnectJob transport_connect_job(
       DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_, params,
       &test_delegate, nullptr /* net_log */);
 
@@ -1243,6 +1336,59 @@ TEST_F(WebSocketTransportClientSocketPoolTest,
   // Verify that the alias list only contains kHostName.
   EXPECT_THAT(test_delegate.socket()->GetDnsAliases(),
               testing::ElementsAre(kHostName));
+}
+
+TEST_F(WebSocketTransportClientSocketPoolTest, LoadState) {
+  host_resolver_->rules()->AddRule("v6-only.test", "1:abcd::3:4:ff");
+  host_resolver_->rules()->AddRule("v6-and-v4.test", "1:abcd::3:4:ff,2.2.2.2");
+  host_resolver_->set_ondemand_mode(true);
+
+  client_socket_factory_.set_default_client_socket_type(
+      MockTransportClientSocketFactory::Type::kDelayedFailing);
+
+  auto params_v6_only = base::MakeRefCounted<TransportSocketParams>(
+      HostPortPair("v6-only.test", 80), NetworkIsolationKey(),
+      SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
+      /*supported_alpns=*/base::flat_set<std::string>());
+  auto params_v6_and_v4 = base::MakeRefCounted<TransportSocketParams>(
+      HostPortPair("v6-and-v4.test", 80), NetworkIsolationKey(),
+      SecureDnsPolicy::kAllow, OnHostResolutionCallback(),
+      /*supported_alpns=*/base::flat_set<std::string>());
+
+  // v6-only.test will first block on DNS.
+  TestConnectJobDelegate test_delegate_v6_only;
+  TransportConnectJob connect_job_v6_only(
+      DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
+      params_v6_only, &test_delegate_v6_only, /*net_log=*/nullptr);
+  EXPECT_THAT(connect_job_v6_only.Connect(), test::IsError(ERR_IO_PENDING));
+  EXPECT_THAT(connect_job_v6_only.GetLoadState(), LOAD_STATE_RESOLVING_HOST);
+
+  // When DNS is resolved, it should block on making a connection.
+  host_resolver_->ResolveOnlyRequestNow();
+  base::RunLoop().RunUntilIdle();
+  EXPECT_THAT(connect_job_v6_only.GetLoadState(), LOAD_STATE_CONNECTING);
+
+  // v6-and-v4.test will also first block on DNS.
+  TestConnectJobDelegate test_delegate_v6_and_v4;
+  TransportConnectJob connect_job_v6_and_v4(
+      DEFAULT_PRIORITY, SocketTag(), &common_connect_job_params_,
+      params_v6_and_v4, &test_delegate_v6_and_v4, /*net_log=*/nullptr);
+  EXPECT_THAT(connect_job_v6_and_v4.Connect(), test::IsError(ERR_IO_PENDING));
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(), LOAD_STATE_RESOLVING_HOST);
+
+  // When DNS is resolved, it should attempt to connect to the IPv6 address, but
+  // `connect_job_v6_only` holds the lock.
+  host_resolver_->ResolveOnlyRequestNow();
+  RunUntilIdle();
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(),
+              LOAD_STATE_WAITING_FOR_AVAILABLE_SOCKET);
+
+  // After the IPv6 fallback timeout, it should attempt to connect to the IPv4
+  // address. This lock is available, so `GetLoadState` should report it is now
+  // actively connecting.
+  RunLoopForTimePeriod(TransportConnectJob::kIPv6FallbackTime +
+                       base::Milliseconds(50));
+  EXPECT_THAT(connect_job_v6_and_v4.GetLoadState(), LOAD_STATE_CONNECTING);
 }
 
 }  // namespace

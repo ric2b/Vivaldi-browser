@@ -20,6 +20,7 @@
 #include "base/profiler/stack_sampling_profiler_test_util.h"
 #include "base/profiler/suspendable_thread_delegate.h"
 #include "base/profiler/unwinder.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "build/build_config.h"
 #include "testing/gmock/include/gmock/gmock.h"
 #include "testing/gtest/include/gtest/gtest.h"
@@ -70,13 +71,14 @@ class TestStackCopier : public StackCopier {
                  TimeTicks* timestamp,
                  RegisterContext* thread_context,
                  Delegate* delegate) override {
-    std::memcpy(stack_buffer->buffer(), &fake_stack_[0], fake_stack_.size());
-    *stack_top =
-        reinterpret_cast<uintptr_t>(&fake_stack_[0] + fake_stack_.size());
-    // Set the stack pointer to be consistent with the provided fake stack.
+    std::memcpy(stack_buffer->buffer(), &fake_stack_[0],
+                fake_stack_.size() * sizeof(fake_stack_[0]));
+    *stack_top = reinterpret_cast<uintptr_t>(stack_buffer->buffer() +
+                                             fake_stack_.size());
+    // Set the stack pointer to be consistent with the copied stack.
     *thread_context = {};
     RegisterContextStackPointer(thread_context) =
-        reinterpret_cast<uintptr_t>(&fake_stack_[0]);
+        reinterpret_cast<uintptr_t>(stack_buffer->buffer());
 
     *timestamp = timestamp_;
 
@@ -99,6 +101,8 @@ class DelegateInvokingStackCopier : public StackCopier {
                  TimeTicks* timestamp,
                  RegisterContext* thread_context,
                  Delegate* delegate) override {
+    *stack_top = reinterpret_cast<uintptr_t>(stack_buffer->buffer()) +
+                 10;  // Make msan happy.
     delegate->OnStackCopy();
     return true;
   }
@@ -107,37 +111,23 @@ class DelegateInvokingStackCopier : public StackCopier {
 // Trivial unwinder implementation for testing.
 class TestUnwinder : public Unwinder {
  public:
-  TestUnwinder(size_t stack_size = 0,
-               std::vector<uintptr_t>* stack_copy = nullptr,
-               // Variable to fill in with the bottom address of the
-               // copied stack. This will be different than
-               // &(*stack_copy)[0] because |stack_copy| is a copy of the
-               // copy so does not share memory with the actual copy.
-               uintptr_t* stack_copy_bottom = nullptr)
-      : stack_size_(stack_size),
-        stack_copy_(stack_copy),
-        stack_copy_bottom_(stack_copy_bottom) {}
+  explicit TestUnwinder(std::vector<uintptr_t>* stack_copy)
+      : stack_copy_(stack_copy) {}
 
   bool CanUnwindFrom(const Frame& current_frame) const override { return true; }
 
   UnwindResult TryUnwind(RegisterContext* thread_context,
                          uintptr_t stack_top,
                          std::vector<Frame>* stack) const override {
-    if (stack_copy_) {
-      auto* bottom = reinterpret_cast<uintptr_t*>(
-          RegisterContextStackPointer(thread_context));
-      auto* top = bottom + stack_size_;
-      *stack_copy_ = std::vector<uintptr_t>(bottom, top);
-    }
-    if (stack_copy_bottom_)
-      *stack_copy_bottom_ = RegisterContextStackPointer(thread_context);
+    auto* bottom = reinterpret_cast<uintptr_t*>(
+        RegisterContextStackPointer(thread_context));
+    *stack_copy_ =
+        std::vector<uintptr_t>(bottom, reinterpret_cast<uintptr_t*>(stack_top));
     return UnwindResult::kCompleted;
   }
 
  private:
-  size_t stack_size_;
   raw_ptr<std::vector<uintptr_t>> stack_copy_;
-  raw_ptr<uintptr_t> stack_copy_bottom_;
 };
 
 // Records invocations of calls to OnStackCapture()/UpdateModules().
@@ -272,21 +262,14 @@ base::circular_deque<std::unique_ptr<Unwinder>> MakeUnwinderCircularDeque(
 
 }  // namespace
 
-// TODO(crbug.com/1001923): Fails on Linux MSan.
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
-#define MAYBE_CopyStack DISABLED_MAYBE_CopyStack
-#else
-#define MAYBE_CopyStack CopyStack
-#endif
-TEST(StackSamplerImplTest, MAYBE_CopyStack) {
+TEST(StackSamplerImplTest, CopyStack) {
   ModuleCache module_cache;
   const std::vector<uintptr_t> stack = {0, 1, 2, 3, 4};
   InjectModuleForContextInstructionPointer(stack, &module_cache);
   std::vector<uintptr_t> stack_copy;
   StackSamplerImpl stack_sampler_impl(
       std::make_unique<TestStackCopier>(stack),
-      MakeUnwindersFactory(
-          std::make_unique<TestUnwinder>(stack.size(), &stack_copy)),
+      MakeUnwindersFactory(std::make_unique<TestUnwinder>(&stack_copy)),
       &module_cache);
 
   stack_sampler_impl.Initialize();
@@ -300,6 +283,54 @@ TEST(StackSamplerImplTest, MAYBE_CopyStack) {
   EXPECT_EQ(stack, stack_copy);
 }
 
+#if BUILDFLAG(IS_CHROMEOS)
+TEST(StackSamplerImplTest, RecordStackFramesUMAMetric) {
+  HistogramTester histogram_tester;
+  ModuleCache module_cache;
+  std::vector<uintptr_t> stack;
+  constexpr size_t UIntPtrsPerKilobyte = 1024 / sizeof(uintptr_t);
+  // kExpectedSizeKB needs to be a fairly large number of kilobytes. The buckets
+  // in UmaHistogramMemoryKB are big enough that small values are in the same
+  // bucket as zero and less than zero, and testing that we added a sample in
+  // that bucket means that the test won't fail if, for example, the
+  // |stack_top - stack_bottom| subtraction was reversed and got a negative
+  // value.
+  constexpr int kExpectedSizeKB = 2048;
+  for (uintptr_t i = 0; i <= (kExpectedSizeKB * UIntPtrsPerKilobyte) + 1; i++) {
+    stack.push_back(i);
+  }
+  InjectModuleForContextInstructionPointer(stack, &module_cache);
+  std::vector<uintptr_t> stack_copy;
+  StackSamplerImpl stack_sampler_impl(
+      std::make_unique<TestStackCopier>(stack),
+      MakeUnwindersFactory(std::make_unique<TestUnwinder>(&stack_copy)),
+      &module_cache);
+
+  stack_sampler_impl.Initialize();
+
+  std::unique_ptr<StackBuffer> stack_buffer =
+      std::make_unique<StackBuffer>(stack.size() * sizeof(uintptr_t));
+  TestProfileBuilder profile_builder(&module_cache);
+
+  for (uint32_t i = 0; i < StackSamplerImpl::kUMAHistogramDownsampleAmount - 1;
+       i++) {
+    stack_sampler_impl.RecordStackFrames(stack_buffer.get(), &profile_builder,
+                                         PlatformThread::CurrentId());
+
+    // Should have no new samples in the
+    // Memory.StackSamplingProfiler.StackSampleSize histogram.
+    histogram_tester.ExpectUniqueSample(
+        "Memory.StackSamplingProfiler.StackSampleSize", kExpectedSizeKB, 0);
+  }
+
+  stack_sampler_impl.RecordStackFrames(stack_buffer.get(), &profile_builder,
+                                       PlatformThread::CurrentId());
+
+  histogram_tester.ExpectUniqueSample(
+      "Memory.StackSamplingProfiler.StackSampleSize", kExpectedSizeKB, 1);
+}
+#endif  // #if BUILDFLAG(IS_CHROMEOS)
+
 TEST(StackSamplerImplTest, CopyStackTimestamp) {
   ModuleCache module_cache;
   const std::vector<uintptr_t> stack = {0};
@@ -308,8 +339,7 @@ TEST(StackSamplerImplTest, CopyStackTimestamp) {
   TimeTicks timestamp = TimeTicks::UnixEpoch();
   StackSamplerImpl stack_sampler_impl(
       std::make_unique<TestStackCopier>(stack, timestamp),
-      MakeUnwindersFactory(
-          std::make_unique<TestUnwinder>(stack.size(), &stack_copy)),
+      MakeUnwindersFactory(std::make_unique<TestUnwinder>(&stack_copy)),
       &module_cache);
 
   stack_sampler_impl.Initialize();

@@ -61,6 +61,7 @@
 #include "third_party/blink/renderer/core/css/resolver/style_resolver.h"
 #include "third_party/blink/renderer/core/dom/document.h"
 #include "third_party/blink/renderer/core/dom/node_computed_style.h"
+#include "third_party/blink/renderer/core/execution_context/security_context.h"
 #include "third_party/blink/renderer/core/frame/frame_test_helpers.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
 #include "third_party/blink/renderer/core/geometry/dom_rect.h"
@@ -167,7 +168,7 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
     // Having an animation would normally ensure this but these tests don't
     // explicitly construct a full animation on the element.
     SetBodyInnerHTML(R"HTML(
-      <div id='test' style='will-change: opacity,filter,transform;
+      <div id='test' style='will-change: opacity,filter,transform,rotate;
                             height:100px; background: green;'>
       </div>
       <span id='inline' style='will-change: opacity,filter,transform;'>
@@ -183,6 +184,9 @@ class AnimationCompositorAnimationsTest : public PaintTestConfigurations,
   }
 
  public:
+  AnimationCompositorAnimationsTest()
+      : RenderingTest(MakeGarbageCollected<SingleChildLocalFrameClient>()) {}
+
   bool ConvertTimingForCompositor(const Timing& t,
                                   CompositorAnimations::CompositorTiming& out,
                                   double playback_rate = 1) {
@@ -727,8 +731,8 @@ TEST_P(AnimationCompositorAnimationsTest,
   auto* ident = MakeGarbageCollected<CSSCustomIdentValue>("foopainter");
   CSSPaintValue* paint_value = MakeGarbageCollected<CSSPaintValue>(ident);
   paint_value->CreateGeneratorForTesting(GetDocument());
-  StyleGeneratedImage* style_image =
-      MakeGarbageCollected<StyleGeneratedImage>(*paint_value);
+  StyleGeneratedImage* style_image = MakeGarbageCollected<StyleGeneratedImage>(
+      *paint_value, StyleGeneratedImage::ContainerSizes());
   style->AddPaintImage(style_image);
   element_->GetLayoutObject()->SetStyle(style);
   // The image is added for testing off-thread paint worklet supporting
@@ -1063,7 +1067,8 @@ TEST_P(AnimationCompositorAnimationsTest, ForceReduceMotion) {
   EXPECT_NEAR(element_->getBoundingClientRect()->x(), 300.0, 0.001);
 }
 
-TEST_P(AnimationCompositorAnimationsTest, ForceReduceMotionPageSupportsReduce) {
+TEST_P(AnimationCompositorAnimationsTest,
+       ForceReduceMotionDocumentSupportsReduce) {
   ScopedForceReduceMotionForTest force_reduce_motion(true);
   GetDocument().GetSettings()->SetPrefersReducedMotion(true);
   SetBodyInnerHTML(R"HTML(
@@ -1082,10 +1087,60 @@ TEST_P(AnimationCompositorAnimationsTest, ForceReduceMotionPageSupportsReduce) {
   element_ = GetDocument().getElementById("test");
   Animation* animation = element_->getAnimations()[0];
 
-  // The effect should snap between keyframes at the halfway points.
+  // As the page has indicated support for reduce motion, the effect should not
+  // jump to the nearest keyframe.
   animation->setCurrentTime(MakeGarbageCollected<V8CSSNumberish>(500),
                             ASSERT_NO_EXCEPTION);
   EXPECT_NEAR(element_->getBoundingClientRect()->x(), 150.0, 0.001);
+}
+
+TEST_P(AnimationCompositorAnimationsTest,
+       ForceReduceMotionChildDocumentSupportsReduce) {
+  ScopedForceReduceMotionForTest force_reduce_motion(true);
+  GetDocument().GetSettings()->SetPrefersReducedMotion(true);
+  SetBodyInnerHTML(R"HTML(
+    <iframe></iframe>
+    <style>
+      @keyframes slide {
+        0% { transform: translateX(100px); }
+        100% { transform: translateX(200px); }
+      }
+      html, body {
+        margin: 0;
+      }
+    </style>
+    <div id='parent-anim' style='animation: slide 1s linear'></div>
+    )HTML");
+  SetChildFrameHTML(R"HTML(
+    <meta name='supports-reduced-motion' content='reduce'>
+    <style>
+      @keyframes slide {
+        0% { transform: translateX(100px); }
+        100% { transform: translateX(200px); }
+      }
+      html, body {
+        margin: 0;
+      }
+    </style>
+    <div id='child-anim' style='animation: slide 1s linear'></div>
+  )HTML");
+  UpdateAllLifecyclePhasesForTest();
+  element_ = GetDocument().getElementById("parent-anim");
+  Animation* animation = element_->getAnimations()[0];
+
+  // As the parent document does not support reduce motion, the effect will jump
+  // to the nearest keyframe.
+  animation->setCurrentTime(MakeGarbageCollected<V8CSSNumberish>(400),
+                            ASSERT_NO_EXCEPTION);
+  EXPECT_NEAR(element_->getBoundingClientRect()->x(), 100.0, 0.001);
+
+  // As the child document does support reduce motion, its animation will not be
+  // snapped.
+  Element* child_element = ChildDocument().getElementById("child-anim");
+  Animation* child_animation = child_element->getAnimations()[0];
+  child_animation->setCurrentTime(MakeGarbageCollected<V8CSSNumberish>(400),
+                                  ASSERT_NO_EXCEPTION);
+  EXPECT_NEAR(child_element->getBoundingClientRect()->x(), 140.0, 0.001);
 }
 
 TEST_P(AnimationCompositorAnimationsTest, CheckCanStartForceReduceMotion) {
@@ -1246,25 +1301,6 @@ TEST_P(AnimationCompositorAnimationsTest,
                                               animation1, *effect1) &
               CompositorAnimations::
                   kTransformRelatedPropertyCannotBeAcceleratedOnTarget);
-
-  StringKeyframeEffectModel* effect2 = CreateKeyframeEffectModel(
-      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "translateX(-45px)",
-                              0),
-      CreateReplaceOpKeyframe(CSSPropertyID::kRotate, "none", 0),
-      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "translateX(45px)",
-                              1.0),
-      CreateReplaceOpKeyframe(CSSPropertyID::kRotate, "45deg", 1.0));
-
-  auto* keyframe_effect2 =
-      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect2, timing_);
-
-  Animation* animation2 = timeline_->Play(keyframe_effect2);
-  effect2->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
-                                                     nullptr);
-
-  EXPECT_TRUE(CheckCanStartEffectOnCompositor(timing_, *element_.Get(),
-                                              animation2, *effect2) &
-              CompositorAnimations::kMultipleTransformAnimationsOnSameTarget);
 }
 
 TEST_P(AnimationCompositorAnimationsTest,
@@ -2355,10 +2391,10 @@ TEST_P(AnimationCompositorAnimationsTest, DetachCompositorTimelinesTest) {
       *target->GetElementAnimations()->Animations().begin()->key;
   EXPECT_TRUE(animation.GetCompositorAnimation());
 
-  CompositorAnimationTimeline* compositor_timeline =
+  cc::AnimationTimeline* compositor_timeline =
       animation.timeline()->CompositorTimeline();
   ASSERT_TRUE(compositor_timeline);
-  int id = compositor_timeline->GetAnimationTimeline()->id();
+  int id = compositor_timeline->id();
   ASSERT_TRUE(host->GetTimelineById(id));
   document->GetDocumentAnimations().DetachCompositorTimelines();
   ASSERT_FALSE(host->GetTimelineById(id));
@@ -2531,6 +2567,62 @@ TEST_P(AnimationCompositorAnimationsTest, Fragmented) {
   EXPECT_EQ(CompositorAnimations::kTargetHasInvalidCompositingState,
             animation.CheckCanStartAnimationOnCompositor(
                 GetDocument().View()->GetPaintArtifactCompositor()));
+}
+
+TEST_P(AnimationCompositorAnimationsTest,
+       CancelIncompatibleTransformCompositorAnimation) {
+  scoped_refptr<ComputedStyle> style =
+      GetDocument().GetStyleResolver().CreateComputedStyle();
+
+  // The first animation for transform is ok to run on the compositor.
+  StringKeyframeEffectModel* effect1 = CreateKeyframeEffectModel(
+      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "none", 0.0),
+      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "scale(2)", 1.0));
+  auto* keyframe_effect1 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect1, timing_);
+  Animation* animation1 = timeline_->Play(keyframe_effect1);
+  effect1->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+  EXPECT_EQ(CheckCanStartEffectOnCompositor(timing_, *element_.Get(),
+                                            animation1, *effect1),
+            CompositorAnimations::kNoFailure);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(animation1->HasActiveAnimationsOnCompositor());
+
+  // The animation for rotation is ok to run on the compositor as it is a
+  // different transformation property.
+  StringKeyframeEffectModel* effect2 = CreateKeyframeEffectModel(
+      CreateReplaceOpKeyframe(CSSPropertyID::kRotate, "0deg", 0.0),
+      CreateReplaceOpKeyframe(CSSPropertyID::kRotate, "90deg", 1.0));
+  KeyframeEffect* keyframe_effect2 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect2, timing_);
+  Animation* animation2 = timeline_->Play(keyframe_effect2);
+  effect2->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+  EXPECT_EQ(CheckCanStartEffectOnCompositor(timing_, *element_.Get(),
+                                            animation2, *effect2),
+            CompositorAnimations::kNoFailure);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_TRUE(animation1->HasActiveAnimationsOnCompositor());
+  EXPECT_TRUE(animation2->HasActiveAnimationsOnCompositor());
+
+  // The second animation for transform is not ok to run on the compositor.
+  StringKeyframeEffectModel* effect3 = CreateKeyframeEffectModel(
+      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "none", 0.0),
+      CreateReplaceOpKeyframe(CSSPropertyID::kTransform, "translateX(10px)",
+                              1.0));
+  KeyframeEffect* keyframe_effect3 =
+      MakeGarbageCollected<KeyframeEffect>(element_.Get(), effect3, timing_);
+  Animation* animation3 = timeline_->Play(keyframe_effect3);
+  effect3->SnapshotAllCompositorKeyframesIfNecessary(*element_.Get(), *style,
+                                                     nullptr);
+  EXPECT_EQ(CheckCanStartEffectOnCompositor(timing_, *element_.Get(),
+                                            animation3, *effect3),
+            CompositorAnimations::kTargetHasIncompatibleAnimations);
+  UpdateAllLifecyclePhasesForTest();
+  EXPECT_FALSE(animation1->HasActiveAnimationsOnCompositor());
+  EXPECT_TRUE(animation2->HasActiveAnimationsOnCompositor());
+  EXPECT_FALSE(animation3->HasActiveAnimationsOnCompositor());
 }
 
 }  // namespace blink

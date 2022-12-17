@@ -47,9 +47,11 @@ class AutofillPopupBaseView : public views::WidgetDelegateView,
   AutofillPopupBaseView& operator=(const AutofillPopupBaseView&) = delete;
 
   static int GetCornerRadius();
-
-  // views::View:
-  void VisibilityChanged(View* starting_from, bool is_visible) override;
+  // Returns the horizontal margin between elements and the edge of the view.
+  static int GetHorizontalMargin();
+  // Returns the horizontal space between elements in the view (e.g. icon and
+  // text).
+  static int GetHorizontalPadding();
 
   // Notify accessibility that an item has been selected.
   void NotifyAXSelection(View*);

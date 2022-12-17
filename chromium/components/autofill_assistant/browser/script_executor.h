@@ -38,6 +38,7 @@
 #include "services/metrics/public/cpp/ukm_recorder.h"
 
 namespace autofill_assistant {
+class ElementFinderResult;
 class ElementStore;
 class UserModel;
 class WaitForDomOperation;
@@ -173,7 +174,7 @@ class ScriptExecutor : public ActionDelegate,
               base::OnceCallback<void()> end_on_navigation_callback,
               bool browse_mode,
               bool browse_mode_invisible) override;
-  void CleanUpAfterPrompt() override;
+  void CleanUpAfterPrompt(bool consume_touchable_area = true) override;
   void SetBrowseDomainsAllowlist(std::vector<std::string> domains) override;
   void RetrieveElementFormAndFieldData(
       const Selector& selector,
@@ -209,6 +210,7 @@ class ScriptExecutor : public ActionDelegate,
   password_manager::PasswordChangeSuccessTracker*
   GetPasswordChangeSuccessTracker() const override;
   content::WebContents* GetWebContents() const override;
+  JsFlowDevtoolsWrapper* GetJsFlowDevtoolsWrapper() const override;
   ElementStore* GetElementStore() const override;
   WebController* GetWebController() const override;
   std::string GetEmailAddressForAccessTokenAccount() const override;
@@ -261,9 +263,20 @@ class ScriptExecutor : public ActionDelegate,
   base::WeakPtr<ActionDelegate> GetWeakPtr() const override;
   ProcessedActionStatusDetailsProto& GetLogInfo() override;
   void RequestUserData(
+      UserDataEventField event_field,
       const CollectUserDataOptions& options,
       base::OnceCallback<void(bool, const GetUserDataResponseProto&)> callback)
       override;
+  bool SupportsExternalActions() override;
+  void RequestExternalAction(
+      const ExternalActionProto& external_action,
+      base::OnceCallback<void(ExternalActionDelegate::DomUpdateCallback)>
+          start_dom_checks_callback,
+      base::OnceCallback<void(const external::Result& result)>
+          end_action_callback) override;
+  bool MustUseBackendData() const override;
+  void MaybeSetPreviousAction(
+      const ProcessedActionProto& processed_action) override;
 
  private:
   // TODO(b/220079189): remove this friend declaration.
@@ -335,6 +348,11 @@ class ScriptExecutor : public ActionDelegate,
       int http_status,
       const std::string& response,
       const ServiceRequestSender::ResponseInfo& response_info);
+  void OnExternalActionFinished(
+      const ExternalActionProto& external_action,
+      const bool prompt,
+      base::OnceCallback<void(const external::Result& result)> callback,
+      const external::Result& result);
 
   // Maybe shows the message specified in a callout, depending on the current
   // state and client settings.

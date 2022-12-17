@@ -7,11 +7,11 @@
 #include <memory>
 
 #include "ash/app_list/app_list_controller_impl.h"
+#include "ash/app_list/app_list_view_delegate.h"
 #include "ash/bubble/bubble_utils.h"
 #include "ash/shell.h"
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
-#include "ash/style/highlight_border.h"
 #include "ash/style/icon_button.h"
 #include "ash/style/pill_button.h"
 #include "components/vector_icons/vector_icons.h"
@@ -23,10 +23,13 @@
 #include "ui/views/background.h"
 #include "ui/views/border.h"
 #include "ui/views/controls/button/label_button.h"
+#include "ui/views/controls/focus_ring.h"
 #include "ui/views/controls/image_view.h"
 #include "ui/views/controls/label.h"
+#include "ui/views/highlight_border.h"
 #include "ui/views/layout/box_layout.h"
 #include "ui/views/view_class_properties.h"
+#include "ui/views/view_utils.h"
 
 namespace ash {
 namespace {
@@ -78,6 +81,9 @@ AppListToastView::Builder::~Builder() = default;
 std::unique_ptr<AppListToastView> AppListToastView::Builder::Build() {
   std::unique_ptr<AppListToastView> toast =
       std::make_unique<AppListToastView>(title_);
+
+  if (view_delegate_)
+    toast->SetViewDelegate(view_delegate_);
 
   if (style_for_tablet_mode_)
     toast->StyleForTabletMode();
@@ -160,10 +166,24 @@ AppListToastView::Builder& AppListToastView::Builder::SetStyleForTabletMode(
   return *this;
 }
 
+AppListToastView::Builder& AppListToastView::Builder::SetViewDelegate(
+    AppListViewDelegate* delegate) {
+  view_delegate_ = delegate;
+  return *this;
+}
+
+void AppListToastView::SetViewDelegate(AppListViewDelegate* delegate) {
+  view_delegate_ = delegate;
+}
+
 AppListToastView::Builder& AppListToastView::Builder::SetIconBackground(
     bool has_icon_background) {
   has_icon_background_ = has_icon_background;
   return *this;
+}
+
+bool AppListToastView::IsToastButton(views::View* view) {
+  return views::IsViewClass<ToastPillButton>(view);
 }
 
 AppListToastView::AppListToastView(const std::u16string title) {
@@ -214,8 +234,8 @@ void AppListToastView::OnThemeChanged() {
         ColorProvider::Get()->GetBaseLayerColor(
             ColorProvider::BaseLayerType::kTransparent80),
         kCornerRadius));
-    SetBorder(std::make_unique<HighlightBorder>(
-        kCornerRadius, HighlightBorder::Type::kHighlightBorder1,
+    SetBorder(std::make_unique<views::HighlightBorder>(
+        kCornerRadius, views::HighlightBorder::Type::kHighlightBorder1,
         /*use_light_colors=*/false));
   } else {
     SetBackground(views::CreateRoundedRectBackground(
@@ -233,9 +253,11 @@ void AppListToastView::SetButton(
     views::Button::PressedCallback button_callback) {
   DCHECK(button_callback);
 
-  toast_button_ = AddChildView(std::make_unique<PillButton>(
-      button_callback, button_text, PillButton::Type::kIconless,
-      /*icon=*/nullptr));
+  toast_button_ =
+      AddChildView(std::make_unique<AppListToastView::ToastPillButton>(
+          view_delegate_, button_callback, button_text,
+          PillButton::Type::kIconless,
+          /*icon=*/nullptr));
   toast_button_->SetBorder(views::NullBorder());
 }
 
@@ -321,6 +343,33 @@ gfx::Size AppListToastView::CalculatePreferredSize() const {
 
 void AppListToastView::UpdateInteriorMargins(const gfx::Insets& margin) {
   layout_manager_->set_inside_border_insets(margin);
+}
+
+AppListToastView::ToastPillButton::ToastPillButton(
+    AppListViewDelegate* view_delegate,
+    PressedCallback callback,
+    const std::u16string& text,
+    Type type,
+    const gfx::VectorIcon* icon)
+    : PillButton(callback, text, type, icon), view_delegate_(view_delegate) {
+  views::FocusRing::Get(this)->SetHasFocusPredicate([&](View* view) -> bool {
+    // With a `view_delegate_` present, focus ring should only show when
+    // button is focused and keyboard traversal is engaged.
+    if (view_delegate_ && !view_delegate_->KeyboardTraversalEngaged())
+      return false;
+
+    return view->HasFocus();
+  });
+}
+
+void AppListToastView::ToastPillButton::OnFocus() {
+  PillButton::OnFocus();
+  views::FocusRing::Get(this)->SchedulePaint();
+}
+
+void AppListToastView::ToastPillButton::OnBlur() {
+  PillButton::OnBlur();
+  views::FocusRing::Get(this)->SchedulePaint();
 }
 
 void AppListToastView::UpdateIconImage() {

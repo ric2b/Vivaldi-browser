@@ -6,7 +6,11 @@ import os
 import re
 from datetime import datetime
 
-from chrome_ent_test.infra.core import before_all, category, environment, test
+from chrome_ent_test.infra.core import before_all
+from chrome_ent_test.infra.core import category
+from chrome_ent_test.infra.core import environment
+from chrome_ent_test.infra.core import test
+
 from infra import ChromeEnterpriseTestCase
 from .reporting_server import RealTimeReportingServer
 
@@ -19,7 +23,8 @@ class RealTimeBCEReportingPipelineTest(ChromeEnterpriseTestCase):
   def getServiceAccountKey(self):
     path = "gs://%s/secrets/ServiceAccountKey.json" % self.gsbucket
     cmd = r'gsutil cat ' + path
-    serviceAccountKey = self.RunCommand(self.win_config['dc'], cmd).rstrip()
+    serviceAccountKey = self.RunCommand(self.win_config['dc'],
+                                        cmd).rstrip().decode()
     localDir = os.path.dirname(os.path.abspath(__file__))
     filePath = os.path.join(localDir, 'service_accountkey.json')
     with open(filePath, 'w', encoding="utf-8") as f:
@@ -49,8 +54,9 @@ class RealTimeBCEReportingPipelineTest(ChromeEnterpriseTestCase):
         self.win_config['client'],
         os.path.join(commonDir, 'common', 'realtime_reporting_ui_test.py'),
         timeout=600)
-    clientId = re.search(r'DeviceId:.*$',clientId.strip()).group(0) \
-      .replace('DeviceId:','')
+    clientId = re.search(r'DeviceId:.*$',
+                         clientId.strip()).group(0).replace('DeviceId:',
+                                                            '').rstrip("\\rn'")
     # read service account private key from gs-bucket & write into local
     self.getServiceAccountKey()
     eventFound = RealTimeReportingServer().lookupevents(

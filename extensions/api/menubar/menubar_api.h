@@ -19,6 +19,7 @@ class MenubarAPI {
  public:
   static void UpdateCommandEnabled(CommandUpdater* command_updater);
   static bool GetIsEnabledWithNoWindows(int id, bool* enabled);
+  static bool GetIsEnabled(int id, bool hasWindow, bool* enabled);
   static bool HasActiveWindow();
   static bool HandleActionById(content::BrowserContext* browser_context,
                                int window_id,

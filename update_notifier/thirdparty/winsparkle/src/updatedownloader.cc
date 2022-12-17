@@ -79,10 +79,17 @@ const wchar_t kSetupExe[] = L"setup.exe";
 
 #ifndef OFFICIAL_BUILD
 // To avoid asking for a HTTP password for Soprano builds we download them from
-// a special location with an extra HTTP header. Without  the header HTTP
-// reports a not-found error.
-const char kSopranoDownloadUrlPrefix[] = "https://vivaldi.com/sopranos/";
-const char kSopranoRemappedFolder[] = "https://vivaldi.com/sopranos-update/";
+// a special location remapped from the original and which requires an extra
+// HTTP header instead of the password. Without the header HTTP reports a
+// not-found error.
+const std::pair<base::StringPiece, base::StringPiece> kSopranoDownloadRemap[] =
+    {
+        {"https://vivaldi.com/sopranos/",
+         "https://vivaldi.com/sopranos-update/"},
+        {"https://sopranos.vivaldi.com/",
+         "https://sopranos-update.vivaldi.com/"},
+};
+
 const char kSopranoHeaderName[] = "X-Vivaldi-Update";
 const char kSopranoHeaderValue[] = "soprano";
 #endif
@@ -147,13 +154,16 @@ base::FilePath DownloadUrl(GURL url,
                            Error& error) {
   FileDownloader downloader;
 #ifndef OFFICIAL_BUILD
-  if (base::StartsWith(url.spec(), kSopranoDownloadUrlPrefix)) {
-    size_t nprefix = strlen(kSopranoDownloadUrlPrefix);
-    std::string remapped_url = kSopranoRemappedFolder;
-    remapped_url.append(url.spec().data() + nprefix,
-                        url.spec().length() - nprefix);
-    url = GURL(remapped_url);
-    downloader.SetHeader(kSopranoHeaderName, kSopranoHeaderValue);
+  for (auto const& i : kSopranoDownloadRemap) {
+    if (base::StartsWith(url.spec(), i.first)) {
+      size_t nprefix = i.first.length();
+      std::string remapped_url(i.second.data(), i.second.length());
+      remapped_url.append(url.spec().data() + nprefix,
+                          url.spec().length() - nprefix);
+      url = GURL(remapped_url);
+      downloader.SetHeader(kSopranoHeaderName, kSopranoHeaderValue);
+      break;
+    }
   }
 #endif
   downloader.Connect(url, error);
@@ -673,37 +683,31 @@ std::unique_ptr<InstallerLaunchData> DownloadFullInstaller(
   if (error)
     return nullptr;
 
-  // For now require --vivaldi-unpack switch with the update notifier to enable
-  // separated unpacking stage until we release the installer with the support
-  // for --vivaldi-unpack option.
-  if (base::CommandLine::ForCurrentProcess()->HasSwitch(
-          vivaldi::constants::kVivaldiUnpack)) {
-    // Extract setup.exe and the main archive from the installer.
-    report.kind = DownloadReport::kUnpacking;
-    delegate.SendReport(report, error);
+  // Extract setup.exe and the main archive from the installer.
+  report.kind = DownloadReport::kUnpacking;
+  delegate.SendReport(report, error);
 
-    base::CommandLine unpack_cmdline(full_update_path);
-    unpack_cmdline.AppendSwitch(vivaldi::constants::kVivaldiUnpack);
-    base::LaunchOptions launch_options;
-    launch_options.current_directory = tmpdir;
-    launch_options.start_hidden = true;
+  base::CommandLine unpack_cmdline(full_update_path);
+  unpack_cmdline.AppendSwitch(vivaldi::constants::kVivaldiUnpack);
+  base::LaunchOptions launch_options;
+  launch_options.current_directory = tmpdir;
+  launch_options.start_hidden = true;
 
-    RunHelperProcess(unpack_cmdline, launch_options,
-                     base::Time::Now() + kUnpackTimeLimit, report, delegate,
-                     error);
-    if (error)
-      return nullptr;
+  RunHelperProcess(unpack_cmdline, launch_options,
+                   base::Time::Now() + kUnpackTimeLimit, report, delegate,
+                   error);
+  if (error)
+    return nullptr;
 
-    base::FilePath setup_exe = tmpdir.Append(kSetupExe);
-    if (!base::PathExists(setup_exe)) {
-      error.set(Error::kFormat, "The installer failed to unpack the main exe");
-      return nullptr;
-    }
-
-    // We no longer need the installer file.
-    base::DeleteFile(full_update_path);
-    full_update_path = std::move(setup_exe);
+  base::FilePath setup_exe = tmpdir.Append(kSetupExe);
+  if (!base::PathExists(setup_exe)) {
+    error.set(Error::kFormat, "The installer failed to unpack the main exe");
+    return nullptr;
   }
+
+  // We no longer need the installer file.
+  base::DeleteFile(full_update_path);
+  full_update_path = std::move(setup_exe);
 
   base::CommandLine cmdline(full_update_path);
   AddInstallArguments(cmdline);

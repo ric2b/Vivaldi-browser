@@ -87,6 +87,8 @@ interface NotificationGenerator {
   // Show a native notification, title and message are from WebUI.
   ShowNotification(mojo_base.mojom.String16 title,
           mojo_base.mojom.String16 message, WebNotificationType type);
+  // Show a native toast, text is from WebUI.
+  ShowToast(mojo_base.mojom.String16 text);
 };
 
 // Enum representing the video streaming status from browser. Numerical
@@ -115,7 +117,11 @@ interface DisplayStreamHandler {
 // Enum representing stream action from Eche SWA. Numerical values should not
 // be changed because they must stay in sync with value on for Eche Web app.
 enum StreamAction {
+    // Notify the stream should be close.
     kStreamActionClose,
+
+    // Notify the stream should go back to the previous page.
+    kStreamActionGoBack,
 };
 
 // A generic interface to observe stream action from Eche SWA native code for

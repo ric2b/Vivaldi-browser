@@ -2,9 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-// clang-format off
 import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
-// clang-format on
 
 /**
  * Information for an account managed by Chrome OS AccountManager.
@@ -14,6 +12,7 @@ import {sendWithPromise} from 'chrome://resources/js/cr.m.js';
  *   isDeviceAccount: boolean,
  *   isSignedIn: boolean,
  *   unmigrated: boolean,
+ *   isManaged: boolean,
  *   fullName: string,
  *   email: string,
  *   pic: string,
@@ -62,17 +61,25 @@ export class AccountManagerBrowserProxy {
    * @param {?boolean} isAvailableInArc new ARC availability value
    */
   changeArcAvailability(account, isAvailableInArc) {}
-
-  /**
-   * Displays the Account Manager welcome dialog if required.
-   */
-  showWelcomeDialogIfRequired() {}
 }
+
+/** @type {?AccountManagerBrowserProxy} */
+let instance = null;
 
 /**
  * @implements {AccountManagerBrowserProxy}
  */
 export class AccountManagerBrowserProxyImpl {
+  /** @return {!AccountManagerBrowserProxy} */
+  static getInstance() {
+    return instance || (instance = new AccountManagerBrowserProxyImpl());
+  }
+
+  /** @param {!AccountManagerBrowserProxy} obj */
+  static setInstance(obj) {
+    instance = obj;
+  }
+
   /** @override */
   getAccounts() {
     return sendWithPromise('getAccounts');
@@ -102,22 +109,4 @@ export class AccountManagerBrowserProxyImpl {
   changeArcAvailability(account, isAvailableInArc) {
     chrome.send('changeArcAvailability', [account, isAvailableInArc]);
   }
-
-  /** @override */
-  showWelcomeDialogIfRequired() {
-    chrome.send('showWelcomeDialogIfRequired');
-  }
-
-  /** @return {!AccountManagerBrowserProxy} */
-  static getInstance() {
-    return instance || (instance = new AccountManagerBrowserProxyImpl());
-  }
-
-  /** @param {!AccountManagerBrowserProxy} obj */
-  static setInstance(obj) {
-    instance = obj;
-  }
 }
-
-/** @type {?AccountManagerBrowserProxy} */
-let instance = null;

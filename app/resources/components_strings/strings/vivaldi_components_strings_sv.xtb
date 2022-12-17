@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Testa att köra Windows nätverksdiagnostik<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Den här webbplatsen innehåller skadliga program</translation>
 <translation id="1916770123977586577">Läs in sidan igen för att tillämpa dina uppdaterade inställningar för webbplatsen</translation>
+<translation id="1973351931613083086">automatisk uppspelning</translation>
 <translation id="1974060860693918893">Avancerat</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Kontrollerar mellanservern (proxyn) och brandväggen<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Utfärdat till: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Gå tillbaka</translation>
 <translation id="2539524384386349900">Identifiera</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> skickade ett ogiltigt svar.</translation>
-<translation id="2609632851001447353">Varianter</translation>
 <translation id="2634124572758952069">Det gick inte att hitta IP-adressen till servern för <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Åtkomst till filen nekades</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">En angripare kan försöka stjäla dina uppgifter från <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (t.ex. lösenord, meddelanden eller kreditkortsuppgifter). <ph name="BEGIN_LEARN_MORE_LINK" />Läs mer<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">En nätverksförändring upptäcktes.</translation>
 <translation id="2948083400971632585">Du kan inaktivera mellanservrar (proxy) konfigurerade för en anslutning från inställningssidan.</translation>
+<translation id="2953943267837858202">Det är inte tillåtet att spela upp video automatiskt</translation>
 <translation id="2991571918955627853">Du kan inte besöka <ph name="SITE" /> just nu eftersom webbplatsen använder HSTS. Nätverksfel och attacker är ofta tillfälliga, så sidan kommer förmodligen att fungera senare.</translation>
 <translation id="3005723025932146533">Visa sparad kopia</translation>
 <translation id="301521992641321250">Blockerades automatiskt</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Tryck knappen Hämta om för att sända de data som behövs för att läsa in sidan på nytt.</translation>
 <translation id="3234666976984236645">Upptäck alltid viktigt innehåll på den här webbplatsen</translation>
+<translation id="3291915639428159043">Autouppspelning blockerad</translation>
 <translation id="3308738399950580893">annonser</translation>
 <translation id="3422472998109090673"><ph name="HOST_NAME" /> kan inte nås för tillfället.</translation>
 <translation id="3427092606871434483">Tillåt (standard)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Anslutningen är inte privat</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Dölj detaljerad information</translation>
+<translation id="3620979700683094848">Webbplatser kan spela upp video automatiskt</translation>
 <translation id="3630155396527302611">Om den redan finns med på listan över program som har tillgång till nätverket 
         kan du prova att ta bort den från listan och sedan lägga till den igen.</translation>
 <translation id="3658742229777143148">Version</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> har blockerats</translation>
 <translation id="3987940399970879459">Mindre än 1 MB</translation>
 <translation id="4075732493274867456">Klienten och servern har inte stöd för en gemensam SSL-protokollversion eller chiffersvit.</translation>
+<translation id="410351446219883937">Autospela</translation>
 <translation id="4116663294526079822">Tillåt alltid på den här webbplatsen</translation>
 <translation id="4130226655945681476">Kontrollera nätverkskablar, modem och router</translation>
 <translation id="4151403195736952345">Använd global standardinställning (Upptäck)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Kontrollera DNS-inställningarna</translation>
 <translation id="6328639280570009161">Prova att inaktivera nätverksförslag</translation>
 <translation id="6328786501058569169">Den här webbplatsen är bedräglig</translation>
+<translation id="6348220984832452017">Aktiva variationer</translation>
 <translation id="6358450015545214790">Vad innebär dessa?</translation>
 <translation id="6433595998831338502"><ph name="HOST_NAME" /> avvisade anslutningen.</translation>
 <translation id="6447842834002726250">Kakor (cookies)</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Tillåt <ph name="BLOCKED_TYPE" /> från <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423"><ph name="HOST_NAME" /> följer inte säkerhetsstandarderna.</translation>
 <translation id="7219179957768738017">För anslutningen används <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Visa aviseringar</translation>
 <translation id="7260504762447901703">Återkalla åtkomst</translation>
 <translation id="7353601530677266744">Kommandorad</translation>
 <translation id="7364115444476960850">Sidan du försökte komma åt blockerades av Vivaldis <ph name="BLOCKER_NAME" /></translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Anslutningen kan ha blockerats av en brandvägg eller antivirusprogram.</translation>
 <translation id="7800304661137206267">Anslutningen är krypterad med <ph name="CIPHER" />, med <ph name="MAC" /> för meddelandeautentisering och <ph name="KX" /> som mekanism för nyckelutbyte.</translation>
 <translation id="7834399512844817676">På <ph name="SITE" /> används normalt kryptering för att skydda din information. När Vivaldi försökte ansluta till <ph name="SITE" /> den här gången skickade webbplatsen tillbaka ovanliga och felaktiga uppgifter. Sådant kan hända när en angripare utger sig för att vara <ph name="SITE" /> eller när anslutningen har avbrutits av en Wi-Fi-inloggningsskärm. Din information är fortfarande säker eftersom Vivaldi avbröt anslutningen innan någon data utbyttes.</translation>
+<translation id="7834693436815575883">Autouppspelning tillåten</translation>
 <translation id="7878562273885520351">Lösenordet kan vara utsatt för risk</translation>
 <translation id="7951415247503192394">(32 bitar)</translation>
 <translation id="8025119109950072390">Angripare på den här webbplatsen kan lura dig att göra något farligt, till exempel installera programvara eller lämna ut personliga uppgifter (som lösenord, telefonnummer eller kreditkortsuppgifter).</translation>
 <translation id="8037357227543935929">Fråga (standard)</translation>
 <translation id="8041940743680923270">Använd global standardinställning (Fråga)</translation>
+<translation id="8044382196220116469">Tillåt inte webbplatser att spela upp video automatiskt</translation>
 <translation id="808894953321890993">Byt lösenord</translation>
 <translation id="8119307142152921512">spårare och annonser</translation>
 <translation id="8149426793427495338">Datorn gick ner i vänteläge.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Användarnamn</translation>
 <translation id="8703575177326907206">Din anslutning till <ph name="DOMAIN" /> är inte krypterad.</translation>
 <translation id="8740359287975076522"><ph name="HOST_NAME" />s &lt;abbr id="dnsDefinition"&gt;DNS-adress&lt;/abbr&gt; kunde inte hittas. Diagnostiserar problemet.</translation>
+<translation id="8774017153185436870">Webbplatser kan spela upp video automatiskt</translation>
 <translation id="8820817407110198400">Bokmärken</translation>
 <translation id="8940028675168378100">Blockerad av <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Öppna webbplatsinställningarna</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Ignorera</translation>
 <translation id="9025348182339809926">(Ogiltigt)</translation>
 <translation id="9039213469156557790">Den här sidan innehåller emellertid andra resurser som inte är säkra. Andra kan se resurserna när de överförs och angripare kan ändra resurserna så att sidan får ett annat beteende.</translation>
+<translation id="9048224371732578627">Tillåts för att automatiskt spela upp video</translation>
 <translation id="9062620674789239642">Den kan ha flyttats, ändrats eller tagits bort.</translation>
 <translation id="9069693763241529744">Blockerades av ett tillägg</translation>
 <translation id="9073799351042754113">Du har valt att stänga av säkerhetsvarningar för den här webbplatsen.</translation>

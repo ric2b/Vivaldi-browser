@@ -150,6 +150,11 @@ void GetRendererContentSettingRules(const HostContentSettingsMap* map,
                              &(rules->script_rules));
   map->GetSettingsForOneType(ContentSettingsType::POPUPS,
                              &(rules->popup_redirect_rules));
+
+#if defined(VIVALDI_BUILD)
+  map->GetSettingsForOneType(ContentSettingsType::AUTOPLAY,
+                             &(rules->autoplay_rules));
+#endif  // VIVALDI_BUILD
 }
 
 bool IsMorePermissive(ContentSetting a, ContentSetting b) {

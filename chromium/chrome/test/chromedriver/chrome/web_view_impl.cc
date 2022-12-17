@@ -10,9 +10,11 @@
 #include <vector>
 
 #include "base/bind.h"
+#include "base/check.h"
 #include "base/files/file_path.h"
 #include "base/json/json_writer.h"
 #include "base/logging.h"
+#include "base/memory/raw_ptr.h"
 #include "base/strings/string_util.h"
 #include "base/strings/stringprintf.h"
 #include "base/threading/platform_thread.h"
@@ -21,8 +23,8 @@
 #include "build/build_config.h"
 #include "chrome/test/chromedriver/chrome/browser_info.h"
 #include "chrome/test/chromedriver/chrome/cast_tracker.h"
+#include "chrome/test/chromedriver/chrome/devtools_client.h"
 #include "chrome/test/chromedriver/chrome/devtools_client_impl.h"
-#include "chrome/test/chromedriver/chrome/dom_tracker.h"
 #include "chrome/test/chromedriver/chrome/download_directory_override_manager.h"
 #include "chrome/test/chromedriver/chrome/frame_tracker.h"
 #include "chrome/test/chromedriver/chrome/geolocation_override_manager.h"
@@ -46,9 +48,10 @@ const int kWaitForNavigationStopSeconds = 10;
 
 Status GetContextIdForFrame(WebViewImpl* web_view,
                             const std::string& frame,
-                            int* context_id) {
+                            std::string* context_id) {
+  DCHECK(context_id);
   if (frame.empty() || frame == web_view->GetId()) {
-    *context_id = 0;
+    context_id->clear();
     return Status(kOk);
   }
   Status status =
@@ -160,6 +163,154 @@ std::unique_ptr<base::DictionaryValue> GenerateTouchPoint(
   return point;
 }
 
+Status ReleaseRemoteObject(DevToolsClient* client,
+                           const std::string& object_id) {
+  // Release the remote object before doing anything else.
+  base::DictionaryValue params;
+  params.GetDict().Set("objectId", object_id);
+  Status release_status = client->SendCommand("Runtime.releaseObject", params);
+  if (release_status.IsError()) {
+    LOG(ERROR) << "Failed to release remote object: "
+               << release_status.message();
+  }
+  return release_status;
+}
+
+class RemoteObjectReleaseGuard {
+ public:
+  RemoteObjectReleaseGuard(DevToolsClient* client, std::string object_id)
+      : client_(client), object_id_(object_id) {}
+
+  ~RemoteObjectReleaseGuard() { ReleaseRemoteObject(client_, object_id_); }
+
+ private:
+  raw_ptr<DevToolsClient> client_;
+  std::string object_id_;
+};
+
+bool IsFencedFrameNode(const base::Value& node) {
+  if (!node.is_dict())
+    return false;
+  const std::string* nodeName = node.GetDict().FindString("nodeName");
+  return nodeName && *nodeName == "FENCEDFRAME";
+}
+
+const base::Value* GetFencedFrameUserAgentShadowRoot(const base::Value& node) {
+  DCHECK(IsFencedFrameNode(node));
+  const base::Value* shadow_roots = node.GetDict().Find("shadowRoots");
+  if (!shadow_roots)
+    return nullptr;
+
+  // Find user-agent shadow root inside fenced frame.
+  for (const base::Value& shadow_root : shadow_roots->GetList()) {
+    if (shadow_root.is_dict()) {
+      const std::string* shadow_root_type =
+          shadow_root.GetDict().FindString("shadowRootType");
+      if (shadow_root_type && *shadow_root_type == "user-agent") {
+        return &shadow_root;
+      }
+    }
+  }
+
+  return nullptr;
+}
+
+Status DescribeNode(DevToolsClient* client,
+                    const std::string& object_id,
+                    int depth,
+                    bool pierce,
+                    base::Value* result_node) {
+  DCHECK(result_node);
+  base::Value params(base::Value::Type::DICT);
+  base::Value cmd_result;
+  params.GetDict().Set("objectId", object_id);
+  params.GetDict().Set("depth", depth);
+  params.GetDict().Set("pierce", pierce);
+  Status status = client->SendCommandAndGetResult(
+      "DOM.describeNode", base::Value::AsDictionaryValue(params), &cmd_result);
+
+  if (status.IsError()) {
+    return status;
+  }
+
+  DCHECK(cmd_result.is_dict());
+
+  base::Value* node = cmd_result.GetDict().Find("node");
+  if (!node || !node->is_dict()) {
+    return Status(kUnknownError, "DOM.describeNode missing dictionary 'node'");
+  }
+
+  *result_node = std::move(*node);
+
+  return status;
+}
+
+Status GetFrameIdForObjectId(DevToolsClient* client,
+                             const std::string& object_id,
+                             bool* found_node,
+                             std::string* frame_id) {
+  DCHECK(frame_id);
+  DCHECK(found_node);
+  base::DictionaryValue cmd_result;
+
+  Status status{kOk};
+
+  base::Value node;
+  status = DescribeNode(client, object_id, 0, false, &node);
+
+  if (status.IsError())
+    return status;
+
+  std::string* maybe_frame_id = node.GetIfDict()->FindString("frameId");
+  if (maybe_frame_id) {
+    *frame_id = *maybe_frame_id;
+    *found_node = true;
+    return Status(kOk);
+  }
+
+  if (IsFencedFrameNode(node)) {
+    status = DescribeNode(client, object_id, 3, true, &node);
+    if (status.IsError()) {
+      return status;
+    }
+    const base::Value* ua_shadow_root = GetFencedFrameUserAgentShadowRoot(node);
+    if (!ua_shadow_root)
+      return Status(kUnknownError, "Shadow not found in fenced frame");
+
+    if (ua_shadow_root->FindIntKey("childNodeCount").value_or(0) == 0)
+      return Status(kUnknownError,
+                    "Attribute childNodeCount not found in fenced frame");
+
+    // Find iframe inside fenced frame's shadow dom.
+    const base::Value* iframe_node = nullptr;
+    const base::Value* shadow_root_children =
+        ua_shadow_root->FindListKey("children");
+    if (!shadow_root_children)
+      return Status(kUnknownError,
+                    "Children attribute not found in fenced frame");
+
+    for (const base::Value& child : shadow_root_children->GetList()) {
+      if (*child.FindStringKey("nodeName") == "IFRAME") {
+        iframe_node = &child;
+        break;
+      }
+    }
+    if (!iframe_node)
+      return Status(kUnknownError, "IFrame child not found under fenced frame");
+
+    // Associate fenced frame element with nested iframe's frame id.
+    const std::string* child_frame_id =
+        iframe_node->GetDict().FindString("frameId");
+    if (child_frame_id) {
+      *frame_id = *child_frame_id;
+      *found_node = true;
+      return Status{kOk};
+    }
+  }
+
+  return Status(kOk);
+}
+
 }  // namespace
 
 WebViewImpl::WebViewImpl(const std::string& id,
@@ -174,7 +325,6 @@ WebViewImpl::WebViewImpl(const std::string& id,
       is_detached_(false),
       parent_(parent),
       client_(std::move(client)),
-      dom_tracker_(nullptr),
       frame_tracker_(nullptr),
       dialog_manager_(nullptr),
       mobile_emulation_override_manager_(nullptr),
@@ -199,7 +349,6 @@ WebViewImpl::WebViewImpl(const std::string& id,
       is_detached_(false),
       parent_(parent),
       client_(std::move(client)),
-      dom_tracker_(new DomTracker(client_.get())),
       frame_tracker_(new FrameTracker(client_.get(), this, browser_info)),
       dialog_manager_(new JavaScriptDialogManager(client_.get(), browser_info)),
       mobile_emulation_override_manager_(
@@ -242,7 +391,8 @@ WebViewImpl* WebViewImpl::CreateChild(const std::string& session_id,
   DevToolsClientImpl* root_client =
       static_cast<DevToolsClientImpl*>(client_.get()->GetRootClient());
   std::unique_ptr<DevToolsClient> child_client(
-      std::make_unique<DevToolsClientImpl>(root_client, session_id));
+      std::make_unique<DevToolsClientImpl>(session_id, session_id,
+                                           root_client));
   WebViewImpl* child = new WebViewImpl(
       target_id, w3c_compliant_, this, browser_info_, std::move(child_client),
       nullptr,
@@ -439,7 +589,7 @@ Status WebViewImpl::EvaluateScriptWithTimeout(
                                              awaitPromise, result);
   }
 
-  int context_id;
+  std::string context_id;
   Status status = GetContextIdForFrame(this, frame, &context_id);
   if (status.IsError())
     return status;
@@ -532,20 +682,25 @@ Status WebViewImpl::GetFrameByFunction(const std::string& frame,
     return target->GetFrameByFunction(frame, function, args, out_frame);
   }
 
-  int context_id;
+  std::string context_id;
   Status status = GetContextIdForFrame(this, frame, &context_id);
   if (status.IsError())
     return status;
-  bool found_node;
-  int node_id;
-  status = internal::GetNodeIdFromFunction(
-      client_.get(), context_id, function, args,
-      &found_node, &node_id, w3c_compliant_);
-  if (status.IsError())
+  bool found_node = false;
+
+  status = internal::GetFrameIdFromFunction(client_.get(), context_id, function,
+                                            args, &found_node, out_frame,
+                                            w3c_compliant_);
+
+  if (status.IsError()) {
     return status;
-  if (!found_node)
+  }
+
+  if (!found_node) {
     return Status(kNoSuchFrame);
-  return dom_tracker_->GetFrameIdForNode(node_id, out_frame);
+  }
+
+  return status;
 }
 
 Status WebViewImpl::DispatchTouchEventsForMouseEvents(
@@ -978,21 +1133,21 @@ Status WebViewImpl::PrintToPDF(const base::DictionaryValue& params,
   return Status(kOk);
 }
 
-Status WebViewImpl::GetNodeIdByElement(const std::string& frame,
-                                       const base::Value& element,
-                                       int* node_id) {
+Status WebViewImpl::GetBackendNodeIdByElement(const std::string& frame,
+                                              const base::Value& element,
+                                              int* backend_node_id) {
   if (!element.is_dict())
     return Status(kUnknownError, "'element' is not a dictionary");
-  int context_id;
+  std::string context_id;
   Status status = GetContextIdForFrame(this, frame, &context_id);
   if (status.IsError())
     return status;
   base::ListValue args;
   args.Append(element.Clone());
-  bool found_node;
-  status = internal::GetNodeIdFromFunction(
+  bool found_node = false;
+  status = internal::GetBackendNodeIdFromFunction(
       client_.get(), context_id, "function(element) { return element; }", args,
-      &found_node, node_id, w3c_compliant_);
+      &found_node, backend_node_id, w3c_compliant_);
   if (status.IsError())
     return status;
   if (!found_node)
@@ -1014,8 +1169,8 @@ Status WebViewImpl::SetFileInputFiles(const std::string& frame,
     return target->SetFileInputFiles(frame, element, files, append);
   }
 
-  int node_id;
-  Status status = GetNodeIdByElement(frame, element, &node_id);
+  int backend_node_id;
+  Status status = GetBackendNodeIdByElement(frame, element, &backend_node_id);
   if (status.IsError())
     return status;
 
@@ -1030,7 +1185,7 @@ Status WebViewImpl::SetFileInputFiles(const std::string& frame,
     {
       base::DictionaryValue cmd_result;
       base::DictionaryValue params;
-      params.GetDict().Set("nodeId", node_id);
+      params.GetDict().Set("backendNodeId", backend_node_id);
       status = client_->SendCommandAndGetResult("DOM.resolveNode", params,
                                                 &cmd_result);
       if (status.IsError())
@@ -1107,7 +1262,7 @@ Status WebViewImpl::SetFileInputFiles(const std::string& frame,
   }
 
   base::DictionaryValue setFilesParams;
-  setFilesParams.GetDict().Set("nodeId", node_id);
+  setFilesParams.GetDict().Set("backendNodeId", backend_node_id);
   setFilesParams.GetDict().Set("files", file_list.Clone());
   return client_->SendCommand("DOM.setFileInputFiles", setFilesParams);
 }
@@ -1280,7 +1435,7 @@ Status WebViewImpl::IsNotPendingNavigation(const std::string& frame_id,
     *is_not_pending = true;
     return Status(kOk);
   }
-  bool is_pending;
+  bool is_pending = false;
   Status status =
       navigation_tracker_->IsPendingNavigation(timeout, &is_pending);
   if (status.IsError())
@@ -1303,11 +1458,6 @@ bool WebViewImpl::IsNonBlocking() const {
     return navigation_tracker_->IsNonBlocking();
   else
     return parent_->IsNonBlocking();
-}
-
-bool WebViewImpl::IsOOPIF(const std::string& frame_id) {
-  WebView* target = GetTargetForFrame(this, frame_id);
-  return target != nullptr && frame_id == target->GetId();
 }
 
 FrameTracker* WebViewImpl::GetFrameTracker() const {
@@ -1387,7 +1537,7 @@ WebViewImplHolder::~WebViewImplHolder() {
 namespace internal {
 
 Status EvaluateScript(DevToolsClient* client,
-                      int context_id,
+                      const std::string& context_id,
                       const std::string& expression,
                       EvaluateScriptReturnType return_type,
                       const base::TimeDelta& timeout,
@@ -1396,8 +1546,9 @@ Status EvaluateScript(DevToolsClient* client,
   base::DictionaryValue params;
   base::Value::Dict& dict = params.GetDict();
   dict.Set("expression", expression);
-  if (context_id)
-    dict.Set("contextId", context_id);
+  if (!context_id.empty()) {
+    dict.Set("uniqueContextId", context_id);
+  }
   dict.Set("returnByValue", return_type == ReturnByValue);
   dict.Set("awaitPromise", awaitPromise);
   base::Value cmd_result;
@@ -1427,7 +1578,7 @@ Status EvaluateScript(DevToolsClient* client,
 }
 
 Status EvaluateScriptAndGetObject(DevToolsClient* client,
-                                  int context_id,
+                                  const std::string& context_id,
                                   const std::string& expression,
                                   const base::TimeDelta& timeout,
                                   const bool awaitPromise,
@@ -1451,7 +1602,7 @@ Status EvaluateScriptAndGetObject(DevToolsClient* client,
 }
 
 Status EvaluateScriptAndGetValue(DevToolsClient* client,
-                                 int context_id,
+                                 const std::string& context_id,
                                  const std::string& expression,
                                  const base::TimeDelta& timeout,
                                  const bool awaitPromise,
@@ -1501,15 +1652,15 @@ Status ParseCallFunctionResult(const base::Value& temp_result,
   return Status(kOk);
 }
 
-Status GetNodeIdFromFunction(DevToolsClient* client,
-                             int context_id,
-                             const std::string& function,
-                             const base::ListValue& args,
-                             bool* found_node,
-                             int* node_id,
-                             bool w3c_compliant) {
+Status GetBackendNodeIdFromFunction(DevToolsClient* client,
+                                    const std::string& context_id,
+                                    const std::string& function,
+                                    const base::ListValue& args,
+                                    bool* found_node,
+                                    int* backend_node_id,
+                                    bool w3c_compliant) {
   DCHECK(found_node);
-  DCHECK(node_id);
+  DCHECK(backend_node_id);
   std::string json;
   base::JSONWriter::Write(args, &json);
   std::string w3c = w3c_compliant ? "true" : "false";
@@ -1521,7 +1672,69 @@ Status GetNodeIdFromFunction(DevToolsClient* client,
       json.c_str(),
       w3c.c_str());
 
-  bool got_object;
+  bool got_object = false;
+  std::string element_id;
+  Status status = internal::EvaluateScriptAndGetObject(
+      client, context_id, expression, base::TimeDelta::Max(), true, &got_object,
+      &element_id);
+
+  if (status.IsError())
+    return status;
+
+  if (!got_object) {
+    *found_node = false;
+
+    return Status(kOk);
+  }
+
+  RemoteObjectReleaseGuard releaseGuard(client, element_id);
+
+  base::DictionaryValue cmd_result;
+  {
+    base::DictionaryValue params;
+    params.GetDict().Set("objectId", element_id);
+    status = client->SendCommandAndGetResult("DOM.describeNode", params,
+                                             &cmd_result);
+  }
+  if (status.IsError())
+    return status;
+
+  DCHECK(cmd_result.is_dict());
+
+  base::Value* node = cmd_result.GetDict().Find("node");
+  if (!node || !node->is_dict()) {
+    return Status(kUnknownError, "Dom.describeNode missing dictionary 'node'");
+  }
+
+  absl::optional<int> maybe_node_id = node->GetDict().FindInt("backendNodeId");
+  if (!maybe_node_id)
+    return Status(kUnknownError, "DOM.requestNode missing int 'backendNodeId'");
+
+  // Note that this emulates the previous Deprecated GetInteger behavior, but
+  // should likely be changed.
+  *backend_node_id = *maybe_node_id;
+  *found_node = true;
+  return Status(kOk);
+}
+
+Status GetFrameIdFromFunction(DevToolsClient* client,
+                              const std::string& context_id,
+                              const std::string& function,
+                              const base::ListValue& args,
+                              bool* found_node,
+                              std::string* frame_id,
+                              bool w3c_compliant) {
+  DCHECK(found_node);
+  DCHECK(frame_id);
+  std::string json;
+  base::JSONWriter::Write(args, &json);
+  std::string w3c = w3c_compliant ? "true" : "false";
+  // TODO(zachconrad): Second null should be array of shadow host ids.
+  std::string expression = base::StringPrintf(
+      "(%s).apply(null, [%s, %s, %s, true])", kCallFunctionScript,
+      function.c_str(), json.c_str(), w3c.c_str());
+
+  bool got_object = false;
   std::string element_id;
   Status status = internal::EvaluateScriptAndGetObject(
       client, context_id, expression, base::TimeDelta::Max(), true, &got_object,
@@ -1533,38 +1746,9 @@ Status GetNodeIdFromFunction(DevToolsClient* client,
     return Status(kOk);
   }
 
-  base::DictionaryValue cmd_result;
-  {
-    base::DictionaryValue params;
-    params.GetDict().Set("objectId", element_id);
-    status =
-        client->SendCommandAndGetResult("DOM.requestNode", params, &cmd_result);
-  }
-  {
-    // Release the remote object before doing anything else.
-    base::DictionaryValue params;
-    params.GetDict().Set("objectId", element_id);
-    Status release_status =
-        client->SendCommand("Runtime.releaseObject", params);
-    if (release_status.IsError()) {
-      LOG(ERROR) << "Failed to release remote object: "
-                 << release_status.message();
-    }
-  }
-  if (status.IsError())
-    return status;
+  RemoteObjectReleaseGuard guard(client, element_id);
 
-  absl::optional<int> maybe_node_id = cmd_result.FindIntKey("nodeId");
-  if (!maybe_node_id)
-    return Status(kUnknownError, "DOM.requestNode missing int 'nodeId'");
-
-  // Note that this emulates the previous Deprecated GetInteger behavior, but
-  // should likely be changed.
-  *node_id = *maybe_node_id;
-  *found_node = true;
-  return Status(kOk);
+  return GetFrameIdForObjectId(client, element_id, found_node, frame_id);
 }
-
-
 
 }  // namespace internal

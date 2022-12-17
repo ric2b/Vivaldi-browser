@@ -53,12 +53,12 @@ aggregate_vector_icons("omnibox_vector_icons") {
     "https_valid_in_chip.icon",
     "incognito.icon",
     "install_desktop.icon",
+    "journeys.icon",
     "keyword_search.icon",
     "offline_pin.icon",
     "page.icon",
     "pedal.icon",
     "product.icon",
-    "send.icon",
     "share.icon",
     "star.icon",
     "star_active.icon",
@@ -88,8 +88,6 @@ static_library("vector_icons") {
 
 static_library("browser") {
   sources = [
-    "actions/history_clusters_action.cc",
-    "actions/history_clusters_action.h",
     "actions/omnibox_action.cc",
     "actions/omnibox_action.h",
     "actions/omnibox_action_concepts.h",
@@ -257,11 +255,9 @@ static_library("browser") {
     "//components/dom_distiller/core:core",
     "//components/favicon/core",
     "//components/favicon_base",
-    "//components/history_clusters/core",
     "//components/keyed_service/core",
     "//components/metrics",
     "//components/navigation_metrics",
-    "//components/ntp_tiles",
     "//components/open_from_clipboard",
     "//components/pref_registry",
     "//components/prefs",
@@ -294,7 +290,15 @@ static_library("browser") {
   }
 
   if (!is_ios) {
-    deps += [ "//components/keyed_service/content" ]
+    sources += [
+      "actions/history_clusters_action.cc",
+      "actions/history_clusters_action.h",
+    ]
+    deps += [
+      "//components/history_clusters/core",
+      "//components/keyed_service/content",
+      "//components/optimization_guide/core:entities",
+    ]
   }
 
   if (enable_extensions) {
@@ -417,13 +421,15 @@ if (is_android) {
       "android/java/src/org/chromium/components/omnibox/SecurityButtonAnimationDelegate.java",
       "android/java/src/org/chromium/components/omnibox/SecurityStatusIcon.java",
       "android/java/src/org/chromium/components/omnibox/SuggestionAnswer.java",
+      "android/java/src/org/chromium/components/omnibox/action/HistoryClustersAction.java",
       "android/java/src/org/chromium/components/omnibox/action/OmniboxPedal.java",
     ]
 
     resources_package = "org.chromium.components.omnibox"
     deps = [
       ":java_resources",
-      "//base:base_java",
+      "//base:jni_java",
+      "//build/android:build_java",
       "//components/browser_ui/widget/android:java",
       "//components/embedder_support/android:util_java",
       "//components/query_tiles:query_tile_java",
@@ -438,6 +444,29 @@ if (is_android) {
 
     srcjar_deps = [ ":browser_java_enums_srcjar" ]
     annotation_processor_deps = [ "//base/android/jni_generator:jni_processor" ]
+  }
+
+  android_library("javatests") {
+    testonly = true
+    sources = [ "//components/omnibox/browser/android/javatests/src/org/chromium/components/omnibox/AutocompleteResultUnitTest.java" ]
+    deps = [
+      ":browser_java",
+      ":test_util_java",
+      "//base:base_java_test_support",
+      "//third_party/androidx:androidx_test_runner_java",
+      "//third_party/junit:junit",
+    ]
+  }
+
+  android_library("test_util_java") {
+    testonly = true
+    sources = [ "//components/omnibox/browser/android/javatests/src/org/chromium/components/omnibox/AutocompleteMatchBuilder.java" ]
+    deps = [
+      "//components/omnibox/browser:browser_java",
+      "//components/query_tiles:query_tile_java",
+      "//third_party/androidx:androidx_collection_collection_java",
+      "//url:gurl_java",
+    ]
   }
 
   java_cpp_enum("browser_java_enums_srcjar") {
@@ -457,6 +486,7 @@ if (is_android) {
       "android/java/src/org/chromium/components/omnibox/AutocompleteSchemeClassifier.java",
       "android/java/src/org/chromium/components/omnibox/OmniboxUrlEmphasizer.java",
       "android/java/src/org/chromium/components/omnibox/SuggestionAnswer.java",
+      "android/java/src/org/chromium/components/omnibox/action/HistoryClustersAction.java",
       "android/java/src/org/chromium/components/omnibox/action/OmniboxPedal.java",
     ]
   }
@@ -640,6 +670,11 @@ source_set("unit_tests") {
       "//components/omnibox/browser:vector_icons",
       "//components/vector_icons:vector_icons",
     ]
+  }
+
+  if (!is_ios) {
+    sources += [ "actions/history_clusters_action_unittest.cc" ]
+    deps += [ "//components/history_clusters/core:test_support" ]
   }
 }
 

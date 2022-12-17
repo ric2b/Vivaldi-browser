@@ -373,7 +373,7 @@ bool BrowsingDataRemoverBrowserTestBase::CheckUserDirectoryForString(
           pos < 30 ? 0 : pos - 30,
           std::min(content.size() - 1, pos + hostname.size() + 30));
       LOG(WARNING) << "Found file content: " << file << "\n"
-                   << partial_content << "\n";
+                   << partial_content << "\n" << found;
     }
   }
   return found;
@@ -455,9 +455,10 @@ bool BrowsingDataRemoverBrowserTestBase::SetGaiaCookieForProfile(
   GURL google_url = GaiaUrls::GetInstance()->secure_google_url();
   auto cookie = net::CanonicalCookie::CreateUnsafeCookieForTesting(
       "SAPISID", std::string(), "." + google_url.host(), "/", base::Time(),
-      base::Time(), base::Time(), true /* secure */, false /* httponly */,
-      net::CookieSameSite::NO_RESTRICTION, net::COOKIE_PRIORITY_DEFAULT,
-      false /* same_party */);
+      base::Time(), base::Time(), base::Time(), /*secure=*/true,
+      /*httponly=*/false, net::CookieSameSite::NO_RESTRICTION,
+      net::COOKIE_PRIORITY_DEFAULT,
+      /*same_party=*/false);
   bool success = false;
   base::RunLoop loop;
   base::OnceCallback<void(net::CookieAccessResult)> callback =

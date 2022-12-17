@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Prueba a ejecutar el diagnóstico de red de Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este sitio contiene programas dañinos</translation>
 <translation id="1916770123977586577">Recarga esta página para aplicar a este sitio tus ajustes actualizados</translation>
+<translation id="1973351931613083086">autoreproducción</translation>
 <translation id="1974060860693918893">Avanzado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Revisar el proxy y el cortafuegos<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Regresar</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027">El sitio <ph name="HOST_NAME" /> envió una respuesta inválida.</translation>
-<translation id="2609632851001447353">Variaciones</translation>
 <translation id="2634124572758952069">No se pudo encontrar la dirección IP del servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">Se denegó el acceso al archivo</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Los atacantes pueden estar intentando robar tu información de <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (p. ej. contraseñas, mensajes o tarjetas de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Conoce más<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Se ha detectado un cambio de red.</translation>
 <translation id="2948083400971632585">Puedes desactivar cualquier proxy configurado para una conexión desde los ajustes de red de Vivaldi.</translation>
+<translation id="2953943267837858202">No permitidos para autoreproducir videos</translation>
 <translation id="2991571918955627853">Ahora mismo no puedes acceder a <ph name="SITE" /> porque el sitio web usa HSTS. Los ataques y errores de red suelen ser temporales, por lo que es probable que esta página funcione más tarde.</translation>
 <translation id="3005723025932146533">Mostrar copia guardada</translation>
 <translation id="301521992641321250">Bloqueado automáticamente</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Presiona el botón de recargar la página para reenviar los datos necesarios para cargar la página.</translation>
 <translation id="3234666976984236645">Detectar siempre contenido importante en este sitio</translation>
+<translation id="3291915639428159043">Autoreproducción desactivada</translation>
 <translation id="3308738399950580893">anuncios</translation>
 <translation id="3422472998109090673">El sitio <ph name="HOST_NAME" /> es inaccesible en este momento.</translation>
 <translation id="3427092606871434483">Permitir (por defecto)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Tu conexión no es privada</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalles</translation>
+<translation id="3620979700683094848">Los sitios pueden autoreproducir videos</translation>
 <translation id="3630155396527302611">Si fue incluido como programa autorizado para acceder a la red,
       prueba a eliminarlo de la lista y volverlo a añadir.</translation>
 <translation id="3658742229777143148">Revisión</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861">El sitio <ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">El cliente y el servidor no son compatibles con una versión de protocolo SSL o un conjunto de cifrado comunes.</translation>
+<translation id="410351446219883937">Autoreproducción</translation>
 <translation id="4116663294526079822">Permitir siempre en este sitio</translation>
 <translation id="4130226655945681476">Revisar los cables de red, el módem y el enrutador</translation>
 <translation id="4151403195736952345">Usar valor por defecto global (detectar)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Revisa tu configuración de DNS</translation>
 <translation id="6328639280570009161">Prueba a desactivar la predicción de red</translation>
 <translation id="6328786501058569169">Este sitio es engañoso</translation>
+<translation id="6348220984832452017">Variaciones activas</translation>
 <translation id="6358450015545214790">¿Qué significa esto?</translation>
 <translation id="6433595998831338502">El sitio <ph name="HOST_NAME" /> rechazó la conexión.</translation>
 <translation id="6447842834002726250">Cookies</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Permitir <ph name="BLOCKED_TYPE" /> de <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">El sitio <ph name="HOST_NAME" /> no cumple con los estándares de seguridad.</translation>
 <translation id="7219179957768738017">La conexión usa <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Mostrar notificaciones</translation>
 <translation id="7260504762447901703">Revocar acceso</translation>
 <translation id="7353601530677266744">Línea de comandos</translation>
 <translation id="7364115444476960850">La página fue bloqueada por <ph name="BLOCKER_NAME" /> de Vivaldi</translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Puede que el cortafuegos o el antivirus hayan bloqueado la conexión.</translation>
 <translation id="7800304661137206267">La conexión se cifró con <ph name="CIPHER" />, con <ph name="MAC" /> para la autenticación del mensaje y con <ph name="KX" /> como mecanismo de intercambio de claves.</translation>
 <translation id="7834399512844817676">Normalmente <ph name="SITE" /> usa el cifrado para proteger tu información. Cuando Vivaldi intentó establecer una conexión con <ph name="SITE" />, el sitio web devolvió unas credenciales inusuales e incorrectas. Esto puede ocurrir si un atacante está intentando suplantar a <ph name="SITE" /> o si la conexión es interrumpida por el inicio de sesión en una red inalámbrica. Tu información sigue estando protegida, ya que Vivaldi detuvo la conexión antes de intercambiar datos.</translation>
+<translation id="7834693436815575883">Autoreproducción activada</translation>
 <translation id="7878562273885520351">Tu contraseña puede estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8025119109950072390">Los atacantes a este sitio pueden engañarte para que realices algo peligroso, como instalar programas o revelar tu información personal (p. ej. contraseñas, números de teléfono o tarjetas de crédito).</translation>
 <translation id="8037357227543935929">Preguntar (por defecto)</translation>
 <translation id="8041940743680923270">Usar valor por defecto global (preguntar)</translation>
+<translation id="8044382196220116469">No permitir que los sitios autoreproduzcan videos</translation>
 <translation id="808894953321890993">Cambiar contraseña</translation>
 <translation id="8119307142152921512">rastreadores y anuncios</translation>
 <translation id="8149426793427495338">El equipo entró en suspensión.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Nombre de usuario</translation>
 <translation id="8703575177326907206">Tu conexión con <ph name="DOMAIN" /> no está cifrada.</translation>
 <translation id="8740359287975076522">No se pudo encontrar la &lt;abbr id="dnsDefinition"&gt;dirección DNS&lt;/abbr&gt; de <ph name="HOST_NAME" />. Se está diagnosticando el problema.</translation>
+<translation id="8774017153185436870">Los sitios pueden autoreproducir videos</translation>
 <translation id="8820817407110198400">Marcadores</translation>
 <translation id="8940028675168378100">Bloqueado por <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir a los ajustes del sitio</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Además, esta página incluye otros recursos no seguros. Mientras transitan, estos pueden ser vistos por otros y un atacante puede modificarlos para cambiar el comportamiento de la página.</translation>
+<translation id="9048224371732578627">Permitidos para autoreproducir videos</translation>
 <translation id="9062620674789239642">Es posible que haya sido trasladado, editado o eliminado.</translation>
 <translation id="9069693763241529744">Bloqueado por una extensión</translation>
 <translation id="9073799351042754113">Has elegido desactivar las advertencias de seguridad para este sitio.</translation>

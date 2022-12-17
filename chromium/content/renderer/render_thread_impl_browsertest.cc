@@ -56,11 +56,6 @@
 #include "ui/gfx/buffer_format_util.h"
 #include "ui/gfx/switches.h"
 
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-// Need to disable IPC Audio for these tests, or the tests will hang
-#include "platform_media/renderer/decoders/ipc_audio_decoder.h"
-#endif  // defined(USE_SYSTEM_PROPRIETARY_CODECS)
-
 // IPC messages for testing ----------------------------------------------------
 
 // TODO(mdempsky): Fix properly by moving into a separate
@@ -280,10 +275,6 @@ class RenderThreadImplBrowserTest : public testing::Test,
 
   std::unique_ptr<RenderProcess> process_;
   scoped_refptr<QuitOnTestMsgFilter> test_msg_filter_;
-#if defined(USE_SYSTEM_PROPRIETARY_CODECS)
-  // Need to disable IPC Audio for these tests, or the test will hang
-  media::IPCAudioDecoder::ScopedDisableForTesting ipc_audio_decoder_disabler_;
-#endif
 
   blink::scheduler::WebMockThreadScheduler* main_thread_scheduler_;
 

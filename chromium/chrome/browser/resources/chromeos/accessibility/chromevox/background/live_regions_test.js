@@ -13,9 +13,12 @@ GEN_INCLUDE([
 ChromeVoxLiveRegionsTest = class extends ChromeVoxNextE2ETest {
   async setUpDeferred() {
     await super.setUpDeferred();
+    await importModule(
+        'ChromeVoxState', '/chromevox/background/chromevox_state.js');
+    await importModule('LiveRegions', '/chromevox/background/live_regions.js');
+    await importModule('Output', '/chromevox/background/output/output.js');
 
     window.TreeChangeType = chrome.automation.TreeChangeType;
-    await importModule('LiveRegions', '/chromevox/background/live_regions.js');
   }
 
   /**
@@ -190,7 +193,7 @@ TEST_F('ChromeVoxLiveRegionsTest', 'FocusThenLiveRegion', async function() {
   mockFeedback.call(this.simulateUserInteraction.bind(this))
       .call(go.doDefault.bind(go))
       .expectSpeech('Focus')
-      .expectSpeech((candidate) => {
+      .expectSpeech(candidate => {
         return candidate.text === 'Live' &&
             (candidate.queueMode === QueueMode.CATEGORY_FLUSH ||
              candidate.queueMode === QueueMode.QUEUE);
@@ -358,4 +361,33 @@ SYNC_TEST_F('ChromeVoxLiveRegionsTest', 'ShouldIgnoreLiveRegion', function() {
   assertFalse(liveRegions.shouldIgnoreLiveRegion_(mockNode));
   mockParentNode.state[chrome.automation.StateType.INVISIBLE] = true;
   assertTrue(liveRegions.shouldIgnoreLiveRegion_(mockNode));
+});
+
+TEST_F('ChromeVoxLiveRegionsTest', 'LiveIgnoredToUnignored', async function() {
+  const mockFeedback = this.createMockFeedback();
+  const root = await this.runWithLoadedTree(`
+    <button></button>
+    <div aria-live="polite" style="display:none">hello</div>
+    <div aria-live="polite" hidden>there</div>
+    <script>
+      const [button, div1, div2] = document.body.children;
+      let clickCount = 0;
+      button.addEventListener('click', () => {
+        clickCount++;
+        switch (clickCount) {
+          case 1:
+            div1.style.display = 'block';
+            break;
+          case 2:
+            div2.hidden = false;
+        }
+      });
+    </script>
+  `);
+  const button = root.find({role: chrome.automation.RoleType.BUTTON});
+  mockFeedback.call(button.doDefault.bind(button))
+      .expectSpeech('hello')
+      .call(button.doDefault.bind(button))
+      .expectSpeech('there')
+      .replay();
 });

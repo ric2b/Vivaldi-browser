@@ -126,8 +126,10 @@ void FullscreenElementChanged(Document& document,
 
     // Update paint properties on the visual viewport since
     // user-input-scrollable bits will change based on fullscreen state.
-    if (Page* page = frame->GetPage())
-      page->GetVisualViewport().SetNeedsPaintPropertyUpdate();
+    if (Page* page = frame->GetPage()) {
+      if (page->GetVisualViewport().IsActiveViewport())
+        page->GetVisualViewport().SetNeedsPaintPropertyUpdate();
+    }
   }
 }
 
@@ -197,6 +199,11 @@ void GoFullscreen(Element& element,
     document.RemoveFromTopLayer(&element);
   else
     DCHECK(!HasFullscreenFlag(element));
+
+  // If there are any open popups, close them, unless this fullscreen
+  // element is a descendant of an open popup.
+  if (RuntimeEnabledFeatures::HTMLPopupAttributeEnabled())
+    document.HideAllPopupsUntil(&element, HidePopupFocusBehavior::kNone);
 
   // To fullscreen an |element| within a |document|, set the |element|'s
   // fullscreen flag and add it to |document|'s top layer.
@@ -318,6 +325,13 @@ bool AllowedToRequestFullscreen(Document& document) {
   if (LocalFrame::HasTransientUserActivation(document.GetFrame()))
     return true;
 
+  // The algorithm is triggered by a fullscreen request capability delegation.
+  if (RuntimeEnabledFeatures::CapabilityDelegationFullscreenRequestEnabled(
+          document.GetExecutionContext()) &&
+      document.domWindow()->IsFullscreenRequestTokenActive()) {
+    return true;
+  }
+
   // The algorithm is triggered by a user-generated orientation change.
   if (ScopedAllowFullscreen::FullscreenAllowedReason() ==
       ScopedAllowFullscreen::kOrientationChange) {
@@ -383,7 +397,7 @@ bool RequestFullscreenConditionsMet(Element& pending, Document& document) {
     return false;
 
   // |pending| is not a dialog or popup element.
-  if (IsA<HTMLDialogElement>(pending) || IsA<HTMLPopupElement>(pending))
+  if (IsA<HTMLDialogElement>(pending) || pending.HasValidPopupAttribute())
     return false;
 
   // The fullscreen element ready check for |pending| returns false.
@@ -697,10 +711,12 @@ ScriptPromise Fullscreen::RequestFullscreen(Element& pending,
     LocalFrame& frame = *window.GetFrame();
     frame.GetChromeClient().EnterFullscreen(frame, options, request_type);
 
-    // After the first fullscreen request, the user activation should be
-    // consumed, and the following fullscreen requests should receive an error.
-    if (!for_cross_process_descendant)
+    if (!for_cross_process_descendant) {
+      // Consume any transient user activation and delegated fullscreen token.
+      // AllowedToRequestFullscreen() enforces algorithm requirements earlier.
       LocalFrame::ConsumeTransientUserActivation(&frame);
+      window.ConsumeFullscreenRequestToken();
+    }
   } else {
     // Note: Although we are past the "in parallel" point, it's OK to continue
     // synchronously because when |error| is true, |ContinueRequestFullscreen()|

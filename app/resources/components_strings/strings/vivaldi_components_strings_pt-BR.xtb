@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Tente Executar o Diagnóstico de Rede do Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Este site contém programas perigosos</translation>
 <translation id="1916770123977586577">Para aplicar as configurações atualizadas a este site, recarregue a página</translation>
+<translation id="1973351931613083086">autoplay</translation>
 <translation id="1974060860693918893">Avançado</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Verificar o proxy e o firewall<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Emitido para: <ph name="ORGANIZATION" /> (<ph name="JURISDICTION" />)</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Voltar</translation>
 <translation id="2539524384386349900">Detectar</translation>
 <translation id="255002559098805027"><ph name="HOST_NAME" /> enviou uma resposta inválida.</translation>
-<translation id="2609632851001447353">Variações</translation>
 <translation id="2634124572758952069">Não foi possível encontrar o endereço IP do servidor de <ph name="HOST_NAME" />.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">O acesso ao arquivo foi negado</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Invasores podem estar tentando roubar suas informações do site <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (por exemplo, senhas, mensagens ou cartões de crédito). <ph name="BEGIN_LEARN_MORE_LINK" />Saiba mais<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Foi detectada uma alteração na rede.</translation>
 <translation id="2948083400971632585">Você pode desabilitar qualquer proxy configurado pela categoria "Rede" nas configurações do Vivaldi.</translation>
+<translation id="2953943267837858202">Não permitido rodar vídeos automaticamente</translation>
 <translation id="2991571918955627853">Você não pode visitar <ph name="SITE" /> agora, porque o site usa HSTS. Erros de rede e ataques são geralmente temporários. Esta página provavelmente funcionará mais tarde.</translation>
 <translation id="3005723025932146533">Mostrar cópia salva</translation>
 <translation id="301521992641321250">Bloqueada automaticamente</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Atualize a página para reenviar os dados necessários para carregar a página.</translation>
 <translation id="3234666976984236645">Sempre detectar conteúdo importante neste site</translation>
+<translation id="3291915639428159043">Autoplay bloqueado</translation>
 <translation id="3308738399950580893">anúncios</translation>
 <translation id="3422472998109090673">No momento, não é possível acessar <ph name="HOST_NAME" />.</translation>
 <translation id="3427092606871434483">Permitir (padrão)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Sua conexão não é particular</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" /> <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Ocultar detalhes</translation>
+<translation id="3620979700683094848">Sites têm permissão para rodar vídeos automaticamente</translation>
 <translation id="3630155396527302611">Se ele já estiver listado como um programa que tem permissão para acessar a rede, tente
       removê-lo da lista e adicioná-lo novamente.</translation>
 <translation id="3658742229777143148">Revisão</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861"><ph name="HOST_NAME" /> está bloqueado</translation>
 <translation id="3987940399970879459">Menos de 1 MB</translation>
 <translation id="4075732493274867456">O cliente e o servidor não são compatíveis com uma versão do protocolo SSL comum ou com o pacote de criptografia.</translation>
+<translation id="410351446219883937">Autoplay</translation>
 <translation id="4116663294526079822">Sempre permitir neste site</translation>
 <translation id="4130226655945681476">Verificar o modem, o roteador e os cabos da rede</translation>
 <translation id="4151403195736952345">Usar padrão global (Detectar)</translation>
@@ -183,11 +187,13 @@
 <translation id="7758069387465995638">É possível que o software antivírus ou o firewall tenha bloqueado a conexão.</translation>
 <translation id="7800304661137206267">A conexão foi criptografada utilizando <ph name="CIPHER" />, com <ph name="MAC" /> para mensagem de autenticação e <ph name="KX" /> como o mecanismo de troca de chaves.</translation>
 <translation id="7834399512844817676">O site <ph name="SITE" /> geralmente usa criptografia para proteger suas informações. Quando o Vivaldi tentou se conectar a <ph name="SITE" /> dessa vez, o website retornou credenciais incomuns e incorretas. Isso pode acontecer quando um invasor está fingindo ser <ph name="SITE" /> ou quando uma tela de login por Wi-Fi interrompeu a conexão. Suas informações ainda estão protegidas, porque o Vivaldi interrompeu a conexão antes que os dados fossem trocados.</translation>
+<translation id="7834693436815575883">Permitido Autoplay</translation>
 <translation id="7878562273885520351">Sua senha pode estar comprometida</translation>
 <translation id="7951415247503192394">(32 bits)</translation>
 <translation id="8025119109950072390">Este site foi denunciado por tentar induzir os usuários a fazer algo perigoso, como instalar um software ou revelar suas informações pessoais (como senhas e números de telefone ou cartão de crédito).</translation>
 <translation id="8037357227543935929">Perguntar (padrão)</translation>
 <translation id="8041940743680923270">Usar padrão global (Perguntar)</translation>
+<translation id="8044382196220116469">Não permite que sites rodem vídeos automaticamente</translation>
 <translation id="808894953321890993">Alterar Senha</translation>
 <translation id="8119307142152921512">rastreadores e anúncios</translation>
 <translation id="8149426793427495338">Seu computador entrou em suspensão.</translation>
@@ -205,6 +211,7 @@
 <translation id="8503813439785031346">Nome de usuário</translation>
 <translation id="8703575177326907206">Sua conexão com <ph name="DOMAIN" /> não está criptografada.</translation>
 <translation id="8740359287975076522">Não foi possível encontrar um &lt;abbr id="dnsDefinition"&gt;endereço DNS&lt;/abbr&gt; para <ph name="HOST_NAME" />. Diagnosticando o problema...</translation>
+<translation id="8774017153185436870">Sites podem rodar vídeos automaticamente</translation>
 <translation id="8820817407110198400">Favoritos</translation>
 <translation id="8940028675168378100">Bloqueado pelo <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Ir para configurações do site</translation>
@@ -212,6 +219,7 @@
 <translation id="9008201768610948239">Ignorar</translation>
 <translation id="9025348182339809926">(Inválido)</translation>
 <translation id="9039213469156557790">Além disso, esta página inclui outros recursos que não são seguros. Esses recursos podem ser visualizados por outros usuários enquanto eles navegam e podem ser modificados por um invasor para alterar o comportamento da página.</translation>
+<translation id="9048224371732578627">Permitido rodar vídeos automaticamente</translation>
 <translation id="9062620674789239642">Talvez ele tenha sido movido, editado ou excluído.</translation>
 <translation id="9069693763241529744">Bloqueada por uma extensão</translation>
 <translation id="9073799351042754113">Você escolheu desativar os avisos de segurança para este site.</translation>

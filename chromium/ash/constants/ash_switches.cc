@@ -101,19 +101,9 @@ const char kArcDisableMediaStoreMaintenance[] =
 // apps silently. Used in autotests to resolve racy conditions.
 const char kArcDisablePlayAutoInstall[] = "arc-disable-play-auto-install";
 
-// Used for development of Android app that are included into ARC as system
-// default apps in order to be able to install them via adb.
-const char kArcDisableSystemDefaultApps[] = "arc-disable-system-default-apps";
-
 // Flag that disables ureadahead completely, including host and guest parts.
 // See also |kArcVmUreadaheadMode|.
 const char kArcDisableUreadahead[] = "arc-disable-ureadahead";
-
-// Flag to enables an experiment to allow users to turn on 64-bit support in
-// native bridge on systems that have such support available but not yet enabled
-// by default.
-const char kArcEnableNativeBridge64BitSupportExperiment[] =
-    "arc-enable-native-bridge-64bit-support-experiment";
 
 // Flag that forces the OptIn ui to be shown. Used in tests.
 const char kArcForceShowOptInUi[] = "arc-force-show-optin-ui";
@@ -260,6 +250,10 @@ const char kAshUiMode[] = "force-tablet-mode";
 const char kAshUiModeClamshell[] = "clamshell";
 const char kAshUiModeTablet[] = "touch_view";
 
+// Makes ash use ChromeOS mojo service manager as the mojo broker.
+const char kAshUseCrOSMojoServiceManager[] =
+    "ash-use-cros-mojo-service-manager";
+
 // (Most) Chrome OS hardware reports ACPI power button releases correctly.
 // Standard hardware reports releases immediately after presses.  If set, we
 // lock the screen or shutdown the system immediately in response to a press
@@ -292,6 +286,12 @@ const char kCryptohomeRecoveryReauthUrl[] = "cryptohome-recovery-reauth-url";
 
 // Controls if AuthSession API should be used when interacting with cryptohomed.
 const char kCryptohomeUseAuthSession[] = "cryptohome-use-authsession";
+
+// Forces cryptohome to create new users using old (ecryptfs) encryption.
+// This switch can be used to set up configurations that can be used to
+// test encryption migration scenarios.
+const char kCryptohomeUseOldEncryptionForTesting[] =
+    "cryptohome-use-old-encryption-for-testing";
 
 // Indicates that the wallpaper images specified by
 // kAshDefaultWallpaper{Large,Small} are OEM-specific (i.e. they are not
@@ -395,10 +395,6 @@ const char kEnableArcVm[] = "enable-arcvm";
 
 // Enables ARCVM realtime VCPU feature.
 const char kEnableArcVmRtVcpu[] = "enable-arcvm-rt-vcpu";
-
-// Enables testing the selfie camera feature of Capture Mode using fake cameras.
-// Used only in tests and the emulator.
-const char kEnableCaptureModeFakeCameras[] = "enable-capture-mode-fake-cameras";
 
 // Enables the Cast Receiver.
 const char kEnableCastReceiver[] = "enable-cast-receiver";
@@ -626,11 +622,6 @@ const char kInstallLogFastUploadForTests[] =
 // directory. For now, only one extension can be specified.
 const char kInstallSystemExtension[] = "install-system-extension";
 
-// If set, the Chrome settings will not expose the option to enable crostini
-// unless the enable-experimental-kernel-vm-support flag is set in
-// chrome://flags
-const char kKernelnextRestrictVMs[] = "kernelnext-restrict-vms";
-
 // When this flag is set, the lacros-availability policy is ignored.
 const char kLacrosAvailabilityIgnore[] = "lacros-availability-ignore";
 
@@ -682,6 +673,10 @@ const char kLoginUser[] = "login-user";
 // Specifies the user that the browser data migration should happen for.
 const char kBrowserDataMigrationForUser[] = "browser-data-migration-for-user";
 
+// Run move migration instead of copy. Passed with
+// `kBrowserDataMigrationForUser`.
+const char kBrowserDataMigrationMoveMode[] = "browser-data-migration-move-mode";
+
 // Force skip or force migration. Should only be used for testing.
 const char kForceBrowserDataMigrationForTesting[] =
     "force-browser-data-migration-for-testing";
@@ -718,6 +713,9 @@ const char kOobeLargeScreenSpecialScaling[] =
 
 // Specifies directory for screenshots taken with OOBE UI Debugger.
 const char kOobeScreenshotDirectory[] = "oobe-screenshot-dir";
+
+// Shows Blazey screens.
+const char kOobeShowBlazeyScreen[] = "oobe-show-blazey";
 
 // Skips all other OOBE pages after user login.
 const char kOobeSkipPostLogin[] = "oobe-skip-postlogin";
@@ -872,11 +870,6 @@ bool IsAuthSessionCryptohomeEnabled() {
 
 bool IsCellularFirstDevice() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(kCellularFirst);
-}
-
-bool AreCaptureModeFakeCamerasEnabled() {
-  return base::CommandLine::ForCurrentProcess()->HasSwitch(
-      kEnableCaptureModeFakeCameras);
 }
 
 bool IsRevenBranding() {

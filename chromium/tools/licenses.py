@@ -344,6 +344,13 @@ SPECIAL_CASES = {
         "License File":
         "/third_party/swiftshader/third_party/SPIRV-Tools/LICENSE",
     },
+    os.path.join('third_party', 'swiftshader', 'third_party', 'SPIRV-Headers'): {
+        "Name": "SPIRV-Headers",
+        "URL": "https://github.com/KhronosGroup/SPIRV-Headers",
+        "License": "Apache 2.0",
+        "License File":
+        "/third_party/swiftshader/third_party/SPIRV-Headers/LICENSE",
+    },
 }
 SPECIAL_CASES.update(licenses_vivaldi.SPECIAL_CASES)
 

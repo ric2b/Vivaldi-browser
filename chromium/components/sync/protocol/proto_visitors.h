@@ -21,6 +21,7 @@
 #include "components/sync/protocol/extension_setting_specifics.pb.h"
 #include "components/sync/protocol/extension_specifics.pb.h"
 #include "components/sync/protocol/history_delete_directive_specifics.pb.h"
+#include "components/sync/protocol/history_specifics.pb.h"
 #include "components/sync/protocol/list_passwords_result.pb.h"
 #include "components/sync/protocol/model_type_state.pb.h"
 #include "components/sync/protocol/nigori_local_data.pb.h"
@@ -301,6 +302,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientConfigParams& proto) {
   VISIT(tabs_datatype_enabled);
   VISIT(cookie_jar_mismatch);
   VISIT(single_client);
+  VISIT_REP(devices_fcm_registration_tokens);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientStatus& proto) {
@@ -317,6 +319,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientToServerMessage& proto) {
   VISIT(sync_problem_detected);
   VISIT(debug_info);
   VISIT(client_status);
+  VISIT(invalidator_client_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::ClientToServerResponse& proto) {
@@ -334,6 +337,7 @@ VISIT_PROTO_FIELDS(const sync_pb::ClientToServerResponse::Error& proto) {
   VISIT_ENUM(error_type);
   VISIT(error_description);
   VISIT_ENUM(action);
+  VISIT_REP(error_data_type_ids);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::CommitMessage& proto) {
@@ -341,6 +345,7 @@ VISIT_PROTO_FIELDS(const sync_pb::CommitMessage& proto) {
   VISIT(cache_guid);
   VISIT_REP(extensions_activity);
   VISIT(config_params);
+  VISIT_REP(client_contexts);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::CommitResponse& proto) {
@@ -364,16 +369,13 @@ VISIT_PROTO_FIELDS(const sync_pb::DataTypeContext& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::DataTypeProgressMarker& proto) {
   VISIT(data_type_id);
   VISIT_BYTES(token);
-  VISIT(notification_hint);
   VISIT(get_update_triggers);
+  VISIT(gc_directive);
 }
 
-VISIT_PROTO_FIELDS(const sync_pb::DatatypeAssociationStats& proto) {
-  VISIT(data_type_id);
-  VISIT(download_wait_time_us);
-  VISIT(download_time_us);
-  VISIT_REP(high_priority_type_configured_before);
-  VISIT_REP(same_priority_type_configured_before);
+VISIT_PROTO_FIELDS(const sync_pb::GarbageCollectionDirective& proto) {
+  VISIT(version_watermark);
+  VISIT(age_watermark_in_days);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::DebugEventInfo& proto) {
@@ -381,7 +383,6 @@ VISIT_PROTO_FIELDS(const sync_pb::DebugEventInfo& proto) {
   VISIT(sync_cycle_completed_event_info);
   VISIT(nudging_datatype);
   VISIT_REP(datatypes_notified_from_server);
-  VISIT(datatype_association_stats);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::DebugInfo& proto) {
@@ -447,7 +448,6 @@ VISIT_PROTO_FIELDS(const sync_pb::DictionarySpecifics& proto) {
 
 VISIT_PROTO_FIELDS(const sync_pb::EncryptedData& proto) {
   VISIT(key_name);
-  // TODO(akalin): Shouldn't blob be of type bytes instead of string?
   VISIT_BYTES(blob);
 }
 
@@ -466,7 +466,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntityMetadata& proto) {
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
-  static_assert(38 + 1 /* notes */ == GetNumModelTypes(),
+  static_assert(39 + 1 /* notes */ == GetNumModelTypes(),
                 "When adding a new protocol type, you will likely need to add "
                 "it here as well.");
   VISIT(encrypted);
@@ -483,6 +483,7 @@ VISIT_PROTO_FIELDS(const sync_pb::EntitySpecifics& proto) {
   VISIT(dictionary);
   VISIT(extension);
   VISIT(extension_setting);
+  VISIT(history);
   VISIT(history_delete_directive);
   VISIT(managed_user_setting);
   VISIT(nigori);
@@ -551,6 +552,7 @@ VISIT_PROTO_FIELDS(const sync_pb::GetUpdatesMessage& proto) {
   VISIT(need_encryption_key);
   VISIT(create_mobile_bookmarks_folder);
   VISIT_ENUM(get_updates_origin);
+  VISIT(is_retry);
   VISIT_REP(client_contexts);
 }
 
@@ -602,6 +604,8 @@ VISIT_PROTO_FIELDS(const sync_pb::ModelTypeState& proto) {
   VISIT(type_context);
   VISIT(encryption_key_name);
   VISIT(initial_sync_done);
+  VISIT(cache_guid);
+  VISIT(authenticated_account_id);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::NavigationRedirect& proto) {
@@ -692,6 +696,32 @@ VISIT_PROTO_FIELDS(const sync_pb::WebauthnCredentialSpecifics& proto) {
   // etc.
 }
 
+VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics::PageTransition& proto) {
+  VISIT_ENUM(core_transition);
+  VISIT(blocked);
+  VISIT(forward_back);
+  VISIT(from_address_bar);
+  VISIT(home_page);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics::RedirectEntry& proto) {
+  VISIT(originator_visit_id);
+  VISIT(url);
+  VISIT(title);
+  VISIT(hidden);
+  VISIT_ENUM(redirect_type);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::HistorySpecifics& proto) {
+  VISIT(visit_time_windows_epoch_micros);
+  VISIT(originator_cache_guid);
+  VISIT_REP(redirect_entries);
+  VISIT(page_transition);
+  VISIT(originator_referring_visit_id);
+  VISIT(originator_opener_visit_id);
+  VISIT(visit_duration_micros);
+}
+
 VISIT_PROTO_FIELDS(
     const sync_pb::NigoriSpecifics::TrustedVaultDebugInfo& proto) {
   VISIT(migration_time);
@@ -710,6 +740,7 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecifics& proto) {
   VISIT(encrypted);
   VISIT(unencrypted_metadata);
   VISIT(client_only_encrypted_data);
+  VISIT(encrypted_notes_backup);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordWithLocalData& proto) {
@@ -742,6 +773,7 @@ VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData& proto) {
   VISIT(date_last_used);
   VISIT(password_issues);
   VISIT(date_password_modified_windows_epoch_micros);
+  VISIT(notes);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_PasswordIssues& proto) {
@@ -755,6 +787,17 @@ VISIT_PROTO_FIELDS(
     const sync_pb::PasswordSpecificsData_PasswordIssues_PasswordIssue& proto) {
   VISIT(date_first_detection_microseconds);
   VISIT(is_muted);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_Notes& proto) {
+  VISIT_REP(note);
+}
+
+VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsData_Notes_Note& proto) {
+  VISIT(unique_display_name);
+  VISIT(value);
+  VISIT(date_created_windows_epoch_micros);
+  VISIT(hide_by_default);
 }
 
 VISIT_PROTO_FIELDS(const sync_pb::PasswordSpecificsMetadata& proto) {
@@ -826,6 +869,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SearchEngineSpecifics& proto) {
   VISIT(image_url_post_params);
   VISIT(new_tab_url);
   VISIT_ENUM(is_active);
+  VISIT(starter_pack_id);
   VISIT(unique_position);
 }
 
@@ -834,7 +878,6 @@ VISIT_PROTO_FIELDS(const sync_pb::SendTabToSelfSpecifics& proto) {
   VISIT(title);
   VISIT(url);
   VISIT(shared_time_usec);
-  VISIT(navigation_time_usec);
   VISIT(device_name);
   VISIT(target_device_sync_cache_guid);
   VISIT(opened);
@@ -914,9 +957,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
   VISIT(name);
   VISIT(non_unique_name);
   VISIT(server_defined_unique_tag);
-  VISIT(position_in_parent);
   VISIT(unique_position);
-  VISIT(insert_after_item_id);
   VISIT(deleted);
   VISIT(originator_cache_guid);
   VISIT(originator_client_item_id);
@@ -928,6 +969,7 @@ VISIT_PROTO_FIELDS(const sync_pb::SyncEntity& proto) {
 VISIT_PROTO_FIELDS(const sync_pb::SyncInvalidationsPayload& proto) {
   VISIT_REP(data_type_invalidations);
   VISIT_BYTES(hint);
+  VISIT(version);
 }
 
 VISIT_PROTO_FIELDS(
@@ -1278,6 +1320,7 @@ VISIT_PROTO_FIELDS(
   VISIT_REP(tabs);
   VISIT(active_tab_index);
   VISIT(show_as_app);
+  VISIT_REP(tab_groups);
 }
 
 VISIT_PROTO_FIELDS(
@@ -1318,6 +1361,15 @@ VISIT_PROTO_FIELDS(
     const sync_pb::WorkspaceDeskSpecifics::ArcApp::WindowSize& proto) {
   VISIT(width);
   VISIT(height);
+}
+
+VISIT_PROTO_FIELDS(
+    const sync_pb::WorkspaceDeskSpecifics::BrowserAppWindow::TabGroup& proto) {
+  VISIT(first_index);
+  VISIT(last_index);
+  VISIT(title);
+  VISIT_ENUM(color);
+  VISIT(is_collapsed);
 }
 
 // Vivaldi specific

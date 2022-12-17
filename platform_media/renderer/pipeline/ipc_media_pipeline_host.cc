@@ -12,7 +12,6 @@
 #include <queue>
 
 #include "base/callback_helpers.h"
-#include "base/command_line.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/stl_util.h"
 #include "base/trace_event/trace_event.h"
@@ -21,7 +20,6 @@
 #include "media/base/decoder_buffer.h"
 #include "mojo/public/cpp/base/shared_memory_utils.h"
 
-#include "base/vivaldi_switches.h"
 #include "platform_media/common/feature_toggles.h"
 #include "platform_media/common/platform_ipc_util.h"
 #include "platform_media/common/platform_logging_util.h"
@@ -90,9 +88,7 @@ DemuxerStream::Status HandleConfigChange(PlatformStreamType stream_type,
 
 /* static */
 bool IPCMediaPipelineHost::IsAvailable() {
-  static bool disabled = base::CommandLine::ForCurrentProcess()->HasSwitch(
-      switches::kVivaldiDisableIPCDemuxer);
-  return g_available && !disabled;
+  return g_available;
 }
 
 IPCMediaPipelineHost::IPCMediaPipelineHost() {
@@ -302,19 +298,19 @@ void IPCMediaPipelineHost::OnDecodedDataReady(
   if (result) {
     using Tag = platform_media::mojom::DecodingResult::Tag;
     switch (result->which()) {
-      case Tag::END_OF_FILE:
+      case Tag::kEndOfFile:
         buffer = DecoderBuffer::CreateEOSBuffer();
         status = DemuxerStream::kOk;
         break;
-      case Tag::AUDIO_CONFIG:
+      case Tag::kAudioConfig:
         status = HandleConfigChange(stream_type, result->get_audio_config(),
                                     audio_config_);
         break;
-      case Tag::VIDEO_CONFIG:
+      case Tag::kVideoConfig:
         status = HandleConfigChange(stream_type, result->get_video_config(),
                                     video_config_);
         break;
-      case Tag::DECODED_DATA: {
+      case Tag::kDecodedData: {
         platform_media::mojom::DecodedDataPtr data =
             std::move(result->get_decoded_data());
         if (data->region.IsValid()) {

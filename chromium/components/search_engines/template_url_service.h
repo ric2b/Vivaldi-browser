@@ -184,10 +184,9 @@ class TemplateURLService : public WebDataServiceConsumer,
                            bool supports_replacement_only,
                            TURLsAndMeaningfulLengths* matches);
 
-  // Looks up |keyword| and returns the element it maps to.  Returns NULL if
-  // the keyword was not found.
-  // The caller should not try to delete the returned pointer; the data store
-  // retains ownership of it.
+  // Looks up |keyword| and returns the best TemplateURL for it.  Returns
+  // nullptr if the keyword was not found. The caller should not try to delete
+  // the returned pointer; the data store retains ownership of it.
   TemplateURL* GetTemplateURLForKeyword(const std::u16string& keyword);
   const TemplateURL* GetTemplateURLForKeyword(
       const std::u16string& keyword) const;
@@ -198,10 +197,15 @@ class TemplateURLService : public WebDataServiceConsumer,
   TemplateURL* GetTemplateURLForGUID(const std::string& sync_guid);
   const TemplateURL* GetTemplateURLForGUID(const std::string& sync_guid) const;
 
-  // Returns the first TemplateURL found with a URL using the specified |host|,
-  // or NULL if there are no such TemplateURLs
+  // Returns the best TemplateURL found with a URL using the specified |host|,
+  // or nullptr if there are no such TemplateURLs.
   TemplateURL* GetTemplateURLForHost(const std::string& host);
   const TemplateURL* GetTemplateURLForHost(const std::string& host) const;
+
+  // Returns the number of TemplateURLs that match `host`. Used for logging.
+  // Caller must ensure TemplateURLService is loaded before calling this.
+  // TODO(crbug.com/1322216): Delete after bug is fixed.
+  size_t GetTemplateURLCountForHostForLogging(const std::string& host) const;
 
   // Adds a new TemplateURL to this model.
   //
@@ -351,6 +355,15 @@ class TemplateURLService : public WebDataServiceConsumer,
   // After this, the default search engine is reset to the default entry in the
   // prepopulate data.
   void RepairPrepopulatedSearchEngines();
+
+  // Performs the same actions that happen when the starter pack data version is
+  // revved: all existing starter pack entries are checked against the current
+  // starter pack data, any now-extraneous safe_for_autoreplace() entries are
+  // removed, any existing engines are reset to the provided data (except for
+  // user-edited names or keywords), and any new starter pack engines are
+  // added.  Unlike `RepairPrepopulatedSearchEngines()`, this does not modify
+  // the default search engine entry.
+  void RepairStarterPackEngines();
 
   // Observers used to listen for changes to the model.
   // TemplateURLService does NOT delete the observers when deleted.
@@ -523,6 +536,7 @@ class TemplateURLService : public WebDataServiceConsumer,
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest, LastVisitedTimeUpdate);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest,
                            RepairPrepopulatedSearchEngines);
+  FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceTest, RepairStarterPackEngines);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceSyncTest, PreSyncDeletes);
   FRIEND_TEST_ALL_PREFIXES(TemplateURLServiceSyncTest, MergeInSyncTemplateURL);
   FRIEND_TEST_ALL_PREFIXES(LocationBarModelTest, GoogleBaseURL);
@@ -719,6 +733,9 @@ class TemplateURLService : public WebDataServiceConsumer,
 
   // Returns the TemplateURL corresponding to |prepopulated_id|, if any.
   TemplateURL* FindPrepopulatedTemplateURL(int prepopulated_id);
+
+  // Returns the TemplateURL corresponding to |starter_pack_id|, if any.
+  TemplateURL* FindStarterPackTemplateURL(int starter_pack_id);
 
   // Returns the TemplateURL associated with |extension_id|, if any.
   TemplateURL* FindTemplateURLForExtension(const std::string& extension_id,

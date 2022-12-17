@@ -595,7 +595,9 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
   reg_app_id.append(install_static::GetBaseAppId() + browser_entry_suffix);
   DeleteRegistryKey(root, reg_app_id, WorkItem::kWow64Default);
 
-  // Delete Software\Classes\CLSID\|toast_activator_clsid|.
+  // NOTE(andre@vivaldi.com) : Clear any clsid target exe key.
+  installer_state.ClearToastActivatorTargetExe();
+
   std::wstring toast_activator_reg_path =
       InstallUtil::GetToastActivatorRegistryPath();
   if (!toast_activator_reg_path.empty()) {
@@ -604,7 +606,6 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
     LOG(DFATAL) << "Cannot retrieve the toast activator registry path";
   }
 
-#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   if (installer_state.system_install()) {
     if (!InstallServiceWorkItem::DeleteService(
             install_static::GetElevationServiceName(),
@@ -615,7 +616,6 @@ bool DeleteChromeRegistrationKeys(const InstallerState& installer_state,
                    << install_static::GetElevationServiceName();
     }
   }
-#endif  // BUILDFLAG(GOOGLE_CHROME_BRANDING
 
   // Delete all Start Menu Internet registrations that refer to this Chrome.
   {

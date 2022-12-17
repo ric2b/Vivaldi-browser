@@ -10,6 +10,7 @@
 #include "base/containers/extend.h"
 #include "base/scoped_observation.h"
 #include "chrome/browser/apps/app_service/app_icon/app_icon_factory.h"
+#include "chrome/browser/apps/app_service/extension_apps_utils.h"
 #include "chrome/browser/apps/app_service/intent_util.h"
 #include "chrome/browser/browser_process.h"
 #include "chrome/browser/extensions/extension_ui_util.h"
@@ -221,8 +222,7 @@ class LacrosExtensionAppsPublisher::ProfileTracker
     auto it = app_window_id_cache_.find(app_window);
     DCHECK(it != app_window_id_cache_.end());
 
-    std::string muxed_id =
-        lacros_extensions_util::MuxId(profile_, app_window->extension_id());
+    std::string muxed_id = apps::MuxId(profile_, app_window->extension_id());
     std::string window_id = it->second;
     publisher_->OnAppWindowRemoved(muxed_id, window_id);
 
@@ -321,10 +321,11 @@ class LacrosExtensionAppsPublisher::ProfileTracker
     app->allow_uninstall = (policy->UserMayModifySettings(extension, nullptr) &&
                             !policy->MustRemainInstalled(extension, nullptr));
 
-    // Add file_handlers for Chrome Apps, or file_browser_handler for
-    // Extensions.
+    // Add file_handlers for Chrome Apps and quickoffice, or
+    // file_browser_handler for Extensions.
     base::Extend(app->intent_filters,
-                 which_type_.ChooseForChromeAppOrExtension(
+                 which_type_.ChooseIntentFilter(
+                     extension_misc::IsQuickOfficeExtension(extension->id()),
                      apps_util::CreateIntentFiltersForChromeApp,
                      apps_util::CreateIntentFiltersForExtension)(extension));
     return app;
@@ -462,6 +463,7 @@ void LacrosExtensionAppsPublisher::OnProfileMarkedForPermanentDeletion(
 }
 
 void LacrosExtensionAppsPublisher::OnProfileManagerDestroying() {
+  profile_trackers_.clear();
   profile_manager_observation_.Reset();
 }
 

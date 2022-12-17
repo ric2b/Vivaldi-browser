@@ -126,6 +126,20 @@ AMPPageLoadMetricsObserver::~AMPPageLoadMetricsObserver() {}
 AMPPageLoadMetricsObserver::SubFrameInfo::SubFrameInfo() = default;
 AMPPageLoadMetricsObserver::SubFrameInfo::~SubFrameInfo() = default;
 
+const char* AMPPageLoadMetricsObserver::GetObserverName() const {
+  static const char kName[] = "AMPPageLoadMetricsObserver";
+  return kName;
+}
+
+page_load_metrics::PageLoadMetricsObserver::ObservePolicy
+AMPPageLoadMetricsObserver::OnFencedFramesStart(
+    content::NavigationHandle* navigation_handle,
+    const GURL& currently_committed_url) {
+  // This class needs forwarding for the events OnMobileFriendlinessUpdate and
+  // OnSubFrameRenderDataUpdate.
+  return FORWARD_OBSERVING;
+}
+
 page_load_metrics::PageLoadMetricsObserver::ObservePolicy
 AMPPageLoadMetricsObserver::OnCommit(
     content::NavigationHandle* navigation_handle) {
@@ -165,9 +179,9 @@ void AMPPageLoadMetricsObserver::OnDidFinishSubFrameNavigation(
 
   // Only track frames or fenced frames that are direct descendants of the main
   // frame.
-  if (navigation_handle->GetParentFrame() == nullptr ||
-      navigation_handle->GetParentFrame()->GetParentOrOuterDocument() !=
-          nullptr) {
+  auto* parent_frame = navigation_handle->GetParentFrameOrOuterDocument();
+  if (parent_frame == nullptr ||
+      parent_frame->GetParentOrOuterDocument() != nullptr) {
     return;
   }
 

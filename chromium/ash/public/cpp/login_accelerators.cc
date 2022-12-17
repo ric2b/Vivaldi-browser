@@ -7,17 +7,6 @@
 #include <string>
 
 namespace ash {
-namespace {
-
-// These strings must be kept in sync with handleAccelerator()
-// in display_manager.js.
-const char kAccelNameCancel[] = "cancel";
-const char kAccelNameVersion[] = "version";
-const char kAccelNameReset[] = "reset";
-const char kAccelNameAppLaunchBailout[] = "app_launch_bailout";
-const char kAccelNameAppLaunchNetworkConfig[] = "app_launch_network_config";
-
-}  // namespace
 
 // clang-format off
 const LoginAcceleratorData kLoginAcceleratorData[] = {
@@ -36,11 +25,11 @@ const LoginAcceleratorData kLoginAcceleratorData[] = {
     }, {
        kAppLaunchBailout,
        ui::VKEY_S, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
-       false, kScopeOobe | kScopeLogin,
+       true, kScopeOobe | kScopeLogin,
     }, {
        kAppLaunchNetworkConfig,
        ui::VKEY_N, ui::EF_CONTROL_DOWN | ui::EF_ALT_DOWN,
-       false, kScopeOobe | kScopeLogin,
+       true, kScopeOobe | kScopeLogin,
     }, {
        kCancelScreenAction,
        ui::VKEY_ESCAPE, ui::EF_NONE,
@@ -82,30 +71,5 @@ const LoginAcceleratorData kLoginAcceleratorData[] = {
 // clang-format on
 
 const size_t kLoginAcceleratorDataLength = std::size(kLoginAcceleratorData);
-
-std::string MapToWebUIAccelerator(LoginAcceleratorAction action) {
-  switch (action) {
-    case LoginAcceleratorAction::kToggleSystemInfo:
-      return kAccelNameVersion;
-    case LoginAcceleratorAction::kShowResetScreen:
-      return kAccelNameReset;
-    case LoginAcceleratorAction::kAppLaunchBailout:
-      return kAccelNameAppLaunchBailout;
-    case LoginAcceleratorAction::kAppLaunchNetworkConfig:
-      return kAccelNameAppLaunchNetworkConfig;
-    case LoginAcceleratorAction::kCancelScreenAction:
-      return kAccelNameCancel;
-    case LoginAcceleratorAction::kShowFeedback:
-    case LoginAcceleratorAction::kStartEnrollment:
-    case LoginAcceleratorAction::kStartKioskEnrollment:
-    case LoginAcceleratorAction::kEnableConsumerKiosk:
-    case LoginAcceleratorAction::kEnableDebugging:
-    case LoginAcceleratorAction::kEditDeviceRequisition:
-    case LoginAcceleratorAction::kDeviceRequisitionRemora:
-    case LoginAcceleratorAction::kStartDemoMode:
-    case LoginAcceleratorAction::kLaunchDiagnostics:
-      return "";
-  }
-}
 
 }  // namespace ash

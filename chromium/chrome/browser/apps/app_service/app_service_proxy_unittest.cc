@@ -17,6 +17,7 @@
 #include "components/services/app_service/public/cpp/app_types.h"
 #include "components/services/app_service/public/cpp/features.h"
 #include "components/services/app_service/public/cpp/icon_types.h"
+#include "components/services/app_service/public/cpp/intent.h"
 #include "components/services/app_service/public/cpp/intent_filter.h"
 #include "components/services/app_service/public/cpp/intent_filter_util.h"
 #include "components/services/app_service/public/cpp/intent_test_util.h"
@@ -266,12 +267,28 @@ TEST_F(AppServiceProxyTest, ProxyAccessPerProfile) {
   TestingProfile::Builder guest_builder;
   guest_builder.SetGuestSession();
   auto guest_profile = guest_builder.Build();
+#if BUILDFLAG(IS_CHROMEOS_ASH)
+  // App service is not available for original profile.
+  EXPECT_FALSE(apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(
+      guest_profile.get()));
+
+  // App service is available for OTR profile in Guest mode.
+  auto* guest_otr_profile =
+      guest_profile->GetPrimaryOTRProfile(/*create_if_needed=*/true);
+  EXPECT_TRUE(apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(
+      guest_otr_profile));
+  auto* guest_otr_proxy =
+      apps::AppServiceProxyFactory::GetForProfile(guest_otr_profile);
+  EXPECT_TRUE(guest_otr_proxy);
+  EXPECT_NE(guest_otr_proxy, proxy);
+#else
   EXPECT_TRUE(apps::AppServiceProxyFactory::IsAppServiceAvailableForProfile(
       guest_profile.get()));
   auto* guest_proxy =
       apps::AppServiceProxyFactory::GetForProfile(guest_profile.get());
   EXPECT_TRUE(guest_proxy);
   EXPECT_NE(guest_proxy, proxy);
+#endif
 }
 
 // The parameter indicates whether the kAppServiceLoadIconWithoutMojom feature
@@ -286,8 +303,6 @@ class AppServiceProxyPreferredAppsTest : public AppServiceProxyTest {
   void SetUp() override {
     proxy_ = AppServiceProxyFactory::GetForProfile(&profile_);
 
-    auto* const provider = web_app::FakeWebAppProvider::Get(&profile_);
-    provider->SkipAwaitingExtensionSystem();
     web_app::test::AwaitStartWebAppProviderAndSubsystems(&profile_);
   }
 
@@ -402,9 +417,8 @@ TEST_F(AppServiceProxyPreferredAppsTest, SetPreferredApp) {
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl1));
   ASSERT_EQ(kTestAppId1,
             proxy()->PreferredAppsList().FindPreferredAppForUrl(kTestUrl2));
-  apps::mojom::IntentPtr mime_intent = apps::mojom::Intent::New();
+  auto mime_intent = std::make_unique<Intent>(apps_util::kIntentActionSend);
   mime_intent->mime_type = "image/png";
-  mime_intent->action = apps_util::kIntentActionSend;
   ASSERT_EQ(
       absl::nullopt,
       proxy()->PreferredAppsList().FindPreferredAppForIntent(mime_intent));

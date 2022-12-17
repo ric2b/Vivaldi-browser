@@ -39,7 +39,6 @@
 #include "base/task/bind_post_task.h"
 #include "base/task/single_thread_task_runner.h"
 #include "base/task/thread_pool.h"
-#include "base/threading/sequence_bound.h"
 #include "base/threading/simple_thread.h"
 #include "base/threading/thread_local.h"
 #include "base/threading/thread_restrictions.h"
@@ -95,7 +94,6 @@
 #include "content/renderer/variations_render_thread_observer.h"
 #include "content/renderer/worker/embedded_shared_worker_stub.h"
 #include "content/renderer/worker/worker_thread_registry.h"
-#include "content/services/shared_storage_worklet/shared_storage_worklet_service_impl.h"
 #include "device/gamepad/public/cpp/gamepads.h"
 #include "gin/public/debug.h"
 #include "gpu/GLES2/gl2extchromium.h"
@@ -148,10 +146,8 @@
 #include "third_party/blink/public/web/web_document.h"
 #include "third_party/blink/public/web/web_frame.h"
 #include "third_party/blink/public/web/web_render_theme.h"
-#include "third_party/blink/public/web/web_script_controller.h"
 #include "third_party/blink/public/web/web_security_policy.h"
 #include "third_party/blink/public/web/web_view.h"
-#include "third_party/boringssl/src/include/openssl/evp.h"
 #include "third_party/skia/include/core/SkFontMgr.h"
 #include "third_party/skia/include/core/SkGraphics.h"
 #include "ui/base/layout.h"
@@ -176,6 +172,8 @@
 #include <objbase.h>
 #include <windows.h>
 #include "content/renderer/media/win/dcomp_texture_factory.h"
+#include "content/renderer/media/win/overlay_state_service_provider.h"
+#include "media/base/win/mf_feature_checks.h"
 #endif
 
 #ifdef ENABLE_VTUNE_JIT_INTERFACE
@@ -210,7 +208,6 @@ using ::blink::WebDocument;
 using ::blink::WebFrame;
 using ::blink::WebNetworkStateNotifier;
 using ::blink::WebRuntimeFeatures;
-using ::blink::WebScriptController;
 using ::blink::WebSecurityPolicy;
 using ::blink::WebString;
 using ::blink::WebView;
@@ -343,50 +340,6 @@ static bool IsSingleProcess() {
   return base::CommandLine::ForCurrentProcess()->HasSwitch(
       switches::kSingleProcess);
 }
-
-// A thread for running shared storage worklet operations. It hosts a worklet
-// environment belonging to one Document. The object owns itself, cleaning up
-// when the worklet has shut down.
-class SelfOwnedSharedStorageWorkletThread {
- public:
-  SelfOwnedSharedStorageWorkletThread(
-      scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner,
-      mojo::PendingReceiver<
-          shared_storage_worklet::mojom::SharedStorageWorkletService> receiver)
-      : main_thread_runner_(std::move(main_thread_runner)) {
-    DCHECK(main_thread_runner_->BelongsToCurrentThread());
-
-    auto disconnect_handler = base::BindPostTask(
-        main_thread_runner_,
-        base::BindOnce(&SelfOwnedSharedStorageWorkletThread::
-                           OnSharedStorageWorkletServiceDestroyed,
-                       weak_factory_.GetWeakPtr()));
-
-    auto task_runner = base::ThreadPool::CreateSingleThreadTaskRunner(
-        {base::TaskPriority::BEST_EFFORT,
-         base::TaskShutdownBehavior::CONTINUE_ON_SHUTDOWN},
-        base::SingleThreadTaskRunnerThreadMode::DEDICATED);
-
-    // Initialize the worklet service in a new thread.
-    worklet_thread_ = base::SequenceBound<
-        shared_storage_worklet::SharedStorageWorkletServiceImpl>(
-        task_runner, std::move(receiver), std::move(disconnect_handler));
-  }
-
- private:
-  void OnSharedStorageWorkletServiceDestroyed() {
-    DCHECK(main_thread_runner_->BelongsToCurrentThread());
-    worklet_thread_.Reset();
-    delete this;
-  }
-
-  scoped_refptr<base::SingleThreadTaskRunner> main_thread_runner_;
-
-  base::SequenceBound<shared_storage_worklet::SharedStorageWorkletServiceImpl>
-      worklet_thread_;
-
-  base::WeakPtrFactory<SelfOwnedSharedStorageWorkletThread> weak_factory_{this};
-};
 
 }  // namespace
 
@@ -919,13 +872,6 @@ RenderThreadImpl::CreateVideoFrameCompositorTaskRunner() {
   return video_frame_compositor_task_runner_;
 }
 
-void RenderThreadImpl::CreateSharedStorageWorkletService(
-    mojo::PendingReceiver<
-        shared_storage_worklet::mojom::SharedStorageWorkletService> receiver) {
-  new SelfOwnedSharedStorageWorkletThread(
-      GetWebMainThreadScheduler()->DefaultTaskRunner(), std::move(receiver));
-}
-
 void RenderThreadImpl::InitializeWebKit(mojo::BinderMap* binders) {
   DCHECK(!blink_platform_impl_);
 
@@ -1053,11 +999,6 @@ void RenderThreadImpl::RecordComputedAction(const std::string& action) {
   GetRendererHost()->RecordUserMetricsAction(action);
 }
 
-void RenderThreadImpl::RegisterExtension(
-    std::unique_ptr<v8::Extension> extension) {
-  WebScriptController::RegisterExtension(std::move(extension));
-}
-
 int RenderThreadImpl::PostTaskToAllWebWorkers(base::RepeatingClosure closure) {
   return WorkerThreadRegistry::Instance()->PostTaskToAllThreads(
       std::move(closure));
@@ -1127,7 +1068,6 @@ media::GpuVideoAcceleratorFactories* RenderThreadImpl::GetGpuFactories() {
        gpu::kGpuFeatureStatusEnabled);
 
   const bool enable_gpu_memory_buffers =
-      !forced_gpu_channel_ && // FEATURE_FORCE_ACCESS_TO_GPU
       !is_gpu_compositing_disabled_ &&
 #if !BUILDFLAG(IS_ANDROID)
       !cmd_line->HasSwitch(switches::kDisableGpuMemoryBufferVideoFrames);
@@ -1181,17 +1121,6 @@ RenderThreadImpl::GetVideoFrameCompositorContextProvider(
 
   scoped_refptr<gpu::GpuChannelHost> gpu_channel_host =
       EstablishGpuChannelSync();
-
-  if (!gpu_channel_host) {
-    LOG(INFO) << " PROPMEDIA(RENDERER) : " << __FUNCTION__
-              << " Attempting to establish a GpuChannelHost"
-              << " by forcing access to the GPU";
-    // FEATURE_FORCE_ACCESS_TO_GPU
-    gpu_->SetForceAllowAccessToGpu(true);
-    gpu_channel_host = EstablishForcedGpuChannelSync();
-    gpu_->SetForceAllowAccessToGpu(false);
-  }
-
   if (!gpu_channel_host)
     return nullptr;
 
@@ -1285,6 +1214,27 @@ scoped_refptr<DCOMPTextureFactory> RenderThreadImpl::GetDCOMPTextureFactory() {
         std::move(channel), GetMediaThreadTaskRunner());
   }
   return dcomp_texture_factory_;
+}
+
+OverlayStateServiceProvider*
+RenderThreadImpl::GetOverlayStateServiceProvider() {
+  DCHECK(IsMainThread());
+  // Only set 'overlay_state_service_provider_' if Media Foundation for clear
+  // is enabled.
+  if (media::SupportMediaFoundationClearPlayback()) {
+    if (!overlay_state_service_provider_ ||
+        overlay_state_service_provider_->IsLost()) {
+      scoped_refptr<gpu::GpuChannelHost> channel = EstablishGpuChannelSync();
+      if (!channel) {
+        overlay_state_service_provider_ = nullptr;
+        return nullptr;
+      }
+      overlay_state_service_provider_ =
+          std::make_unique<OverlayStateServiceProviderImpl>(std::move(channel));
+    }
+  }
+
+  return overlay_state_service_provider_.get();
 }
 #endif  // BUILDFLAG(IS_WIN)
 
@@ -1464,178 +1414,6 @@ void RenderThreadImpl::EnableBlinkRuntimeFeatures(
   for (const auto& feature : features) {
     blink::WebRuntimeFeatures::EnableFeatureFromString(feature, true);
   }
-}
-
-bool RenderThreadImpl::GetRendererMemoryMetrics(
-    RendererMemoryMetrics* memory_metrics) const {
-  DCHECK(memory_metrics);
-
-  // Cache this result, as it can change while this code is running, and is used
-  // as a divisor below.
-  size_t web_view_count = blink::WebView::GetWebViewCount();
-
-  // If there are no web views it doesn't make sense to calculate metrics
-  // right now.
-  if (web_view_count == 0)
-    return false;
-
-  blink::WebMemoryStatistics blink_stats = blink::WebMemoryStatistics::Get();
-  memory_metrics->partition_alloc_kb =
-      blink_stats.partition_alloc_total_allocated_bytes / 1024;
-  memory_metrics->blink_gc_kb =
-      blink_stats.blink_gc_total_allocated_bytes / 1024;
-  std::unique_ptr<base::ProcessMetrics> metric(
-      base::ProcessMetrics::CreateCurrentProcessMetrics());
-  size_t malloc_usage = metric->GetMallocUsage();
-  memory_metrics->malloc_mb = malloc_usage / 1024 / 1024;
-
-  size_t discardable_usage = discardable_memory_allocator_->GetBytesAllocated();
-  memory_metrics->discardable_kb = discardable_usage / 1024;
-
-  size_t v8_usage = 0;
-  if (v8::Isolate* isolate = blink::MainThreadIsolate()) {
-    v8::HeapStatistics v8_heap_statistics;
-    isolate->GetHeapStatistics(&v8_heap_statistics);
-    v8_usage = v8_heap_statistics.total_heap_size();
-  }
-  // TODO(tasak): Currently only memory usage of mainThreadIsolate() is
-  // reported. We should collect memory usages of all isolates using
-  // memory-infra.
-  memory_metrics->v8_main_thread_isolate_mb = v8_usage / 1024 / 1024;
-  size_t total_allocated = blink_stats.partition_alloc_total_allocated_bytes +
-                           blink_stats.blink_gc_total_allocated_bytes +
-                           malloc_usage + v8_usage + discardable_usage;
-  memory_metrics->total_allocated_mb = total_allocated / 1024 / 1024;
-  memory_metrics->non_discardable_total_allocated_mb =
-      (total_allocated - discardable_usage) / 1024 / 1024;
-  memory_metrics->total_allocated_per_render_view_mb =
-      total_allocated / web_view_count / 1024 / 1024;
-
-  return true;
-}
-
-static void RecordMemoryUsageAfterBackgroundedMB(const char* basename,
-                                                 const char* suffix,
-                                                 int memory_usage) {
-  std::string histogram_name = base::StringPrintf("%s.%s", basename, suffix);
-  base::UmaHistogramMemoryLargeMB(histogram_name, memory_usage);
-}
-
-void RenderThreadImpl::RecordMemoryUsageAfterBackgrounded(
-    const char* suffix,
-    int foregrounded_count) {
-  // If this renderer is resumed, we should not update UMA.
-  if (!RendererIsHidden())
-    return;
-  // If this renderer was not kept backgrounded for 5/10/15 minutes,
-  // we should not record current memory usage.
-  if (foregrounded_count != process_foregrounded_count_)
-    return;
-
-  RendererMemoryMetrics memory_metrics;
-  if (!GetRendererMemoryMetrics(&memory_metrics))
-    return;
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.PartitionAlloc.AfterBackgrounded", suffix,
-      memory_metrics.partition_alloc_kb / 1024);
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.BlinkGC.AfterBackgrounded", suffix,
-      memory_metrics.blink_gc_kb / 1024);
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.Malloc.AfterBackgrounded", suffix,
-      memory_metrics.malloc_mb);
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.Discardable.AfterBackgrounded", suffix,
-      memory_metrics.discardable_kb / 1024);
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.V8MainThreaIsolate.AfterBackgrounded",
-      suffix, memory_metrics.v8_main_thread_isolate_mb);
-  RecordMemoryUsageAfterBackgroundedMB(
-      "Memory.Experimental.Renderer.TotalAllocated.AfterBackgrounded", suffix,
-      memory_metrics.total_allocated_mb);
-}
-
-#define GET_MEMORY_GROWTH(current, previous, allocator) \
-  (current.allocator > previous.allocator               \
-       ? current.allocator - previous.allocator         \
-       : 0)
-
-static void RecordBackgroundedRenderPurgeMemoryGrowthKB(const char* basename,
-                                                        const char* suffix,
-                                                        int memory_usage) {
-  std::string histogram_name = base::StringPrintf("%s.%s", basename, suffix);
-  base::UmaHistogramMemoryKB(histogram_name, memory_usage);
-}
-
-void RenderThreadImpl::OnRecordMetricsForBackgroundedRendererPurgeTimerExpired(
-    const char* suffix,
-    int foregrounded_count_when_purged) {
-  // If this renderer is resumed, we should not update UMA.
-  if (!RendererIsHidden())
-    return;
-  if (foregrounded_count_when_purged != process_foregrounded_count_)
-    return;
-
-  RendererMemoryMetrics memory_metrics;
-  if (!GetRendererMemoryMetrics(&memory_metrics))
-    return;
-
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.PartitionAllocKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        partition_alloc_kb));
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.BlinkGCKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        blink_gc_kb));
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.MallocKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        malloc_mb) *
-          1024);
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.DiscardableKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        discardable_kb));
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.V8MainThreadIsolateKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        v8_main_thread_isolate_mb) *
-          1024);
-  RecordBackgroundedRenderPurgeMemoryGrowthKB(
-      "PurgeAndSuspend.Experimental.MemoryGrowth.TotalAllocatedKB", suffix,
-      GET_MEMORY_GROWTH(memory_metrics, purge_and_suspend_memory_metrics_,
-                        total_allocated_mb) *
-          1024);
-}
-
-void RenderThreadImpl::RecordMetricsForBackgroundedRendererPurge() {
-  RendererMemoryMetrics memory_metrics;
-  if (!GetRendererMemoryMetrics(&memory_metrics))
-    return;
-
-  purge_and_suspend_memory_metrics_ = memory_metrics;
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(
-          &RenderThreadImpl::
-              OnRecordMetricsForBackgroundedRendererPurgeTimerExpired,
-          base::Unretained(this), "30min", process_foregrounded_count_),
-      base::Minutes(30));
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(
-          &RenderThreadImpl::
-              OnRecordMetricsForBackgroundedRendererPurgeTimerExpired,
-          base::Unretained(this), "60min", process_foregrounded_count_),
-      base::Minutes(60));
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(
-          &RenderThreadImpl::
-              OnRecordMetricsForBackgroundedRendererPurgeTimerExpired,
-          base::Unretained(this), "90min", process_foregrounded_count_),
-      base::Minutes(90));
 }
 
 void RenderThreadImpl::CompositingModeFallbackToSoftware() {
@@ -1930,25 +1708,6 @@ void RenderThreadImpl::OnRendererBackgrounded() {
   main_thread_scheduler_->SetRendererBackgrounded(true);
   discardable_memory_allocator_->OnBackgrounded();
   internal::PartitionAllocSupport::Get()->OnBackgrounded();
-
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&RenderThreadImpl::RecordMemoryUsageAfterBackgrounded,
-                     base::Unretained(this), "5min",
-                     process_foregrounded_count_),
-      base::Minutes(5));
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&RenderThreadImpl::RecordMemoryUsageAfterBackgrounded,
-                     base::Unretained(this), "10min",
-                     process_foregrounded_count_),
-      base::Minutes(10));
-  GetWebMainThreadScheduler()->DefaultTaskRunner()->PostDelayedTask(
-      FROM_HERE,
-      base::BindOnce(&RenderThreadImpl::RecordMemoryUsageAfterBackgrounded,
-                     base::Unretained(this), "15min",
-                     process_foregrounded_count_),
-      base::Minutes(15));
 }
 
 void RenderThreadImpl::OnRendererForegrounded() {
@@ -2015,25 +1774,6 @@ void RenderThreadImpl::SetRenderingColorSpace(
 gfx::ColorSpace RenderThreadImpl::GetRenderingColorSpace() {
   DCHECK(IsMainThread());
   return rendering_color_space_;
-}
-
-// FEATURE_FORCE_ACCESS_TO_GPU
-scoped_refptr<gpu::GpuChannelHost> RenderThreadImpl::EstablishForcedGpuChannelSync() {
-  TRACE_EVENT0("gpu", "RenderThreadImpl::EstablishForcedGpuChannelSync");
-
-  if (forced_gpu_channel_) {
-      // Do nothing if we already have a GPU channel or are already
-      // establishing one.
-      if (!forced_gpu_channel_->IsLost())
-          return forced_gpu_channel_;
-
-      // Recreate the channel if it has been lost.
-      forced_gpu_channel_->DestroyChannel();
-      forced_gpu_channel_ = nullptr;
-  }
-
-  forced_gpu_channel_ = gpu_->EstablishGpuChannelSync();
-  return forced_gpu_channel_;
 }
 
 }  // namespace content

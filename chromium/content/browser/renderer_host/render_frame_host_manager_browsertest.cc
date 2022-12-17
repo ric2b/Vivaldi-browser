@@ -989,14 +989,18 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, DisownSubframeOpener) {
                             ->GetPrimaryFrameTree()
                             .root();
   EXPECT_EQ(root, root->child_at(0)->opener());
-  EXPECT_EQ(nullptr, root->child_at(0)->original_opener());
+  EXPECT_EQ(
+      nullptr,
+      root->child_at(0)->first_live_main_frame_in_original_opener_chain());
 
   // Now disown the frame's opener.  Shouldn't crash.
   EXPECT_TRUE(ExecuteScript(shell(), "window.frames[0].opener = null;"));
 
   // Check that the subframe's opener in the browser process is disowned.
   EXPECT_EQ(nullptr, root->child_at(0)->opener());
-  EXPECT_EQ(nullptr, root->child_at(0)->original_opener());
+  EXPECT_EQ(
+      nullptr,
+      root->child_at(0)->first_live_main_frame_in_original_opener_chain());
 }
 
 // Check that window.name is preserved for top frames when they navigate
@@ -2638,7 +2642,7 @@ IN_PROC_BROWSER_TEST_P(RFHMProcessPerTabTest, MAYBE_BackFromWebUI) {
 //   browsing instances, but should require a new site instance.
 IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, WebUIGetsBindings) {
   GURL url1(std::string(kChromeUIScheme) + "://" +
-            std::string(kChromeUIGpuHost));
+            std::string(kChromeUIUkmHost));
   GURL url2(std::string(kChromeUIScheme) + "://" +
             std::string(kChromeUIHistogramHost));
 
@@ -3318,9 +3322,9 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, UpdateOpener) {
           ->GetPrimaryFrameTree()
           .root();
   EXPECT_EQ(root, foo_root->opener());
-  EXPECT_EQ(root, foo_root->original_opener());
+  EXPECT_EQ(root, foo_root->first_live_main_frame_in_original_opener_chain());
   EXPECT_EQ(root, bar_root->opener());
-  EXPECT_EQ(root, bar_root->original_opener());
+  EXPECT_EQ(root, bar_root->first_live_main_frame_in_original_opener_chain());
 
   // From the bar process, use window.open to update foo's opener to point to
   // bar. This is allowed since bar is same-origin with foo's opener.  Use
@@ -3337,7 +3341,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, UpdateOpener) {
 
   // Check that updated opener propagated to the browser process.
   EXPECT_EQ(bar_root, foo_root->opener());
-  EXPECT_EQ(root, foo_root->original_opener());
+  EXPECT_EQ(root, foo_root->first_live_main_frame_in_original_opener_chain());
 
   // Check that foo's opener was updated in foo's process. Send a postMessage
   // to the opener and check that the right window (bar_shell) receives it.
@@ -3355,7 +3359,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest, UpdateOpener) {
   // in the browser process.
   EXPECT_TRUE(ExecuteScript(foo_shell, "window.opener = window;"));
   EXPECT_EQ(bar_root, foo_root->opener());
-  EXPECT_EQ(root, foo_root->original_opener());
+  EXPECT_EQ(root, foo_root->first_live_main_frame_in_original_opener_chain());
 }
 
 // Tests that when a popup is opened, which is then navigated cross-process and
@@ -3513,7 +3517,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   // load stop.
   RenderFrameHostImpl* rfh_a = root->current_frame_host();
   rfh_a->DisableUnloadTimerForTesting();
-  SiteInstanceGroup* site_instance_group_a = rfh_a->GetSiteInstance()->group();
+  scoped_refptr<SiteInstanceImpl> site_instance_a = rfh_a->GetSiteInstance();
   TestFrameNavigationObserver commit_observer(root);
   shell()->LoadURL(embedded_test_server()->GetURL("b.com", "/title2.html"));
   commit_observer.WaitForCommit();
@@ -3521,7 +3525,7 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
             new_shell->web_contents()->GetSiteInstance());
   EXPECT_TRUE(root->current_frame_host()
                   ->browsing_context_state()
-                  ->GetRenderFrameProxyHost(site_instance_group_a));
+                  ->GetRenderFrameProxyHost(site_instance_a->group()));
 
   // The previous RFH should still be pending deletion, as we wait for either
   // the mojo::AgentSchedulingGroupHost::DidUnloadRenderFrame or a timeout.
@@ -3547,20 +3551,30 @@ IN_PROC_BROWSER_TEST_P(RenderFrameHostManagerTest,
   EXPECT_TRUE(rvh_a->HasOneRef());
   EXPECT_TRUE(root->current_frame_host()
                   ->browsing_context_state()
-                  ->GetRenderFrameProxyHost(site_instance_group_a));
+                  ->GetRenderFrameProxyHost(site_instance_a->group()));
   EXPECT_FALSE(root->current_frame_host()
                    ->browsing_context_state()
-                   ->GetRenderFrameProxyHost(site_instance_group_a)
+                   ->GetRenderFrameProxyHost(site_instance_a->group())
                    ->is_render_frame_proxy_live());
 
   // Close the popup so there is no proxy for a.com in the original tab.
   new_shell->Close();
-  EXPECT_FALSE(root->current_frame_host()
-                   ->browsing_context_state()
-                   ->GetRenderFrameProxyHost(site_instance_group_a));
 
-  // This should delete the RVH as well.
-  EXPECT_FALSE(root->frame_tree()->GetRenderViewHost(site_instance_group_a));
+  // Verify that there are no proxies, meaning there's no proxy for a.com. At
+  // this point, |site_instance_group_a| has been freed, so searching the proxy
+  // host map using it isn't an option.
+  EXPECT_EQ(nullptr, site_instance_a->group());
+  EXPECT_EQ(0u, root->current_frame_host()
+                    ->browsing_context_state()
+                    ->proxy_hosts()
+                    .size());
+
+  // This should delete the RVH as well. Check this by verifying that there's
+  // only one RVH in the frame tree, and it's for the current SiteInstanceGroup,
+  // not |site_instance_group_a|.
+  EXPECT_TRUE(root->frame_tree()->GetRenderViewHost(
+      root->current_frame_host()->GetSiteInstance()->group()));
+  EXPECT_EQ(1u, root->frame_tree()->render_view_host_map_.size());
 
   // Go back in the main frame from b.com to a.com. In https://crbug.com/581912,
   // the browser process would crash here because there was no main frame

@@ -52,6 +52,7 @@ _CONFIG = [
             'base::Days',
             'base::DefaultTickClock',
             'base::ElapsedTimer',
+            'base::EnumSet',
             'base::JobDelegate',
             'base::JobHandle',
             'base::PostJob',
@@ -67,6 +68,7 @@ _CONFIG = [
             "base::i18n::ToUCharPtr",
             'base::Location',
             'base::MakeRefCounted',
+            'base::MatcherStringPattern',
             'base::Microseconds',
             'base::Milliseconds',
             'base::Minutes',
@@ -88,6 +90,7 @@ _CONFIG = [
             'base::ScopedFD',
             'base::ScopedClosureRunner',
             'base::StringPiece',
+            'base::SubstringSetMatcher',
             'base::SupportsWeakPtr',
             'base::SysInfo',
             'base::ThreadChecker',
@@ -106,7 +109,8 @@ _CONFIG = [
             'base::WrapRefCounted',
             'base::WritableSharedMemoryMapping',
             'base::as_bytes',
-            'base::in_place',
+            'base::bit_cast',
+            'absl::in_place',
             'absl::make_optional',
             'base::make_span',
             'absl::nullopt',
@@ -119,7 +123,7 @@ _CONFIG = [
             'base::PassKey',
 
             # //base/allocator/partition_allocator/partition_alloc_constants.h
-            'base::kAlignment',
+            'partition_alloc::internal::kAlignment',
 
             # //base/task/bind_post_task.h
             'base::BindPostTask',
@@ -191,9 +195,6 @@ _CONFIG = [
             'base::ClampRound',
             'base::SafeUnsignedAbs',
             'base::StrictNumeric',
-
-            # //base/strings/char_traits.h.
-            'base::CharTraits',
 
             # //base/synchronization/lock.h.
             'base::AutoLock',
@@ -274,6 +275,7 @@ _CONFIG = [
             'base::Feature.*',
             'base::FEATURE_.+',
             "base::GetFieldTrial.*",
+            'base::features::.+',
             'features::.+',
 
             # PartitionAlloc
@@ -432,6 +434,7 @@ _CONFIG = [
             # Animation
             'cc::AnimationHost',
             "cc::AnimationIdProvider",
+            "cc::AnimationTimeline",
             "cc::FilterKeyframe",
             "cc::KeyframedFilterAnimationCurve",
             "cc::KeyframeModel",
@@ -527,6 +530,7 @@ _CONFIG = [
             'root_scroller_util::.+',
             'scheduler::.+',
             'scroll_customization::.+',
+            'scroll_into_view_util::.+',
             'scroll_timeline_util::.+',
             'style_change_extra_data::.+',
             'style_change_reason::.+',
@@ -606,9 +610,13 @@ _CONFIG = [
             'service_manager::InterfaceProvider',
 
             # STL containers such as std::string and std::vector are discouraged
-            # but still needed for interop with WebKit/common. Note that other
+            # but still needed for interop with blink/common. Note that other
             # STL types such as std::unique_ptr are encouraged.
             'std::.+',
+
+            # Similarly, GURL is allowed to interoperate with blink/common and
+            # other common code shared between browser and renderer.
+            'GURL',
 
             # UI Cursor
             'ui::Cursor',
@@ -675,6 +683,12 @@ _CONFIG = [
             'absl::holds_alternative',
             'absl::variant',
             'absl::visit',
+
+            # 128-bit absl types
+            'absl::MakeInt128',
+            'absl::MakeUint128',
+            'absl::int128',
+            'absl::uint128',
         ],
         'disallowed': [
             ('base::Bind(|Once|Repeating)',
@@ -791,7 +805,7 @@ _CONFIG = [
     },
     {
         'paths': ['third_party/blink/renderer/core/clipboard'],
-        'allowed': ['net::EscapeForHTML'],
+        'allowed': ['base::EscapeForHTML'],
     },
     {
         'paths': ['third_party/blink/renderer/core/css'],
@@ -929,7 +943,8 @@ _CONFIG = [
     },
     {
         'paths': [
-            'third_party/blink/renderer/core/inspector/inspector_memory_agent.cc'
+            'third_party/blink/renderer/core/inspector/inspector_memory_agent.cc',
+            'third_party/blink/renderer/core/inspector/inspector_memory_agent.h',
         ],
         'allowed': [
             'base::ModuleCache',
@@ -946,6 +961,14 @@ _CONFIG = [
             'cc::ContentLayerClient',
             'cc::DisplayItemList',
             'cc::DrawRecordOp',
+        ],
+    },
+    {
+        'paths': [
+            'third_party/blink/renderer/core/css/properties/css_parsing_utils.cc',
+        ],
+        'allowed': [
+            'color_utils::GetContrastRatio',
         ],
     },
     {
@@ -1100,6 +1123,7 @@ _CONFIG = [
             'gpu::raster::RasterInterface',
             'gpu::Mailbox',
             'gpu::MailboxHolder',
+            'gpu::SharedImageInterface',
             'gpu::SyncToken',
             'gpu::webgpu::ReservedTexture',
             'display::Display',
@@ -1708,6 +1732,12 @@ _CONFIG = [
         ],
         'allowed': [
             'base::Value',
+        ],
+    },
+    {
+        'paths': ['third_party/blink/renderer/modules/clipboard/'],
+        'allowed': [
+            'net::ParseMimeTypeWithoutParameter',
         ],
     },
 ]

@@ -47,7 +47,7 @@ namespace {
 // or why we aren't.
 enum class AttemptingMultipleOverlays {
   kYes = 0,
-  kNoTooFewMaxOverlaysConsidered = 1,
+  kNoFeatureDisabled = 1,
   kNoRequiredOverlay = 2,
   kNoUnsupportedStrategy = 3,
   kMaxValue = kNoUnsupportedStrategy,
@@ -56,10 +56,10 @@ enum class AttemptingMultipleOverlays {
 constexpr char kShouldAttemptMultipleOverlaysHistogramName[] =
     "Compositing.Display.OverlayProcessorUsingStrategy."
     "ShouldAttemptMultipleOverlays";
-constexpr char kNumOverlaysAttemptedHistogramName[] =
-    "Compositing.Display.OverlayProcessorUsingStrategy.NumOverlaysAttempted";
 constexpr char kNumOverlaysPromotedHistogramName[] =
     "Compositing.Display.OverlayProcessorUsingStrategy.NumOverlaysPromoted";
+constexpr char kNumOverlaysAttemptedHistogramName[] =
+    "Compositing.Display.OverlayProcessorUsingStrategy.NumOverlaysAttempted";
 constexpr char kNumOverlaysFailedHistogramName[] =
     "Compositing.Display.OverlayProcessorUsingStrategy.NumOverlaysFailed";
 
@@ -161,6 +161,10 @@ void OverlayProcessorUsingStrategy::ProcessForOverlays(
   auto* render_pass = render_passes->back().get();
   bool success = false;
 
+  UMA_HISTOGRAM_COUNTS_1000(
+      "Compositing.Display.OverlayProcessorUsingStrategy.NumQuadsConsidered",
+      render_pass->quad_list.size());
+
   DBG_DRAW_RECT("overlay.incoming.damage", (*damage_rect));
   for (auto&& each : surface_damage_rect_list) {
     DBG_DRAW_RECT("overlay.surface.damage", each);
@@ -185,6 +189,8 @@ void OverlayProcessorUsingStrategy::ProcessForOverlays(
   LogCheckOverlaySupportMetrics();
 
   DCHECK(candidates->empty() || success);
+  UMA_HISTOGRAM_COUNTS_100(kNumOverlaysPromotedHistogramName,
+                           candidates->size());
 
   UpdateOverlayStatusMap(*candidates);
   UpdateDamageRect(surface_damage_rect_list, *damage_rect);
@@ -413,7 +419,7 @@ void OverlayProcessorUsingStrategy::UpdateDamageRect(
     const auto& status = it.second;
     if (status.plane_z_order != 0) {
       RecordOverlayDamageRectHistograms(status.plane_z_order > 0,
-                                        status.damage_area_estimate != 0,
+                                        status.damage_area_estimate != 0.f,
                                         damage_rect.IsEmpty());
     }
   }
@@ -496,11 +502,11 @@ void OverlayProcessorUsingStrategy::SortProposedOverlayCandidatesPrioritized(
     // for low latency surfaces (inking like in the google keeps application).
     const bool force_update = it->candidate.overlay_damage_index !=
                                   OverlayCandidate::kInvalidDamageIndex &&
-                              it->candidate.damage_area_estimate != 0;
-    track_data.AddRecord(
-        frame_sequence_number_,
-        static_cast<float>(it->candidate.damage_area_estimate) / display_area,
-        it->candidate.resource_id, tracker_config_, force_update);
+                              it->candidate.damage_area_estimate != 0.f;
+    track_data.AddRecord(frame_sequence_number_,
+                         it->candidate.damage_area_estimate / display_area,
+                         it->candidate.resource_id, tracker_config_,
+                         force_update);
     // Here a series of criteria are considered for wholesale rejection of a
     // candidate. The rational for rejection is usually power improvements but
     // this can indirectly reallocate limited overlay resources to another
@@ -585,6 +591,11 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategiesPrioritized(
       num_proposed_pre_sort);
 
   SortProposedOverlayCandidatesPrioritized(&proposed_candidates);
+  if (proposed_candidates.size() == 0) {
+    LogStrategyEnumUMA(num_proposed_pre_sort != 0
+                           ? OverlayStrategy::kNoStrategyFailMin
+                           : OverlayStrategy::kNoStrategyUsed);
+  }
 
   if (ShouldAttemptMultipleOverlays(proposed_candidates)) {
     auto* render_pass = render_pass_list->back().get();
@@ -665,11 +676,7 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategiesPrioritized(
   }
   RegisterOverlayRequirement(has_required_overlay);
 
-  if (proposed_candidates.size() == 0) {
-    LogStrategyEnumUMA(num_proposed_pre_sort != 0
-                           ? OverlayStrategy::kNoStrategyFailMin
-                           : OverlayStrategy::kNoStrategyUsed);
-  } else {
+  if (proposed_candidates.size() != 0) {
     LogStrategyEnumUMA(OverlayStrategy::kNoStrategyAllFail);
   }
   OnOverlaySwitchUMA(ProposedCandidateKey());
@@ -678,10 +685,9 @@ bool OverlayProcessorUsingStrategy::AttemptWithStrategiesPrioritized(
 
 bool OverlayProcessorUsingStrategy::ShouldAttemptMultipleOverlays(
     const std::vector<OverlayProposedCandidate>& sorted_candidates) {
-  if (max_overlays_considered_ <= 1) {
-    UMA_HISTOGRAM_ENUMERATION(
-        kShouldAttemptMultipleOverlaysHistogramName,
-        AttemptingMultipleOverlays::kNoTooFewMaxOverlaysConsidered);
+  if (max_overlays_config_ <= 1) {
+    UMA_HISTOGRAM_ENUMERATION(kShouldAttemptMultipleOverlaysHistogramName,
+                              AttemptingMultipleOverlays::kNoFeatureDisabled);
     return false;
   }
 
@@ -718,6 +724,7 @@ bool OverlayProcessorUsingStrategy::AttemptMultipleOverlays(
     OverlayCandidateList& candidates) {
   if (sorted_candidates.empty()) {
     UMA_HISTOGRAM_COUNTS_100(kNumOverlaysAttemptedHistogramName, 0);
+    UMA_HISTOGRAM_COUNTS_100(kNumOverlaysFailedHistogramName, 0);
     return false;
   }
 
@@ -796,12 +803,11 @@ bool OverlayProcessorUsingStrategy::AttemptMultipleOverlays(
 
   UMA_HISTOGRAM_COUNTS_100(kNumOverlaysAttemptedHistogramName,
                            num_overlays_attempted);
-  UMA_HISTOGRAM_COUNTS_100(kNumOverlaysPromotedHistogramName,
-                           num_overlays_promoted);
   UMA_HISTOGRAM_COUNTS_100(kNumOverlaysFailedHistogramName,
                            num_overlays_attempted - num_overlays_promoted);
 
   if (candidates.empty()) {
+    LogStrategyEnumUMA(OverlayStrategy::kNoStrategyAllFail);
     return false;
   }
 
@@ -825,6 +831,7 @@ bool OverlayProcessorUsingStrategy::AttemptMultipleOverlays(
   // Commit successful candidates.
   for (auto& test_candidate : test_candidates) {
     test_candidate.strategy->CommitCandidate(test_candidate, render_pass);
+    LogStrategyEnumUMA(test_candidate.strategy->GetUMAEnum());
   }
 
   return true;

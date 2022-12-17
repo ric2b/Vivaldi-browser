@@ -331,6 +331,30 @@ PrerenderHost::PrerenderHost(const PrerenderAttributes& attributes,
                              WebContents& web_contents)
     : attributes_(attributes) {
   DCHECK(blink::features::IsPrerender2Enabled());
+  // If the prerendering is browser-initiated, it is expected to have no
+  // initiator. All initiator related information should be null or invalid. On
+  // the other hand, renderer-initiated prerendering should have valid initiator
+  // information.
+  if (attributes.IsBrowserInitiated()) {
+    DCHECK(!attributes.initiator_origin.has_value());
+    DCHECK(!attributes.initiator_frame_token.has_value());
+    DCHECK_EQ(attributes.initiator_process_id,
+              ChildProcessHost::kInvalidUniqueID);
+    DCHECK_EQ(attributes.initiator_ukm_id, ukm::kInvalidSourceId);
+    DCHECK_EQ(attributes.initiator_frame_tree_node_id,
+              RenderFrameHost::kNoFrameTreeNodeId);
+  } else {
+    DCHECK(attributes.initiator_origin.has_value());
+    DCHECK(attributes.initiator_frame_token.has_value());
+    // TODO(https://crbug.com/1325211): Add back the following DCHECKs after
+    // fixing prerendering activation for embedder-triggered prerendering in
+    // unittests.
+    // DCHECK_NE(attributes.initiator_process_id,
+    // ChildProcessHost::kInvalidUniqueID);
+    // DCHECK_NE(attributes.initiator_ukm_id, ukm::kInvalidSourceId);
+    // DCHECK_NE(attributes.initiator_frame_tree_node_id,
+    //           RenderFrameHost::kNoFrameTreeNodeId);
+  }
   CreatePageHolder(*static_cast<WebContentsImpl*>(&web_contents));
 }
 
@@ -807,9 +831,7 @@ void PrerenderHost::RecordFinalStatus(FinalStatus status,
                                       ukm::SourceId prerendered_ukm_id) {
   DCHECK(!final_status_);
   final_status_ = status;
-  RecordPrerenderHostFinalStatus(status, trigger_type(),
-                                 embedder_histogram_suffix(), initiator_ukm_id,
-                                 prerendered_ukm_id);
+  RecordPrerenderHostFinalStatus(status, attributes_, prerendered_ukm_id);
 }
 
 const GURL& PrerenderHost::GetInitialUrl() const {

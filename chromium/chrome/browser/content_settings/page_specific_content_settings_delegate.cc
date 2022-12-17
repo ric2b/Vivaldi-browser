@@ -34,6 +34,8 @@
 #include "extensions/browser/guest_view/web_view/web_view_guest.h"
 #endif
 
+#include "app/vivaldi_apptools.h"
+
 namespace {
 
 void RecordOriginStorageAccess(const url::Origin& origin,
@@ -125,6 +127,12 @@ void GetGuestViewDefaultContentSettingRules(
       ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
       content_settings::ContentSettingToValue(CONTENT_SETTING_BLOCK),
       std::string(), incognito));
+#if defined(VIVALDI_BUILD)
+  rules->autoplay_rules.push_back(ContentSettingPatternSource(
+      ContentSettingsPattern::Wildcard(), ContentSettingsPattern::Wildcard(),
+      content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
+      std::string(), incognito));
+#endif  // VIVALDI_BUILD
 }
 #endif
 }  // namespace
@@ -136,11 +144,17 @@ void PageSpecificContentSettingsDelegate::SetDefaultRendererContentSettingRules(
       web_contents()->GetBrowserContext()->IsOffTheRecord();
 
 #if BUILDFLAG(ENABLE_EXTENSIONS)
+  // Let this avoid guest content settings if the view is embedded inside
+  // Vivaldi. VB-89545
+  auto* web_contents = content::WebContents::FromRenderFrameHost(rfh);
+  auto* guest = guest_view::GuestViewBase::FromWebContents(web_contents);
+  if (guest && !vivaldi::IsVivaldiApp(guest->owner_host())) {
   if (guest_view::GuestViewBase::IsGuest(
           content::WebContents::FromRenderFrameHost(rfh))) {
     GetGuestViewDefaultContentSettingRules(is_off_the_record, rules);
     return;
   }
+  } // IsVivaldiApp
 #endif
   // Always allow scripting in PDF renderers to retain the functionality of
   // the scripted messaging proxy in between the plugins in the PDF renderers
@@ -153,15 +167,6 @@ void PageSpecificContentSettingsDelegate::SetDefaultRendererContentSettingRules(
         content_settings::ContentSettingToValue(CONTENT_SETTING_ALLOW),
         std::string(), is_off_the_record);
   }
-}
-
-ContentSetting PageSpecificContentSettingsDelegate::GetEmbargoSetting(
-    const GURL& request_origin,
-    ContentSettingsType permission) {
-  return PermissionDecisionAutoBlockerFactory::GetForProfile(
-             Profile::FromBrowserContext(web_contents()->GetBrowserContext()))
-      ->GetEmbargoResult(request_origin, permission)
-      .content_setting;
 }
 
 std::vector<storage::FileSystemType>

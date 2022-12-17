@@ -9,6 +9,7 @@ import("//build/config/ui.gni")
 import("//components/nacl/features.gni")
 import("//components/optimization_guide/features.gni")
 import("//components/safe_browsing/buildflags.gni")
+import("//components/services/screen_ai/buildflags/features.gni")
 import("//extensions/buildflags/buildflags.gni")
 import("//media/media_options.gni")
 import("//pdf/features.gni")
@@ -82,13 +83,16 @@ test("components_unittests") {
   }
 
   if (is_fuchsia) {
-    use_cfv2 = false
-    additional_manifest_fragments = [
-      "//build/config/fuchsia/test/font_capabilities.test-cmx",
+    use_cfv1 = false
 
-      # TODO(crbug.com/1185811): Figure out why jit_capabilities is needed.
-      "//build/config/fuchsia/test/jit_capabilities.test-cmx",
-      "//build/config/fuchsia/test/network_capabilities.test-cmx",
+    # TODO(https://crbug.com/1185811): Investigate removing the requirement for
+    # job_policy_ambient_mark_vmo_exec for the sake of V8's allocator in tests.
+    test_runner_shard = "//build/config/fuchsia/test/elf_test_ambient_exec_runner.shard.test-cml"
+
+    additional_manifest_fragments = [
+      "//build/config/fuchsia/test/fonts.shard.test-cml",
+      "//build/config/fuchsia/test/network.shard.test-cml",
+      "//third_party/fuchsia-sdk/sdk/pkg/vulkan/client.shard.cml",
     ]
   }
 
@@ -116,6 +120,7 @@ test("components_unittests") {
     "//components/certificate_matching:unit_tests",
     "//components/client_update_protocol:unit_tests",
     "//components/cloud_devices/common:unit_tests",
+    "//components/commerce/core:shopping_service_unit_tests",
     "//components/component_updater:unit_tests",
     "//components/component_updater/installer_policies:unit_tests",
     "//components/consent_auditor:unit_tests",
@@ -125,6 +130,7 @@ test("components_unittests") {
     "//components/crash/core/common:unit_tests",
     "//components/crx_file:unit_tests",
     "//components/device_event_log:unit_tests",
+    "//components/device_signals/core:unit_tests",
     "//components/dom_distiller/core:unit_tests",
     "//components/download:unit_tests",
     "//components/encrypted_messages:unit_tests",
@@ -142,7 +148,6 @@ test("components_unittests") {
     "//components/history/core/browser:unit_tests",
     "//components/history/core/common:unit_tests",
     "//components/history/metrics:unit_tests",
-    "//components/history_clusters/core:unit_tests",
     "//components/image_fetcher/core:unit_tests",
     "//components/keyed_service/core:unit_tests",
     "//components/language/core/browser:unit_tests",
@@ -150,6 +155,7 @@ test("components_unittests") {
     "//components/language/core/language_model:unit_tests",
     "//components/lens:unit_tests",
     "//components/leveldb_proto:unit_tests",
+    "//components/local_state:unit_tests",
     "//components/lookalikes/core:unit_tests",
     "//components/memory_pressure:unit_tests",
     "//components/metrics:unit_tests",
@@ -227,6 +233,7 @@ test("components_unittests") {
     "//components/url_formatter/spoof_checks/common_words:unit_tests",
     "//components/url_formatter/spoof_checks/top_domains:unit_tests",
     "//components/url_matcher:unit_tests",
+    "//components/url_param_filter/core:unit_tests",
     "//components/url_pattern_index:unit_tests",
     "//components/variations:unit_tests",
     "//components/variations/field_trial_config:unit_tests",
@@ -235,6 +242,10 @@ test("components_unittests") {
     "//components/webdata/common:unit_tests",
     "//components/webdata_services:unit_tests",
   ]
+
+  if (enable_screen_ai_service) {
+    deps += [ "//components/services/screen_ai:unit_tests" ]
+  }
 
   if (build_with_internal_optimization_guide && is_android) {
     loadable_module_deps = [
@@ -251,6 +262,7 @@ test("components_unittests") {
       "//components/global_media_controls:unit_tests",
       "//components/media_message_center:unit_tests",
       "//components/ui_devtools:unit_tests",
+      "//components/user_education/views:unit_tests",
     ]
   }
 
@@ -262,7 +274,13 @@ test("components_unittests") {
     deps += [ "//components/nacl/browser:unit_tests" ]
   }
 
-  if (!is_fuchsia) {
+  if (is_fuchsia) {
+    deps += [
+      "//components/fuchsia_component_support:unit_tests",
+      "//components/fuchsia_legacymetrics:unit_tests",
+    ]
+  } else {
+    # TODO(crbug.com/1290514): Enable all relevant tests on Fuchsia too.
     deps += [
       "//components/browser_sync:unit_tests",
       "//components/send_tab_to_self:unit_tests",
@@ -289,6 +307,7 @@ test("components_unittests") {
       "//components/signin/public/identity_manager/objc:unit_tests",
       "//components/translate/ios/browser:unit_tests",
       "//components/ukm/ios:unit_tests",
+      "//components/url_param_filter/ios:unit_tests",
     ]
   } else {  #!is_ios
     deps += [
@@ -296,6 +315,7 @@ test("components_unittests") {
       "//components/autofill/content/browser:unit_tests",
       "//components/autofill/content/renderer:unit_tests",
       "//components/autofill/core/common/mojom:unit_tests",
+      "//components/autofill_assistant/browser:unit_tests",
       "//components/background_sync:unit_tests",
       "//components/blocked_content:unit_tests",
       "//components/browsing_data/content:unit_tests",
@@ -307,7 +327,6 @@ test("components_unittests") {
       "//components/certificate_transparency:unit_tests",
       "//components/content_capture/browser:unit_tests",
       "//components/content_settings/browser:unit_tests",
-      "//components/contextual_search/core:unit_tests",
       "//components/continuous_search/browser:unit_tests",
       "//components/continuous_search/common:unit_tests",
       "//components/custom_handlers:unit_tests",
@@ -319,12 +338,14 @@ test("components_unittests") {
       "//components/domain_reliability:unit_tests",
       "//components/drive:unit_tests",
       "//components/embedder_support:unit_tests",
+      "//components/endpoint_fetcher:unit_tests",
       "//components/enterprise/content:unit_tests",
       "//components/favicon/content:unit_tests",
       "//components/feed:unit_tests",
       "//components/gcm_driver/instance_id:unit_tests",
       "//components/heavy_ad_intervention:unit_tests",
       "//components/history/content/browser:unit_tests",
+      "//components/history_clusters/core:unit_tests",
       "//components/invalidation/impl:unit_tests",
       "//components/javascript_dialogs:unit_tests",
       "//components/js_injection/common:unit_tests",
@@ -386,7 +407,9 @@ test("components_unittests") {
       "//components/translate/content/browser:unit_tests",
       "//components/translate/content/renderer:unit_tests",
       "//components/ukm/content:unit_tests",
+      "//components/url_param_filter/content:unit_tests",
       "//components/url_rewrite:unit_tests",
+      "//components/user_education/common:unit_tests",
       "//components/value_store:unit_tests",
       "//components/visitedlink/test:unit_tests",
       "//components/web_cache/browser:unit_tests",
@@ -430,7 +453,6 @@ test("components_unittests") {
     deps += [
       "//base:base_java_unittest_support",
       "//components/android_autofill/browser:unit_tests",
-      "//components/autofill_assistant/browser:unit_tests",
       "//components/autofill_assistant/content/browser:unit_tests",
       "//components/autofill_assistant/content/renderer:unit_tests",
       "//components/browser_ui/sms/android:unit_tests",
@@ -624,7 +646,10 @@ test("components_unittests") {
   }
 
   if (is_win || is_mac || is_linux || is_chromeos) {
-    deps += [ "//components/user_notes/browser:unit_tests" ]
+    deps += [
+      "//components/user_notes/browser:unit_tests",
+      "//components/user_notes/storage:unit_tests",
+    ]
   }
 
   # On LaCrOS, tests use ash - chrome as a window manager, thus the dependency.
@@ -853,11 +878,15 @@ if (!is_ios) {
         "autofill_assistant/browser/js_flow_executor_impl_browsertest.cc",
         "autofill_assistant/browser/mock_script_executor_delegate.cc",
         "autofill_assistant/browser/mock_script_executor_delegate.h",
+        "autofill_assistant/browser/script_executor_browsertest.cc",
         "autofill_assistant/browser/service/mock_service.cc",
         "autofill_assistant/browser/service/mock_service.h",
         "autofill_assistant/browser/web/batch_element_checker_browsertest.cc",
+        "autofill_assistant/browser/web/mock_autofill_assistant_agent.cc",
+        "autofill_assistant/browser/web/mock_autofill_assistant_agent.h",
         "autofill_assistant/browser/web/mock_web_controller.cc",
         "autofill_assistant/browser/web/mock_web_controller.h",
+        "autofill_assistant/browser/web/semantic_element_finder_browsertest.cc",
         "autofill_assistant/browser/web/web_controller_browsertest.cc",
         "browser_ui/client_certificate/android/ssl_client_certificate_request_browsertest.cc",
         "test/android/browsertests_apk/components_browser_tests_jni_onload.cc",
@@ -950,7 +979,6 @@ if (!is_ios) {
       "omnibox/browser/history_quick_provider_performance_unittest.cc",
       "subresource_filter/core/common/perftests/indexed_ruleset_perftest.cc",
       "test/run_all_perftests.cc",
-      "url_matcher/substring_set_matcher_perftest.cc",
       "visitedlink/test/visitedlink_perftest.cc",
     ]
 
@@ -966,7 +994,6 @@ if (!is_ios) {
       "//components/subresource_filter/core/common",
       "//components/subresource_filter/tools:tools_lib",
       "//components/test:test_support",
-      "//components/url_matcher",
       "//components/visitedlink/browser",
       "//testing/perf",
       "//url",

@@ -43,12 +43,14 @@
 #include "third_party/blink/renderer/core/script/script.h"
 #include "third_party/blink/renderer/core/script_type_names.h"
 #include "third_party/blink/renderer/core/workers/dedicated_worker_messaging_proxy.h"
+#include "third_party/blink/renderer/core/workers/global_scope_creation_params.h"
 #include "third_party/blink/renderer/core/workers/worker_classic_script_loader.h"
 #include "third_party/blink/renderer/core/workers/worker_clients.h"
 #include "third_party/blink/renderer/core/workers/worker_global_scope.h"
 #include "third_party/blink/renderer/platform/bindings/enumeration_base.h"
 #include "third_party/blink/renderer/platform/bindings/exception_state.h"
 #include "third_party/blink/renderer/platform/bindings/script_state.h"
+#include "third_party/blink/renderer/platform/graphics/begin_frame_provider.h"
 #include "third_party/blink/renderer/platform/instrumentation/use_counter.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher.h"
 #include "third_party/blink/renderer/platform/loader/fetch/resource_fetcher_properties.h"
@@ -257,12 +259,12 @@ void DedicatedWorker::OnHostCreated(
   if (options_->type() == script_type_names::kModule) {
     // Specify empty source code etc. here because scripts will be fetched on
     // the worker thread.
-    ContinueStart(
-        script_request_url_, nullptr /* worker_main_script_load_params */,
-        network::mojom::ReferrerPolicy::kDefault,
-        Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
-        absl::nullopt /* response_address_space */, String() /* source_code */,
-        reject_coep_unsafe_none, std::move(back_forward_cache_controller_host));
+    ContinueStart(script_request_url_,
+                  nullptr /* worker_main_script_load_params */,
+                  network::mojom::ReferrerPolicy::kDefault,
+                  Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
+                  String() /* source_code */, reject_coep_unsafe_none,
+                  std::move(back_forward_cache_controller_host));
     return;
   }
   NOTREACHED() << "Invalid type: " << IDLEnumAsString(options_->type());
@@ -271,26 +273,6 @@ void DedicatedWorker::OnHostCreated(
 void DedicatedWorker::terminate() {
   DCHECK(!GetExecutionContext() || GetExecutionContext()->IsContextThread());
   context_proxy_->TerminateGlobalScope();
-}
-
-BeginFrameProviderParams DedicatedWorker::CreateBeginFrameProviderParams() {
-  DCHECK(GetExecutionContext()->IsContextThread());
-  // If we don't have a frame or we are not in window, some of the SinkIds
-  // won't be initialized. If that's the case, the Worker will initialize it by
-  // itself later.
-  BeginFrameProviderParams begin_frame_provider_params;
-  if (auto* window = DynamicTo<LocalDOMWindow>(GetExecutionContext())) {
-    LocalFrame* frame = window->GetFrame();
-    if (frame) {
-      WebFrameWidgetImpl* widget =
-          WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
-      begin_frame_provider_params.parent_frame_sink_id =
-          widget->GetFrameSinkId();
-    }
-    begin_frame_provider_params.frame_sink_id =
-        Platform::Current()->GenerateFrameSinkId();
-  }
-  return begin_frame_provider_params;
 }
 
 void DedicatedWorker::ContextDestroyed() {
@@ -330,7 +312,6 @@ void DedicatedWorker::OnScriptLoadStarted(
   ContinueStart(script_request_url_, std::move(worker_main_script_load_params),
                 network::mojom::ReferrerPolicy::kDefault,
                 Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
-                absl::nullopt /* response_address_space */,
                 String() /* source_code */, RejectCoepUnsafeNone(false),
                 std::move(back_forward_cache_controller_host));
 }
@@ -394,7 +375,6 @@ void DedicatedWorker::OnFinished(
             ? mojo::Clone(classic_script_loader_->GetContentSecurityPolicy()
                               ->GetParsedPolicies())
             : Vector<network::mojom::blink::ContentSecurityPolicyPtr>(),
-        classic_script_loader_->ResponseAddressSpace(),
         classic_script_loader_->SourceText(), RejectCoepUnsafeNone(false),
         std::move(back_forward_cache_controller_host));
     probe::ScriptImported(GetExecutionContext(),
@@ -411,7 +391,6 @@ void DedicatedWorker::ContinueStart(
     network::mojom::ReferrerPolicy referrer_policy,
     Vector<network::mojom::blink::ContentSecurityPolicyPtr>
         response_content_security_policies,
-    absl::optional<network::mojom::IPAddressSpace> response_address_space,
     const String& source_code,
     RejectCoepUnsafeNone reject_coep_unsafe_none,
     mojo::PendingRemote<mojom::blink::BackForwardCacheControllerHost>
@@ -419,8 +398,7 @@ void DedicatedWorker::ContinueStart(
   context_proxy_->StartWorkerGlobalScope(
       CreateGlobalScopeCreationParams(
           script_url, referrer_policy,
-          std::move(response_content_security_policies),
-          response_address_space),
+          std::move(response_content_security_policies)),
       std::move(worker_main_script_load_params), options_, script_url,
       *outside_fetch_client_settings_object_, v8_stack_trace_id_, source_code,
       reject_coep_unsafe_none, token_,
@@ -428,13 +406,37 @@ void DedicatedWorker::ContinueStart(
       std::move(back_forward_cache_controller_host));
 }
 
+namespace {
+
+BeginFrameProviderParams CreateBeginFrameProviderParams(
+    ExecutionContext& execution_context) {
+  DCHECK(execution_context.IsContextThread());
+  // If we don't have a frame or we are not in window, some of the SinkIds
+  // won't be initialized. If that's the case, the Worker will initialize it by
+  // itself later.
+  BeginFrameProviderParams begin_frame_provider_params;
+  if (auto* window = DynamicTo<LocalDOMWindow>(execution_context)) {
+    LocalFrame* frame = window->GetFrame();
+    if (frame) {
+      WebFrameWidgetImpl* widget =
+          WebLocalFrameImpl::FromFrame(frame)->LocalRootFrameWidget();
+      begin_frame_provider_params.parent_frame_sink_id =
+          widget->GetFrameSinkId();
+    }
+    begin_frame_provider_params.frame_sink_id =
+        Platform::Current()->GenerateFrameSinkId();
+  }
+  return begin_frame_provider_params;
+}
+
+}  // namespace
+
 std::unique_ptr<GlobalScopeCreationParams>
 DedicatedWorker::CreateGlobalScopeCreationParams(
     const KURL& script_url,
     network::mojom::ReferrerPolicy referrer_policy,
     Vector<network::mojom::blink::ContentSecurityPolicyPtr>
-        response_content_security_policies,
-    absl::optional<network::mojom::IPAddressSpace> response_address_space) {
+        response_content_security_policies) {
   base::UnguessableToken parent_devtools_token;
   std::unique_ptr<WorkerSettings> settings;
   ExecutionContext* execution_context = GetExecutionContext();
@@ -467,14 +469,13 @@ DedicatedWorker::CreateGlobalScopeCreationParams(
       execution_context->GetSecurityOrigin(),
       execution_context->IsSecureContext(), execution_context->GetHttpsState(),
       MakeGarbageCollected<WorkerClients>(), CreateWebContentSettingsClient(),
-      response_address_space,
       OriginTrialContext::GetInheritedTrialFeatures(execution_context).get(),
       parent_devtools_token, std::move(settings),
       mojom::blink::V8CacheOptions::kDefault,
       nullptr /* worklet_module_responses_map */,
       std::move(browser_interface_broker_),
       mojo::NullRemote() /* code_cache_host_interface */,
-      CreateBeginFrameProviderParams(),
+      CreateBeginFrameProviderParams(*execution_context),
       execution_context->GetSecurityContext().GetPermissionsPolicy(),
       execution_context->GetAgentClusterID(), execution_context->UkmSourceID(),
       execution_context->GetExecutionContextToken(),
@@ -495,7 +496,7 @@ DedicatedWorker::CreateWebWorkerFetchContext() {
     } else {
       web_worker_fetch_context = frame->Client()->CreateWorkerFetchContext();
     }
-    web_worker_fetch_context->SetIsOnSubframe(!frame->IsMainFrame());
+    web_worker_fetch_context->SetIsOnSubframe(!frame->IsOutermostMainFrame());
     return web_worker_fetch_context;
   }
 

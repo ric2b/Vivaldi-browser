@@ -18,6 +18,7 @@
 #include "base/containers/flat_set.h"
 #include "base/gtest_prod_util.h"
 #include "base/memory/raw_ptr.h"
+#include "base/memory/safe_ref.h"
 #include "base/observer_list.h"
 #include "base/threading/sequence_bound.h"
 #include "base/time/time.h"
@@ -27,7 +28,6 @@
 #include "components/services/storage/public/cpp/buckets/bucket_info.h"
 #include "components/services/storage/public/cpp/quota_error_or.h"
 #include "content/browser/child_process_launcher.h"
-#include "content/browser/renderer_host/code_cache_host_impl.h"
 #include "content/browser/renderer_host/media/aec_dump_manager_impl.h"
 #include "content/browser/renderer_host/render_process_host_internal_observer.h"
 #include "content/browser/storage_partition_impl.h"
@@ -214,6 +214,7 @@ class CONTENT_EXPORT RenderProcessHostImpl
   BrowserContext* GetBrowserContext() override;
   bool InSameStoragePartition(StoragePartition* partition) override;
   int GetID() const override;
+  base::SafeRef<RenderProcessHost> GetSafeRef() const override;
   bool IsInitializedAndNotDead() override;
   void SetBlocked(bool blocked) override;
   bool IsBlocked() override;
@@ -287,7 +288,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   void BindIndexedDB(
       const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::IDBFactory> receiver) override;
-  void BindBucketManagerHost(
+  void BindBucketManagerHostForRenderFrame(
+      const GlobalRenderFrameHostId& render_frame_host_id,
+      mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) override;
+  void BindBucketManagerHostForWorker(
       const url::Origin& origin,
       mojo::PendingReceiver<blink::mojom::BucketManagerHost> receiver) override;
   void ForceCrash() override;
@@ -298,6 +302,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
 #if BUILDFLAG(CLANG_PROFILING_INSIDE_SANDBOX)
   void DumpProfilingData(base::OnceClosure callback) override;
 #endif
+
+  void PauseSocketManagerForRenderFrameHost(
+      const GlobalRenderFrameHostId& render_frame_host_id) override;
+  void ResumeSocketManagerForRenderFrameHost(
+      const GlobalRenderFrameHostId& render_frame_host_id) override;
 
   // IPC::Sender via RenderProcessHost.
   bool Send(IPC::Message* msg) override;
@@ -610,11 +619,11 @@ class CONTENT_EXPORT RenderProcessHostImpl
           receiver) override;
 
   // Binds |receiver| to a QuotaManagerHost instance indirectly owned by the
-  // StoragePartition associated with the render process host. Used by frames
-  // and workers via BrowserInterfaceBroker.
+  // StoragePartition associated with the render process host. Used by workers
+  // via BrowserInterfaceBroker. Frames should call out to QuotaContext directly
+  // to pass in the correct frame id as well.
   void BindQuotaManagerHost(
-      int render_frame_id,
-      const url::Origin& origin,
+      const blink::StorageKey& storage_key,
       mojo::PendingReceiver<blink::mojom::QuotaManagerHost> receiver) override;
 
   // Binds |receiver| to the LockManager owned by |storage_partition_impl_|.
@@ -662,7 +671,8 @@ class CONTENT_EXPORT RenderProcessHostImpl
 
   void BindP2PSocketManager(
       net::NetworkIsolationKey isolation_key,
-      mojo::PendingReceiver<network::mojom::P2PSocketManager> receiver);
+      mojo::PendingReceiver<network::mojom::P2PSocketManager> receiver,
+      GlobalRenderFrameHostId render_frame_host_id);
 
   using IpcSendWatcher = base::RepeatingCallback<void(const IPC::Message& msg)>;
   void SetIpcSendWatcherForTesting(IpcSendWatcher watcher) {
@@ -776,8 +786,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
       mojo::PendingReceiver<viz::mojom::CompositingModeReporter> receiver);
   void CreateDomStorageProvider(
       mojo::PendingReceiver<blink::mojom::DomStorageProvider> receiver);
-  void CreateCodeCacheHost(
-      mojo::PendingReceiver<blink::mojom::CodeCacheHost> receiver);
   void CreateRendererHost(
       mojo::PendingAssociatedReceiver<mojom::RendererHost> receiver);
   void BindMediaInterfaceProxy(
@@ -1108,14 +1116,6 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // The memory allocator, if any, in which the renderer will write its metrics.
   std::unique_ptr<base::PersistentMemoryAllocator> metrics_allocator_;
 
-  // TODO(mythria): Currently we are in the process of migrating CodeCacheHost
-  // interface to use execution specific contexts. Once the migration is
-  // complete remove CodeCacheHost interface from the RenderProcessHost.
-  // Currently fetching code caches from main thread use the interface
-  // associated with the RenderFrameHost. All others (fetches from worker
-  // threads, writing into code caches) use per-process interface.
-  CodeCacheHostImpl::ReceiverSet code_cache_host_receivers_;
-
   bool channel_connected_;
   bool sent_render_process_ready_;
 
@@ -1191,6 +1191,10 @@ class CONTENT_EXPORT RenderProcessHostImpl
   // Used to vend WeakPtrs which are invalidated any time the RenderProcessHost
   // is recycled.
   base::WeakPtrFactory<RenderProcessHostImpl> instance_weak_factory_{this};
+
+  // A WeakPtrFactory that doesn't get reset, unlike |instance_weak_factory_|
+  // above. This is used to create SafeRefs.
+  base::WeakPtrFactory<RenderProcessHostImpl> weak_ptr_factory_{this};
 };
 
 }  // namespace content

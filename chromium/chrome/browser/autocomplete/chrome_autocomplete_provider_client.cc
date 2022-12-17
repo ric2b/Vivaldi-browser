@@ -26,7 +26,6 @@
 #include "chrome/browser/history/history_service_factory.h"
 #include "chrome/browser/history/top_sites_factory.h"
 #include "chrome/browser/history_clusters/history_clusters_service_factory.h"
-#include "chrome/browser/ntp_tiles/chrome_most_visited_sites_factory.h"
 #include "chrome/browser/prefetch/search_prefetch/search_prefetch_service.h"
 #include "chrome/browser/prefetch/search_prefetch/search_prefetch_service_factory.h"
 #include "chrome/browser/prefs/incognito_mode_prefs.h"
@@ -44,12 +43,14 @@
 #include "chrome/common/pref_names.h"
 #include "chrome/common/url_constants.h"
 #include "components/history/core/browser/history_service.h"
+#include "components/history/core/browser/top_sites.h"
 #include "components/language/core/browser/pref_names.h"
-#include "components/ntp_tiles/most_visited_sites.h"
 #include "components/omnibox/browser/actions/omnibox_pedal_provider.h"
 #include "components/omnibox/browser/autocomplete_classifier.h"
 #include "components/omnibox/browser/autocomplete_match.h"
 #include "components/omnibox/browser/omnibox_field_trial.h"
+#include "components/omnibox/browser/omnibox_triggered_feature_service.h"
+#include "components/omnibox/browser/shortcuts_backend.h"
 #include "components/omnibox/browser/tab_matcher.h"
 #include "components/omnibox/common/omnibox_features.h"
 #include "components/prefs/pref_service.h"
@@ -160,15 +161,6 @@ ChromeAutocompleteProviderClient::GetHistoryClustersService() {
 scoped_refptr<history::TopSites>
 ChromeAutocompleteProviderClient::GetTopSites() {
   return TopSitesFactory::GetForProfile(profile_);
-}
-
-ntp_tiles::MostVisitedSites*
-ChromeAutocompleteProviderClient::GetNtpMostVisitedSites() {
-  if (!most_visited_sites_) {
-    most_visited_sites_ =
-        ChromeMostVisitedSitesFactory::NewForProfile(profile_);
-  }
-  return most_visited_sites_.get();
 }
 
 bookmarks::BookmarkModel* ChromeAutocompleteProviderClient::GetBookmarkModel() {

@@ -16,9 +16,6 @@ import org.chromium.components.browser_ui.settings.ChromeSwitchPreference;
 import org.chromium.components.browser_ui.settings.SettingsUtils;
 import org.chromium.components.browser_ui.settings.TextMessagePreference;
 
-// Vivaldi
-import org.chromium.build.BuildConfig;
-
 /**
  * Fragment to manage the Contextual Search preference in Chrome Settings, and to explain to the
  * user what Contextual Search (aka Touch to Search) actually does.
@@ -53,7 +50,6 @@ public class ContextualSearchPreferenceFragment extends PreferenceFragmentCompat
         contextualSearchSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
             ContextualSearchPolicy.setContextualSearchState((boolean) newValue);
             ContextualSearchUma.logMainPreferenceChange((boolean) newValue);
-            if (!BuildConfig.IS_VIVALDI)
             seeBetterResultsSwitch.setVisible(
                     ContextualSearchPolicy.shouldShowMultilevelSettingsUI() && (boolean) newValue);
             return true;
@@ -63,7 +59,6 @@ public class ContextualSearchPreferenceFragment extends PreferenceFragmentCompat
                 (ChromeManagedPreferenceDelegate)
                         preference -> ContextualSearchPolicy.isContextualSearchDisabledByPolicy());
 
-        if (!BuildConfig.IS_VIVALDI) {
         seeBetterResultsSwitch.setChecked(
                 ContextualSearchPolicy.isContextualSearchPrefFullyOptedIn());
         seeBetterResultsSwitch.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -74,7 +69,6 @@ public class ContextualSearchPreferenceFragment extends PreferenceFragmentCompat
 
         seeBetterResultsSwitch.setVisible(ContextualSearchPolicy.shouldShowMultilevelSettingsUI()
                 && isContextualSearchEnabled);
-        } // Vivaldi
 
         if (ContextualSearchPolicy.shouldShowMultilevelSettingsUI()) {
             TextMessagePreference contextualSearchDescription =

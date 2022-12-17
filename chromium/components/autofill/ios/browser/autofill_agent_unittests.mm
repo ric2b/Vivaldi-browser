@@ -129,7 +129,7 @@ TEST_F(AutofillAgentTests,
   std::string locale("en");
   autofill::AutofillDriverIOS::PrepareForWebStateWebFrameAndDelegate(
       &fake_web_state_, &client_, nil, locale,
-      autofill::BrowserAutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      autofill::AutofillManager::EnableDownloadManager(false));
 
   autofill::FormData form;
   form.url = GURL("https://myform.com");
@@ -179,7 +179,7 @@ TEST_F(AutofillAgentTests,
       fillFormData:form
            inFrame:fake_web_state_.GetWebFramesManager()->GetMainWebFrame()];
   fake_web_state_.WasShown();
-  EXPECT_EQ("__gCrWeb.autofill.fillForm({\"fields\":{\"2\":{\"section\":\"\","
+  EXPECT_EQ(u"__gCrWeb.autofill.fillForm({\"fields\":{\"2\":{\"section\":\"\","
             "\"value\":\"number_value\"},"
             "\"3\":{\"section\":\"\",\"value\":\"name_value\"}},"
             "\"formName\":\"CC form\",\"formRendererID\":1}, 0);",
@@ -369,7 +369,7 @@ TEST_F(AutofillAgentTests, FrameInitializationOrderFrames) {
   std::string locale("en");
   autofill::AutofillDriverIOS::PrepareForWebStateWebFrameAndDelegate(
       &fake_web_state_, &client_, nil, locale,
-      autofill::BrowserAutofillManager::DISABLE_AUTOFILL_DOWNLOAD_MANAGER);
+      autofill::AutofillManager::EnableDownloadManager(false));
 
   // Remove the current main frame.
   RemoveWebFrame(fake_main_frame_->GetFrameId());

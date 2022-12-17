@@ -10,6 +10,7 @@
 <translation id="1411638389238344450">Send lenkja som e-post</translation>
 <translation id="1454726940098520109">Syn ikkje stadfestinga igjen</translation>
 <translation id="1462666970065907900">Vil du verkeleg lukka dette vindauget?</translation>
+<translation id="1480046233931937785">Bidragsytarar</translation>
 <translation id="1526344461589023948">Klarte ikkje å lagra den nedlasta oppdateringa. Sjå til at maskina har nok lagringsplass og prøv igjen seinare.</translation>
 <translation id="1657174850639146440">Monster 9</translation>
 <translation id="1676595396635191120">Nytt privatvindauge</translation>
@@ -41,6 +42,7 @@
 <translation id="2989805286512600854">Opna i ny fane</translation>
 <translation id="3027988479108856431">Diverre er ikkje Yandex-innstillingane tilgjengelege medan den nettlesaren køyrer. For å importera innstillingane i Vivaldi må du lagra arbeidet ditt og lukka alle Yandex-vindauga. Vel Hald fram.</translation>
 <translation id="3084011186245865060">Landskap 6</translation>
+<translation id="3093931836425623631">Vivaldi er gjort mogleg gjennom openkjeldeprosjektet Chromium og andre openkjeldeprogram.</translation>
 <translation id="3127383884976966729">Dyr 7</translation>
 <translation id="3156398087075132709">Nytt bokmerke</translation>
 <translation id="3255747772218936245">Installer oppdateringa</translation>
@@ -52,6 +54,7 @@
 <translation id="3402602684546832928">Vel Opera-bokmerkefil</translation>
 <translation id="3451317331714872347">Landskap 8</translation>
 <translation id="3457498675806041407">Stadfest lukking</translation>
+<translation id="3470981972195599598">Vivaldi <ph name="VERSION" /> er allereie installert og vil verta teken i bruk etter omstart av nettlesaren.</translation>
 <translation id="3516213908976398531">Landskap 11</translation>
 <translation id="3521635864657970829">Vil du verkeleg lukka dette vindauget?</translation>
 <translation id="3540597690227428180">Dyr 9</translation>
@@ -80,6 +83,7 @@
 <translation id="4456211719108566931">Monster 6</translation>
 <translation id="4512900838580567989">Opna lenkja i ei ny bakgrunnsfane</translation>
 <translation id="4515472507709384008">Opera utgåve 15+</translation>
+<translation id="4545097004879999966">Opera Mail</translation>
 <translation id="4548358047305717967">Opna bildet i ei ny bakgrunnsfane</translation>
 <translation id="4582480609585453144">Opna lenkja i bakgrunnsfane</translation>
 <translation id="4636708767492582204">Send som e-post</translation>
@@ -140,6 +144,7 @@
 <translation id="8099620695029051217">Kopier sideadressa</translation>
 <translation id="8197810018650377191">Lag bokmerke av sida</translation>
 <translation id="8261506727792406068">Slett</translation>
+<translation id="8263047843452521549">Inspiser bakgrunnstenesta</translation>
 <translation id="8331671104904436324">Opna i bakgrunnsfane</translation>
 <translation id="8373293945112511707">Landskap 1</translation>
 <translation id="8388552048012645975">Lastar ned oppdateringa …</translation>
@@ -154,6 +159,7 @@
 <translation id="8651348004684669199">Legg til aktiv fane</translation>
 <translation id="8669345741879513971">Monster 10</translation>
 <translation id="867544375504146191">Yandex</translation>
+<translation id="8689295374912158752">Inspiser portaldokument</translation>
 <translation id="8768970203213061953">Landskap 14</translation>
 <translation id="8773635261052182196">Du vil ikkje lenger sjå desse varsla. Du kan slå dei på att frå Vivaldi- innstillingane.</translation>
 <translation id="8813277370772331957">Varsla meg seinare</translation>
@@ -161,7 +167,9 @@
 <translation id="8912720443398351457">Vil du verkeleg avslutta Vivaldi?</translation>
 <translation id="8947109330183116400">Vel HTML-bokmerkefil</translation>
 <translation id="9017566390391482291">Vel Vivaldi-profilmappa som skal importerast</translation>
+<translation id="9048058608784130603">Ventande oppdatering <ph name="VERSION" /></translation>
 <translation id="9065203028668620118">Endra</translation>
+<translation id="910680796491389880">Thunderbird</translation>
 <translation id="912022491595344261">Opna biletet som <ph name="USER" /></translation>
 <translation id="9157539936604258187">Opna lenkja</translation>
 <translation id="9169060351863393881">Opera 12.x</translation>

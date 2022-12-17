@@ -45,6 +45,9 @@ class IPCMediaPipelineHost : public platform_media::mojom::PipelineDataSource {
   IPCMediaPipelineHost();
   ~IPCMediaPipelineHost() override;
 
+  // Return false if the implementation in the GPU process cannot be initialized
+  // due to lack of relevant system libraries like on Windows-N or for other
+  // reasons.
   static bool IsAvailable();
 
   DataSource* data_source() const { return data_source_; }

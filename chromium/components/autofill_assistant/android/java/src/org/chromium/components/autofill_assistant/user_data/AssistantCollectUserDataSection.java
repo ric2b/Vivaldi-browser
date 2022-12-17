@@ -8,12 +8,15 @@ import android.content.Context;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.DrawableRes;
 import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
 
+import org.chromium.base.ApiCompatibilityUtils;
 import org.chromium.base.Callback;
 import org.chromium.components.autofill_assistant.AssistantEditor;
 import org.chromium.components.autofill_assistant.AssistantOptionModel;
@@ -46,24 +49,26 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
         }
     }
 
+    protected final Context mContext;
     private final @Nullable View mTitleAddButton;
     private final AssistantVerticalExpander mSectionExpander;
     private final AssistantChoiceList mItemsView;
-    private final View mSummaryView;
+    private final View mSummaryContentView;
+    private final View mSummarySpinnerView;
     private final int mFullViewResId;
     private final int mTitleToContentPadding;
     private final List<Item> mItems;
 
-    protected final Context mContext;
-    protected T mSelectedOption;
-
+    private boolean mUiEnabled = true;
+    private boolean mIsLoading;
     private boolean mIgnoreItemSelectedNotifications;
     private boolean mIgnoreItemChangeNotification;
+    private boolean mRequestReloadOnChange;
     private @Nullable Delegate<T> mDelegate;
     private int mTopPadding;
     private int mBottomPadding;
 
-    private boolean mRequestReloadOnChange;
+    protected T mSelectedOption;
 
     /**
      *
@@ -89,13 +94,16 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
         mSectionExpander = new AssistantVerticalExpander(context, null);
         View sectionTitle =
                 inflater.inflate(R.layout.autofill_assistant_payment_request_section_title, null);
-        mSummaryView = inflater.inflate(summaryViewResId, null);
+        mSummaryContentView = inflater.inflate(summaryViewResId, /* root= */ null);
+        mSummarySpinnerView =
+                inflater.inflate(R.layout.autofill_assistant_loading_spinner, /* root= */ null);
+        View summaryView = buildSummaryView(context, mSummaryContentView, mSummarySpinnerView);
         mItemsView = createChoiceList(listAddButton);
 
         mSectionExpander.setTitleView(sectionTitle,
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        mSectionExpander.setCollapsedView(mSummaryView,
+        mSectionExpander.setCollapsedView(summaryView,
                 new LinearLayout.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         mSectionExpander.setExpandedView(mItemsView,
@@ -108,7 +116,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
                 R.dimen.autofill_assistant_bottombar_horizontal_spacing);
         setHorizontalMargins(sectionTitle, horizontalMargin, horizontalMargin);
         setHorizontalMargins(mSectionExpander.getChevronButton(), 0, horizontalMargin);
-        setHorizontalMargins(mSummaryView, horizontalMargin, 0);
+        setHorizontalMargins(summaryView, horizontalMargin, 0);
         setHorizontalMargins(mItemsView, 0, 0);
 
         if (titleAddButton == null) {
@@ -119,21 +127,31 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
             TextView titleAddButtonLabelView =
                     mSectionExpander.findViewById(R.id.section_title_add_button_label);
             titleAddButtonLabelView.setText(titleAddButton);
+            ImageView titleAddButtonIconView =
+                    mSectionExpander.findViewById(R.id.section_title_add_button_icon);
+            ApiCompatibilityUtils.setImageTintList(titleAddButtonIconView,
+                    ContextCompat.getColorStateList(mContext, R.color.blue_when_enabled_list));
             mTitleAddButton.setOnClickListener(unusedView -> createOrEditItem(null));
         }
 
         parent.addView(mSectionExpander,
                 new ViewGroup.LayoutParams(
                         ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        updateVisibility();
+        updateUi();
     }
 
     View getView() {
         return mSectionExpander;
     }
 
+    /**
+     * Set the view itself visible, if allowed. This can be overruled by the view deciding that
+     * it has no reason to be visible, by being empty (no items) and not having an editor.
+     *
+     * @param visible The flag to decide the visibility.
+     */
     void setVisible(boolean visible) {
-        mSectionExpander.setVisibility(visible ? View.VISIBLE : View.GONE);
+        mSectionExpander.setVisibility(visible && canBeVisible() ? View.VISIBLE : View.GONE);
     }
 
     void setDelegate(@Nullable Delegate<T> delegate) {
@@ -164,7 +182,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
                 initiallySelectedItem = item;
             }
         }
-        updateVisibility();
+        updateUi();
 
         if (initiallySelectedItem != null) {
             selectItem(initiallySelectedItem, false, AssistantUserDataEventType.NO_NOTIFICATION);
@@ -188,7 +206,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
      */
     void updateViews() {
         if (mSelectedOption != null) {
-            updateSummaryView(mSummaryView, mSelectedOption);
+            updateSummaryView(mSummaryContentView, mSelectedOption);
         }
         for (int i = 0; i < mItems.size(); i++) {
             updateFullView(mItems.get(i).mFullView, mItems.get(i).mOption);
@@ -226,7 +244,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
             addItem(item);
         } else {
             eventType = AssistantUserDataEventType.ENTRY_EDITED;
-            updateSummaryView(mSummaryView, item.mOption);
+            updateSummaryView(mSummaryContentView, item.mOption);
         }
 
         if (select) {
@@ -242,6 +260,18 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
 
     void setRequestReloadOnChange(boolean requestReloadOnChange) {
         mRequestReloadOnChange = requestReloadOnChange;
+    }
+
+    private View buildSummaryView(Context context, View contentView, View spinnerView) {
+        LinearLayout viewWrapper = new LinearLayout(context);
+
+        viewWrapper.addView(contentView);
+
+        spinnerView.setTag(AssistantTagsForTesting.COLLECT_USER_DATA_SUMMARY_LOADING_SPINNER_TAG);
+        spinnerView.setVisibility(View.GONE);
+        viewWrapper.addView(spinnerView);
+
+        return viewWrapper;
     }
 
     private AssistantChoiceList createChoiceList(@Nullable String addButtonText) {
@@ -268,7 +298,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
 
     private void updatePaddings() {
         View titleView = mSectionExpander.getTitleView();
-        if (isEmpty()) {
+        if (isEmpty() && !mIsLoading) {
             // Section is empty, i.e., the title is the bottom-most widget.
             titleView.setPadding(titleView.getPaddingLeft(), mTopPadding,
                     titleView.getPaddingRight(), mBottomPadding);
@@ -283,6 +313,11 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
                     titleView.getPaddingRight(), mTitleToContentPadding);
             setBottomPadding(mSectionExpander.getCollapsedView(), mBottomPadding);
         }
+    }
+
+    private void setBottomPadding(View view, int padding) {
+        view.setPadding(
+                view.getPaddingLeft(), view.getPaddingTop(), view.getPaddingRight(), padding);
     }
 
     /**
@@ -309,6 +344,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
             editButtonContentDescription = getEditButtonContentDescription(item.mOption);
         }
         mItemsView.addItem(item.mFullView, /* hasEditButton= */ canEditOption,
+                /* itemSelectedListener= */
                 selected
                 -> {
                     if (mIgnoreItemSelectedNotifications || !selected) {
@@ -323,11 +359,12 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
                         createOrEditItem(item.mOption);
                     }
                 },
+                /* itemEditedListener= */
                 ()
                         -> createOrEditItem(item.mOption),
-                /*editButtonDrawable=*/editButtonDrawable,
-                /*editButtonContentDescription=*/editButtonContentDescription);
-        updateVisibility();
+                /* editButtonDrawable= */ editButtonDrawable,
+                /* editButtonContentDescription= */ editButtonContentDescription);
+        updateUi();
     }
 
     private void selectItem(Item item, boolean notify, @AssistantUserDataEventType int eventType) {
@@ -335,8 +372,8 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
         mIgnoreItemSelectedNotifications = true;
         mItemsView.setCheckedItem(item.mFullView);
         mIgnoreItemSelectedNotifications = false;
-        updateSummaryView(mSummaryView, item.mOption);
-        updateVisibility();
+        updateSummaryView(mSummaryContentView, item.mOption);
+        updateUi();
 
         if (notify) {
             notifyDataChanged(item.mOption, eventType);
@@ -392,6 +429,7 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
             if (mRequestReloadOnChange) {
                 int eventType = oldItem == null ? AssistantUserDataEventType.ENTRY_CREATED
                                                 : AssistantUserDataEventType.ENTRY_EDITED;
+                mSectionExpander.post(() -> mSectionExpander.setExpanded(false));
                 notifyDataChanged(editedItem, eventType);
                 return;
             }
@@ -433,14 +471,41 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
     }
 
     /**
-     * Update the visibility if something changed.
+     * Enable or disable UI interactions.
+     * @param enabled The flag to disable the interactions.
      */
-    protected void updateVisibility() {
+    void setEnabled(boolean enabled) {
+        mUiEnabled = enabled;
+        updateUi();
+    }
+
+    /**
+     * Set the view to loading, showing a spinner instead of the content - or to done, showing the
+     * content while hiding the spinner.
+     *
+     * @param loading The flag.
+     */
+    void setLoading(boolean loading) {
+        mIsLoading = loading;
+        mSummaryContentView.setVisibility(loading ? View.GONE : View.VISIBLE);
+        mSummarySpinnerView.setVisibility(loading ? View.VISIBLE : View.GONE);
+        AssistantLoadingSpinner loadingSpinner =
+                mSummarySpinnerView.findViewById(R.id.loading_spinner);
+        loadingSpinner.setAnimationState(loading);
+        updatePaddings();
+    }
+
+    /**
+     * Update the UI if something changed.
+     */
+    protected void updateUi() {
         boolean hasEditor = getEditor() != null;
         if (mTitleAddButton != null) {
             mTitleAddButton.setVisibility(isEmpty() && hasEditor ? View.VISIBLE : View.GONE);
+            setTitleAddButtonEnabled(mUiEnabled);
         }
         mItemsView.setAddButtonVisible(/* visible= */ hasEditor);
+        mItemsView.setUiEnabled(mUiEnabled);
         mSectionExpander.setFixed(isEmpty());
         mSectionExpander.setCollapsedVisible(!isEmpty());
         mSectionExpander.setExpandedVisible(!isEmpty());
@@ -450,8 +515,14 @@ public abstract class AssistantCollectUserDataSection<T extends AssistantOptionM
         updatePaddings();
     }
 
-    private void setBottomPadding(View view, int padding) {
-        view.setPadding(
-                view.getPaddingLeft(), view.getPaddingTop(), view.getPaddingRight(), padding);
+    private boolean canBeVisible() {
+        return !isEmpty() || getEditor() != null;
+    }
+
+    private void setTitleAddButtonEnabled(boolean enabled) {
+        assert mTitleAddButton != null;
+        mTitleAddButton.setEnabled(enabled);
+        mTitleAddButton.findViewById(R.id.section_title_add_button_icon).setEnabled(enabled);
+        mTitleAddButton.findViewById(R.id.section_title_add_button_label).setEnabled(enabled);
     }
 }

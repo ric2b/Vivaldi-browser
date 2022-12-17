@@ -138,6 +138,7 @@
 <translation id="3360297538363969800">Tisk se nezdařil. Zkontrolujte tiskárnu a zkuste to znovu.</translation>
 <translation id="3378572629723696641">Toto rozšíření mohlo být poškozeno.</translation>
 <translation id="3387614642886316601">Použít vylepšenou kontrolu pravopisu</translation>
+<translation id="3393582007140394275">Obrazovku nelze sdílet.</translation>
 <translation id="3432227430032737297">Odstranit všechny zobrazené</translation>
 <translation id="345693547134384690">Otevřít obrázek v novém l&amp;istu</translation>
 <translation id="3494769164076977169">Zeptat se po stažení prvního souboru, když se web pokouší stahovat soubory automaticky (doporučeno)</translation>
@@ -210,8 +211,10 @@
 <translation id="488785315393301722">Zobrazit podrobnosti</translation>
 <translation id="4907306957610201395">Třída oprávnění</translation>
 <translation id="4912643508233590958">Probuzení z nečinnosti</translation>
+<translation id="49265687513387605">Obrazovku nelze sdílet. Zkontrolujte, zda jste potvrdili výzvu k zahájení sdílení obrazovky.</translation>
 <translation id="4927753642311223124">Není tu nic k vidění, vše v pořádku.</translation>
 <translation id="4930714375720679147">Zapnout</translation>
+<translation id="4961318399572185831">Sdílet obrazovku</translation>
 <translation id="4988526792673242964">Stránky</translation>
 <translation id="49896407730300355">Otočit &amp;proti směru hodinových ručiček</translation>
 <translation id="4989966318180235467">Prozkoumat stránku na &amp;pozadí</translation>

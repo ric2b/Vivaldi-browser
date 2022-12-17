@@ -4,9 +4,9 @@
 
 #include "base/allocator/partition_allocator/starscan/stats_collector.h"
 
+#include "base/allocator/partition_allocator/partition_alloc_base/time/time.h"
 #include "base/allocator/partition_allocator/starscan/logging.h"
 #include "base/allocator/partition_allocator/starscan/stats_reporter.h"
-#include "base/time/time.h"
 
 namespace partition_alloc::internal {
 
@@ -52,7 +52,7 @@ void StatsCollector::ReportTracesAndHistsImpl(
       accumulated_events{};
   // First, report traces and accumulate each trace scope to report UMA hists.
   for (const auto& tid_and_events : event_map.get_underlying_map_unsafe()) {
-    const ::base::PlatformThreadId tid = tid_and_events.first;
+    const internal::base::PlatformThreadId tid = tid_and_events.first;
     const auto& events = tid_and_events.second;
     PA_DCHECK(accumulated_events.size() == events.size());
     for (size_t id = 0; id < events.size(); ++id) {
@@ -64,7 +64,8 @@ void StatsCollector::ReportTracesAndHistsImpl(
         continue;
       }
       reporter.ReportTraceEvent(static_cast<IdType<context>>(id), tid,
-                                event.start_time, event.end_time);
+                                event.start_time.ToInternalValue(),
+                                event.end_time.ToInternalValue());
       accumulated_events[id] += (event.end_time - event.start_time);
     }
   }
@@ -75,7 +76,7 @@ void StatsCollector::ReportTracesAndHistsImpl(
     if (accumulated_events[id].is_zero())
       continue;
     reporter.ReportStats(ToUMAString(static_cast<IdType<context>>(id)).c_str(),
-                         accumulated_events[id]);
+                         accumulated_events[id].InMicroseconds());
   }
 }
 

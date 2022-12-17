@@ -90,6 +90,8 @@ android_library("java") {
 
   deps = [
     "//base:base_java",
+    "//base:jni_java",
+    "//build/android:build_java",
     "//components/browser_ui/styles/android:java",
     "//components/paint_preview/browser/android:java",
     "//content/public/android:content_java",
@@ -115,6 +117,8 @@ android_library("player_java_test_support") {
     ":java",
     "//base:base_java",
     "//base:base_java_test_support",
+    "//base:jni_java",
+    "//build/android:build_java",
     "//components/paint_preview/browser/android:java",
     "//components/signin/public/android:java",
     "//components/signin/public/android:signin_java_test_support",
@@ -141,9 +145,9 @@ android_library("javatests") {
     "//third_party/android_support_test_runner:rules_java",
     "//third_party/android_support_test_runner:runner_java",
     "//third_party/androidx:androidx_test_runner_java",
+    "//third_party/androidx:androidx_test_uiautomator_uiautomator_java",
     "//third_party/hamcrest:hamcrest_java",
     "//third_party/junit",
-    "//third_party/ub-uiautomator:ub_uiautomator_java",
     "//ui/android:ui_java_test_support",
     "//url:gurl_java",
   ]

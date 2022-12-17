@@ -85,11 +85,11 @@ void GuestViewInternalCreateGuestFunction::CreateGuestCallback(
     guest_instance_id = guest->guest_instance_id();
     }
   }
-  auto return_params = std::make_unique<base::DictionaryValue>();
-  return_params->SetIntKey(guest_view::kID, guest_instance_id);
 
-  Respond(
-      OneArgument(base::Value::FromUniquePtrValue(std::move(return_params))));
+  base::Value::Dict return_params;
+  return_params.Set(guest_view::kID, guest_instance_id);
+
+  Respond(OneArgument(base::Value(std::move(return_params))));
 }
 
 GuestViewInternalDestroyGuestFunction::

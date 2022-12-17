@@ -13,7 +13,7 @@
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "url/gurl.h"
 
-TestWallpaperController::TestWallpaperController() = default;
+TestWallpaperController::TestWallpaperController() : id_cache_(0) {}
 
 TestWallpaperController::~TestWallpaperController() = default;
 
@@ -27,7 +27,6 @@ void TestWallpaperController::ClearCounts() {
   set_online_wallpaper_count_ = 0;
   set_google_photos_wallpaper_count_ = 0;
   remove_user_wallpaper_count_ = 0;
-  collection_id_ = std::string();
   wallpaper_info_ = absl::nullopt;
   update_current_wallpaper_layout_count_ = 0;
   update_current_wallpaper_layout_layout_ = absl::nullopt;
@@ -84,6 +83,32 @@ void TestWallpaperController::SetGooglePhotosWallpaper(
   std::move(callback).Run(/*success=*/true);
 }
 
+std::string TestWallpaperController::GetGooglePhotosDailyRefreshAlbumId(
+    const AccountId& account_id) const {
+  if (!wallpaper_info_.has_value() ||
+      wallpaper_info_->type != ash::WallpaperType::kDailyGooglePhotos) {
+    return std::string();
+  }
+  return wallpaper_info_->collection_id;
+}
+
+bool TestWallpaperController::SetDailyGooglePhotosWallpaperIdCache(
+    const AccountId& account_id,
+    const DailyGooglePhotosIdCache& ids) {
+  id_cache_.ShrinkToSize(0);
+  std::for_each(ids.rbegin(), ids.rend(),
+                [&](uint id) { id_cache_.Put(std::move(id)); });
+  return true;
+}
+
+bool TestWallpaperController::GetDailyGooglePhotosWallpaperIdCache(
+    const AccountId& account_id,
+    DailyGooglePhotosIdCache& ids_out) const {
+  std::for_each(id_cache_.rbegin(), id_cache_.rend(),
+                [&](uint id) { ids_out.Put(std::move(id)); });
+  return true;
+}
+
 void TestWallpaperController::SetOnlineWallpaperIfExists(
     const ash::OnlineWallpaperParams& params,
     SetWallpaperCallback callback) {
@@ -97,9 +122,17 @@ void TestWallpaperController::SetOnlineWallpaperFromData(
   NOTIMPLEMENTED();
 }
 
-void TestWallpaperController::SetDefaultWallpaper(const AccountId& account_id,
-                                                  bool show_wallpaper) {
+void TestWallpaperController::SetDefaultWallpaper(
+    const AccountId& account_id,
+    bool show_wallpaper,
+    SetWallpaperCallback callback) {
   ++set_default_wallpaper_count_;
+  std::move(callback).Run(/*success=*/true);
+}
+
+base::FilePath TestWallpaperController::GetDefaultWallpaperPath(
+    const AccountId& account_id) {
+  return base::FilePath();
 }
 
 void TestWallpaperController::SetCustomizedDefaultWallpaperPaths(
@@ -227,7 +260,13 @@ bool TestWallpaperController::IsActiveUserWallpaperControlledByPolicy() {
   return false;
 }
 
-ash::WallpaperInfo TestWallpaperController::GetActiveUserWallpaperInfo() {
+bool TestWallpaperController::IsWallpaperControlledByPolicy(
+    const AccountId& account_id) const {
+  NOTIMPLEMENTED_LOG_ONCE();
+  return false;
+}
+
+ash::WallpaperInfo TestWallpaperController::GetActiveUserWallpaperInfo() const {
   return wallpaper_info_.value_or(ash::WallpaperInfo());
 }
 
@@ -239,12 +278,19 @@ bool TestWallpaperController::ShouldShowWallpaperSetting() {
 void TestWallpaperController::SetDailyRefreshCollectionId(
     const AccountId& account_id,
     const std::string& collection_id) {
-  collection_id_ = collection_id;
+  if (!wallpaper_info_)
+    wallpaper_info_ = ash::WallpaperInfo();
+  wallpaper_info_->type = ash::WallpaperType::kDaily;
+  wallpaper_info_->collection_id = collection_id;
 }
 
 std::string TestWallpaperController::GetDailyRefreshCollectionId(
     const AccountId& account_id) const {
-  return collection_id_;
+  if (!wallpaper_info_.has_value() ||
+      wallpaper_info_->type != ash::WallpaperType::kDaily) {
+    return std::string();
+  }
+  return wallpaper_info_->collection_id;
 }
 
 void TestWallpaperController::UpdateDailyRefreshWallpaper(

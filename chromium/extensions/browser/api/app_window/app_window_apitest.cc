@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+#include "base/command_line.h"
 #include "base/compiler_specific.h"
 #include "base/run_loop.h"
 #include "base/strings/string_number_conversions.h"
@@ -34,7 +35,7 @@ using ExperimentalAppWindowApiTest = ExperimentalPlatformAppBrowserTest;
 
 // Tests chrome.app.window.setIcon.
 IN_PROC_BROWSER_TEST_F(ExperimentalAppWindowApiTest, SetIcon) {
-  ExtensionTestMessageListener listener("ready", true);
+  ExtensionTestMessageListener listener("ready", ReplyBehavior::kWillReply);
 
   // Launch the app and wait for it to be ready.
   LoadAndLaunchPlatformApp("windows_api_set_icon", &listener);
@@ -210,7 +211,7 @@ IN_PROC_BROWSER_TEST_F(AppWindowApiTest, OpeningAbsoluteURLs) {
       (*app_windows.begin())->web_contents();
   EXPECT_EQ(GURL("chrome://version"),
             app_window_contents->GetLastCommittedURL());
-  EXPECT_FALSE(app_window_contents->GetMainFrame()->IsErrorDocument());
+  EXPECT_FALSE(app_window_contents->GetPrimaryMainFrame()->IsErrorDocument());
 }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)

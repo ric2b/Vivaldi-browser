@@ -230,9 +230,10 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
     Occlusion occlusion = draw_properties().occlusion_in_content_space;
 
     EffectNode* effect_node = GetEffectTree().Node(effect_tree_index());
+    // TODO(crbug/1308932): Remove FromColor and make all SkColor4f.
     SolidColorLayerImpl::AppendSolidQuads(
         render_pass, occlusion, shared_quad_state, scaled_visible_layer_rect,
-        raster_source_->GetSolidColor(),
+        SkColor4f::FromColor(raster_source_->GetSolidColor()),
         !layer_tree_impl()->settings().enable_edge_anti_aliasing,
         effect_node->blend_mode, append_quads_data);
     return;
@@ -366,7 +367,7 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
              shared_quad_state->visible_quad_layer_rect,
              ideal_contents_scale_key());
          iter; ++iter) {
-      SkColor color;
+      SkColor4f color;
       float width;
       if (*iter && iter->draw_info().IsReadyToDraw()) {
         TileDrawInfo::Mode mode = iter->draw_info().mode();
@@ -399,23 +400,24 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
       gfx::Rect geometry_rect = iter.geometry_rect();
       geometry_rect.Offset(quad_offset);
       gfx::Rect visible_geometry_rect = geometry_rect;
-      debug_border_quad->SetNew(shared_quad_state,
-                                geometry_rect,
-                                visible_geometry_rect,
-                                color,
+      // TODO(crbug/1308932): Remove  toSkColor  and make all SkColor4f.
+      debug_border_quad->SetNew(shared_quad_state, geometry_rect,
+                                visible_geometry_rect, color.toSkColor(),
                                 width);
     }
   }
 
   if (layer_tree_impl()->debug_state().highlight_non_lcd_text_layers) {
-    SkColor color =
+    // TODO(crbug/1308932): Remove all instances of toSkColor below and make all
+    // SkColor4f.
+    SkColor4f color =
         DebugColors::NonLCDTextHighlightColor(lcd_text_disallowed_reason());
-    if (color != SK_ColorTRANSPARENT &&
+    if (color != SkColors::kTransparent &&
         GetRasterSource()->GetDisplayItemList()->AreaOfDrawText(
             gfx::Rect(bounds()))) {
       render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>()->SetNew(
-          shared_quad_state, debug_border_rect, debug_border_rect, color,
-          append_quads_data);
+          shared_quad_state, debug_border_rect, debug_border_rect,
+          color.toSkColor(), append_quads_data);
     }
   }
 
@@ -513,15 +515,16 @@ void PictureLayerImpl::AppendQuads(viz::CompositorRenderPass* render_pass,
 
     if (!has_draw_quad) {
       // Checkerboard.
-      SkColor color = safe_opaque_background_color();
+      SkColor4f color = safe_opaque_background_color();
       if (ShowDebugBorders(DebugBorderType::LAYER)) {
         // Fill the whole tile with the missing tile color.
         color = DebugColors::DefaultCheckerboardColor();
       }
       auto* quad =
           render_pass->CreateAndAppendDrawQuad<viz::SolidColorDrawQuad>();
+      // TODO(crbug/1308932): Remove toSkColor and make all SkColor4f.
       quad->SetNew(shared_quad_state, offset_geometry_rect,
-                   offset_visible_geometry_rect, color, false);
+                   offset_visible_geometry_rect, color.toSkColor(), false);
       ValidateQuadResources(quad);
 
       if (geometry_rect.Intersects(scaled_viewport_for_tile_priority)) {
@@ -840,10 +843,11 @@ void PictureLayerImpl::UpdateCanUseLCDText(
       ComputeLCDTextDisallowedReason(raster_translation_aligns_pixels);
 }
 
-bool PictureLayerImpl::HasWillChangeTransformHint() const {
+bool PictureLayerImpl::AffectedByWillChangeTransformHint() const {
   TransformNode* transform_node =
       GetTransformTree().Node(transform_tree_index());
-  return transform_node && transform_node->will_change_transform;
+  return transform_node &&
+         transform_node->node_or_ancestors_will_change_transform;
 }
 
 LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
@@ -859,7 +863,7 @@ LCDTextDisallowedReason PictureLayerImpl::ComputeLCDTextDisallowedReason(
   if (!layer_tree_impl()->settings().can_use_lcd_text)
     return LCDTextDisallowedReason::kSetting;
   if (!contents_opaque_for_text()) {
-    if (SkColorGetA(background_color()) != SK_AlphaOPAQUE)
+    if (!background_color().isOpaque())
       return LCDTextDisallowedReason::kBackgroundColorNotOpaque;
     return LCDTextDisallowedReason::kContentsNotOpaque;
   }
@@ -1224,16 +1228,13 @@ void PictureLayerImpl::RemoveAllTilings() {
 
 bool PictureLayerImpl::CanRecreateHighResTilingForLCDTextAndRasterTransform(
     const PictureLayerTiling& high_res) const {
-  // This is for the sync tree only to avoid flickering.
-  if (!layer_tree_impl()->IsSyncTree())
-    return false;
   // We can recreate the tiling if we would invalidate all of its tiles.
   if (high_res.may_contain_low_resolution_tiles())
     return true;
   // Keep the non-ideal raster translation unchanged for transform animations
   // to avoid re-rasterization during animation.
   if (draw_properties().screen_space_transform_is_animating ||
-      HasWillChangeTransformHint())
+      AffectedByWillChangeTransformHint())
     return false;
   // Also avoid re-rasterization during pinch-zoom.
   if (layer_tree_impl()->PinchGestureActive())
@@ -1242,6 +1243,11 @@ bool PictureLayerImpl::CanRecreateHighResTilingForLCDTextAndRasterTransform(
   // the raster scale is ideal.
   if (lcd_text_disallowed_reason_ == LCDTextDisallowedReason::kNoText &&
       high_res.raster_transform().scale() == raster_contents_scale_)
+    return false;
+  // If ReadyToActivate() is already scheduled, recreating tiling should be
+  // delayed until the activation is executed. Otherwise the tiles in viewport
+  // will be deleted.
+  if (layer_tree_impl()->IsSyncTree() && layer_tree_impl()->IsReadyToActivate())
     return false;
   return true;
 }
@@ -1261,12 +1267,28 @@ void PictureLayerImpl::UpdateTilingsForRasterScaleAndTranslation(
         high_res->raster_transform().translation() != raster_translation;
     bool can_use_lcd_text_changed =
         high_res->can_use_lcd_text() != can_use_lcd_text();
+    bool can_recreate_highres_tiling =
+        CanRecreateHighResTilingForLCDTextAndRasterTransform(*high_res);
+    // Only for the sync tree to avoid flickering.
     bool should_recreate_high_res =
         (raster_transform_is_not_ideal || can_use_lcd_text_changed) &&
-        CanRecreateHighResTilingForLCDTextAndRasterTransform(*high_res);
+        layer_tree_impl()->IsSyncTree() && can_recreate_highres_tiling;
+    // Only request an invalidation if we don't already have a pending tree.
+    bool can_request_invalidation_for_high_res =
+        (raster_transform_is_not_ideal || can_use_lcd_text_changed) &&
+        !layer_tree_impl()->settings().commit_to_active_tree &&
+        layer_tree_impl()->IsActiveTree() && can_recreate_highres_tiling &&
+        !layer_tree_impl()->HasPendingTree();
+
     if (should_recreate_high_res) {
       tilings_->Remove(high_res);
       high_res = nullptr;
+    } else if (can_request_invalidation_for_high_res) {
+      // Anytime a condition which flips whether we can recreate the tiling
+      // changes, we'll get a call to UpdateDrawProperties. We check whether we
+      // could recreate the tiling when this runs on the active tree to trigger
+      // an impl-side invalidation (if needed).
+      layer_tree_impl()->RequestImplSideInvalidationForRerasterTiling();
     } else if (!has_adjusted_raster_scale) {
       // Nothing changed, no need to update tilings.
       DCHECK_EQ(HIGH_RESOLUTION, high_res->resolution());
@@ -1353,7 +1375,7 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
     // will-change: transform hint to preserve maximum resolution tiles
     // needed.
     if (draw_properties().screen_space_transform_is_animating ||
-        !HasWillChangeTransformHint())
+        !AffectedByWillChangeTransformHint())
       return true;
   }
 
@@ -1418,7 +1440,7 @@ bool PictureLayerImpl::ShouldAdjustRasterScale() const {
 
   // Don't update will-change: transform layers if the raster contents scale is
   // bigger than the minimum scale.
-  if (HasWillChangeTransformHint()) {
+  if (AffectedByWillChangeTransformHint()) {
     float min_raster_scale = MinimumRasterContentsScaleForWillChangeTransform();
     if (raster_contents_scale_.x() >= min_raster_scale &&
         raster_contents_scale_.y() >= min_raster_scale)
@@ -1525,7 +1547,7 @@ void PictureLayerImpl::RecalculateRasterScales() {
   if (draw_properties().screen_space_transform_is_animating)
     AdjustRasterScaleForTransformAnimation(preserved_raster_contents_scale);
 
-  if (HasWillChangeTransformHint()) {
+  if (AffectedByWillChangeTransformHint()) {
     float min_scale = MinimumRasterContentsScaleForWillChangeTransform();
     raster_contents_scale_.SetToMax(gfx::Vector2dF(min_scale, min_scale));
   }
@@ -1571,7 +1593,7 @@ void PictureLayerImpl::AdjustRasterScaleForTransformAnimation(
   raster_contents_scale_.SetToMax(
       gfx::Vector2dF(maximum_animation_scale, maximum_animation_scale));
 
-  if (HasWillChangeTransformHint()) {
+  if (AffectedByWillChangeTransformHint()) {
     // If we have a will-change: transform hint, do not shrink the content
     // raster scale, otherwise we will end up throwing away larger tiles we may
     // need again.
@@ -1637,7 +1659,7 @@ void PictureLayerImpl::CleanUpTilingsOnActiveLayer(
 
 float PictureLayerImpl::MinimumRasterContentsScaleForWillChangeTransform()
     const {
-  DCHECK(HasWillChangeTransformHint());
+  DCHECK(AffectedByWillChangeTransformHint());
   float native_scale = ideal_device_scale_ * ideal_page_scale_;
   float ideal_scale = ideal_contents_scale_key();
   // Clamp will-change: transform layers to be at least the native scale,
@@ -1810,7 +1832,7 @@ void PictureLayerImpl::UpdateIdealScales() {
   ideal_contents_scale_ = GetIdealContentsScale();
 
   if (layer_tree_impl()->PageScaleTransformNode()) {
-    DCHECK(!layer_tree_impl()->settings().is_layer_tree_for_subframe);
+    DCHECK(layer_tree_impl()->settings().is_for_scalable_page);
     ideal_page_scale_ = IsAffectedByPageScale()
                             ? layer_tree_impl()->current_page_scale_factor()
                             : 1.f;
@@ -1819,16 +1841,16 @@ void PictureLayerImpl::UpdateIdealScales() {
   // This layer may be in a layer tree embedded in a hierarchy that has its own
   // page scale factor. We represent that here as 'external_page_scale_factor',
   // a value that affects raster scale in the same way that page_scale_factor
-  // does, but doesn't affect any geometry calculations. In a normal main frame
-  // or OOPIF, only one of current or external page scale factor is ever used
-  // but not both. The only exception to this is a main frame in a portal. It
-  // may have a current_page_scale_factor (e.g. due to a viewport <meta> tag)
-  // as well as an external_page_scale_factor coming from the page scale of its
-  // embedder page.
+  // does, but doesn't affect any geometry calculations. In a normal main frame,
+  // fenced frame, or OOPIF, only one of current or external page scale factor
+  // is ever used but not both. The only exception to this is a main frame in a
+  // portal or a guest view. In these cases we may have a
+  // current_page_scale_factor (e.g. due to a viewport <meta> tag) as well as an
+  // external_page_scale_factor coming from the page scale of its embedder page.
   float external_page_scale_factor =
       layer_tree_impl() ? layer_tree_impl()->external_page_scale_factor() : 1.f;
   DCHECK(!layer_tree_impl() ||
-         !layer_tree_impl()->settings().is_layer_tree_for_subframe ||
+         layer_tree_impl()->settings().is_for_scalable_page ||
          external_page_scale_factor == 1.f ||
          layer_tree_impl()->current_page_scale_factor() == 1.f);
   ideal_page_scale_ *= external_page_scale_factor;
@@ -1842,9 +1864,8 @@ void PictureLayerImpl::UpdateIdealScales() {
                          ideal_contents_scale_.y() / ideal_page_scale_};
 }
 
-void PictureLayerImpl::GetDebugBorderProperties(
-    SkColor* color,
-    float* width) const {
+void PictureLayerImpl::GetDebugBorderProperties(SkColor4f* color,
+                                                float* width) const {
   float device_scale_factor =
       layer_tree_impl() ? layer_tree_impl()->device_scale_factor() : 1;
 

@@ -162,7 +162,7 @@ struct FieldMatches {
               if (string) {
                 const auto string_words =
                     SplitByColon(String16VectorFromString16(
-                        base::UTF8ToUTF16(string->c_str()), false, nullptr));
+                        base::UTF8ToUTF16(string->c_str()), nullptr));
                 word_vec.insert(word_vec.end(), string_words.begin(),
                                 string_words.end());
               }
@@ -243,7 +243,7 @@ int CalculateScore(const std::u16string& input, const base::Value* result) {
                    });
 
   String16Vector input_words =
-      SplitByColon(String16VectorFromString16(input, false, nullptr));
+      SplitByColon(String16VectorFromString16(input, nullptr));
 
   for (const auto& word : input_words) {
     for (auto& field_matches : field_matches_vec) {
@@ -589,9 +589,10 @@ DocumentProvider::DocumentProvider(AutocompleteProviderClient* client,
       field_trial_triggered_in_session_(false),
       backoff_for_session_(false),
       client_(client),
-      listener_(listener),
       cache_size_(cache_size),
       matches_cache_(MatchesCache::NO_AUTO_EVICT) {
+  AddListener(listener);
+
   if (base::FeatureList::IsEnabled(omnibox::kDebounceDocumentProvider)) {
     bool from_last_run = base::GetFieldTrialParamByFeatureAsBool(
         omnibox::kDebounceDocumentProvider,
@@ -630,7 +631,7 @@ void DocumentProvider::OnURLLoadComplete(
   LogTotalTime(time_run_invoked_, false);
   loader_.reset();
   done_ = true;
-  listener_->OnProviderUpdate(results_updated);
+  NotifyListeners(results_updated);
 }
 
 bool DocumentProvider::UpdateResults(const std::string& json_data) {
@@ -948,9 +949,10 @@ const GURL DocumentProvider::GetURLForDeduping(const GURL& url) {
   }
 
   // Unescape |url_str|
-  url_str = net::UnescapeURLComponent(
-      url_str, net::UnescapeRule::PATH_SEPARATORS |
-                   net::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
+  url_str = base::UnescapeURLComponent(
+      url_str,
+      base::UnescapeRule::PATH_SEPARATORS |
+          base::UnescapeRule::URL_SPECIAL_CHARS_EXCEPT_PATH_SEPARATORS);
 
   const std::string id = ExtractDocIdFromUrl(url_str);
 

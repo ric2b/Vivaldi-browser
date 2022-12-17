@@ -166,8 +166,8 @@ source_set("browser_sources") {
     "favicon_status.h",
     "feature_observer_client.h",
     "federated_identity_active_session_permission_context_delegate.h",
+    "federated_identity_api_permission_context_delegate.cc",
     "federated_identity_api_permission_context_delegate.h",
-    "federated_identity_request_permission_context_delegate.h",
     "federated_identity_sharing_permission_context_delegate.h",
     "file_select_listener.h",
     "file_system_access_entry_factory.h",
@@ -182,6 +182,7 @@ source_set("browser_sources") {
     "font_list_async.h",
     "frame_accept_header.cc",
     "frame_accept_header.h",
+    "frame_rate_throttling.h",
     "frame_type.h",
     "generated_code_cache_settings.h",
     "global_request_id.cc",
@@ -203,7 +204,6 @@ source_set("browser_sources") {
     "host_zoom_map.h",
     "identity_request_dialog_controller.cc",
     "identity_request_dialog_controller.h",
-    "idle_time_provider.h",
     "installability_error.cc",
     "installability_error.h",
     "installed_payment_apps_finder.h",
@@ -284,8 +284,6 @@ source_set("browser_sources") {
     "permission_controller.h",
     "permission_controller_delegate.cc",
     "permission_controller_delegate.h",
-    "permission_type.cc",
-    "permission_type.h",
     "picture_in_picture_window_controller.h",
     "platform_notification_context.h",
     "platform_notification_service.h",
@@ -393,6 +391,8 @@ source_set("browser_sources") {
     "url_data_source.h",
     "url_loader_request_interceptor.h",
     "url_loader_throttles.h",
+    "usb_chooser.cc",
+    "usb_chooser.h",
     "video_capture_device_launcher.cc",
     "video_capture_device_launcher.h",
     "video_capture_service.h",
@@ -453,6 +453,7 @@ source_set("browser_sources") {
     "//build:chromecast_buildflags",
     "//components/browsing_topics/common:common",
     "//components/download/public/common:public",
+    "//components/services/storage/privileged/mojom",
     "//components/services/storage/public/mojom",
     "//content/public/common:common_sources",
     "//device/vr/buildflags",
@@ -525,10 +526,6 @@ source_set("browser_sources") {
       "plugin_service_filter.h",
     ]
     deps += [ "//ppapi/c" ]
-  }
-
-  if (is_chromeos || is_android || is_win || is_chromecast || is_fuchsia) {
-    defines = [ "ENABLE_PROTECTED_MEDIA_IDENTIFIER_PERMISSION" ]
   }
 
   if (is_posix || is_fuchsia) {

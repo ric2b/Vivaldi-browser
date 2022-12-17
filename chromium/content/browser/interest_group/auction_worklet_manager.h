@@ -28,6 +28,7 @@
 namespace content {
 
 class RenderFrameHostImpl;
+class SiteInstance;
 
 // Per-frame manager of auction worklets. Manages creation and sharing of
 // worklets. Worklets may be reused if they share URLs for scripts and trusted
@@ -80,6 +81,9 @@ class CONTENT_EXPORT AuctionWorkletManager {
 
     // Get containing frame. (Passed to debugging hooks).
     virtual RenderFrameHostImpl* GetFrame() = 0;
+
+    // Returns the SiteInstance representing the frame running the auction.
+    virtual scoped_refptr<SiteInstance> GetFrameSiteInstance() = 0;
 
     // Returns the ClientSecurityState associated with the frame, for use in
     // bidder worklet and signals fetches.
@@ -177,12 +181,14 @@ class CONTENT_EXPORT AuctionWorkletManager {
       const GURL& bidding_logic_url,
       const absl::optional<GURL>& wasm_url,
       const absl::optional<GURL>& trusted_bidding_signals_url,
+      absl::optional<uint16_t> experiment_group_id,
       base::OnceClosure worklet_available_callback,
       FatalErrorCallback fatal_error_callback,
       std::unique_ptr<WorkletHandle>& out_worklet_handle);
   [[nodiscard]] bool RequestSellerWorklet(
       const GURL& decision_logic_url,
       const absl::optional<GURL>& trusted_scoring_signals_url,
+      absl::optional<uint16_t> experiment_group_id,
       base::OnceClosure worklet_available_callback,
       FatalErrorCallback fatal_error_callback,
       std::unique_ptr<WorkletHandle>& out_worklet_handle);
@@ -195,7 +201,8 @@ class CONTENT_EXPORT AuctionWorkletManager {
     WorkletInfo(WorkletType type,
                 const GURL& script_url,
                 const absl::optional<GURL>& wasm_url,
-                const absl::optional<GURL>& signals_url);
+                const absl::optional<GURL>& signals_url,
+                absl::optional<uint16_t> experiment_group_id);
     WorkletInfo(const WorkletInfo&);
     WorkletInfo(WorkletInfo&&);
     ~WorkletInfo();
@@ -204,6 +211,7 @@ class CONTENT_EXPORT AuctionWorkletManager {
     GURL script_url;
     absl::optional<GURL> wasm_url;
     absl::optional<GURL> signals_url;
+    absl::optional<uint16_t> experiment_group_id;
 
     bool operator<(const WorkletInfo& other) const;
   };

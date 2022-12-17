@@ -22,6 +22,7 @@
 #include "content/public/browser/web_contents_media_capture_id.h"
 #include "extensions/common/permissions/permissions_data.h"
 #include "third_party/blink/public/mojom/mediastream/media_stream.mojom-shared.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 
 #if BUILDFLAG(IS_CHROMEOS)
 #include "chrome/browser/chromeos/policy/dlp/dlp_content_manager.h"
@@ -69,26 +70,26 @@ std::unique_ptr<content::MediaStreamUI> GetMediaStreamUI(
     const content::MediaStreamRequest& request,
     content::WebContents* web_contents,
     std::unique_ptr<MediaStreamUI> media_ui,
-    blink::MediaStreamDevices* out_devices) {
+    blink::mojom::StreamDevices& out_devices) {
   if (request.audio_type ==
       blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE) {
-    out_devices->emplace_back(blink::MediaStreamDevice(
+    out_devices.audio_device = blink::MediaStreamDevice(
         blink::mojom::MediaStreamType::GUM_TAB_AUDIO_CAPTURE,
         /*id=*/std::string(),
-        /*name=*/std::string()));
+        /*name=*/std::string());
   }
 
   if (request.video_type ==
       blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE) {
-    out_devices->emplace_back(blink::MediaStreamDevice(
+    out_devices.video_device = blink::MediaStreamDevice(
         blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
         /*id=*/std::string(),
-        /*name=*/std::string()));
+        /*name=*/std::string());
   }
 
   return MediaCaptureDevicesDispatcher::GetInstance()
       ->GetMediaStreamCaptureIndicator()
-      ->RegisterMediaStream(web_contents, *out_devices, std::move(media_ui));
+      ->RegisterMediaStream(web_contents, out_devices, std::move(media_ui));
 }
 
 }  // namespace
@@ -127,7 +128,7 @@ void TabCaptureAccessHandler::HandleRequest(
   if (!tab_capture_registry) {
     NOTREACHED();
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::INVALID_STATE, /*ui=*/nullptr);
     return;
   }
@@ -145,7 +146,7 @@ void TabCaptureAccessHandler::HandleRequest(
                                            request.render_frame_id));
   if (!can_show_web_contents.Run(target_web_contents)) {
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
         /*ui=*/nullptr);
     return;
@@ -158,7 +159,7 @@ void TabCaptureAccessHandler::HandleRequest(
   if (!tab_capture_registry->VerifyRequest(
           request.render_process_id, request.render_frame_id, extension_id)) {
     std::move(callback).Run(
-        blink::MediaStreamDevices(),
+        blink::mojom::StreamDevicesSet(),
         blink::mojom::MediaStreamRequestResult::INVALID_STATE, /*ui=*/nullptr);
     return;
   }
@@ -177,10 +178,11 @@ void TabCaptureAccessHandler::HandleRequest(
     // Use extension name as title for extensions and host/origin for drive-by
     // web.
     std::u16string application_title =
-        extension ? base::UTF8ToUTF16(extension->name())
-                  : url_formatter::FormatOriginForSecurityDisplay(
-                        web_contents->GetMainFrame()->GetLastCommittedOrigin(),
-                        url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
+        extension
+            ? base::UTF8ToUTF16(extension->name())
+            : url_formatter::FormatOriginForSecurityDisplay(
+                  web_contents->GetPrimaryMainFrame()->GetLastCommittedOrigin(),
+                  url_formatter::SchemeDisplay::OMIT_CRYPTOGRAPHIC);
     content::DesktopMediaID media_id(
         content::DesktopMediaID::TYPE_WEB_CONTENTS, /*id=*/0,
         content::WebContentsMediaCaptureId(request.render_process_id,
@@ -215,13 +217,20 @@ void TabCaptureAccessHandler::AcceptRequest(
   DCHECK_CURRENTLY_ON(content::BrowserThread::UI);
   DCHECK(web_contents);
 
-  blink::MediaStreamDevices devices;
-  std::unique_ptr<content::MediaStreamUI> ui =
-      GetMediaStreamUI(request, web_contents, std::move(media_ui), &devices);
-  DCHECK(!devices.empty());
+  // TOOD(crbug.com/1300883): Generalize to multiple streams.
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& stream_devices =
+      *stream_devices_set.stream_devices[0];
+  std::unique_ptr<content::MediaStreamUI> ui = GetMediaStreamUI(
+      request, web_contents, std::move(media_ui), stream_devices);
+  DCHECK(stream_devices.audio_device.has_value() ||
+         stream_devices.video_device.has_value());
 
   UpdateExtensionTrusted(request, is_allowlisted_extension);
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 }
 
@@ -244,7 +253,7 @@ void TabCaptureAccessHandler::OnDlpRestrictionChecked(
                   std::move(media_ui));
   } else {
     std::move(pending_request->callback)
-        .Run(blink::MediaStreamDevices(),
+        .Run(blink::mojom::StreamDevicesSet(),
              blink::mojom::MediaStreamRequestResult::PERMISSION_DENIED,
              /*ui=*/nullptr);
   }

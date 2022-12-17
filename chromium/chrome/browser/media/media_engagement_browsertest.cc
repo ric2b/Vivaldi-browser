@@ -7,6 +7,7 @@
 #include "base/memory/raw_ptr.h"
 #include "base/run_loop.h"
 #include "base/strings/utf_string_conversions.h"
+#include "base/test/gmock_callback_support.h"
 #include "base/test/scoped_feature_list.h"
 #include "base/test/simple_test_clock.h"
 #include "base/test/test_mock_time_task_runner.h"
@@ -977,7 +978,7 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementContentsObserverPrerenderBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   MockAutoplayConfigurationClient client;
-  OverrideInterface(GetWebContents()->GetMainFrame(), &client);
+  OverrideInterface(GetWebContents()->GetPrimaryMainFrame(), &client);
 
   const GURL& initial_url = embedded_test_server()->GetURL("/empty.html");
   SetScores(url::Origin::Create(initial_url), 24, 20);
@@ -1045,7 +1046,7 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementContentsObserverFencedFrameBrowserTest,
   ASSERT_TRUE(embedded_test_server()->Start());
 
   MockAutoplayConfigurationClient client;
-  OverrideInterface(GetWebContents()->GetMainFrame(), &client);
+  OverrideInterface(GetWebContents()->GetPrimaryMainFrame(), &client);
 
   const GURL& initial_url =
       embedded_test_server()->GetURL("a.com", "/empty.html");
@@ -1062,7 +1063,7 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementContentsObserverFencedFrameBrowserTest,
       embedded_test_server()->GetURL("b.com", "/fenced_frames/title1.html");
   content::RenderFrameHost* fenced_frame_host =
       fenced_frame_test_helper().CreateFencedFrame(
-          GetWebContents()->GetMainFrame(), fenced_frame_url);
+          GetWebContents()->GetPrimaryMainFrame(), fenced_frame_url);
   EXPECT_NE(nullptr, fenced_frame_host);
 
   // AddAutoplayFlags should be called on the fenced frame.
@@ -1070,10 +1071,13 @@ IN_PROC_BROWSER_TEST_F(MediaEngagementContentsObserverFencedFrameBrowserTest,
   OverrideInterface(fenced_frame_host, &fenced_frame_client);
   GURL fenced_frame_navigate_url =
       embedded_test_server()->GetURL("b.com", "/fenced_frames/title2.html");
+  base::RunLoop run_loop;
   EXPECT_CALL(fenced_frame_client,
               AddAutoplayFlags(url::Origin::Create(fenced_frame_navigate_url),
                                testing::_))
-      .Times(1);
+      .Times(1)
+      .WillOnce(base::test::RunClosure(run_loop.QuitClosure()));
   fenced_frame_test_helper().NavigateFrameInFencedFrameTree(
       fenced_frame_host, fenced_frame_navigate_url);
+  run_loop.Run();
 }

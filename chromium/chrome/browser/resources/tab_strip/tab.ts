@@ -3,7 +3,6 @@
 // found in the LICENSE file.
 
 import './strings.m.js';
-
 import './alert_indicators.js';
 
 import {assert} from 'chrome://resources/js/assert_ts.js';
@@ -13,6 +12,7 @@ import {loadTimeData} from 'chrome://resources/js/load_time_data.m.js';
 import {isRTL} from 'chrome://resources/js/util.m.js';
 
 import {AlertIndicatorsElement} from './alert_indicators.js';
+import {getTemplate} from './tab.html.js';
 import {Tab, TabNetworkState} from './tab_strip.mojom-webui.js';
 import {TabSwiper} from './tab_swiper.js';
 import {CloseTabAction, TabsApiProxy, TabsApiProxyImpl} from './tabs_api_proxy.js';
@@ -40,7 +40,7 @@ function getPaddingInlineEndProperty(): string {
 
 export class TabElement extends CustomElement {
   static override get template() {
-    return `{__html_template__}`;
+    return getTemplate();
   }
 
   private alertIndicatorsEl_: AlertIndicatorsElement;

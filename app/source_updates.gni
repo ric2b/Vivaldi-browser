@@ -6,39 +6,6 @@ import("//vivaldi/app/resource_list.gni")
 
 import("//build/config/locales.gni")
 
-update_target("//base:base") {
-  if (!defined(sources)) {
-    sources = []
-  }
-  sources += [
-    "//vivaldi/app/vivaldi_apptools.cpp",
-    "//vivaldi/app/vivaldi_apptools.h",
-  ]
-  allow_circular_includes_from = [
-    "//base:base_static",
-  ]
-}
-
-update_target("//base:base_static") {
-  sources += [
-    "//vivaldi/app/vivaldi_constants.cc",
-    "//vivaldi/app/vivaldi_constants.h",
-  ]
-  if (is_win) {
-    sources += [
-      "//vivaldi/update_notifier/update_notifier_switches.cc",
-      "//vivaldi/update_notifier/update_notifier_switches.h",
-    ]
-  }
-  if (!defined(deps)) {
-    deps = []
-  }
-  deps += [
-    "//base:debugging_buildflags",
-    "//base:logging_buildflags",
-  ]
-}
-
 update_target("//chrome:visual_elements_resources") {
   sources = []
   sources += [
@@ -52,16 +19,6 @@ update_target("//chrome/common:non_code_constants") {
   sources += [
     "//vivaldi/app/vivaldi_version_constants.cc",
     "//vivaldi/app/vivaldi_version_constants.h",
-  ]
-}
-
-update_target("//components/version_info:version_info") {
-  sources += [
-    "//vivaldi/app/vivaldi_version_info.cc",
-    "//vivaldi/app/vivaldi_version_info.h",
-  ]
-  deps += [
-    "//vivaldi/prefs:prefs_files_generator",
   ]
 }
 
@@ -91,109 +48,6 @@ if (is_mac) {
     sources += [
       "//vivaldi/app/resources/theme/default_100_percent/$VIVALDI_RELEASE_KIND/product_logo_32.png",
     ]
-  }
-}
-
-foreach(_target_config, CHROMIUM_VIVALDI_RESOURCE_LIST) {
-  _target = _target_config[0]
-  vivaldi_source = _target_config[1]
-  _flags = {
-  }
-  _flags = _target_config[2]
-  extra_outputs = []
-  if (defined(_flags.pak_file_prefix)) {
-    pakext = "pak"
-    if (defined(_flags.pak_file_extension)) {
-      pakext = _flags.pak_file_extension
-    }
-    locale_prefix = ""
-    extra_locales = []
-    if (!is_android && defined(_flags.add_mobile_locales) && _flags.add_mobile_locales) {
-      extra_locales = vivaldi_pending_mobile_locales
-    }
-    foreach (locale, vivaldi_pending_locales + extra_locales) {
-      locale_prefix = ""
-      locale_postfix = "$locale"
-      if (defined(_flags.pak_file_locale_prefix)){
-        prefix_locale = locale
-        if (locale == "en-GB") {
-          prefix_locale = "en-rGB"
-        } else if (locale == "de-CH") {
-          prefix_locale = "de-rCH"
-        } else if (locale == "pt-BR") {
-          prefix_locale = "pt-rBR"
-        } else if (locale == "pt-PT") {
-          prefix_locale = "pt-rPT"
-        } else if (locale == "zh-TW") {
-          prefix_locale = "zh-rTW"
-        } else if (locale == "zh-CN") {
-          prefix_locale = "zh-rCN"
-        } else if (locale == "es-419") {
-          prefix_locale = "es-rUS"
-        } else if (locale == "es-PE") {
-          prefix_locale = "es-rPE"
-        } else if (locale == "he") {
-          prefix_locale = "iw"
-        } else if (locale == "id") {
-          prefix_locale = "in"
-        } else if (locale == "ja-KS") {
-          prefix_locale = "ja-rKS"
-        }
-        locale_prefix = _flags.pak_file_locale_prefix+"$prefix_locale/"
-        locale_postfix = ""
-      }
-      extra_outputs += [ locale_prefix+_flags.pak_file_prefix+"$locale_postfix.$pakext" ]
-    }
-  }
-  extra_inputs = []
-  if (!defined(_flags.have_strings_flag) || _flags.have_strings_flag) {
-    assert(defined(_flags.translation_dir_setting))
-    assert(defined(_flags.pak_file_prefix))
-    if (defined(_flags.vivaldi_translation_dir_setting)) {
-      vivaldi_translation_dir = _flags.vivaldi_translation_dir_setting
-    } else {
-      vivaldi_translation_dir = _flags.translation_dir_setting
-    }
-    _file_prefix = _flags.pak_file_prefix
-    if (defined(_flags.string_file_prefix)) {
-      _file_prefix = _flags.string_file_prefix
-    }
-    _vivaldi_file_prefix = "vivaldi_" + _file_prefix
-    if (defined(_flags.vivaldi_file_prefix)) {
-      _vivaldi_file_prefix = _flags.vivaldi_file_prefix
-    }
-    vivaldi_translations = get_path_info(vivaldi_source, "dir") +"/${vivaldi_translation_dir}/${_vivaldi_file_prefix}"
-
-    #foreach(locale, locales + vivaldi_pending_locales- ["en-US"]) {
-    #  extra_inputs += ["${vivaldi_translations}$locale.xtb"]
-    #}
-  }
-
-  merge_extra_grit_defines = []
-  if (defined(_flags.merge_extra_grit_defines)) {
-    merge_extra_grit_defines = _flags.merge_extra_grit_defines
-  }
-
-  update_template_instance(_target) {
-    outputs += extra_outputs
-  }
-
-  grit_suffix = "_grit"
-  if (is_android && defined(_flags.java_grd_name) && _flags.java_grd_name) {
-    grit_suffix = "__grit" + grit_suffix
-  }
-  update_target(_target+grit_suffix) {
-    inputs += [
-      vivaldi_source,
-      "//vivaldi/app/gritsettings/resource_ids",
-      "//vivaldi/app/resources/vivaldi_resources.py"
-    ] + extra_inputs
-    args += [
-      "--extra-input",
-      rebase_path(vivaldi_source, root_build_dir),
-      "--extra-resource-id",
-      rebase_path("//vivaldi/app/gritsettings/resource_ids", root_build_dir),
-    ] + extra_grit_defines + merge_extra_grit_defines
   }
 }
 
@@ -227,11 +81,14 @@ if (is_win) {
     grd_files_info = [
       chromium_strings,
       [
-        "//vivaldi/app/resources/strings/",
-        "vivaldi_strings",
+        "//vivaldi/app/installer/",
+        "vivaldi_installer_strings",
         "strings",
         _vivaldi_translation_locales
       ]
+    ]
+    deps = [
+      "//vivaldi/app:vivaldi_installer_strings",
     ]
   }
 }

@@ -23,9 +23,9 @@ import {PhotosProxy} from './photos_module_proxy.js';
  * to logs. Entries should not be renumbered, removed or reused.
  */
 enum OptInStatus {
-  kHardOptOut = 0,
-  kOptIn = 1,
-  kSoftOptOut = 2,
+  HARD_OPT_OUT = 0,
+  OPT_IN = 1,
+  SOFT_OPT_OUT = 2,
 }
 
 function recordOptInStatus(optInStatus: OptInStatus) {
@@ -71,10 +71,35 @@ export class PhotosModuleElement extends I18nMixin
         }
       },
 
+      customArtworkIndex_: {
+        type: String,
+        value: () => {
+          return loadTimeData.getString('photosModuleCustomArtWork');
+        }
+      },
+
+      // If true, the artwork shown in opt-in screen will be one single svg
+      // image.
       showCustomArtWork_: {
         type: Boolean,
         value: () => {
-          return loadTimeData.getString('photosModuleCustomArtWork') !== '';
+          return loadTimeData.getString('photosModuleCustomArtWork') !== '' &&
+              !loadTimeData.getBoolean('photosModuleSplitSvgCustomArtWork');
+        }
+      },
+
+      // If true, the artwork shown in opt-in screen will be a composite image
+      // with constituent elements. Note that the composite images are
+      // implemented only for art work designs 1,2 & 3. If
+      // photosModuleSplitSvgCustomArtWork flag is enabled and the art work
+      // design is not 1, 2 or 3, the default art work will be shown.
+      showSplitSvgCustomArtWork_: {
+        type: Boolean,
+        value: () => {
+          return loadTimeData.getBoolean('photosModuleSplitSvgCustomArtWork') &&
+              (loadTimeData.getString('photosModuleCustomArtWork') === '1' ||
+               loadTimeData.getString('photosModuleCustomArtWork') === '2' ||
+               loadTimeData.getString('photosModuleCustomArtWork') === '3');
         }
       },
 
@@ -99,6 +124,8 @@ export class PhotosModuleElement extends I18nMixin
   private headerChipText_: string;
   private customArtworkUrl_: string;
   private showCustomArtWork_: boolean;
+  private customArtworkIndex_: string;
+  private showSplitSvgCustomArtWork_: boolean;
 
   override ready() {
     super.ready();
@@ -134,7 +161,7 @@ export class PhotosModuleElement extends I18nMixin
   }
 
   private onSoftOptOutClick_() {
-    recordOptInStatus(OptInStatus.kSoftOptOut);
+    recordOptInStatus(OptInStatus.SOFT_OPT_OUT);
     PhotosProxy.getHandler().softOptOut();
     this.dispatchEvent(new CustomEvent('dismiss-module', {
       bubbles: true,
@@ -167,7 +194,7 @@ export class PhotosModuleElement extends I18nMixin
   }
 
   private onOptInClick_() {
-    recordOptInStatus(OptInStatus.kOptIn);
+    recordOptInStatus(OptInStatus.OPT_IN);
     PhotosProxy.getHandler().onUserOptIn(true);
     this.showOptInScreen = false;
     this.hideMenuButton = false;
@@ -175,7 +202,7 @@ export class PhotosModuleElement extends I18nMixin
   }
 
   private onOptOutClick_() {
-    recordOptInStatus(OptInStatus.kHardOptOut);
+    recordOptInStatus(OptInStatus.HARD_OPT_OUT);
     PhotosProxy.getHandler().onUserOptIn(false);
     // Disable the module when user opt out.
     this.onDisableButtonClick_();
@@ -193,6 +220,14 @@ export class PhotosModuleElement extends I18nMixin
       imgSize = '=w255-h164-p-k-rw-no';
     }
     return url.replace('?', imgSize + '?');
+  }
+
+  private isEqual(lhs: string, rhs: string) {
+    return lhs === rhs;
+  }
+
+  private showDefaultOptInscreen() {
+    return !this.showCustomArtWork_ && !this.showSplitSvgCustomArtWork_;
   }
 }
 
@@ -217,6 +252,7 @@ async function createPhotosElement(): Promise<PhotosModuleElement|null> {
     return null;
   }
   const element = new PhotosModuleElement();
+
   element.showOptInScreen = showOptInScreen;
   element.showSoftOptOutButton = showSoftOptOutButton;
   element.optInTitleText = optInTitleText;

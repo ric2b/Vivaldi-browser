@@ -110,6 +110,8 @@ message NetworkTelemetry {
   optional int64 link_quality = 13;
   // Wifi power management enabled
   optional bool power_management_enabled = 14;
+  // Signal strength for wireless networks in dBm.
+  optional int32 signal_strength_dbm = 15;
 }
 
 // Configured networks telemetry data.
@@ -293,6 +295,19 @@ message BootPerformanceTelemetry {
   optional string shutdown_reason = 5;
 }
 
+// Data tracking user status information
+message UserStatusTelemetry {
+  enum DeviceActivityState {
+    DEVICE_ACTIVITY_STATE_UNKNOWN = 0;
+    ACTIVE = 1;
+    IDLE = 2;
+    LOCKED = 3;
+  }
+
+  // Device state.
+  optional DeviceActivityState device_activity_state = 1;
+}
+
 // Data that can change over time, collected and reported every specific period
 // of time or when an event occur.
 message TelemetryData {
@@ -306,6 +321,8 @@ message TelemetryData {
   optional PeripheralsTelemetry peripherals_telemetry = 3;
   // Boot Performance telemetry data.
   optional BootPerformanceTelemetry boot_performance_telemetry = 4;
+  // User status telemetry data.
+  optional UserStatusTelemetry user_status_telemetry = 5;
 }
 
 enum MetricEventType {

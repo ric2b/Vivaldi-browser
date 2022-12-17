@@ -24,11 +24,13 @@ class ChromeAccountManagerService;
 @class ContentSuggestionsHeaderSynchronizer;
 @class ContentSuggestionsMediator;
 @class ContentSuggestionsCollectionViewController;
+@protocol FeedControlDelegate;
+@class FeedMetricsRecorder;
+class GURL;
 @protocol LogoVendor;
 @class NewTabPageViewController;
 @protocol NTPHomeConsumer;
 @class NTPHomeMetrics;
-@class FeedMetricsRecorder;
 class TemplateURLService;
 class UrlLoadingBrowserAgent;
 class VoiceSearchAvailability;
@@ -72,6 +74,8 @@ class VoiceSearchAvailability;
 @property(nonatomic, strong) ContentSuggestionsMediator* suggestionsMediator;
 // Consumer for this mediator.
 @property(nonatomic, weak) id<NTPHomeConsumer> consumer;
+// Delegate for controlling the current feed.
+@property(nonatomic, weak) id<FeedControlDelegate> feedControlDelegate;
 // The browser.
 @property(nonatomic, assign) Browser* browser;
 // The web state associated with this NTP.
@@ -108,6 +112,10 @@ class VoiceSearchAvailability;
 // Handles the actions following a tap on the "Learn More" item in the Discover
 // feed menu.
 - (void)handleFeedLearnMoreTapped;
+
+// Handles the actions following a tap on the "Visit Site" item in the followed
+// item edit menu of the follow management page.
+- (void)handleVisitSiteFromFollowManagementList:(const GURL&)url;
 
 @end
 

@@ -396,7 +396,7 @@ void FFmpegDemuxerStream::EnqueuePacket(ScopedAVPacket packet) {
     }
   }
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   // Convert the packet if there is a bitstream filter.
   if (bitstream_converter_ &&
       !bitstream_converter_->ConvertPacket(packet.get())) {
@@ -765,7 +765,7 @@ void FFmpegDemuxerStream::Read(ReadCB read_cb) {
 void FFmpegDemuxerStream::EnableBitstreamConverter() {
   DCHECK(task_runner_->RunsTasksInCurrentSequence());
 
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   InitBitstreamConverter();
 #else
   DLOG(ERROR) << "Proprietary codecs not enabled and stream requires bitstream "
@@ -774,14 +774,14 @@ void FFmpegDemuxerStream::EnableBitstreamConverter() {
 }
 
 void FFmpegDemuxerStream::ResetBitstreamConverter() {
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   if (bitstream_converter_)
     InitBitstreamConverter();
 #endif  // BUILDFLAG(USE_PROPRIETARY_CODECS)
 }
 
 void FFmpegDemuxerStream::InitBitstreamConverter() {
-#if BUILDFLAG(USE_PROPRIETARY_CODECS) || defined(VIVALDI_BUILD)
+#if BUILDFLAG(USE_PROPRIETARY_CODECS)
   switch (stream_->codecpar->codec_id) {
     case AV_CODEC_ID_H264:
       // Clear |extra_data| so that future (fallback) decoders will know that

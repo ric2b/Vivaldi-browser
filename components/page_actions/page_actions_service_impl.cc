@@ -44,7 +44,7 @@ void ChangeStaticInjectionForFrame(content::WebContents* tab_contents,
                                    content::RenderFrameHost* frame,
                                    base::FilePath script_path,
                                    bool enable) {
-  if (!frame->IsRenderFrameCreated()) {
+  if (!frame->IsRenderFrameLive()) {
     // Will happen when restoring a tab. Current injections will be kept in
     // TabHelper.
     return;

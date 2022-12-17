@@ -16,6 +16,7 @@
 #include "third_party/blink/renderer/core/document_transition/document_transition_supplement.h"
 #include "third_party/blink/renderer/core/exported/web_view_impl.h"
 #include "third_party/blink/renderer/core/frame/web_local_frame_impl.h"
+#include "third_party/blink/renderer/platform/scheduler/public/thread.h"
 
 namespace blink {
 
@@ -35,12 +36,13 @@ WebFrameWidget* FrameWidgetTestHelper::CreateTestWebFrameWidget(
     bool never_composited,
     bool is_for_child_local_root,
     bool is_for_nested_main_frame,
+    bool is_for_scalable_page,
     content::TestRunner* test_runner) {
   return MakeGarbageCollected<WebTestWebFrameWidgetImpl>(
       pass_key, std::move(frame_widget_host), std::move(frame_widget),
       std::move(widget_host), std::move(widget), std::move(task_runner),
       frame_sink_id, hidden, never_composited, is_for_child_local_root,
-      is_for_nested_main_frame, test_runner);
+      is_for_nested_main_frame, is_for_scalable_page, test_runner);
 }
 
 WebTestWebFrameWidgetImpl::WebTestWebFrameWidgetImpl(
@@ -59,6 +61,7 @@ WebTestWebFrameWidgetImpl::WebTestWebFrameWidgetImpl(
     bool never_composited,
     bool is_for_child_local_root,
     bool is_for_nested_main_frame,
+    bool is_for_scalable_page,
     content::TestRunner* test_runner)
     : WebFrameWidgetImpl(pass_key,
                          std::move(frame_widget_host),
@@ -70,7 +73,8 @@ WebTestWebFrameWidgetImpl::WebTestWebFrameWidgetImpl(
                          hidden,
                          never_composited,
                          is_for_child_local_root,
-                         is_for_nested_main_frame),
+                         is_for_nested_main_frame,
+                         is_for_scalable_page),
       test_runner_(test_runner) {}
 
 WebTestWebFrameWidgetImpl::~WebTestWebFrameWidgetImpl() = default;
@@ -128,7 +132,7 @@ void WebTestWebFrameWidgetImpl::DisableEndDocumentTransition() {
 void WebTestWebFrameWidgetImpl::ScheduleAnimationInternal(bool do_raster) {
   // When using threaded compositing, have the WeFrameWidgetImpl normally
   // schedule a request for a frame, as we use the compositor's scheduler.
-  if (scheduler::WebThreadScheduler::CompositorThreadScheduler()) {
+  if (Thread::CompositorThread()) {
     WebFrameWidgetImpl::ScheduleAnimation();
     return;
   }

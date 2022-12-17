@@ -48,6 +48,8 @@ TEST_F(AssistantOnboardingSuggestionViewTest, DarkAndLightTheme) {
   AshColorProvider::Get()->OnActiveUserPrefServiceChanged(
       Shell::Get()->session_controller()->GetActivePrefService());
   ASSERT_TRUE(features::IsDarkLightModeEnabled());
+  Shell::Get()->session_controller()->GetActivePrefService()->SetBoolean(
+      prefs::kDarkModeEnabled, false);
   ASSERT_FALSE(ColorProvider::Get()->IsDarkModeEnabled());
 
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
@@ -131,11 +133,12 @@ TEST_F(AssistantOnboardingSuggestionViewTest, DarkAndLightTheme) {
 }
 
 TEST_F(AssistantOnboardingSuggestionViewTest, DarkAndLightModeFlagOff) {
-  ASSERT_FALSE(features::IsDarkLightModeEnabled());
-
   // ProductivityLauncher uses DarkLightMode colors.
   base::test::ScopedFeatureList scoped_feature_list;
-  scoped_feature_list.InitAndDisableFeature(features::kProductivityLauncher);
+  scoped_feature_list.InitWithFeatures(
+      /*enabled_features=*/{}, /*disabled_features=*/{
+          chromeos::features::kDarkLightMode, features::kNotificationsRefresh,
+          features::kProductivityLauncher});
 
   std::unique_ptr<views::Widget> widget = CreateTestWidget();
 

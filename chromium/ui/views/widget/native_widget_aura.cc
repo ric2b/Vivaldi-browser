@@ -64,13 +64,12 @@
 #include "ui/views/widget/desktop_aura/desktop_window_tree_host.h"
 #endif
 
-#if BUILDFLAG(IS_WIN)
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && defined(USE_OZONE)
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_platform.h"
 #endif
 
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
-    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
+#if BUILDFLAG(IS_WIN)
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_win.h"
 #endif
 
 DEFINE_UI_CLASS_PROPERTY_TYPE(views::internal::NativeWidgetPrivate*)
@@ -105,8 +104,7 @@ NativeWidgetAura::NativeWidgetAura(internal::NativeWidgetDelegate* delegate)
     : delegate_(delegate),
       window_(new aura::Window(this, aura::client::WINDOW_TYPE_UNKNOWN)),
       ownership_(Widget::InitParams::NATIVE_WIDGET_OWNS_WIDGET),
-      destroying_(false),
-      cursor_(gfx::kNullCursor) {
+      destroying_(false) {
   aura::client::SetFocusChangeObserver(window_, this);
   wm::SetActivationChangeObserver(window_, this);
 }
@@ -714,7 +712,6 @@ void NativeWidgetAura::Restore() {
 }
 
 void NativeWidgetAura::SetFullscreen(bool fullscreen,
-                                     const base::TimeDelta& delay,
                                      int64_t target_display_id) {
   // The `target_display_id` argument is unsupported in Aura.
   DCHECK_EQ(target_display_id, display::kInvalidDisplayId);
@@ -770,7 +767,7 @@ void NativeWidgetAura::ScheduleLayout() {
     window_->ScheduleDraw();
 }
 
-void NativeWidgetAura::SetCursor(gfx::NativeCursor cursor) {
+void NativeWidgetAura::SetCursor(const ui::Cursor& cursor) {
   cursor_ = cursor;
   aura::client::CursorClient* cursor_client =
       aura::client::GetCursorClient(window_->GetRootWindow());
@@ -1153,8 +1150,7 @@ void NativeWidgetAura::SetInitialFocus(ui::WindowShowState show_state) {
 // Widget, public:
 
 namespace {
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
-    (BUILDFLAG(IS_WIN) || BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && (BUILDFLAG(IS_WIN) || defined(USE_OZONE))
 void CloseWindow(aura::Window* window) {
   if (window) {
     Widget* widget = Widget::GetWidgetForNativeView(window);
@@ -1184,9 +1180,8 @@ void Widget::CloseAllSecondaryWidgets() {
   EnumThreadWindows(GetCurrentThreadId(), WindowCallbackProc, 0);
 #endif
 
-#if BUILDFLAG(ENABLE_DESKTOP_AURA) && \
-    (BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
-  DesktopWindowTreeHostLinux::CleanUpWindowList(CloseWindow);
+#if BUILDFLAG(ENABLE_DESKTOP_AURA) && defined(USE_OZONE)
+  DesktopWindowTreeHostPlatform::CleanUpWindowList(CloseWindow);
 #endif
 }
 

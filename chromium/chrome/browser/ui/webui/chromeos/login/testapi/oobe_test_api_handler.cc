@@ -7,6 +7,7 @@
 #include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/ash_interfaces.h"
+#include "ash/public/cpp/tablet_mode.h"
 #include "ash/public/mojom/cros_display_config.mojom.h"
 #include "base/bind.h"
 #include "base/check.h"
@@ -16,12 +17,14 @@
 #include "chrome/browser/ash/login/existing_user_controller.h"
 #include "chrome/browser/ash/login/helper.h"
 #include "chrome/browser/ash/login/oobe_screen.h"
+#include "chrome/browser/ash/login/quick_unlock/quick_unlock_utils.h"
 #include "chrome/browser/ash/login/screens/network_screen.h"
 #include "chrome/browser/ash/login/startup_utils.h"
 #include "chrome/browser/ash/login/ui/login_display_host.h"
 #include "chrome/browser/ash/login/wizard_controller.h"
 #include "chrome/browser/ash/policy/enrollment/enrollment_requisition_manager.h"
 #include "chrome/browser/ui/ash/login_screen_client_impl.h"
+#include "chromeos/ash/components/assistant/buildflags.h"
 #include "components/account_id/account_id.h"
 
 namespace chromeos {
@@ -36,6 +39,8 @@ void OobeTestAPIHandler::DeclareJSCallbacks() {
   AddCallback("OobeTestApi.loginWithPin", &OobeTestAPIHandler::LoginWithPin);
   AddCallback("OobeTestApi.advanceToScreen",
               &OobeTestAPIHandler::AdvanceToScreen);
+  AddCallback("OobeTestApi.skipToLoginForTesting",
+              &OobeTestAPIHandler::SkipToLoginForTesting);
   AddCallback("OobeTestApi.skipPostLoginScreens",
               &OobeTestAPIHandler::SkipPostLoginScreens);
   AddCallback("OobeTestApi.loginAsGuest", &OobeTestAPIHandler::LoginAsGuest);
@@ -68,6 +73,29 @@ void OobeTestAPIHandler::GetAdditionalParameters(base::Value::Dict* dict) {
             StartupUtils::IsEulaAccepted() ||
                 !features::IsOobeConsolidatedConsentEnabled() ||
                 !BUILDFLAG(GOOGLE_CHROME_BRANDING));
+
+  dict->Set("testapi_isFingerprintSupported",
+            ash::quick_unlock::IsFingerprintSupported());
+
+  dict->Set("testapi_isLibAssistantEnabled",
+#if BUILDFLAG(ENABLE_CROS_LIBASSISTANT)
+            true
+#else
+            false
+#endif
+  );
+
+  dict->Set("testapi_isBrandedBuild",
+#if BUILDFLAG(GOOGLE_CHROME_BRANDING)
+            true
+#else
+            false
+#endif
+  );
+
+  dict->Set("testapi_isOobeInTabletMode",
+            ash::TabletMode::Get()->InTabletMode() ||
+                ash::switches::ShouldOobeUseTabletModeFirstRun());
 }
 
 void OobeTestAPIHandler::LoginWithPin(const std::string& username,
@@ -83,8 +111,14 @@ void OobeTestAPIHandler::AdvanceToScreen(const std::string& screen) {
   ash::LoginDisplayHost::default_host()->StartWizard(ash::OobeScreenId(screen));
 }
 
+void OobeTestAPIHandler::SkipToLoginForTesting() {
+  ash::WizardController::default_controller()
+      ->SkipToLoginForTesting();  // IN-TEST
+}
+
 void OobeTestAPIHandler::SkipPostLoginScreens() {
-  ash::WizardController::SkipPostLoginScreensForTesting();
+  ash::WizardController::default_controller()
+      ->SkipPostLoginScreensForTesting();  // IN-TEST
 }
 
 void OobeTestAPIHandler::LoginAsGuest() {

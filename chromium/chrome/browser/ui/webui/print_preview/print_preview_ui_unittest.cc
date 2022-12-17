@@ -73,15 +73,15 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewData) {
 
   PrintViewManager* print_view_manager =
       PrintViewManager::FromWebContents(initiator);
-  print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
+  print_view_manager->PrintPreviewNow(initiator->GetPrimaryMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
   EXPECT_NE(initiator, preview_dialog);
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
   EXPECT_TRUE(IsShowingWebContentsModalDialog(initiator));
 
-  PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
-      preview_dialog->GetWebUI()->GetController());
+  PrintPreviewUI* preview_ui =
+      preview_dialog->GetWebUI()->GetController()->GetAs<PrintPreviewUI>();
   ASSERT_TRUE(preview_ui);
   preview_ui->SetPreviewUIId();
 
@@ -118,15 +118,15 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewDraftPages) {
 
   PrintViewManager* print_view_manager =
       PrintViewManager::FromWebContents(initiator);
-  print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
+  print_view_manager->PrintPreviewNow(initiator->GetPrimaryMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
   EXPECT_NE(initiator, preview_dialog);
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
   EXPECT_TRUE(IsShowingWebContentsModalDialog(initiator));
 
-  PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
-      preview_dialog->GetWebUI()->GetController());
+  PrintPreviewUI* preview_ui =
+      preview_dialog->GetWebUI()->GetController()->GetAs<PrintPreviewUI>();
   ASSERT_TRUE(preview_ui);
   preview_ui->SetPreviewUIId();
 
@@ -176,15 +176,15 @@ TEST_F(PrintPreviewUIUnitTest, ShouldCancelRequest) {
 
   PrintViewManager* print_view_manager =
       PrintViewManager::FromWebContents(initiator);
-  print_view_manager->PrintPreviewNow(initiator->GetMainFrame(), false);
+  print_view_manager->PrintPreviewNow(initiator->GetPrimaryMainFrame(), false);
   WebContents* preview_dialog = controller->GetOrCreatePreviewDialog(initiator);
 
   EXPECT_NE(initiator, preview_dialog);
   EXPECT_EQ(1, browser()->tab_strip_model()->count());
   EXPECT_TRUE(IsShowingWebContentsModalDialog(initiator));
 
-  PrintPreviewUI* preview_ui = static_cast<PrintPreviewUI*>(
-      preview_dialog->GetWebUI()->GetController());
+  PrintPreviewUI* preview_ui =
+      preview_dialog->GetWebUI()->GetController()->GetAs<PrintPreviewUI>();
   ASSERT_TRUE(preview_ui);
   preview_ui->SetPreviewUIId();
 
@@ -226,7 +226,7 @@ TEST_F(PrintPreviewUIUnitTest, PrintPreviewFailureCancelsPendingActions) {
   EXPECT_TRUE(IsShowingWebContentsModalDialog(initiator));
 
   PrintPreviewUI* preview_ui =
-      static_cast<PrintPreviewUI*>(preview_dialog->GetWebUI()->GetController());
+      preview_dialog->GetWebUI()->GetController()->GetAs<PrintPreviewUI>();
   ASSERT_TRUE(preview_ui);
   preview_ui->SetPreviewUIId();
 

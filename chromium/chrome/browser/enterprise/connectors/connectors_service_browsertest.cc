@@ -40,6 +40,7 @@
 #endif
 
 #if BUILDFLAG(IS_CHROMEOS_LACROS)
+#include "chromeos/startup/browser_init_params.h"
 #include "components/policy/core/common/policy_loader_lacros.h"
 #endif
 
@@ -90,13 +91,13 @@ std::string ExpectedOsPlatform() {
   return "Windows";
 #elif BUILDFLAG(IS_MAC)
   return "Mac OS X";
-#elif BUILDFLAG(IS_CHROMEOS_ASH)
+#elif BUILDFLAG(IS_CHROMEOS)
 #if BUILDFLAG(GOOGLE_CHROME_BRANDING)
   return "ChromeOS";
 #else
   return "ChromiumOS";
 #endif
-#elif BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#elif BUILDFLAG(IS_LINUX)
   return "Linux";
 #endif
 #if BUILDFLAG(IS_FUCHSIA)
@@ -212,8 +213,7 @@ class ConnectorsServiceProfileBrowserTest
     init_params->device_properties->device_affiliation_ids = {
         management_status() == ManagementStatus::AFFILIATED ? kAffiliationId1
                                                             : kAffiliationId2};
-    chromeos::LacrosService::Get()->SetInitParamsForTests(
-        std::move(init_params));
+    chromeos::BrowserInitParams::SetInitParamsForTests(std::move(init_params));
 #elif BUILDFLAG(IS_CHROMEOS_ASH)
     auto* fake_user_manager = new ash::FakeChromeUserManager();
     user_manager_enabler_ = std::make_unique<user_manager::ScopedUserManager>(

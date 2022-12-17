@@ -5,31 +5,27 @@
 #include "chrome/browser/ui/views/side_panel/side_panel_coordinator.h"
 #include <memory>
 
+#include "base/bind.h"
 #include "base/callback.h"
 #include "base/callback_forward.h"
 #include "base/metrics/user_metrics.h"
 #include "base/metrics/user_metrics_action.h"
-#include "chrome/browser/extensions/api/bookmark_manager_private/bookmark_manager_private_api.h"
 #include "chrome/browser/feature_engagement/tracker_factory.h"
 #include "chrome/browser/themes/theme_properties.h"
-#include "chrome/browser/ui/ui_features.h"
+#include "chrome/browser/ui/color/chrome_color_id.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/frame/browser_view.h"
-#include "chrome/browser/ui/views/side_panel/read_later_side_panel_web_view.h"
 #include "chrome/browser/ui/views/side_panel/side_panel.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_combobox_model.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_content_proxy.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_entry.h"
+#include "chrome/browser/ui/views/side_panel/side_panel_util.h"
 #include "chrome/browser/ui/views/side_panel/side_panel_web_ui_view.h"
 #include "chrome/browser/ui/views/toolbar/toolbar_view.h"
-#include "chrome/browser/ui/webui/side_panel/bookmarks/bookmarks_side_panel_ui.h"
-#include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_container_view.h"
-#include "chrome/browser/ui/webui/side_panel/read_anything/read_anything_coordinator.h"
 #include "chrome/common/webui_url_constants.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
-#include "components/omnibox/browser/vector_icons.h"
 #include "components/strings/grit/components_strings.h"
-#include "components/user_notes/user_notes_features.h"
-#include "ui/accessibility/accessibility_features.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -44,6 +40,8 @@
 #include "ui/views/vector_icons.h"
 
 namespace {
+
+const char kGlobalSidePanelRegistryKey[] = "global_side_panel_registry_key";
 
 constexpr int kSidePanelContentViewId = 42;
 constexpr int kSidePanelContentWrapperViewId = 43;
@@ -63,6 +61,13 @@ std::unique_ptr<views::ImageButton> CreateControlButton(
   button->SetImageHorizontalAlignment(views::ImageButton::ALIGN_CENTER);
   button->SetProperty(views::kMarginsKey, margin_insets);
   views::InstallCircleHighlightPathGenerator(button.get());
+  button->SetProperty(
+      views::kMarginsKey,
+      gfx::Insets().set_left(ChromeLayoutProvider::Get()->GetDistanceMetric(
+          views::DistanceMetric::DISTANCE_RELATED_CONTROL_HORIZONTAL)));
+  button->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification().WithAlignment(views::LayoutAlignment::kEnd));
 
   return button;
 }
@@ -81,51 +86,93 @@ class SidePanelSeparator : public views::Separator {
 BEGIN_METADATA(SidePanelSeparator, views::Separator)
 END_METADATA
 
+using PopulateSidePanelCallback = base::OnceCallback<void(
+    SidePanelEntry* entry,
+    absl::optional<std::unique_ptr<views::View>> content_view)>;
+
+// SidePanelContentSwappingContainer is used as the content wrapper for views
+// hosted in the side panel. This uses the SidePanelContentProxy to check if or
+// wait for a SidePanelEntry's content view to be ready to be shown then only
+// swaps the views when the content is ready. If the SidePanelContextProxy
+// doesn't exist, the content is swapped immediately.
+class SidePanelContentSwappingContainer : public views::View {
+ public:
+  explicit SidePanelContentSwappingContainer(bool show_immediately_for_testing)
+      : show_immediately_for_testing_(show_immediately_for_testing) {
+    SetUseDefaultFillLayout(true);
+    SetBackground(
+        views::CreateThemedSolidBackground(kColorSidePanelBackground));
+    SetProperty(
+        views::kFlexBehaviorKey,
+        views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
+                                 views::MaximumFlexSizeRule::kUnbounded));
+    SetID(kSidePanelContentWrapperViewId);
+  }
+
+  ~SidePanelContentSwappingContainer() override {
+    ResetLoadingEntryIfNecessary();
+  }
+
+  void RequestEntry(SidePanelEntry* entry, PopulateSidePanelCallback callback) {
+    DCHECK(entry);
+    ResetLoadingEntryIfNecessary();
+    auto content_view = entry->GetContent();
+    SidePanelContentProxy* content_proxy =
+        SidePanelUtil::GetSidePanelContentProxy(content_view.get());
+    if (content_proxy->IsAvailable() || show_immediately_for_testing_) {
+      std::move(callback).Run(entry, std::move(content_view));
+    } else {
+      entry->CacheView(std::move(content_view));
+      loading_entry_ = entry;
+      loaded_callback_ = std::move(callback);
+      content_proxy->SetAvailableCallback(
+          base::BindOnce(&SidePanelContentSwappingContainer::RunLoadedCallback,
+                         base::Unretained(this)));
+    }
+  }
+
+ private:
+  void RunLoadedCallback() {
+    DCHECK(!loaded_callback_.is_null());
+    SidePanelEntry* entry = loading_entry_;
+    loading_entry_ = nullptr;
+    std::move(loaded_callback_).Run(entry, absl::nullopt);
+  }
+
+  void ResetLoadingEntryIfNecessary() {
+    if (loading_entry_ && loading_entry_->CachedView()) {
+      SidePanelUtil::GetSidePanelContentProxy(loading_entry_->CachedView())
+          ->ResetAvailableCallback();
+    }
+    loading_entry_ = nullptr;
+  }
+
+  // When true, don't delay switching panels.
+  bool show_immediately_for_testing_;
+  // If the SidePanelEntry is ever discarded by the SidePanelCoordinator then we
+  // are always either immediately switching to a different entry (where this
+  // value would be reset) or closing the side panel (where this would be
+  // destroyed).
+  raw_ptr<SidePanelEntry> loading_entry_ = nullptr;
+  PopulateSidePanelCallback loaded_callback_;
+};
+
 }  // namespace
 
-SidePanelCoordinator::SidePanelCoordinator(BrowserView* browser_view,
-                                           SidePanelRegistry* global_registry)
-    : browser_view_(browser_view), global_registry_(global_registry) {
+SidePanelCoordinator::SidePanelCoordinator(BrowserView* browser_view)
+    : browser_view_(browser_view) {
   combobox_model_ = std::make_unique<SidePanelComboboxModel>();
-  global_registry->AddObserver(this);
-  browser_view_->browser()->tab_strip_model()->AddObserver(this);
-  // TODO(pbos): Consider moving creation of SidePanelEntry into other functions
-  // that can easily be unit tested.
-  global_registry->Register(std::make_unique<SidePanelEntry>(
-      SidePanelEntry::Id::kReadingList,
-      l10n_util::GetStringUTF16(IDS_READ_LATER_TITLE),
-      ui::ImageModel::FromVectorIcon(kReadLaterIcon, ui::kColorIcon),
-      base::BindRepeating(
-          [](SidePanelCoordinator* coordinator,
-             Browser* browser) -> std::unique_ptr<views::View> {
-            return std::make_unique<ReadLaterSidePanelWebView>(
-                browser, base::BindRepeating(&SidePanelCoordinator::Close,
-                                             base::Unretained(coordinator)));
-          },
-          this, browser_view->browser())));
-  global_registry->Register(std::make_unique<SidePanelEntry>(
-      SidePanelEntry::Id::kBookmarks,
-      l10n_util::GetStringUTF16(IDS_BOOKMARK_MANAGER_TITLE),
-      ui::ImageModel::FromVectorIcon(omnibox::kStarIcon, ui::kColorIcon),
-      base::BindRepeating(&SidePanelCoordinator::CreateBookmarksWebView,
-                          base::Unretained(this), browser_view->browser())));
-  if (features::IsReadAnythingEnabled()) {
-    global_registry->Register(std::make_unique<SidePanelEntry>(
-        SidePanelEntry::Id::kReadAnything,
-        l10n_util::GetStringUTF16(IDS_READ_ANYTHING_TITLE),
-        ui::ImageModel::FromVectorIcon(kReaderModeIcon, ui::kColorIcon),
-        base::BindRepeating(&SidePanelCoordinator::CreateReadAnythingWebView,
-                            base::Unretained(this), browser_view->browser())));
-  }
 
-  if (user_notes::IsUserNotesEnabled()) {
-    global_registry->Register(std::make_unique<SidePanelEntry>(
-        SidePanelEntry::Id::kUserNote,
-        l10n_util::GetStringUTF16(IDS_USER_NOTE_TITLE),
-        ui::ImageModel::FromVectorIcon(kInkHighlighterIcon, ui::kColorIcon),
-        base::BindRepeating(&SidePanelCoordinator::CreateUserNoteView,
-                            base::Unretained(this), browser_view->browser())));
-  }
+  auto global_registry = std::make_unique<SidePanelRegistry>();
+  global_registry->AddObserver(this);
+  global_registry_ = global_registry.get();
+  browser_view->browser()->SetUserData(kGlobalSidePanelRegistryKey,
+                                       std::move(global_registry));
+
+  browser_view_->browser()->tab_strip_model()->AddObserver(this);
+
+  SidePanelUtil::PopulateGlobalEntries(browser_view->browser(),
+                                       GetGlobalSidePanelRegistry());
 }
 
 SidePanelCoordinator::~SidePanelCoordinator() {
@@ -137,10 +184,8 @@ void SidePanelCoordinator::Show(absl::optional<SidePanelEntry::Id> entry_id) {
     entry_id = GetLastActiveEntryId().value_or(kDefaultEntry);
 
   SidePanelEntry* entry = GetEntryForId(entry_id.value());
-  if (!entry || (GetContentView() && GetLastActiveEntryId().has_value() &&
-                 GetLastActiveEntryId().value() == entry->id())) {
+  if (!entry)
     return;
-  }
 
   if (GetContentView() == nullptr) {
     InitializeSidePanel();
@@ -155,21 +200,44 @@ void SidePanelCoordinator::Show(absl::optional<SidePanelEntry::Id> entry_id) {
         feature_engagement::kIPHReadingListInSidePanelFeature);
   }
 
-  PopulateSidePanel(entry);
+  // Ensure that the correct combobox entry is selected. This may not be the
+  // case if `Show()` was called after registering a contextual entry.
+  if (entry_id.has_value()) {
+    DCHECK(header_combobox_);
+    header_combobox_->SetSelectedIndex(
+        combobox_model_->GetIndexForId(entry_id.value()));
+  }
+
+  SidePanelContentSwappingContainer* content_wrapper =
+      static_cast<SidePanelContentSwappingContainer*>(
+          GetContentView()->GetViewByID(kSidePanelContentWrapperViewId));
+  DCHECK(content_wrapper);
+  content_wrapper->RequestEntry(
+      entry, base::BindOnce(&SidePanelCoordinator::PopulateSidePanel,
+                            base::Unretained(this)));
 }
 
 void SidePanelCoordinator::Close() {
-  views::View* const content_view = GetContentView();
-  if (!content_view)
+  if (!GetContentView())
     return;
+
+  if (current_entry_) {
+    // Reset current_entry_ first to prevent current_entry->OnEntryHidden() from
+    // calling multiple times. This could happen in the edge cases when callback
+    // inside current_entry->OnEntryHidden() is calling Close() to trigger race
+    // condition.
+    auto* current_entry = current_entry_.get();
+    current_entry_.reset();
+    current_entry->OnEntryHidden();
+  }
 
   if (global_registry_->active_entry().has_value()) {
     last_active_global_entry_id_ =
         global_registry_->active_entry().value()->id();
   }
-  // Reset active entry values for all registries since existence of an
-  // active_entry for a tab in any registry will trigger the side panel to be
-  // shown.
+  // Reset active entry values for all observed registries and clear cache for
+  // everything except remaining active entries (i.e. if another tab has an
+  // active contextual entry).
   global_registry_->ResetActiveEntry();
   if (auto* contextual_registry = GetActiveContextualRegistry())
     contextual_registry->ResetActiveEntry();
@@ -179,7 +247,11 @@ void SidePanelCoordinator::Close() {
   browser_view_->toolbar()->side_panel_button()->SetTooltipText(
       l10n_util::GetStringUTF16(IDS_TOOLTIP_SIDE_PANEL_SHOW));
 
-  browser_view_->right_aligned_side_panel()->RemoveChildViewT(content_view);
+  // `OnEntryWillDeregister` (triggered by calling `OnEntryHidden`) may already
+  // have deleted the content view, so check that it still exists.
+  if (views::View* content_view = GetContentView())
+    browser_view_->right_aligned_side_panel()->RemoveChildViewT(content_view);
+  header_combobox_ = nullptr;
   base::RecordAction(base::UserMetricsAction("SidePanel.Hide"));
 }
 
@@ -189,6 +261,15 @@ void SidePanelCoordinator::Toggle() {
   } else {
     Show();
   }
+}
+
+SidePanelRegistry* SidePanelCoordinator::GetGlobalSidePanelRegistry() {
+  return static_cast<SidePanelRegistry*>(
+      browser_view_->browser()->GetUserData(kGlobalSidePanelRegistryKey));
+}
+
+void SidePanelCoordinator::SetNoDelaysForTesting() {
+  no_delays_for_testing_ = true;
 }
 
 views::View* SidePanelCoordinator::GetContentView() {
@@ -223,37 +304,43 @@ void SidePanelCoordinator::InitializeSidePanel() {
   container->AddChildView(CreateHeader());
   container->AddChildView(std::make_unique<SidePanelSeparator>());
 
-  auto content_wrapper = std::make_unique<views::View>();
-  content_wrapper->SetUseDefaultFillLayout(true);
-  content_wrapper->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded));
-  content_wrapper->SetID(kSidePanelContentWrapperViewId);
+  auto content_wrapper = std::make_unique<SidePanelContentSwappingContainer>(
+      no_delays_for_testing_);
   container->AddChildView(std::move(content_wrapper));
+  // Set to not visible so that the side panel is not shown until content is
+  // ready to be shown.
+  container->SetVisible(false);
 
   browser_view_->right_aligned_side_panel()->AddChildView(std::move(container));
 }
 
-void SidePanelCoordinator::PopulateSidePanel(SidePanelEntry* entry) {
-  views::View* content_wrapper =
+void SidePanelCoordinator::PopulateSidePanel(
+    SidePanelEntry* entry,
+    absl::optional<std::unique_ptr<views::View>> content_view) {
+  if (current_entry_.get() == entry) {
+    return;
+  }
+
+  auto* content_wrapper =
       GetContentView()->GetViewByID(kSidePanelContentWrapperViewId);
   DCHECK(content_wrapper);
   // |content_wrapper| should have either no child views or one child view for
   // the currently hosted SidePanelEntry.
   DCHECK(content_wrapper->children().size() <= 1);
-  if (content_wrapper->children().size()) {
-    DCHECK(GetLastActiveEntryId().has_value());
-    SidePanelEntry* current_entry =
-        GetEntryForId(GetLastActiveEntryId().value());
-    DCHECK(current_entry);
+
+  GetContentView()->SetVisible(true);
+  if (current_entry_ && content_wrapper->children().size()) {
     auto current_entry_view =
         content_wrapper->RemoveChildViewT(content_wrapper->children().front());
-    current_entry->CacheView(std::move(current_entry_view));
+    current_entry_->CacheView(std::move(current_entry_view));
+    current_entry_->OnEntryHidden();
   }
-  content_wrapper->AddChildView(entry->GetContent());
+  content_wrapper->AddChildView(content_view.has_value()
+                                    ? std::move(content_view.value())
+                                    : entry->GetContent());
   if (auto* contextual_registry = GetActiveContextualRegistry())
     contextual_registry->ResetActiveEntry();
+  current_entry_ = entry->GetWeakPtr();
   entry->OnEntryShown();
 }
 
@@ -288,6 +375,12 @@ absl::optional<SidePanelEntry::Id> SidePanelCoordinator::GetLastActiveEntryId()
   return absl::nullopt;
 }
 
+absl::optional<SidePanelEntry::Id> SidePanelCoordinator::GetSelectedId() const {
+  if (!header_combobox_)
+    return absl::nullopt;
+  return combobox_model_->GetIdAt(header_combobox_->GetSelectedIndex());
+}
+
 SidePanelRegistry* SidePanelCoordinator::GetActiveContextualRegistry() const {
   if (auto* web_contents =
           browser_view_->browser()->tab_strip_model()->GetActiveWebContents()) {
@@ -318,19 +411,6 @@ std::unique_ptr<views::View> SidePanelCoordinator::CreateHeader() {
 
   header_combobox_ = header->AddChildView(CreateCombobox());
 
-  // Create an empty view between branding and buttons to align branding on left
-  // without hardcoding margins. This view fills up the empty space between the
-  // branding and the control buttons.
-  // TODO(pbos): This View seems like it should be avoidable by not having LHS
-  // and RHS content stretch? This is copied from the Lens side panel, but could
-  // probably by cleaned up?
-  auto container = std::make_unique<views::View>();
-  container->SetProperty(
-      views::kFlexBehaviorKey,
-      views::FlexSpecification(views::MinimumFlexSizeRule::kScaleToZero,
-                               views::MaximumFlexSizeRule::kUnbounded));
-  header->AddChildView(std::move(container));
-
   header->AddChildView(CreateControlButton(
       header.get(),
       base::BindRepeating(&SidePanelCoordinator::Close, base::Unretained(this)),
@@ -352,6 +432,13 @@ std::unique_ptr<views::Combobox> SidePanelCoordinator::CreateCombobox() {
 
   combobox->SetCallback(base::BindRepeating(
       &SidePanelCoordinator::OnComboboxChanged, base::Unretained(this)));
+  combobox->SetProperty(
+      views::kFlexBehaviorKey,
+      views::FlexSpecification(views::LayoutOrientation::kHorizontal,
+                               views::MinimumFlexSizeRule::kScaleToZero,
+                               views::MaximumFlexSizeRule::kUnbounded,
+                               /*adjust_height_for_width=*/false)
+          .WithAlignment(views::LayoutAlignment::kStart));
   return combobox;
 }
 
@@ -361,48 +448,19 @@ void SidePanelCoordinator::OnComboboxChanged() {
   Show(entry_id);
 }
 
-std::unique_ptr<views::View> SidePanelCoordinator::CreateBookmarksWebView(
-    Browser* browser) {
-  auto bookmarks_web_view =
-      std::make_unique<SidePanelWebUIViewT<BookmarksSidePanelUI>>(
-          browser, base::RepeatingClosure(),
-          base::BindRepeating(&SidePanelCoordinator::Close,
-                              base::Unretained(this)),
-          std::make_unique<BubbleContentsWrapperT<BookmarksSidePanelUI>>(
-              GURL(chrome::kChromeUIBookmarksSidePanelURL), browser->profile(),
-              IDS_BOOKMARK_MANAGER_TITLE,
-              /*webui_resizes_host=*/false,
-              /*esc_closes_ui=*/false));
-  if (base::FeatureList::IsEnabled(features::kSidePanelDragAndDrop)) {
-    extensions::BookmarkManagerPrivateDragEventRouter::CreateForWebContents(
-        bookmarks_web_view.get()->contents_wrapper()->web_contents());
-  }
-  return bookmarks_web_view;
-}
-
-// The ownership of the container view moves to the caller of this function.
-std::unique_ptr<views::View> SidePanelCoordinator::CreateReadAnythingWebView(
-    Browser* browser) {
-  read_anything_coordinator_ =
-      std::make_unique<ReadAnythingCoordinator>(browser);
-  return read_anything_coordinator_->GetContainerView();
-}
-
-std::unique_ptr<views::View> SidePanelCoordinator::CreateUserNoteView(
-    Browser* browser) {
-  return browser_view_->user_note_ui_coordinator()->CreateUserNotesView();
-}
-
 void SidePanelCoordinator::OnEntryRegistered(SidePanelEntry* entry) {
   combobox_model_->AddItem(entry);
 }
 
 void SidePanelCoordinator::OnEntryWillDeregister(SidePanelEntry* entry) {
+  absl::optional<SidePanelEntry::Id> selected_id = GetSelectedId();
   combobox_model_->RemoveItem(entry->id());
+
   // Update the current entry to make sure we don't show an entry that is being
   // removed or close the panel if the entry being deregistered is the only one
   // that has been visible.
-  if (GetContentView()) {
+  if (GetContentView() && selected_id.has_value() &&
+      selected_id.value() == entry->id()) {
     if (global_registry_->active_entry().has_value()) {
       Show(GetLastActiveEntryId().value_or(kDefaultEntry));
     } else {
@@ -415,8 +473,7 @@ void SidePanelCoordinator::OnTabStripModelChanged(
     TabStripModel* tab_strip_model,
     const TabStripModelChange& change,
     const TabStripSelectionChange& selection) {
-  if (change.type() != TabStripModelChange::kSelectionOnly ||
-      !selection.active_tab_changed()) {
+  if (!selection.active_tab_changed()) {
     return;
   }
   // Handle removing the previous tab's contextual registry if one exists and

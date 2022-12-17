@@ -28,6 +28,7 @@
 #include "ui/ozone/platform/wayland/test/test_surface_augmenter.h"
 #include "ui/ozone/platform/wayland/test/test_viewporter.h"
 #include "ui/ozone/platform/wayland/test/test_wp_pointer_gestures.h"
+#include "ui/ozone/platform/wayland/test/test_zcr_stylus.h"
 #include "ui/ozone/platform/wayland/test/test_zcr_text_input_extension.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_linux_explicit_synchronization.h"
 #include "ui/ozone/platform/wayland/test/test_zwp_text_input_manager.h"
@@ -47,12 +48,15 @@ struct DisplayDeleter {
 enum class ShellVersion { kV6, kStable };
 enum class PrimarySelectionProtocol { kNone, kGtk, kZwp };
 enum class CompositorVersion { kV3, kV4 };
+enum class ShouldUseExplicitSynchronizationProtocol { kNone, kUse };
 
 struct ServerConfig {
   ShellVersion shell_version = ShellVersion::kStable;
   CompositorVersion compositor_version = CompositorVersion::kV4;
   PrimarySelectionProtocol primary_selection_protocol =
       PrimarySelectionProtocol::kNone;
+  ShouldUseExplicitSynchronizationProtocol use_explicit_synchronization =
+      ShouldUseExplicitSynchronizationProtocol::kUse;
 };
 
 class TestSelectionDeviceManager;
@@ -137,6 +141,8 @@ class TestWaylandServerThread : public base::Thread,
  private:
   void SetupOutputs();
   bool SetupPrimarySelectionManager(PrimarySelectionProtocol protocol);
+  bool SetupExplicitSynchronizationProtocol(
+      ShouldUseExplicitSynchronizationProtocol usage);
   void DoPause();
 
   std::unique_ptr<base::MessagePump> CreateMessagePump();
@@ -169,6 +175,7 @@ class TestWaylandServerThread : public base::Thread,
   TestSeat seat_;
   MockXdgShell xdg_shell_;
   MockZxdgShellV6 zxdg_shell_v6_;
+  TestZcrStylus zcr_stylus_;
   TestZcrTextInputExtensionV1 zcr_text_input_extension_v1_;
   TestZwpTextInputManagerV1 zwp_text_input_manager_v1_;
   TestZwpLinuxExplicitSynchronizationV1 zwp_linux_explicit_synchronization_v1_;

@@ -22,6 +22,7 @@
 #include "base/files/file_util.h"
 #include "base/numerics/safe_conversions.h"
 #include "base/posix/eintr_wrapper.h"
+#include "base/strings/escape.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/strings/string_util.h"
@@ -69,7 +70,6 @@
 #include "content/public/browser/storage_partition.h"
 #include "content/public/common/url_constants.h"
 #include "extensions/browser/extension_util.h"
-#include "net/base/escape.h"
 #include "services/device/public/mojom/mtp_manager.mojom.h"
 #include "services/device/public/mojom/mtp_storage_info.mojom.h"
 #include "storage/browser/file_system/external_mount_points.h"
@@ -405,6 +405,8 @@ absl::optional<file_manager::io_task::OperationType> IOTaskTypeToChromeEnum(
       return file_manager::io_task::OperationType::kExtract;
     case api::file_manager_private::IO_TASK_TYPE_MOVE:
       return file_manager::io_task::OperationType::kMove;
+    case api::file_manager_private::IO_TASK_TYPE_TRASH:
+      return file_manager::io_task::OperationType::kTrash;
     case api::file_manager_private::IO_TASK_TYPE_ZIP:
       return file_manager::io_task::OperationType::kZip;
     case api::file_manager_private::IO_TASK_TYPE_NONE:
@@ -517,7 +519,7 @@ ExtensionFunction::ResponseAction FileWatchFunctionBase::Run() {
       file_system_context->CrackURLInFirstPartyContext(GURL(url));
   if (file_system_url.path().empty()) {
     auto result_list = std::make_unique<base::ListValue>();
-    result_list->Append(std::make_unique<base::Value>(false));
+    result_list->Append(false);
     return RespondNow(Error("Invalid URL"));
   }
 
@@ -950,8 +952,7 @@ FileManagerPrivateInternalGetDisallowedTransfersFunction::Run() {
     return RespondNow(Error("File URL was invalid"));
   }
 
-  files_controller_ =
-      std::make_unique<policy::DlpFilesController>(profile_, rules_manager);
+  files_controller_ = std::make_unique<policy::DlpFilesController>();
   files_controller_->GetDisallowedTransfers(
       source_urls_, destination_url_,
       base::BindOnce(&FileManagerPrivateInternalGetDisallowedTransfersFunction::
@@ -994,6 +995,88 @@ void FileManagerPrivateInternalGetDisallowedTransfersFunction::
           *entry_definition_list))));
 }
 
+FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+    FileManagerPrivateInternalGetFilesRestrictedByDlpFunction() = default;
+
+FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+    ~FileManagerPrivateInternalGetFilesRestrictedByDlpFunction() = default;
+
+ExtensionFunction::ResponseAction
+FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::Run() {
+  if (!base::FeatureList::IsEnabled(
+          features::kDataLeakPreventionFilesRestriction)) {
+    return RespondNow(OneArgument(base::Value(base::Value::Type::LIST)));
+  }
+
+  policy::DlpRulesManager* rules_manager =
+      policy::DlpRulesManagerFactory::GetForPrimaryProfile();
+  if (!rules_manager) {
+    return RespondNow(OneArgument(base::Value(base::Value::Type::LIST)));
+  }
+
+  using extensions::api::file_manager_private_internal::
+      GetFilesRestrictedByDlp::Params;
+  const std::unique_ptr<Params> params(Params::Create(args()));
+  EXTENSION_FUNCTION_VALIDATE(params);
+
+  scoped_refptr<storage::FileSystemContext> file_system_context =
+      file_manager::util::GetFileSystemContextForRenderFrameHost(
+          Profile::FromBrowserContext(browser_context()), render_frame_host());
+
+  for (const std::string& url : params->entries) {
+    FileSystemURL file_system_url(
+        file_system_context->CrackURLInFirstPartyContext(GURL(url)));
+    if (!file_system_url.is_valid()) {
+      return RespondNow(Error("File URL was invalid"));
+    }
+    source_urls_.push_back(file_system_url);
+  }
+
+  files_controller_ = std::make_unique<policy::DlpFilesController>();
+  files_controller_->GetFilesRestrictedByAnyRule(
+      source_urls_,
+      base::BindOnce(
+          &FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+              OnGetFilesRestrictedByDlp,
+          this));
+
+  return RespondLater();
+}
+
+void FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+    OnGetFilesRestrictedByDlp(
+        std::vector<storage::FileSystemURL> restricted_files) {
+  file_manager::util::FileDefinitionList file_definition_list;
+  for (const auto& file : restricted_files) {
+    file_manager::util::FileDefinition file_definition;
+    file_definition.is_directory = false;
+    file_definition.virtual_path = file.virtual_path();
+    file_definition.absolute_path = file.path();
+    file_definition_list.emplace_back(std::move(file_definition));
+  }
+
+  file_manager::util::ConvertFileDefinitionListToEntryDefinitionList(
+      file_manager::util::GetFileSystemContextForSourceURL(
+          Profile::FromBrowserContext(browser_context()), source_url()),
+      url::Origin::Create(source_url().DeprecatedGetOriginAsURL()),
+      file_definition_list,  // Safe, since copied internally.
+      base::BindOnce(
+          &FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+              OnConvertFileDefinitionListToEntryDefinitionList,
+          this));
+}
+
+void FileManagerPrivateInternalGetFilesRestrictedByDlpFunction::
+    OnConvertFileDefinitionListToEntryDefinitionList(
+        std::unique_ptr<file_manager::util::EntryDefinitionList>
+            entry_definition_list) {
+  DCHECK(entry_definition_list);
+
+  Respond(OneArgument(base::Value::FromUniquePtrValue(
+      file_manager::util::ConvertEntryDefinitionListToListValue(
+          *entry_definition_list))));
+}
+
 FileManagerPrivateInternalStartCopyFunction::
     FileManagerPrivateInternalStartCopyFunction() = default;
 
@@ -1021,7 +1104,7 @@ FileManagerPrivateInternalStartCopyFunction::Run() {
   std::string destination_url_string = params->parent_url;
   if (destination_url_string.back() != '/')
     destination_url_string += '/';
-  destination_url_string += net::EscapePath(params->new_name);
+  destination_url_string += base::EscapePath(params->new_name);
 
   source_url_ =
       file_system_context->CrackURLInFirstPartyContext(GURL(params->url));
@@ -1575,9 +1658,13 @@ FileManagerPrivateInternalStartIOTaskFunction::Run() {
     case file_manager::io_task::OperationType::kExtract:
       if (base::FeatureList::IsEnabled(
               chromeos::features::kFilesExtractArchive)) {
+        std::string password;
+        if (params->params.password) {
+          password = *params->params.password;
+        }
         task = std::make_unique<file_manager::io_task::ExtractIOTask>(
-            std::move(source_urls), std::move(destination_folder_url),
-            file_system_context);
+            std::move(source_urls), std::move(password),
+            std::move(destination_folder_url), profile, file_system_context);
         break;
       }
       // Fall through
@@ -1588,8 +1675,9 @@ FileManagerPrivateInternalStartIOTaskFunction::Run() {
           std::move(source_urls), std::move(destination_folder_url), *type);
       break;
   }
-  volume_manager->io_task_controller()->Add(std::move(task));
-  return RespondNow(NoArguments());
+  const auto taskId =
+      volume_manager->io_task_controller()->Add(std::move(task));
+  return RespondNow(OneArgument(base::Value(static_cast<int>(taskId))));
 }
 
 ExtensionFunction::ResponseAction

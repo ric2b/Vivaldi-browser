@@ -122,6 +122,7 @@ class MenubarMenuShowFunction
   bool IsBookmarkMenu(int menu_id) override;
   int GetSelectedMenuId() override;
   bool IsItemChecked(int id) override;
+  bool IsItemEnabled(int id) override;
   bool IsItemPersistent(int id) override;
   bool GetAccelerator(int id, ui::Accelerator* accelerator) override;
   bool GetUrl(int id, std::string* url) override;
@@ -140,6 +141,7 @@ class MenubarMenuShowFunction
   std::unique_ptr<::vivaldi::VivaldiMenubarMenu> menu_;
 
   IdToBoolMap id_to_checked_map_;
+  IdToBoolMap id_to_disabled_map_;
   IdToBoolMap id_to_persistent_map_;
   IdToAcceleratorMap id_to_accelerator_map_;
   IdToUrlMap id_to_url_map_;

@@ -141,12 +141,17 @@
         About Vivaldi
       </message>
       <message name="IDS_CONTEXTUAL_SEARCH_DESCRIPTION" desc="Description for Contextual Search preference">
-        Learn about topics on websites without leaving the page. Tap to Search is a feature that is only available when Google is set as default search engine in Vivaldi. It sends a word and its surrounding context to Google Search, returning definitions, pictures, search results, and other details.
+        Learn about topics on websites without leaving the page. Touch to Search is a feature that is only available when Google is set as default search engine in Vivaldi. It sends a word and its surrounding context to Google Search, returning definitions, pictures, search results, and other details.
 
 To adjust your search term, long press to select. To refine your search, slide the panel all the way up and tap the search box.
       </message>
-      <message name="IDS_CONTEXTUAL_SEARCH_SHORT_DESCRIPTION" desc="A promo message shown to users who have Tap to Search enabled to explain the new behavior and provide an option to opt out">
-        Tap to Search is a feature that is only available when Google is set as default search engine in Vivaldi. It sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
+      <message name="IDS_CONTEXTUAL_SEARCH_DESCRIPTION_REVISED" desc="Description for Contextual Search preference">
+        Learn about topics on websites without leaving the page. Select one or more words on the page to search for them.
+
+Touch to Search is a feature that is only available when Google is set as the default search engine in Vivaldi.
+      </message>
+      <message name="IDS_CONTEXTUAL_SEARCH_SHORT_DESCRIPTION" desc="A promo message shown to users who have Touch to Search enabled to explain the new behavior and provide an option to opt out">
+        Touch to Search is a feature that is only available when Google is set as default search engine in Vivaldi. It sends the selected word and the current page as context to Google Search. You can turn it off in <ph name="BEGIN_LINK">&lt;link&gt;</ph>Settings<ph name="END_LINK">&lt;/link&gt;</ph>.
       </message>
       <!-- Incognito (Chromium) >> Private (Vivaldi) -->
       <message name="IDS_CONTEXTMENU_OPEN_IN_INCOGNITO_TAB" desc="Context sensitive menu item to open the selected link in a new private tab. [CHAR-LIMIT=30]">

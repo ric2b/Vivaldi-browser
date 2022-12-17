@@ -1103,9 +1103,8 @@ TEST_P(PaintPropertyTreeUpdateTest, WillTransformChangeAboveFixed) {
   To<Element>(container->GetNode())
       ->setAttribute(html_names::kStyleAttr, "will-change: top");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_EQ(
-      &GetLayoutView().FirstFragment().LocalBorderBoxProperties().Transform(),
-      &fixed->FirstFragment().LocalBorderBoxProperties().Transform());
+  EXPECT_EQ(fixed->FirstFragment().PaintProperties()->PaintOffsetTranslation(),
+            &fixed->FirstFragment().LocalBorderBoxProperties().Transform());
 
   To<Element>(container->GetNode())
       ->setAttribute(html_names::kStyleAttr, "will-change: transform");
@@ -1690,7 +1689,9 @@ TEST_P(PaintPropertyTreeUpdateTest, FixedPositionCompositing) {
     <div id="fixed" style="position: fixed; top: 50px; left: 60px">Fixed</div>
   )HTML");
 
-  EXPECT_FALSE(PaintPropertiesForElement("fixed"));
+  // Still paint properties because we composite fixed-position elements to
+  // avoid overscroll.
+  EXPECT_TRUE(PaintPropertiesForElement("fixed"));
 
   auto* space = GetDocument().getElementById("space");
   space->setAttribute(html_names::kStyleAttr, "height: 2000px");
@@ -1705,7 +1706,7 @@ TEST_P(PaintPropertyTreeUpdateTest, FixedPositionCompositing) {
 
   space->setAttribute(html_names::kStyleAttr, "height: 100px");
   UpdateAllLifecyclePhasesForTest();
-  EXPECT_FALSE(PaintPropertiesForElement("fixed"));
+  EXPECT_TRUE(PaintPropertiesForElement("fixed"));
 }
 
 TEST_P(PaintPropertyTreeUpdateTest, InlineFilterReferenceBoxChange) {
@@ -1857,6 +1858,50 @@ TEST_P(PaintPropertyTreeUpdateTest, IFrameContainStrictChangeBorderTopWidth) {
   UpdateAllLifecyclePhasesForTest();
   EXPECT_EQ(gfx::Vector2dF(2, 10),
             child_view_properties->PaintOffsetTranslation()->Translation2D());
+}
+
+TEST_P(PaintPropertyTreeUpdateTest, LocalBorderBoxPropertiesChange) {
+  SetBodyInnerHTML(R"HTML(
+    <style>
+      div {
+        position: relative;
+        width: 100px;
+        height: 100px;
+      }
+    </style>
+    <div id="opacity">
+      <div id="target">
+        <div id="target-child" style="will-change: transform">
+          <div style="contain: paint">
+            <div id="under-isolate"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )HTML");
+
+  Element* opacity_element = GetDocument().getElementById("opacity");
+  const auto* opacity_layer = opacity_element->GetLayoutBox()->Layer();
+  const auto* target_layer = GetPaintLayerByElementId("target");
+  const auto* target_child_layer = GetPaintLayerByElementId("target-child");
+  const auto* under_isolate_layer = GetPaintLayerByElementId("under-isolate");
+
+  EXPECT_FALSE(opacity_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(target_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(target_child_layer->SelfNeedsRepaint());
+  EXPECT_FALSE(under_isolate_layer->SelfNeedsRepaint());
+
+  opacity_element->setAttribute(html_names::kStyleAttr, "opacity: 0.5");
+  UpdateAllLifecyclePhasesExceptPaint();
+
+  // |opacity_layer| needs repaint because it has a new paint property.
+  EXPECT_TRUE(opacity_layer->SelfNeedsRepaint());
+  // |target_layer| and |target_child_layer| need repaint because their local
+  // border box properties changed.
+  EXPECT_TRUE(target_layer->SelfNeedsRepaint());
+  EXPECT_TRUE(target_child_layer->SelfNeedsRepaint());
+  // |under_isolate_layer|'s local border box properties didn't change.
+  EXPECT_FALSE(under_isolate_layer->SelfNeedsRepaint());
 }
 
 }  // namespace blink

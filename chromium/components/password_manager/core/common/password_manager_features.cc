@@ -90,12 +90,24 @@ const base::Feature kIOSEnablePasswordManagerBrandingUpdate{
     base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables (un)muting compromised passwords from bulk leak check in settings.
-const base::Feature kMuteCompromisedPasswords{
-    "MuteCompromisedPasswords", base::FEATURE_DISABLED_BY_DEFAULT};
+const base::Feature kMuteCompromisedPasswords {
+  "MuteCompromisedPasswords",
+#if BUILDFLAG(IS_ANDROID) || BUILDFLAG(IS_IOS)
+      base::FEATURE_DISABLED_BY_DEFAULT
+#else
+      base::FEATURE_ENABLED_BY_DEFAULT
+#endif
+};
 
 // Enables adding, displaying and modifying extra notes to stored credentials.
+// When enabled, "PasswordViewPageInSettings" feature is ignored and the new
+// password view subpage is force enabled.
 const base::Feature kPasswordNotes{"PasswordNotes",
                                    base::FEATURE_DISABLED_BY_DEFAULT};
+
+// Enables the new password viewing subpage.
+const base::Feature kPasswordViewPageInSettings{
+    "PasswordViewPageInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
 
 // Enables sending credentials from the settings UI.
 const base::Feature kSendPasswords{"SendPasswords",
@@ -107,7 +119,11 @@ const base::Feature kLeakDetectionUnauthenticated = {
 
 // Enables automatic password change flow from leaked password dialog.
 const base::Feature kPasswordChange = {"PasswordChange",
+#if BUILDFLAG(IS_ANDROID)
+                                       base::FEATURE_ENABLED_BY_DEFAULT};
+#else
                                        base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
 // Enables password change flow from bulk leak check in settings.
 const base::Feature kPasswordChangeInSettings = {
@@ -158,7 +174,7 @@ const base::Feature kSkipUndecryptablePasswords = {
 // Enables the addition of passwords in Chrome Settings.
 // TODO(crbug/1226008): Remove once it's launched.
 const base::Feature kSupportForAddPasswordsInSettings = {
-    "SupportForAddPasswordsInSettings", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SupportForAddPasswordsInSettings", base::FEATURE_ENABLED_BY_DEFAULT};
 
 #if BUILDFLAG(IS_LINUX)
 // When enabled, all undecryptable passwords are deleted from the local database
@@ -203,12 +219,14 @@ const base::Feature kUnifiedPasswordManagerDesktop = {
 // Enables support of sending votes on username first flow. The votes are sent
 // on single username forms and are based on user interaction with the save
 // prompt.
+// TODO(crbug.com/959776): Clean up code 2-3 milestones after the launch.
 const base::Feature kUsernameFirstFlow = {"UsernameFirstFlow",
-                                          base::FEATURE_DISABLED_BY_DEFAULT};
+                                          base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables support of filling and saving on username first flow.
+// TODO(crbug.com/959776): Clean up code 2-3 milestones after the launch.
 const base::Feature kUsernameFirstFlowFilling = {
-    "UsernameFirstFlowFilling", base::FEATURE_DISABLED_BY_DEFAULT};
+    "UsernameFirstFlowFilling", base::FEATURE_ENABLED_BY_DEFAULT};
 
 // Enables support of sending additional votes on username first flow. The votes
 // are sent on single password forms and contain information about preceding
@@ -262,6 +280,11 @@ const char kTouchToFillPasswordSubmissionWithConservativeHeuristics[] =
 bool IsPasswordScriptsFetchingEnabled() {
   return base::FeatureList::IsEnabled(kPasswordScriptsFetching) ||
          base::FeatureList::IsEnabled(kPasswordDomainCapabilitiesFetching);
+}
+
+bool IsAutomatedPasswordChangeEnabled() {
+  return base::FeatureList::IsEnabled(kPasswordChangeInSettings) ||
+         base::FeatureList::IsEnabled(kPasswordChange);
 }
 
 #if BUILDFLAG(IS_ANDROID)

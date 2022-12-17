@@ -17,15 +17,20 @@
 #include "third_party/blink/renderer/core/dom/pseudo_element.h"
 #include "third_party/blink/renderer/core/inspector/console_message.h"
 #include "third_party/blink/renderer/core/layout/layout_view.h"
+#include "third_party/blink/renderer/core/page/page.h"
+#include "third_party/blink/renderer/core/page/page_animator.h"
+#include "third_party/blink/renderer/core/paint/clip_path_clipper.h"
 #include "third_party/blink/renderer/core/paint/paint_layer.h"
 #include "third_party/blink/renderer/core/paint/paint_layer_paint_order_iterator.h"
 #include "third_party/blink/renderer/core/resize_observer/resize_observer_entry.h"
 #include "third_party/blink/renderer/core/scroll/scrollable_area.h"
 #include "third_party/blink/renderer/core/style/computed_style_constants.h"
+#include "third_party/blink/renderer/core/style/shape_clip_path_operation.h"
 #include "third_party/blink/renderer/platform/data_resource_helper.h"
 #include "third_party/blink/renderer/platform/geometry/layout_size.h"
 #include "third_party/blink/renderer/platform/transforms/transformation_matrix.h"
 #include "third_party/blink/renderer/platform/wtf/text/string_builder.h"
+#include "ui/gfx/geometry/rect_conversions.h"
 
 namespace blink {
 namespace {
@@ -59,6 +64,59 @@ const String& AnimationUAStyles() {
   return kAnimationUAStyles;
 }
 
+absl::optional<String> ComputeInsetDifference(PhysicalRect reference_rect,
+                                              const gfx::Rect& target_rect,
+                                              float device_pixel_ratio) {
+  if (reference_rect.IsEmpty()) {
+    DCHECK(target_rect.IsEmpty());
+    return absl::nullopt;
+  }
+
+  // Reference rect is given to us in layout space, but target_rect is in css
+  // space. Note that this currently relies on the fact that object-view-box
+  // scales its parameters from CSS to layout space. However, that's a bug.
+  // TODO(crbug.com/1324618): Fix this when the object-view-box bug is fixed.
+  gfx::Rect reference_bounding_rect = gfx::ToEnclosingRect(gfx::ScaleRect(
+      static_cast<gfx::RectF>(reference_rect), 1.0 / device_pixel_ratio));
+
+  if (reference_bounding_rect == target_rect)
+    return absl::nullopt;
+
+  int top_offset = target_rect.y() - reference_bounding_rect.y();
+  int right_offset = reference_bounding_rect.right() - target_rect.right();
+  int bottom_offset = reference_bounding_rect.bottom() - target_rect.bottom();
+  int left_offset = target_rect.x() - reference_bounding_rect.x();
+
+  return String::Format("inset(%dpx %dpx %dpx %dpx)", top_offset, right_offset,
+                        bottom_offset, left_offset);
+}
+
+// TODO(vmpstr): This could be optimized by caching values for individual layout
+// boxes. However, it's unclear when the cache should be cleared.
+PhysicalRect ComputeVisualOverflowRect(LayoutBox* box) {
+  if (auto clip_path_bounds = ClipPathClipper::LocalClipPathBoundingBox(*box)) {
+    // TODO(crbug.com/1326514): This is just the bounds of the clip-path, as
+    // opposed to the intersection between the clip-path and the border box
+    // bounds. This seems suboptimal, but that's the rect that we use further
+    // down the pipeline to generate the texture.
+    return PhysicalRect::EnclosingRect(*clip_path_bounds);
+  }
+
+  PhysicalRect result;
+  for (auto* child = box->Layer()->FirstChild(); child;
+       child = child->NextSibling()) {
+    auto* child_box = child->GetLayoutBox();
+    PhysicalRect overflow_rect = ComputeVisualOverflowRect(child_box);
+    child_box->MapToVisualRectInAncestorSpace(box, overflow_rect);
+    result.Unite(overflow_rect);
+  }
+  // Clip self painting descendant overflow by the overflow clip rect, then add
+  // in the visual overflow from the own painting layer.
+  result.Intersect(box->OverflowClipRect(PhysicalOffset()));
+  result.Unite(box->PhysicalVisualOverflowRectIncludingFilters());
+  return result;
+}
+
 }  // namespace
 
 class DocumentTransitionStyleTracker::ImageWrapperPseudoElement
@@ -70,15 +128,10 @@ class DocumentTransitionStyleTracker::ImageWrapperPseudoElement
                             const DocumentTransitionStyleTracker* style_tracker)
       : DocumentTransitionPseudoElementBase(parent,
                                             pseudo_id,
-                                            document_transition_tag),
-        style_tracker_(style_tracker) {}
+                                            document_transition_tag,
+                                            style_tracker) {}
 
   ~ImageWrapperPseudoElement() override = default;
-
-  void Trace(Visitor* visitor) const override {
-    PseudoElement::Trace(visitor);
-    visitor->Trace(style_tracker_);
-  }
 
  private:
   bool CanGeneratePseudoElement(PseudoId pseudo_id) const override {
@@ -102,8 +155,6 @@ class DocumentTransitionStyleTracker::ImageWrapperPseudoElement
     }
     return snapshot_id.IsValid();
   }
-
-  Member<const DocumentTransitionStyleTracker> style_tracker_;
 };
 
 DocumentTransitionStyleTracker::DocumentTransitionStyleTracker(
@@ -334,9 +385,12 @@ void DocumentTransitionStyleTracker::CaptureResolved() {
   for (auto& entry : element_data_map_) {
     auto& element_data = entry.value;
     element_data->target_element = nullptr;
-    element_data->cached_border_box_size = element_data->border_box_size;
+    element_data->cached_border_box_size_in_css_space =
+        element_data->border_box_size_in_css_space;
     element_data->cached_viewport_matrix = element_data->viewport_matrix;
     element_data->cached_device_pixel_ratio = element_data->device_pixel_ratio;
+    element_data->cached_visual_overflow_rect_in_layout_space =
+        element_data->visual_overflow_rect_in_layout_space;
     element_data->effect_node = nullptr;
   }
   root_effect_node_ = nullptr;
@@ -408,6 +462,8 @@ bool DocumentTransitionStyleTracker::Start() {
   // new elements in the DOM.
   InvalidateStyle();
 
+  if (auto* page = document_->GetPage())
+    page->Animator().SetHasSharedElementTransition(true);
   return true;
 }
 
@@ -432,6 +488,8 @@ void DocumentTransitionStyleTracker::EndTransition() {
   pending_shared_element_tags_.clear();
   set_element_sequence_id_ = 0;
   document_->GetStyleEngine().SetDocumentTransitionTags({});
+  if (auto* page = document_->GetPage())
+    page->Animator().SetHasSharedElementTransition(false);
 }
 
 void DocumentTransitionStyleTracker::UpdateElementIndicesAndSnapshotId(
@@ -479,7 +537,7 @@ PseudoElement* DocumentTransitionStyleTracker::CreatePseudoElement(
     case kPseudoIdPageTransition:
     case kPseudoIdPageTransitionContainer:
       return MakeGarbageCollected<DocumentTransitionPseudoElementBase>(
-          parent, pseudo_id, document_transition_tag);
+          parent, pseudo_id, document_transition_tag, this);
     case kPseudoIdPageTransitionImageWrapper:
       return MakeGarbageCollected<ImageWrapperPseudoElement>(
           parent, pseudo_id, document_transition_tag, this);
@@ -512,7 +570,7 @@ PseudoElement* DocumentTransitionStyleTracker::CreatePseudoElement(
       auto* pseudo_element =
           MakeGarbageCollected<DocumentTransitionContentElement>(
               parent, pseudo_id, document_transition_tag, snapshot_id,
-              /*is_live_content_element=*/false);
+              /*is_live_content_element=*/false, this);
       pseudo_element->SetIntrinsicSize(size);
       return pseudo_element;
     }
@@ -531,7 +589,7 @@ PseudoElement* DocumentTransitionStyleTracker::CreatePseudoElement(
       auto* pseudo_element =
           MakeGarbageCollected<DocumentTransitionContentElement>(
               parent, pseudo_id, document_transition_tag, snapshot_id,
-              /*is_live_content_element=*/true);
+              /*is_live_content_element=*/true, this);
       pseudo_element->SetIntrinsicSize(size);
       return pseudo_element;
     }
@@ -577,22 +635,35 @@ void DocumentTransitionStyleTracker::RunPostPrePaintSteps() {
     auto* resize_observer_entry =
         MakeGarbageCollected<ResizeObserverEntry>(element_data->target_element);
     auto entry_size = resize_observer_entry->borderBoxSize()[0];
-    LayoutSize border_box_size =
+    LayoutSize border_box_size_in_css_space =
         layout_object->IsHorizontalWritingMode()
             ? LayoutSize(LayoutUnit(entry_size->inlineSize()),
                          LayoutUnit(entry_size->blockSize()))
             : LayoutSize(LayoutUnit(entry_size->blockSize()),
                          LayoutUnit(entry_size->inlineSize()));
 
+    PhysicalRect visual_overflow_rect_in_layout_space;
+    if (auto* box = DynamicTo<LayoutBox>(layout_object))
+      visual_overflow_rect_in_layout_space = ComputeVisualOverflowRect(box);
+
+    WritingMode writing_mode = layout_object->StyleRef().GetWritingMode();
+
     if (viewport_matrix == element_data->viewport_matrix &&
-        border_box_size == element_data->border_box_size &&
-        device_pixel_ratio == element_data->device_pixel_ratio) {
+        border_box_size_in_css_space ==
+            element_data->border_box_size_in_css_space &&
+        device_pixel_ratio == element_data->device_pixel_ratio &&
+        visual_overflow_rect_in_layout_space ==
+            element_data->visual_overflow_rect_in_layout_space &&
+        writing_mode == element_data->container_writing_mode) {
       continue;
     }
 
     element_data->viewport_matrix = viewport_matrix;
-    element_data->border_box_size = border_box_size;
+    element_data->border_box_size_in_css_space = border_box_size_in_css_space;
     element_data->device_pixel_ratio = device_pixel_ratio;
+    element_data->visual_overflow_rect_in_layout_space =
+        visual_overflow_rect_in_layout_space;
+    element_data->container_writing_mode = writing_mode;
 
     PseudoId live_content_element = HasLiveNewContent()
                                         ? kPseudoIdPageTransitionIncomingImage
@@ -715,10 +786,8 @@ void DocumentTransitionStyleTracker::VerifySharedElements() {
 
     // Invalidate the element since we should no longer be compositing it.
     auto* box = active_element->GetLayoutBox();
-    if (box && box->HasSelfPaintingLayer()) {
+    if (box && box->HasSelfPaintingLayer())
       box->SetNeedsPaintPropertyUpdate();
-      box->Layer()->SetNeedsCompositingInputsUpdate();
-    }
     active_element = nullptr;
   }
 }
@@ -741,6 +810,22 @@ bool DocumentTransitionStyleTracker::IsReservedTransitionTag(
   return value == RootTag();
 }
 
+StyleRequest::RulesToInclude
+DocumentTransitionStyleTracker::StyleRulesToInclude() const {
+  switch (state_) {
+    case State::kIdle:
+    case State::kCapturing:
+    case State::kCaptured:
+      return StyleRequest::kUAOnly;
+    case State::kStarted:
+    case State::kFinished:
+      return StyleRequest::kAll;
+  }
+
+  NOTREACHED();
+  return StyleRequest::kAll;
+}
+
 void DocumentTransitionStyleTracker::InvalidateStyle() {
   ua_style_sheet_.reset();
   document_->GetStyleEngine().InvalidateUADocumentTransitionStyle();
@@ -759,11 +844,8 @@ void DocumentTransitionStyleTracker::InvalidateStyle() {
                                                    invalidate_style);
 
   // Invalidate layout view compositing properties.
-  if (auto* layout_view = document_->GetLayoutView()) {
+  if (auto* layout_view = document_->GetLayoutView())
     layout_view->SetNeedsPaintPropertyUpdate();
-    if (layout_view->HasSelfPaintingLayer())
-      layout_view->Layer()->SetNeedsCompositingInputsUpdate();
-  }
 
   for (auto& entry : element_data_map_) {
     if (!entry.value->target_element)
@@ -780,9 +862,6 @@ void DocumentTransitionStyleTracker::InvalidateStyle() {
     auto* box = entry.value->target_element->GetLayoutBox();
     if (!box || !box->HasSelfPaintingLayer())
       continue;
-
-    // We might need to composite or decomposite this layer.
-    box->Layer()->SetNeedsCompositingInputsUpdate();
   }
 }
 
@@ -805,6 +884,16 @@ const String& DocumentTransitionStyleTracker::UAStyleSheet() {
     auto document_transition_tag = entry.key.GetString().Utf8();
     auto& element_data = entry.value;
 
+    gfx::Rect border_box_in_css_space = gfx::Rect(
+        gfx::Size(element_data->border_box_size_in_css_space.Width().ToInt(),
+                  element_data->border_box_size_in_css_space.Height().ToInt()));
+    gfx::Rect cached_border_box_in_css_space = gfx::Rect(gfx::Size(
+        element_data->cached_border_box_size_in_css_space.Width().ToInt(),
+        element_data->cached_border_box_size_in_css_space.Height().ToInt()));
+
+    std::ostringstream writing_mode_stream;
+    writing_mode_stream << element_data->container_writing_mode;
+
     // ::page-transition-container styles using computed properties for each
     // element.
     builder.AppendFormat(
@@ -813,16 +902,44 @@ const String& DocumentTransitionStyleTracker::UAStyleSheet() {
           width: %dpx;
           height: %dpx;
           transform: %s;
+          writing-mode: %s;
         }
         )CSS",
-        document_transition_tag.c_str(),
-        element_data->border_box_size.Width().ToInt(),
-        element_data->border_box_size.Height().ToInt(),
+        document_transition_tag.c_str(), border_box_in_css_space.width(),
+        border_box_in_css_space.height(),
         ComputedStyleUtils::ValueForTransformationMatrix(
             element_data->viewport_matrix, 1, false)
             ->CssText()
             .Utf8()
-            .c_str());
+            .c_str(),
+        writing_mode_stream.str().c_str());
+
+    float device_pixel_ratio = document_->DevicePixelRatio();
+    absl::optional<String> incoming_inset = ComputeInsetDifference(
+        element_data->visual_overflow_rect_in_layout_space,
+        border_box_in_css_space, device_pixel_ratio);
+    if (incoming_inset) {
+      builder.AppendFormat(
+          R"CSS(
+          html::page-transition-incoming-image(%s) {
+            object-view-box: %s;
+          }
+          )CSS",
+          document_transition_tag.c_str(), incoming_inset->Utf8().c_str());
+    }
+
+    absl::optional<String> outgoing_inset = ComputeInsetDifference(
+        element_data->cached_visual_overflow_rect_in_layout_space,
+        cached_border_box_in_css_space, device_pixel_ratio);
+    if (outgoing_inset) {
+      builder.AppendFormat(
+          R"CSS(
+          html::page-transition-outgoing-image(%s) {
+            object-view-box: %s;
+          }
+          )CSS",
+          document_transition_tag.c_str(), outgoing_inset->Utf8().c_str());
+    }
 
     // TODO(khushalsagar) : We'll need to retarget the animation if the final
     // value changes during the start phase.
@@ -844,8 +961,8 @@ const String& DocumentTransitionStyleTracker::UAStyleSheet() {
               ->CssText()
               .Utf8()
               .c_str(),
-          element_data->cached_border_box_size.Width().ToInt(),
-          element_data->cached_border_box_size.Height().ToInt());
+          element_data->cached_border_box_size_in_css_space.Width().ToInt(),
+          element_data->cached_border_box_size_in_css_space.Height().ToInt());
 
       // TODO(khushalsagar) : The duration/delay in the UA stylesheet will need
       // to be the duration from TransitionConfig. See crbug.com/1275727.
@@ -878,14 +995,15 @@ void DocumentTransitionStyleTracker::ElementData::Trace(
   visitor->Trace(target_element);
 }
 
+// TODO(vmpstr): We need to write tests for the following:
+// * A local transform on the shared element.
+// * A transform on an ancestor which changes its screen space transform.
 LayoutSize DocumentTransitionStyleTracker::ElementData::GetIntrinsicSize(
     bool use_cached_data) {
   LayoutSize box_size =
-      use_cached_data ? cached_border_box_size : border_box_size;
-  float ratio =
-      use_cached_data ? cached_device_pixel_ratio : device_pixel_ratio;
-
-  box_size.Scale(ratio);
+      use_cached_data
+          ? cached_visual_overflow_rect_in_layout_space.size.ToLayoutSize()
+          : visual_overflow_rect_in_layout_space.size.ToLayoutSize();
   return box_size;
 }
 

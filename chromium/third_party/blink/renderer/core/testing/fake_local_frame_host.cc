@@ -80,7 +80,7 @@ void FakeLocalFrameHost::HadStickyUserActivationBeforeNavigationChanged(
     bool value) {}
 
 void FakeLocalFrameHost::ScrollRectToVisibleInParentFrame(
-    const gfx::Rect& rect_to_scroll,
+    const gfx::RectF& rect_to_scroll,
     blink::mojom::blink::ScrollIntoViewParamsPtr params) {}
 
 void FakeLocalFrameHost::BubbleLogicalScrollInParentFrame(
@@ -243,5 +243,8 @@ void FakeLocalFrameHost::BindFrameHostReceiver(
 void FakeLocalFrameHost::DidChangeSrcDoc(
     const blink::FrameToken& child_frame_token,
     const WTF::String& srcdoc_value) {}
+
+void FakeLocalFrameHost::ReceivedDelegatedCapability(
+    blink::mojom::DelegatedCapability delegated_capability) {}
 
 }  // namespace blink

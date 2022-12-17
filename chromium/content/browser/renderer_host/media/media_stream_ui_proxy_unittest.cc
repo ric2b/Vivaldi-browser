@@ -24,6 +24,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/permissions_policy/permissions_policy.h"
 #include "third_party/blink/public/common/web_preferences/web_preferences.h"
+#include "third_party/blink/public/mojom/mediastream/media_stream.mojom.h"
 #include "ui/gfx/geometry/rect.h"
 #include "url/gurl.h"
 #include "url/origin.h"
@@ -38,7 +39,7 @@ namespace {
 class MockRenderFrameHostDelegate : public RenderFrameHostDelegate {
  public:
   void RequestMediaAccessPermission(const MediaStreamRequest& request,
-                                    MediaResponseCallback callback) {
+                                    MediaResponseCallback callback) override {
     return RequestMediaAccessPermission(request, &callback);
   }
   const blink::web_pref::WebPreferences& GetOrCreateWebPreferences() override {
@@ -59,7 +60,7 @@ class MockRenderFrameHostDelegate : public RenderFrameHostDelegate {
 class MockResponseCallback {
  public:
   MOCK_METHOD2(OnAccessRequestResponse,
-               void(const blink::MediaStreamDevices& devices,
+               void(const blink::mojom::StreamDevicesSet& stream_devices_set,
                     blink::mojom::MediaStreamRequestResult result));
   MOCK_METHOD1(OnCheckResponse, void(bool have_access));
 };
@@ -73,6 +74,11 @@ class MockMediaStreamUI : public MediaStreamUI {
                               StateChangeCallback state_change) override {
     return MockOnStarted(std::move(stop), source);
   }
+
+  void OnDeviceStoppedForSourceChange(
+      const std::string& label,
+      const DesktopMediaID& old_media_id,
+      const DesktopMediaID& new_media_id) override {}
 
   void OnDeviceStopped(const std::string& label,
                        const DesktopMediaID& media_id) override {}
@@ -141,22 +147,28 @@ TEST_F(MediaStreamUIProxyTest, Deny) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
   ASSERT_FALSE(callback.is_null());
 
-  blink::MediaStreamDevices devices;
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::unique_ptr<MediaStreamUI>());
 
-  blink::MediaStreamDevices response;
+  blink::mojom::StreamDevicesSetPtr response;
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _))
-    .WillOnce(SaveArg<0>(&response));
+      .WillOnce([&response](const blink::mojom::StreamDevicesSet& arg0,
+                            blink::mojom::MediaStreamRequestResult arg1) {
+        response = arg0.Clone();
+      });
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_TRUE(response.empty());
+  EXPECT_TRUE(blink::ToMediaStreamDevicesList(*response).empty());
 }
 
 TEST_F(MediaStreamUIProxyTest, AcceptAndStart) {
@@ -174,30 +186,37 @@ TEST_F(MediaStreamUIProxyTest, AcceptAndStart) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
   ASSERT_FALSE(callback.is_null());
 
-  blink::MediaStreamDevices devices;
-  devices.push_back(blink::MediaStreamDevice(
-      blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic"));
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
+  devices.audio_device = blink::MediaStreamDevice(
+      blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic");
   auto ui = std::make_unique<MockMediaStreamUI>();
   EXPECT_CALL(*ui, MockOnStarted(_, _)).WillOnce(Return(0));
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 
-  blink::MediaStreamDevices response;
+  blink::mojom::StreamDevicesSetPtr response;
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _))
-    .WillOnce(SaveArg<0>(&response));
+      .WillOnce([&response](const blink::mojom::StreamDevicesSet& arg0,
+                            blink::mojom::MediaStreamRequestResult arg1) {
+        response = arg0.Clone();
+      });
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(response.empty());
+  EXPECT_FALSE(blink::ToMediaStreamDevicesList(*response).empty());
 
   proxy_->OnStarted(base::OnceClosure(), MediaStreamUI::SourceCallback(),
                     MediaStreamUIProxy::WindowIdCallback(),
-                    /*label=*/std::string(), /*screen_capture_ids=*/{},
+                    /*label=*/std::string(), /*screen_share_ids=*/{},
                     MediaStreamUI::StateChangeCallback());
   base::RunLoop().RunUntilIdle();
 }
@@ -218,7 +237,7 @@ TEST_F(MediaStreamUIProxyTest, DeleteBeforeAccepted) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -226,9 +245,12 @@ TEST_F(MediaStreamUIProxyTest, DeleteBeforeAccepted) {
 
   proxy_.reset();
 
-  blink::MediaStreamDevices devices;
   std::unique_ptr<MediaStreamUI> ui;
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 }
 
@@ -247,7 +269,7 @@ TEST_F(MediaStreamUIProxyTest, StopFromUI) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -255,31 +277,39 @@ TEST_F(MediaStreamUIProxyTest, StopFromUI) {
 
   base::OnceClosure stop_callback;
 
-  blink::MediaStreamDevices devices;
-  devices.push_back(blink::MediaStreamDevice(
-      blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic"));
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
+  devices.audio_device = blink::MediaStreamDevice(
+      blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic");
   auto ui = std::make_unique<MockMediaStreamUI>();
-  EXPECT_CALL(*ui, MockOnStarted(_, _)).WillOnce([&](auto closure, auto) {
-    stop_callback = std::move(closure);
-    return 0;
-  });
+  EXPECT_CALL(*ui, MockOnStarted(_, _))
+      .WillOnce([&stop_callback](auto closure, auto) {
+        stop_callback = std::move(closure);
+        return 0;
+      });
 
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 
-  blink::MediaStreamDevices response;
+  blink::mojom::StreamDevicesSetPtr response;
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _))
-    .WillOnce(SaveArg<0>(&response));
+      .WillOnce([&response](const blink::mojom::StreamDevicesSet& arg0,
+                            blink::mojom::MediaStreamRequestResult arg1) {
+        response = arg0.Clone();
+      });
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(response.empty());
+  EXPECT_FALSE(blink::ToMediaStreamDevicesList(*response).empty());
 
   MockStopStreamHandler stop_handler;
   proxy_->OnStarted(base::BindOnce(&MockStopStreamHandler::OnStop,
                                    base::Unretained(&stop_handler)),
                     MediaStreamUI::SourceCallback(),
                     MediaStreamUIProxy::WindowIdCallback(),
-                    /*label=*/std::string(), /*screen_capture_ids=*/{},
+                    /*label=*/std::string(), /*screen_share_ids=*/{},
                     MediaStreamUI::StateChangeCallback());
   base::RunLoop().RunUntilIdle();
 
@@ -304,7 +334,7 @@ TEST_F(MediaStreamUIProxyTest, WindowIdCallbackCalled) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -313,7 +343,10 @@ TEST_F(MediaStreamUIProxyTest, WindowIdCallbackCalled) {
   auto ui = std::make_unique<MockMediaStreamUI>();
   EXPECT_CALL(*ui, MockOnStarted(_, _)).WillOnce(Return(kWindowId));
 
-  std::move(callback).Run(blink::MediaStreamDevices(),
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  std::move(callback).Run(stream_devices_set,
                           blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _));
@@ -326,7 +359,7 @@ TEST_F(MediaStreamUIProxyTest, WindowIdCallbackCalled) {
                     MediaStreamUI::SourceCallback(),
                     base::BindOnce(&MockStopStreamHandler::OnWindowId,
                                    base::Unretained(&handler)),
-                    /*label=*/std::string(), /*screen_capture_ids=*/{},
+                    /*label=*/std::string(), /*screen_share_ids=*/{},
                     MediaStreamUI::StateChangeCallback());
   base::RunLoop().RunUntilIdle();
 }
@@ -346,7 +379,7 @@ TEST_F(MediaStreamUIProxyTest, ChangeSourceFromUI) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -354,24 +387,31 @@ TEST_F(MediaStreamUIProxyTest, ChangeSourceFromUI) {
 
   MediaStreamUI::SourceCallback source_callback;
 
-  blink::MediaStreamDevices devices;
-  devices.push_back(blink::MediaStreamDevice(
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
+  devices.video_device = blink::MediaStreamDevice(
       blink::mojom::MediaStreamType::GUM_DESKTOP_VIDEO_CAPTURE,
-      "fake_desktop_video_device", "Fake Desktop Video Device"));
+      "fake_desktop_video_device", "Fake Desktop Video Device");
   auto ui = std::make_unique<MockMediaStreamUI>();
   EXPECT_CALL(*ui, MockOnStarted(_, _)).WillOnce([&](auto, auto callback) {
     source_callback = std::move(callback);
     return 0;
   });
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 
-  blink::MediaStreamDevices response;
+  blink::mojom::StreamDevicesSetPtr response;
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _))
-      .WillOnce(SaveArg<0>(&response));
+      .WillOnce([&response](const blink::mojom::StreamDevicesSet& arg0,
+                            blink::mojom::MediaStreamRequestResult arg1) {
+        response = arg0.Clone();
+      });
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(response.empty());
+  EXPECT_FALSE(blink::ToMediaStreamDevicesList(*response).empty());
 
   MockStopStreamHandler stop_handler;
   MockChangeSourceStreamHandler source_handler;
@@ -381,7 +421,7 @@ TEST_F(MediaStreamUIProxyTest, ChangeSourceFromUI) {
       base::BindRepeating(&MockChangeSourceStreamHandler::OnChangeSource,
                           base::Unretained(&source_handler)),
       MediaStreamUIProxy::WindowIdCallback(), /*label=*/std::string(),
-      /*screen_capture_ids=*/{}, MediaStreamUI::StateChangeCallback());
+      /*screen_share_ids=*/{}, MediaStreamUI::StateChangeCallback());
   base::RunLoop().RunUntilIdle();
 
   ASSERT_FALSE(source_callback.is_null());
@@ -405,7 +445,7 @@ TEST_F(MediaStreamUIProxyTest, ChangeTabSourceFromUI) {
   MediaResponseCallback callback;
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -413,28 +453,35 @@ TEST_F(MediaStreamUIProxyTest, ChangeTabSourceFromUI) {
 
   MediaStreamUI::SourceCallback source_callback;
 
-  blink::MediaStreamDevices devices;
-  devices.push_back(blink::MediaStreamDevice(
+  blink::mojom::StreamDevicesSet stream_devices_set;
+  stream_devices_set.stream_devices.emplace_back(
+      blink::mojom::StreamDevices::New());
+  blink::mojom::StreamDevices& devices = *stream_devices_set.stream_devices[0];
+  devices.video_device = blink::MediaStreamDevice(
       blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
-      "fake_tab_video_device", "Fake Tab Video Device"));
+      "fake_tab_video_device", "Fake Tab Video Device");
   base::OnceClosure stop_callback;
   auto ui = std::make_unique<MockMediaStreamUI>();
-  EXPECT_CALL(*ui, MockOnStarted(_, _)).WillOnce([&](auto stop, auto callback) {
-    source_callback = std::move(callback);
-    stop_callback = std::move(stop);
-    return 0;
-  });
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  EXPECT_CALL(*ui, MockOnStarted(_, _))
+      .WillOnce([&source_callback, &stop_callback](auto stop, auto callback) {
+        source_callback = std::move(callback);
+        stop_callback = std::move(stop);
+        return 0;
+      });
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::move(ui));
 
-  blink::MediaStreamDevices response;
+  blink::mojom::StreamDevicesSetPtr response;
   EXPECT_CALL(response_callback_, OnAccessRequestResponse(_, _))
       .Times(2)
-      .WillRepeatedly(SaveArg<0>(&response));
-
+      .WillRepeatedly([&](const blink::mojom::StreamDevicesSet& arg0,
+                          blink::mojom::MediaStreamRequestResult arg1) {
+        response = arg0.Clone();
+      });
   base::RunLoop().RunUntilIdle();
 
-  EXPECT_FALSE(response.empty());
+  EXPECT_FALSE(blink::ToMediaStreamDevicesList(*response).empty());
 
   MockStopStreamHandler stop_handler;
   // No stop event should be triggered.
@@ -465,7 +512,7 @@ TEST_F(MediaStreamUIProxyTest, ChangeTabSourceFromUI) {
                      base::Unretained(&response_callback_)));
   EXPECT_CALL(delegate_,
               RequestMediaAccessPermission(SameRequest(request_ptr), _))
-      .WillOnce([&](testing::Unused, MediaResponseCallback* cb) {
+      .WillOnce([&callback](testing::Unused, MediaResponseCallback* cb) {
         callback = std::move(*cb);
       });
   base::RunLoop().RunUntilIdle();
@@ -473,7 +520,13 @@ TEST_F(MediaStreamUIProxyTest, ChangeTabSourceFromUI) {
 
   ui = std::make_unique<MockMediaStreamUI>();
 
-  std::move(callback).Run(devices, blink::mojom::MediaStreamRequestResult::OK,
+  devices = blink::mojom::StreamDevices();
+  devices.video_device = blink::MediaStreamDevice(
+      blink::mojom::MediaStreamType::GUM_TAB_VIDEO_CAPTURE,
+      "fake_tab_video_device", "Fake Tab Video Device");
+
+  std::move(callback).Run(stream_devices_set,
+                          blink::mojom::MediaStreamRequestResult::OK,
                           std::make_unique<MockMediaStreamUI>());
 
   // Replacing the UI will cause the existing one to trigger the callback.
@@ -538,21 +591,26 @@ class MediaStreamUIProxyPermissionsPolicyTest
    public:
     void RequestMediaAccessPermission(const MediaStreamRequest& request,
                                       MediaResponseCallback callback) override {
-      blink::MediaStreamDevices devices;
+      blink::mojom::StreamDevicesSet stream_devices_set;
+      stream_devices_set.stream_devices.emplace_back(
+          blink::mojom::StreamDevices::New());
+      blink::mojom::StreamDevices& devices =
+          *stream_devices_set.stream_devices[0];
       if (request.audio_type ==
           blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE) {
-        devices.push_back(blink::MediaStreamDevice(
-            blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic"));
+        devices.audio_device = blink::MediaStreamDevice(
+            blink::mojom::MediaStreamType::DEVICE_AUDIO_CAPTURE, "Mic", "Mic");
       }
       if (request.video_type ==
           blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE) {
-        devices.push_back(blink::MediaStreamDevice(
+        devices.video_device = blink::MediaStreamDevice(
             blink::mojom::MediaStreamType::DEVICE_VIDEO_CAPTURE, "Camera",
-            "Camera"));
+            "Camera");
       }
       auto ui = std::make_unique<MockMediaStreamUI>();
-      std::move(callback).Run(
-          devices, blink::mojom::MediaStreamRequestResult::OK, std::move(ui));
+      std::move(callback).Run(stream_devices_set,
+                              blink::mojom::MediaStreamRequestResult::OK,
+                              std::move(ui));
     }
 
     const blink::web_pref::WebPreferences& GetOrCreateWebPreferences()
@@ -576,7 +634,7 @@ class MediaStreamUIProxyPermissionsPolicyTest
   }
 
   void FinishedGetResultOnIOThread(
-      const blink::MediaStreamDevices& devices,
+      const blink::mojom::StreamDevicesSet& stream_devices_set,
       blink::mojom::MediaStreamRequestResult result) {
     DCHECK_CURRENTLY_ON(BrowserThread::IO);
     proxy_.reset();
@@ -584,13 +642,13 @@ class MediaStreamUIProxyPermissionsPolicyTest
         FROM_HERE,
         base::BindOnce(
             &MediaStreamUIProxyPermissionsPolicyTest::FinishedGetResult,
-            base::Unretained(this), devices, result));
+            base::Unretained(this), stream_devices_set.Clone(), result));
   }
 
-  void FinishedGetResult(const blink::MediaStreamDevices& devices,
+  void FinishedGetResult(blink::mojom::StreamDevicesSetPtr stream_devices_set,
                          blink::mojom::MediaStreamRequestResult result) {
     DCHECK_CURRENTLY_ON(BrowserThread::UI);
-    devices_ = devices;
+    devices_ = blink::ToMediaStreamDevicesList(*stream_devices_set);
     result_ = result;
     std::move(quit_closure_).Run();
   }

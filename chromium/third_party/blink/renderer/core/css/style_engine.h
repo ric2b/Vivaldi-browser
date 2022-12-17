@@ -47,6 +47,7 @@
 #include "third_party/blink/renderer/core/css/layout_tree_rebuild_root.h"
 #include "third_party/blink/renderer/core/css/pending_sheet_type.h"
 #include "third_party/blink/renderer/core/css/rule_feature_set.h"
+#include "third_party/blink/renderer/core/css/style_image_cache.h"
 #include "third_party/blink/renderer/core/css/style_invalidation_root.h"
 #include "third_party/blink/renderer/core/css/style_recalc_root.h"
 #include "third_party/blink/renderer/core/css/vision_deficiency.h"
@@ -58,6 +59,7 @@
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_map.h"
 #include "third_party/blink/renderer/platform/heap/collection_support/heap_hash_set.h"
 #include "third_party/blink/renderer/platform/heap/garbage_collected.h"
+#include "third_party/blink/renderer/platform/loader/fetch/render_blocking_behavior.h"
 #include "third_party/blink/renderer/platform/wtf/allocator/allocator.h"
 #include "third_party/blink/renderer/platform/wtf/text/wtf_string.h"
 #include "third_party/blink/renderer/platform/wtf/vector.h"
@@ -116,7 +118,6 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                       public FontSelectorClient,
                                       public NameClient {
  public:
-
   class DOMRemovalScope {
     STACK_ALLOCATED();
 
@@ -244,8 +245,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void SetPreferredStylesheetSetNameIfNotSet(const String&);
   void SetHttpDefaultStyle(const String&);
 
-  void AddPendingSheet(Node& style_sheet_candidate_node);
-  void RemovePendingSheet(Node& style_sheet_candidate_node);
+  void AddPendingBlockingSheet(Node& style_sheet_candidate_node,
+                               PendingSheetType type);
+  void RemovePendingBlockingSheet(Node& style_sheet_candidate_node,
+                                  PendingSheetType type);
 
   bool HasPendingScriptBlockingSheets() const {
     return pending_script_blocking_stylesheets_ > 0;
@@ -337,6 +340,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void UpdateStyleRecalcRoot(ContainerNode* ancestor, Node* dirty_node);
   void UpdateLayoutTreeRebuildRoot(ContainerNode* ancestor, Node* dirty_node);
 
+  bool MarkReattachAllowed() const;
+
   CSSFontSelector* GetFontSelector() { return font_selector_; }
 
   void RemoveFontFaceRules(const HeapVector<Member<const StyleRuleFontFace>>&);
@@ -348,7 +353,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   CSSStyleSheet* CreateSheet(Element&,
                              const String& text,
                              WTF::TextPosition start_position,
-                             PendingSheetType type);
+                             PendingSheetType type,
+                             RenderBlockingBehavior render_blocking_behavior);
 
   void CollectFeaturesTo(RuleFeatureSet& features);
 
@@ -392,12 +398,14 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
                                         InvalidationScope =
                                             kInvalidateCurrentScope);
   void ScheduleCustomElementInvalidations(HashSet<AtomicString> tag_names);
-  void ElementInsertedOrRemoved(Element* parent,
-                                Node* node_before_change,
-                                Element& element);
-  void SubtreeInsertedOrRemoved(Element* parent,
-                                Node* node_before_change,
-                                Element& subtree_root);
+  void ScheduleInvalidationsForHasPseudoAffectedByInsertion(
+      Element* parent,
+      Node* node_before_change,
+      Element& element);
+  void ScheduleInvalidationsForHasPseudoAffectedByRemoval(
+      Element* parent,
+      Node* node_before_change,
+      Element& element);
 
   void NodeWillBeRemoved(Node&);
   void ChildrenRemoved(ContainerNode& parent);
@@ -554,11 +562,22 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
     return document_transition_tags_;
   }
 
+  StyleFetchedImage* CacheStyleImage(FetchParameters& params,
+                                     OriginClean origin_clean,
+                                     bool is_ad_related) {
+    return style_image_cache_.CacheStyleImage(GetDocument(), params,
+                                              origin_clean, is_ad_related);
+  }
+
   void Trace(Visitor*) const override;
   const char* NameInHeapSnapshot() const override { return "StyleEngine"; }
 
   RuleSet* DefaultDocumentTransitionStyle() const;
   void InvalidateUADocumentTransitionStyle();
+
+  const ActiveStyleSheetVector& ActiveUserStyleSheetsForDebug() const {
+    return active_user_style_sheets_;
+  }
 
  private:
   // FontSelectorClient implementation.
@@ -605,7 +624,8 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
 
   CSSStyleSheet* ParseSheet(Element&,
                             const String& text,
-                            WTF::TextPosition start_position);
+                            WTF::TextPosition start_position,
+                            RenderBlockingBehavior render_blocking_behavior);
 
   const DocumentStyleSheetCollection& GetDocumentStyleSheetCollection() const {
     DCHECK(document_style_sheet_collection_);
@@ -705,10 +725,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void RebuildFieldSetContainer(HTMLFieldSetElement& fieldset);
 
   // Invalidate ancestors or siblings affected by :has() state change
-  void InvalidateAncestorsOrSiblingsAffectedByHasInternal(
-      Element* parent,
-      Element* previous_sibling,
-      bool for_pseudo_change);
+  inline void InvalidateElementAffectedByHas(Element&, bool for_pseudo_change);
+  void InvalidateAncestorsOrSiblingsAffectedByHas(Element* parent,
+                                                  Element* previous_sibling,
+                                                  bool for_pseudo_change);
   inline void InvalidateAncestorsOrSiblingsAffectedByHas(
       Element& changed_element);
   void InvalidateAncestorsOrSiblingsAffectedByHas(Element* parent,
@@ -718,6 +738,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   void InvalidateAncestorsOrSiblingsAffectedByHasForPseudoChange(
       Element* parent,
       Element* previous_sibling);
+  // Invalidate changed element affected by logical combinations in :has()
+  inline void InvalidateChangedElementAffectedByLogicalCombinationsInHas(
+      Element& changed_element,
+      bool for_pseudo_change);
 
   Member<Document> document_;
 
@@ -886,6 +910,7 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   friend class StyleEngineTest;
   friend class WhitespaceAttacherTest;
   friend class StyleCascadeTest;
+  friend class StyleImageCacheTest;
 
   HeapHashSet<Member<TextTrack>> text_tracks_;
   Member<Element> vtt_originating_element_;
@@ -899,6 +924,10 @@ class CORE_EXPORT StyleEngine final : public GarbageCollected<StyleEngine>,
   // The set of IDs for which ::page-transition-container pseudo elements are
   // generated during a DocumentTransition.
   Vector<AtomicString> document_transition_tags_;
+
+  // Cache for sharing StyleFetchedImage between CSSValues referencing the same
+  // URL.
+  StyleImageCache style_image_cache_;
 };
 
 }  // namespace blink

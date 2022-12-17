@@ -465,4 +465,12 @@ bool ContentSettingsAgentImpl::IsAllowlistedForContentSettings() const {
   return false;
 }
 
+// GetContentSettingFromRules is in an anonymous namespace, expose it here.
+ContentSetting VivaldiGetContentSettingFromRules(
+    const ContentSettingsForOneType& rules,
+    const blink::WebFrame* frame,
+    const GURL& secondary_url) {
+  return GetContentSettingFromRules(rules, secondary_url);
+}
+
 }  // namespace content_settings

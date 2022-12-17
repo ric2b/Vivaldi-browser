@@ -37,6 +37,7 @@
 #include "ui/base/ui_base_features.h"
 #include "ui/gfx/switches.h"
 #include "ui/gl/buildflags.h"
+#include "ui/gl/gl_display.h"
 #include "ui/gl/gl_implementation.h"
 #include "ui/gl/gl_surface.h"
 #include "ui/gl/gl_switches.h"
@@ -80,15 +81,9 @@ namespace {
 bool CollectGraphicsInfo(GPUInfo* gpu_info) {
   DCHECK(gpu_info);
   TRACE_EVENT0("gpu,startup", "Collect Graphics Info");
-  base::ElapsedTimer elapsed_timer;
   bool success = CollectContextGraphicsInfo(gpu_info);
   if (!success)
     LOG(ERROR) << "CollectGraphicsInfo failed.";
-
-  if (success) {
-    UMA_HISTOGRAM_TIMES("GPU.CollectContextGraphicsInfo",
-                        elapsed_timer.Elapsed());
-  }
   return success;
 }
 
@@ -125,7 +120,7 @@ void InitializePlatformOverlaySettings(GPUInfo* gpu_info,
 #endif
 }
 
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMECAST)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CASTOS)
 bool CanAccessDeviceFile(const GPUInfo& gpu_info) {
 #if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
   if (gpu_info.gpu.vendor_id != 0x10de ||  // NVIDIA
@@ -143,7 +138,7 @@ bool CanAccessDeviceFile(const GPUInfo& gpu_info) {
   return true;
 #endif
 }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMECAST)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CASTOS)
 
 class GpuWatchdogInit {
  public:
@@ -176,11 +171,11 @@ void DisableInProcessGpuVulkan(GpuFeatureInfo* gpu_feature_info,
 }
 
 #if BUILDFLAG(ENABLE_VULKAN)
-bool MatchGLRenderer(const GPUInfo& gpu_info, const std::string& patterns) {
+bool MatchGLInfo(const std::string& field, const std::string& patterns) {
   auto pattern_strings = base::SplitString(patterns, "|", base::TRIM_WHITESPACE,
                                            base::SPLIT_WANT_ALL);
   for (const auto& pattern : pattern_strings) {
-    if (base::MatchPattern(gpu_info.gl_renderer, pattern))
+    if (base::MatchPattern(field, pattern))
       return true;
   }
   return false;
@@ -210,7 +205,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   // SwiftShader needs to wait until creating a context.
   bool needs_more_info = true;
   uint64_t system_device_id = 0;
-#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMECAST)
+#if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CASTOS)
   needs_more_info = false;
   if (!PopGPUInfoCache(&gpu_info_)) {
     CollectBasicGraphicsInfo(command_line, &gpu_info_);
@@ -247,33 +242,40 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
                                               command_line, &needs_more_info);
   }
 
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
   // GPU picking is only effective with ANGLE/Metal backend on Mac and
   // on Windows.
-  GPUInfo::GPUDevice preferred_gpu;
-  bool force_integrated_gpu =
+  bool force_low_power_gpu =
       gpu_feature_info_.IsWorkaroundEnabled(FORCE_LOW_POWER_GPU);
-  bool force_discrete_gpu =
+  bool force_high_performance_gpu =
       gpu_feature_info_.IsWorkaroundEnabled(FORCE_HIGH_PERFORMANCE_GPU);
 #if BUILDFLAG(IS_MAC)
   // Default to the integrated gpu on a multi-gpu Mac.
-  if (!force_discrete_gpu)
-    force_integrated_gpu = true;
-#endif  // BUILDFLAG(IS_MAC)
-  if (force_discrete_gpu && gpu_info_.GetDiscreteGpu(&preferred_gpu)) {
-#if BUILDFLAG(IS_MAC)
-    system_device_id = preferred_gpu.register_id;
-#elif BUILDFLAG(IS_WIN)
-    system_device_id = CHROME_LUID_to_uint64_t(preferred_gpu.luid);
-#endif
-  } else if (force_integrated_gpu &&
-             gpu_info_.GetIntegratedGpu(&preferred_gpu)) {
-#if BUILDFLAG(IS_MAC)
-    system_device_id = preferred_gpu.register_id;
-#elif BUILDFLAG(IS_WIN)
-    system_device_id = CHROME_LUID_to_uint64_t(preferred_gpu.luid);
+  if (!force_high_performance_gpu)
+    force_low_power_gpu = true;
+#endif  // IS_MAC
+  GPUInfo::GPUDevice* preferred_gpu = nullptr;
+  if (force_high_performance_gpu) {
+    preferred_gpu =
+        gpu_info_.GetGpuByPreference(gl::GpuPreference::kHighPerformance);
+  } else if (force_low_power_gpu) {
+    preferred_gpu = gpu_info_.GetGpuByPreference(gl::GpuPreference::kLowPower);
+  }
+  if (preferred_gpu) {
+#if BUILDFLAG(IS_WIN)
+    system_device_id = CHROME_LUID_to_uint64_t(preferred_gpu->luid);
+#else  // IS_MAC
+    system_device_id = preferred_gpu->register_id;
 #endif
   }
-#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CHROMECAST)
+
+#if defined(USE_EGL)
+  if (system_device_id != 0) {
+    gl::SetGpuPreferenceEGL(gl::GpuPreference::kDefault, system_device_id);
+  }
+#endif  // USE_EGL
+#endif  // BUILDFLAG(IS_WIN) || BUILDFLAG(IS_MAC)
+#endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_CASTOS)
 
   gpu_info_.in_process_gpu = false;
   gl_use_swiftshader_ = false;
@@ -418,10 +420,12 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     return false;
 #else   // !(BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS))
     SaveHardwareGpuInfoAndGpuFeatureInfo();
-    gl::init::ShutdownGL(true);
+    gl::init::ShutdownGL(nullptr, true);
     gl_initialized = false;
 #endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS)
   }
+
+  gl::GLDisplay* gl_display = nullptr;
 
   if (!gl_initialized) {
     // Pause watchdog. LoadLibrary in GLBindings may take long time.
@@ -436,8 +440,9 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
     if (watchdog_thread_)
       watchdog_thread_->ResumeWatchdog();
     if (gl::GetGLImplementation() != gl::kGLImplementationDisabled) {
-      gl_initialized = gl::init::InitializeGLNoExtensionsOneOff(
+      gl_display = gl::init::InitializeGLNoExtensionsOneOff(
           /*init_bindings*/ false, system_device_id);
+      gl_initialized = !!gl_display;
       if (!gl_initialized) {
         VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
         return false;
@@ -494,6 +499,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
   if (!gl_disabled) {
     if (!gl_use_swiftshader_) {
       if (!CollectGraphicsInfo(&gpu_info_)) {
+        VLOG(1) << "gpu::CollectGraphicsInfo failed";
         return false;
       }
 
@@ -510,11 +516,12 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
         return false;
 #else
         SaveHardwareGpuInfoAndGpuFeatureInfo();
-        gl::init::ShutdownGL(true);
+        gl::init::ShutdownGL(gl_display, true);
         watchdog_thread_ = nullptr;
         watchdog_init.SetGpuWatchdogPtr(nullptr);
-        if (!gl::init::InitializeGLNoExtensionsOneOff(/*init_bindings*/ true,
-                                                      system_device_id)) {
+        gl_display = gl::init::InitializeGLNoExtensionsOneOff(
+            /*init_bindings=*/true, system_device_id);
+        if (!gl_display) {
           VLOG(1)
               << "gl::init::InitializeGLNoExtensionsOneOff with SwiftShader "
               << "failed";
@@ -528,8 +535,10 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
           // Collect GPU info, so we can use blocklist to disable vulkan if it
           // is needed.
           GPUInfo gpu_info;
-          if (!CollectGraphicsInfo(&gpu_info))
+          if (!CollectGraphicsInfo(&gpu_info)) {
+            VLOG(1) << "gpu::CollectGraphicsInfo failed";
             return false;
+          }
           auto gpu_feature_info = ComputeGpuFeatureInfo(
               gpu_info, gpu_preferences_, command_line, nullptr);
           gpu_feature_info_.status_values[GPU_FEATURE_TYPE_VULKAN] =
@@ -604,8 +613,10 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
 
   // Collect GPU process info
   if (!gl_disabled) {
-    if (!CollectGpuExtraInfo(&gpu_extra_info_, gpu_preferences))
+    if (!CollectGpuExtraInfo(&gpu_extra_info_, gpu_preferences)) {
+      VLOG(1) << "gpu::CollectGpuExtraInfo failed";
       return false;
+    }
   }
 
   if (!gl_disabled) {
@@ -613,7 +624,7 @@ bool GpuInit::InitializeAndStartSandbox(base::CommandLine* command_line,
       gl::init::SetDisabledExtensionsPlatform(
           gpu_feature_info_.disabled_extensions);
     }
-    if (!gl::init::InitializeExtensionSettingsOneOffPlatform()) {
+    if (!gl::init::InitializeExtensionSettingsOneOffPlatform(gl_display)) {
       VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
       return false;
     }
@@ -776,7 +787,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
   ui::OzonePlatform::InitializeForGPU(params);
 #endif
   bool needs_more_info = true;
-#if !BUILDFLAG(IS_CHROMECAST)
+#if !BUILDFLAG(IS_CASTOS) && !BUILDFLAG(IS_CAST_ANDROID)
   needs_more_info = false;
   if (!PopGPUInfoCache(&gpu_info_)) {
     CollectBasicGraphicsInfo(command_line, &gpu_info_);
@@ -794,13 +805,16 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
     InitializeSwitchableGPUs(
         gpu_feature_info_.enabled_gpu_driver_bug_workarounds);
   }
-#endif  // !BUILDFLAG(IS_CHROMECAST)
+#endif  // !BUILDFLAG(IS_CASTOS) && !BUILDFLAG(IS_CAST_ANDROID)
+
+  gl::GLDisplay* gl_display = nullptr;
 
   gl_use_swiftshader_ = EnableSwiftShaderIfNeeded(
       command_line, gpu_feature_info_,
       gpu_preferences_.disable_software_rasterizer, needs_more_info);
-  if (!gl::init::InitializeGLNoExtensionsOneOff(/*init_bindings=*/true,
-                                                /*system_device_id=*/0)) {
+  gl_display = gl::init::InitializeGLNoExtensionsOneOff(/*init_bindings=*/true,
+                                                        /*system_device_id=*/0);
+  if (!gl_display) {
     VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed";
     return;
   }
@@ -815,9 +829,10 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
         gpu_preferences_.disable_software_rasterizer, false);
     if (gl_use_swiftshader_) {
       SaveHardwareGpuInfoAndGpuFeatureInfo();
-      gl::init::ShutdownGL(true);
-      if (!gl::init::InitializeGLNoExtensionsOneOff(/*init_bindings=*/true,
-                                                    /*system_device_id=*/0)) {
+      gl::init::ShutdownGL(gl_display, true);
+      gl_display = gl::init::InitializeGLNoExtensionsOneOff(
+          /*init_bindings=*/true, /*system_device_id=*/0);
+      if (!gl_display) {
         VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed "
                 << "with SwiftShader";
         return;
@@ -845,7 +860,7 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
       gl::init::SetDisabledExtensionsPlatform(
           gpu_feature_info_.disabled_extensions);
     }
-    if (!gl::init::InitializeExtensionSettingsOneOffPlatform()) {
+    if (!gl::init::InitializeExtensionSettingsOneOffPlatform(gl_display)) {
       VLOG(1) << "gl::init::InitializeExtensionSettingsOneOffPlatform failed";
     }
     default_offscreen_surface_ =
@@ -870,9 +885,10 @@ void GpuInit::InitializeInProcess(base::CommandLine* command_line,
         gpu_preferences_.disable_software_rasterizer, false);
     if (gl_use_swiftshader_) {
       SaveHardwareGpuInfoAndGpuFeatureInfo();
-      gl::init::ShutdownGL(true);
-      if (!gl::init::InitializeGLNoExtensionsOneOff(/*init_bindings=*/true,
-                                                    /*system_device_id=*/0)) {
+      gl::init::ShutdownGL(gl_display, true);
+      gl_display = gl::init::InitializeGLNoExtensionsOneOff(
+          /*init_bindings=*/true, /*system_device_id=*/0);
+      if (!gl_display) {
         VLOG(1) << "gl::init::InitializeGLNoExtensionsOneOff failed "
                 << "with SwiftShader";
         return;
@@ -954,12 +970,25 @@ bool GpuInit::InitializeVulkan() {
   const base::FeatureParam<std::string> disable_patterns(
       &features::kVulkan, "disable_by_gl_renderer",
       "*Mali-G?? M*" /* https://crbug.com/1183702 */);
-  if (MatchGLRenderer(gpu_info_, disable_patterns.Get()))
+  if (MatchGLInfo(gpu_info_.gl_renderer, disable_patterns.Get()))
+    return false;
+
+  const base::FeatureParam<std::string> disable_driver_patterns(
+      &features::kVulkan, "disable_by_gl_driver",
+#if BUILDFLAG(IS_ANDROID)
+      "324.0|331.0|334.0|378.0|415.0|420.0|444.0" /* https://crbug.com/1246857
+                                                   */
+#else
+      ""
+#endif
+  );
+  if (MatchGLInfo(gpu_info_.gpu.driver_version, disable_driver_patterns.Get()))
     return false;
 
   const base::FeatureParam<std::string> force_enable_patterns(
       &features::kVulkan, "force_enable_by_gl_renderer", "");
-  forced_native |= MatchGLRenderer(gpu_info_, force_enable_patterns.Get());
+  forced_native |=
+      MatchGLInfo(gpu_info_.gl_renderer, force_enable_patterns.Get());
 
   const base::FeatureParam<std::string> enable_by_device_name(
       &features::kVulkan, "enable_by_device_name", "");

@@ -4,67 +4,74 @@
 
 #include "components/segmentation_platform/internal/scheduler/execution_service.h"
 
+#include "base/metrics/field_trial_params.h"
+#include "components/prefs/pref_service.h"
 #include "components/segmentation_platform/internal/data_collection/training_data_collector.h"
-#include "components/segmentation_platform/internal/database/segment_info_database.h"
-#include "components/segmentation_platform/internal/database/signal_database.h"
-#include "components/segmentation_platform/internal/execution/feature_aggregator_impl.h"
-#include "components/segmentation_platform/internal/execution/feature_list_query_processor.h"
+#include "components/segmentation_platform/internal/database/storage_service.h"
+#include "components/segmentation_platform/internal/execution/default_model_manager.h"
 #include "components/segmentation_platform/internal/execution/model_executor_impl.h"
+#include "components/segmentation_platform/internal/execution/processing/feature_aggregator_impl.h"
+#include "components/segmentation_platform/internal/execution/processing/feature_list_query_processor.h"
+#include "components/segmentation_platform/internal/execution/processing/input_delegate.h"
 #include "components/segmentation_platform/internal/scheduler/model_execution_scheduler_impl.h"
+#include "components/segmentation_platform/internal/segmentation_ukm_helper.h"
 #include "components/segmentation_platform/internal/signals/signal_handler.h"
+#include "components/segmentation_platform/public/config.h"
+#include "components/segmentation_platform/public/features.h"
 
 namespace segmentation_platform {
-
-ExecutionService::ExecutionRequest::ExecutionRequest() = default;
-ExecutionService::ExecutionRequest::~ExecutionRequest() = default;
 
 ExecutionService::ExecutionService() = default;
 ExecutionService::~ExecutionService() = default;
 
 void ExecutionService::InitForTesting(
-    std::unique_ptr<FeatureListQueryProcessor> feature_processor,
+    std::unique_ptr<processing::FeatureListQueryProcessor> feature_processor,
     std::unique_ptr<ModelExecutor> executor,
-    std::unique_ptr<ModelExecutionScheduler> scheduler) {
+    std::unique_ptr<ModelExecutionScheduler> scheduler,
+    std::unique_ptr<ModelExecutionManager> execution_manager) {
   feature_list_query_processor_ = std::move(feature_processor);
   model_executor_ = std::move(executor);
   model_execution_scheduler_ = std::move(scheduler);
+  model_execution_manager_ = std::move(execution_manager);
 }
 
 void ExecutionService::Initialize(
-    SignalDatabase* signal_database,
-    SegmentInfoDatabase* segment_info_database,
-    SignalStorageConfig* signal_storage_config,
+    StorageService* storage_service,
     SignalHandler* signal_handler,
     base::Clock* clock,
     ModelExecutionManager::SegmentationModelUpdatedCallback callback,
     scoped_refptr<base::SequencedTaskRunner> task_runner,
-    const base::flat_set<OptimizationTarget>& all_segment_ids,
+    const base::flat_set<SegmentId>& all_segment_ids,
     ModelProviderFactory* model_provider_factory,
     std::vector<ModelExecutionScheduler::Observer*>&& observers,
-    const PlatformOptions& platform_options) {
-  feature_list_query_processor_ = std::make_unique<FeatureListQueryProcessor>(
-      signal_database, std::make_unique<FeatureAggregatorImpl>());
+    const PlatformOptions& platform_options,
+    std::unique_ptr<processing::InputDelegateHolder> input_delegate_holder,
+    std::vector<std::unique_ptr<Config>>* configs,
+    PrefService* profile_prefs) {
+  storage_service_ = storage_service;
+
+  feature_list_query_processor_ =
+      std::make_unique<processing::FeatureListQueryProcessor>(
+          storage_service, std::move(input_delegate_holder),
+          std::make_unique<processing::FeatureAggregatorImpl>());
 
   training_data_collector_ = TrainingDataCollector::Create(
-      segment_info_database, feature_list_query_processor_.get(),
+      storage_service->segment_info_database(),
+      feature_list_query_processor_.get(),
       signal_handler->deprecated_histogram_signal_handler(),
-      signal_storage_config, clock);
-  training_data_collector_->OnServiceInitialized();
+      storage_service->signal_storage_config(), configs, profile_prefs, clock);
 
   model_executor_ = std::make_unique<ModelExecutorImpl>(
       clock, feature_list_query_processor_.get());
 
   model_execution_manager_ = std::make_unique<ModelExecutionManagerImpl>(
-      all_segment_ids, model_provider_factory, clock, segment_info_database,
-      callback);
+      all_segment_ids, model_provider_factory, clock,
+      storage_service->segment_info_database(), callback);
 
   model_execution_scheduler_ = std::make_unique<ModelExecutionSchedulerImpl>(
-      std::move(observers), segment_info_database, signal_storage_config,
-      model_execution_manager_.get(), model_executor_.get(), all_segment_ids,
-      clock, platform_options);
-
-  model_execution_scheduler_->RequestModelExecutionForEligibleSegments(
-      /*expired_only=*/true);
+      std::move(observers), storage_service->segment_info_database(),
+      storage_service->signal_storage_config(), model_execution_manager_.get(),
+      model_executor_.get(), all_segment_ids, clock, platform_options);
 }
 
 void ExecutionService::OnNewModelInfoReady(
@@ -72,33 +79,52 @@ void ExecutionService::OnNewModelInfoReady(
   model_execution_scheduler_->OnNewModelInfoReady(segment_info);
 }
 
+ModelProvider* ExecutionService::GetModelProvider(SegmentId segment_id) {
+  return model_execution_manager_->GetProvider(segment_id);
+}
+
 void ExecutionService::RequestModelExecution(
     std::unique_ptr<ExecutionRequest> request) {
   DCHECK(request->segment_info);
-  if (!request->callback.is_null() && request->model_provider) {
-    DCHECK(!request->save_result_to_db)
-        << "save_result_to_db + callback cannot be set together";
-    model_executor_->ExecuteModel(
-        *request->segment_info, request->model_provider,
-        request->record_metrics_for_default, std::move(request->callback));
-  } else if (request->save_result_to_db) {
+  if (request->save_result_to_db) {
     DCHECK(!request->record_metrics_for_default)
         << "cannot record metics for default model from scheduler";
+    // TODO(ssid): Scheduler should use the `request` instead of fetching the
+    // model provider.
     DCHECK(!request->model_provider)
         << "using custom model provider to save result is not supported";
     DCHECK(request->callback.is_null())
         << "save_result_to_db + callback cannot be set together";
+    DCHECK(!request->input_context)
+        << "saving results keyed on input context is not supported";
     model_execution_scheduler_->RequestModelExecution(*request->segment_info);
-  } else {
-    NOTREACHED()
-        << "On demand xecution of non-default model is not yet supported";
+    return;
   }
+
+  DCHECK(!request->callback.is_null());
+  model_executor_->ExecuteModel(std::move(request));
 }
 
 void ExecutionService::OverwriteModelExecutionResult(
-    optimization_guide::proto::OptimizationTarget segment_id,
+    proto::SegmentId segment_id,
     const std::pair<float, ModelExecutionStatus>& result) {
   model_execution_scheduler_->OnModelExecutionCompleted(segment_id, result);
+}
+
+void ExecutionService::RefreshModelResults() {
+  model_execution_scheduler_->RequestModelExecutionForEligibleSegments(
+      /*expired_only=*/true);
+}
+
+void ExecutionService::RunDailyTasks(bool is_startup) {
+  RefreshModelResults();
+
+  if (is_startup) {
+    // This will trigger data collection after initialization finishes.
+    training_data_collector_->OnServiceInitialized();
+  } else {
+    training_data_collector_->ReportCollectedContinuousTrainingData();
+  }
 }
 
 }  // namespace segmentation_platform

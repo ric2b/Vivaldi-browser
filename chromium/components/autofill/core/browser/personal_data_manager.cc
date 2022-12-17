@@ -18,6 +18,7 @@
 #include "base/containers/contains.h"
 #include "base/containers/cxx20_erase.h"
 #include "base/feature_list.h"
+#include "base/guid.h"
 #include "base/i18n/case_conversion.h"
 #include "base/i18n/timezone.h"
 #include "base/logging.h"
@@ -45,6 +46,7 @@
 #include "components/autofill/core/browser/geo/country_names.h"
 #include "components/autofill/core/browser/geo/phone_number_i18n.h"
 #include "components/autofill/core/browser/metrics/autofill_metrics.h"
+#include "components/autofill/core/browser/metrics/payments/offers_metrics.h"
 #include "components/autofill/core/browser/personal_data_manager_observer.h"
 #include "components/autofill/core/browser/ui/autofill_image_fetcher.h"
 #include "components/autofill/core/browser/ui/label_formatter.h"
@@ -387,12 +389,18 @@ void PersonalDataManager::OnSyncServiceInitialized(
         sync_service && !sync_service_->IsSyncFeatureEnabled());
   }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
   MigrateUserOptedInWalletSyncTransportIfNeeded();
+#endif
 }
 
 void PersonalDataManager::OnURLsDeleted(
     history::HistoryService* /* history_service */,
     const history::DeletionInfo& deletion_info) {
+  for (PersonalDataManagerObserver& observer : observers_) {
+    observer.OnBrowsingHistoryCleared(deletion_info);
+  }
+
   if (!deletion_info.is_from_expiration() && deletion_info.IsAllHistory()) {
     AutofillDownloadManager::ClearUploadHistory(pref_service_);
   }
@@ -549,7 +557,7 @@ void PersonalDataManager::SyncStarted(syncer::ModelType model_type) {
 
 void PersonalDataManager::OnStateChanged(syncer::SyncService* sync_service) {
   if (base::FeatureList::IsEnabled(
-          autofill::features::kAutofillEnableAccountWalletStorage)) {
+          features::kAutofillEnableAccountWalletStorage)) {
     // Use the ephemeral account storage when the user didn't enable the sync
     // feature explicitly.
     database_helper_->SetUseAccountStorageForServerData(
@@ -587,7 +595,7 @@ bool PersonalDataManager::IsSyncFeatureEnabled() const {
 
 void PersonalDataManager::OnAccountsCookieDeletedByUserAction() {
   // Clear all the Sync Transport feature opt-ins.
-  ::autofill::prefs::ClearSyncTransportOptIns(pref_service_);
+  prefs::ClearSyncTransportOptIns(pref_service_);
 }
 
 AutofillSyncSigninState PersonalDataManager::GetSyncSigninState() const {
@@ -1167,9 +1175,9 @@ PersonalDataManager::GetActiveAutofillPromoCodeOffersForOrigin(
   return promo_code_offers_for_origin;
 }
 
-raw_ptr<gfx::Image> PersonalDataManager::GetCreditCardArtImageForUrl(
+gfx::Image* PersonalDataManager::GetCreditCardArtImageForUrl(
     const GURL& card_art_url) const {
-  raw_ptr<gfx::Image> cached_image = GetCachedCardArtImageForUrl(card_art_url);
+  gfx::Image* cached_image = GetCachedCardArtImageForUrl(card_art_url);
   if (cached_image)
     return cached_image;
 
@@ -1177,7 +1185,7 @@ raw_ptr<gfx::Image> PersonalDataManager::GetCreditCardArtImageForUrl(
   return nullptr;
 }
 
-raw_ptr<gfx::Image> PersonalDataManager::GetCachedCardArtImageForUrl(
+gfx::Image* PersonalDataManager::GetCachedCardArtImageForUrl(
     const GURL& card_art_url) const {
   if (!IsAutofillWalletImportEnabled())
     return nullptr;
@@ -1189,7 +1197,7 @@ raw_ptr<gfx::Image> PersonalDataManager::GetCachedCardArtImageForUrl(
 
   // If the cache contains the image, return it.
   if (images_iterator != credit_card_art_images_.end()) {
-    raw_ptr<gfx::Image> image = images_iterator->second.get();
+    gfx::Image* image = images_iterator->second.get();
     if (!image->IsEmpty())
       return image;
   }
@@ -1214,12 +1222,12 @@ std::vector<AutofillProfile*> PersonalDataManager::GetProfilesToSuggest()
 
   std::vector<AutofillProfile*> profiles = GetProfiles();
 
-  // Rank the suggestions by frecency.
+  // Rank the suggestions by ranking score.
   const base::Time comparison_time = AutofillClock::Now();
   std::sort(
       profiles.begin(), profiles.end(),
       [comparison_time](const AutofillProfile* a, const AutofillProfile* b) {
-        return a->HasGreaterFrecencyThan(b, comparison_time);
+        return a->HasGreaterRankingThan(b, comparison_time);
       });
 
   return profiles;
@@ -1267,10 +1275,10 @@ std::vector<Suggestion> PersonalDataManager::GetProfileSuggestions(
 
 #if !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
   use_formatter = base::FeatureList::IsEnabled(
-      autofill::features::kAutofillUseImprovedLabelDisambiguation);
+      features::kAutofillUseImprovedLabelDisambiguation);
 #else
   use_formatter = base::FeatureList::IsEnabled(
-      autofill::features::kAutofillUseMobileLabelDisambiguation);
+      features::kAutofillUseMobileLabelDisambiguation);
 #endif  // !BUILDFLAG(IS_ANDROID) && !BUILDFLAG(IS_IOS)
 
   // The formatter stores a constant reference to |unique_matched_profiles|.
@@ -1343,8 +1351,8 @@ const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest(
       std::make_move_iterator(std::begin(cards_to_dedupe)),
       std::make_move_iterator(std::end(cards_to_dedupe)));
 
-  // Rank the cards by frecency (see AutofillDataModel for details). All expired
-  // cards should be suggested last, also by frecency.
+  // Rank the cards by ranking score (see AutofillDataModel for details). All
+  // expired cards should be suggested last, also by ranking score.
   base::Time comparison_time = AutofillClock::Now();
   std::stable_sort(cards_to_suggest.begin(), cards_to_suggest.end(),
                    [comparison_time](const CreditCard* a, const CreditCard* b) {
@@ -1352,7 +1360,7 @@ const std::vector<CreditCard*> PersonalDataManager::GetCreditCardsToSuggest(
                      if (a_is_expired != b->IsExpired(comparison_time))
                        return !a_is_expired;
 
-                     return a->HasGreaterFrecencyThan(b, comparison_time);
+                     return a->HasGreaterRankingThan(b, comparison_time);
                    });
 
   return cards_to_suggest;
@@ -1363,15 +1371,15 @@ bool PersonalDataManager::IsAutofillEnabled() const {
 }
 
 bool PersonalDataManager::IsAutofillProfileEnabled() const {
-  return ::autofill::prefs::IsAutofillProfileEnabled(pref_service_);
+  return prefs::IsAutofillProfileEnabled(pref_service_);
 }
 
 bool PersonalDataManager::IsAutofillCreditCardEnabled() const {
-  return ::autofill::prefs::IsAutofillCreditCardEnabled(pref_service_);
+  return prefs::IsAutofillCreditCardEnabled(pref_service_);
 }
 
 bool PersonalDataManager::IsAutofillWalletImportEnabled() const {
-  return ::autofill::prefs::IsPaymentsIntegrationEnabled(pref_service_);
+  return prefs::IsPaymentsIntegrationEnabled(pref_service_);
 }
 
 bool PersonalDataManager::ShouldSuggestServerCards() const {
@@ -1563,7 +1571,7 @@ bool PersonalDataManager::IsNewProfileImportBlockedForDomain(
     return false;
   }
 
-  return GetProfileSaveStrikeDatabase()->IsMaxStrikesLimitReached(url.host());
+  return GetProfileSaveStrikeDatabase()->ShouldBlockFeature(url.host());
 }
 
 void PersonalDataManager::AddStrikeToBlockNewProfileImportForDomain(
@@ -1590,7 +1598,7 @@ bool PersonalDataManager::IsProfileUpdateBlocked(
     return false;
   }
 
-  return GetProfileUpdateStrikeDatabase()->IsMaxStrikesLimitReached(guid);
+  return GetProfileUpdateStrikeDatabase()->ShouldBlockFeature(guid);
 }
 
 void PersonalDataManager::AddStrikeToBlockProfileUpdate(
@@ -1878,7 +1886,7 @@ void PersonalDataManager::LogStoredCreditCardMetrics() const {
 
 void PersonalDataManager::LogStoredOfferMetrics() const {
   if (!has_logged_stored_offer_metrics_) {
-    AutofillMetrics::LogStoredOfferMetrics(autofill_offer_data_);
+    autofill_metrics::LogStoredOfferMetrics(autofill_offer_data_);
     // Only log this info once per chrome user profile load.
     has_logged_stored_offer_metrics_ = true;
   }
@@ -1895,13 +1903,13 @@ std::string PersonalDataManager::MostCommonCountryCodeFromProfiles() const {
   const std::vector<AutofillProfile*>& profiles = GetProfiles();
   const std::vector<std::string>& country_codes =
       CountryDataMap::GetInstance()->country_codes();
-  for (size_t i = 0; i < profiles.size(); ++i) {
+  for (auto* profile : profiles) {
     std::string country_code = base::ToUpperASCII(
-        base::UTF16ToASCII(profiles[i]->GetRawInfo(ADDRESS_HOME_COUNTRY)));
+        base::UTF16ToASCII(profile->GetRawInfo(ADDRESS_HOME_COUNTRY)));
 
     if (base::Contains(country_codes, country_code)) {
       // Verified profiles count 100x more than unverified ones.
-      votes[country_code] += profiles[i]->IsVerified() ? 100 : 1;
+      votes[country_code] += profile->IsVerified() ? 100 : 1;
     }
   }
 
@@ -1958,7 +1966,7 @@ bool PersonalDataManager::IsKnownCard(const CreditCard& credit_card) const {
 
 bool PersonalDataManager::IsServerCard(const CreditCard* credit_card) const {
   // Check whether the current card itself is a server card.
-  if (credit_card->record_type() != autofill::CreditCard::LOCAL_CARD)
+  if (credit_card->record_type() != CreditCard::LOCAL_CARD)
     return true;
 
   std::vector<CreditCard*> server_credit_cards = GetServerCreditCards();
@@ -2256,6 +2264,7 @@ bool PersonalDataManager::HasPendingQueries() {
          pending_offer_data_query_ != 0;
 }
 
+#if BUILDFLAG(IS_CHROMEOS_ASH)
 void PersonalDataManager::MigrateUserOptedInWalletSyncTransportIfNeeded() {
   if (!sync_service_)
     return;
@@ -2317,6 +2326,7 @@ void PersonalDataManager::MigrateUserOptedInWalletSyncTransportIfNeeded() {
   prefs::SetUserOptedInWalletSyncTransport(pref_service_, primary_account_id,
                                            /*opted_in=*/true);
 }
+#endif
 
 bool PersonalDataManager::IsSyncEnabledFor(syncer::ModelType model_type) {
   return sync_service_ != nullptr && sync_service_->CanSyncFeatureStart() &&
@@ -2329,20 +2339,16 @@ scoped_refptr<AutofillWebDataService> PersonalDataManager::GetLocalDatabase() {
 }
 
 void PersonalDataManager::OnServerCreditCardsRefreshed() {
-  ProcessVirtualCardMetadataChanges();
+  ProcessCardArtUrlChanges();
 }
 
-void PersonalDataManager::ProcessVirtualCardMetadataChanges() {
+void PersonalDataManager::ProcessCardArtUrlChanges() {
   std::vector<GURL> updated_urls;
   for (auto& card : server_credit_cards_) {
-    // If this card is not enrolled for virtual cards or the url is not valid,
-    // continue.
-    if (card->virtual_card_enrollment_state() != CreditCard::ENROLLED ||
-        !card->card_art_url().is_valid()) {
+    if (!card->card_art_url().is_valid())
       continue;
-    }
 
-    // Otherwise try to find the old entry with the same url.
+    // Try to find the old entry with the same url.
     auto it = credit_card_art_images_.find(card->card_art_url());
     // No existing entry found.
     if (it == credit_card_art_images_.end())

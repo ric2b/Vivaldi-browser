@@ -132,8 +132,14 @@ const char kSyncOobeCompleted[] = "sync.oobe_completed";
 const char kLoginDisplayPasswordButtonEnabled[] =
     "login_display_password_button_enabled";
 
-// Boolean pref indicating whether the user has enabled Suggested Content.
+// Boolean pref indicating whether the user has enabled Suggested Content in
+// OS settings > Privacy > "Suggest new content to explore".
 const char kSuggestedContentEnabled[] = "settings.suggested_content_enabled";
+
+// Boolean value indicating the user has hidden the launcher continue section
+// (usually because they want more visual space available for apps).
+const char kLauncherContinueSectionHidden[] =
+    "launcher.continue_section_hidden";
 
 // Boolean value that indicates that the user has given feedback for removing
 // items from the continue section.
@@ -475,13 +481,16 @@ const char kMessageCenterLockScreenModeHideSensitive[] = "hideSensitive";
 // A boolean pref storing the enabled status of the ambient color feature.
 const char kAmbientColorEnabled[] = "ash.ambient_color.enabled";
 
-// A boolean pref used when dark light mode feature is enabled to indicate
-// whether the color mode is themed. If true, the background color will be
-// calculated based on extracted wallpaper color.
-const char kColorModeThemed[] = "ash.dark_mode.color_mode_themed";
-
 // A boolean pref that indicates whether dark mode is enabled.
 const char kDarkModeEnabled[] = "ash.dark_mode.enabled";
+
+// An integer pref storing the number of times that dark/light mode educational
+// can still be shown. It will be initialized to the maximum number of times
+// that the nudge can be shown. And will be set to 0 if the user toggled the
+// entry points of dark/light mode ("Dark theme" inside quick settings or
+// personalization hub), which means the user already knows how to change the
+// color mode of the system.
+const char kDarkLightModeNudge[] = "ash.dark_light_mode.educational_nudge";
 
 // An integer pref storing the type of automatic scheduling of turning on and
 // off the dark mode feature similar to `kNightLightScheduleType`, but
@@ -683,6 +692,11 @@ const char kSuggestLogoutAfterClosingLastWindow[] =
 // A dictionary pref that maps usernames to wallpaper info.
 const char kUserWallpaperInfo[] = "user_wallpaper_info";
 
+// An ordered list of hashed representations of IDs of Google Photos recently
+// used as wallpapers for Daily Refresh.
+const char kRecentDailyGooglePhotosWallpapers[] =
+    "recent_daily_google_photos_wallpapers";
+
 // A dictionary pref that maps usernames to wallpaper info.
 // This is for wallpapers that are syncable across devices.
 const char kSyncableWallpaperInfo[] = "syncable_wallpaper_info";
@@ -700,6 +714,9 @@ const char kSystemBluetoothAdapterEnabled[] =
 
 // Boolean pref to persist the expanded state of the system tray across reboots.
 const char kSystemTrayExpanded[] = "ash.system_tray.expanded";
+
+// A boolean pref indicating whether the camera is allowed to be used.
+const char kUserCameraAllowed[] = "ash.user.camera_allowed";
 
 // A boolean pref which determines whether tap-dragging is enabled.
 const char kTapDraggingEnabled[] = "settings.touchpad.enable_tap_dragging";
@@ -930,6 +947,11 @@ const char kDeskTemplatesEnabled[] = "ash.desk_templates_enabled";
 // predefined Desks templates configured by policy administrators.
 const char kPreconfiguredDeskTemplates[] = "ash.preconfigured_desk_templates";
 
+// An unsigned integer pref which contains the last used marker color for
+// Projector.
+const char kProjectorAnnotatorLastUsedMarkerColor[] =
+    "ash.projector.annotator_last_used_marker_color";
+
 // A boolean pref that tracks whether the user has enabled Projector creation
 // flow during onboarding.
 const char kProjectorCreationFlowEnabled[] =
@@ -949,6 +971,11 @@ const char kProjectorGalleryOnboardingShowCount[] =
 // shown to the user inside the Projector Viewer.
 const char kProjectorViewerOnboardingShowCount[] =
     "ash.projector.viewer_onboarding_show_count";
+
+// A boolean pref that indicates the the exclude-transcript dialog has been
+// shown.
+const char kProjectorExcludeTranscriptDialogShown[] =
+    "ash.projector.exclude_transcript_dialog_shown";
 
 // A boolean pref that indicates the Projector has been enabled by admin
 // policy.
@@ -982,6 +1009,11 @@ const char kFloatingWorkspaceEnabled[] = "ash.floating_workspace_enabled";
 // Boolean value indicating that post reboot notification should be shown to the
 // user.
 const char kShowPostRebootNotification[] = "ash.show_post_reboot_notification";
+
+// Integer pref indicating which color for the backlight keyboard is currently
+// selected for a user profile.
+const char kPersonalizationKeyboardBacklightColor[] =
+    "ash.personalization.keyboard_backlight_color";
 
 // NOTE: New prefs should start with the "ash." prefix. Existing prefs moved
 // into this file should not be renamed, since they may be synced.

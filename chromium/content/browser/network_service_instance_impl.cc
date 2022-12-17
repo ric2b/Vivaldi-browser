@@ -9,13 +9,13 @@
 #include <utility>
 
 #include "base/bind.h"
+#include "base/command_line.h"
 #include "base/environment.h"
 #include "base/feature_list.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
 #include "base/files/file_util.h"
 #include "base/message_loop/message_pump_type.h"
-#include "base/metrics/field_trial_params.h"
 #include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/no_destructor.h"
@@ -33,6 +33,7 @@
 #include "build/chromeos_buildflags.h"
 #include "content/browser/browser_main_loop.h"
 #include "content/browser/first_party_sets/first_party_sets_handler_impl.h"
+#include "content/browser/net/http_cache_backend_file_operations_factory.h"
 #include "content/browser/network_sandbox_grant_result.h"
 #include "content/browser/network_service_client.h"
 #include "content/public/browser/browser_task_traits.h"
@@ -45,6 +46,8 @@
 #include "content/public/common/network_service_util.h"
 #include "mojo/public/cpp/bindings/pending_receiver.h"
 #include "mojo/public/cpp/bindings/remote.h"
+#include "mojo/public/cpp/bindings/self_owned_receiver.h"
+#include "net/base/features.h"
 #include "net/log/net_log_util.h"
 #include "services/cert_verifier/cert_verifier_service_factory.h"
 #include "services/cert_verifier/public/mojom/cert_verifier_service_factory.mojom.h"
@@ -56,10 +59,6 @@
 #include "services/network/public/mojom/network_context.mojom.h"
 #include "services/network/public/mojom/network_service.mojom.h"
 #include "services/network/public/mojom/network_service_test.mojom.h"
-
-#if BUILDFLAG(IS_ANDROID)
-#include "content/common/android/cpu_affinity_setter.h"
-#endif  // BUILDFLAG(IS_ANDROID)
 
 #if !BUILDFLAG(IS_ANDROID)
 #include "content/browser/network_sandbox.h"
@@ -128,14 +127,6 @@ static NetworkServiceClient* g_client = nullptr;
 
 void CreateInProcessNetworkServiceOnThread(
     mojo::PendingReceiver<network::mojom::NetworkService> receiver) {
-#if BUILDFLAG(IS_ANDROID)
-  if (base::GetFieldTrialParamByFeatureAsBool(
-          features::kBigLittleScheduling,
-          features::kBigLittleSchedulingNetworkMainBigParam, false)) {
-    SetCpuAffinityForCurrentThread(base::CpuAffinityMode::kBigCoresOnly);
-  }
-#endif
-
   // The test interface doesn't need to be implemented in the in-process case.
   auto registry = std::make_unique<service_manager::BinderRegistry>();
   registry->AddInterface(base::BindRepeating(
@@ -578,11 +569,18 @@ network::mojom::NetworkService* GetNetworkService() {
         }
       }
 
-      if (absl::optional<FirstPartySetsHandlerImpl::FlattenedSets> sets =
-              FirstPartySetsHandlerImpl::GetInstance()
-                  ->GetSetsIfEnabledAndReady();
-          sets.has_value()) {
-        g_network_service_remote->get()->SetFirstPartySets(*sets);
+      if (FirstPartySetsHandlerImpl::GetInstance()->IsEnabled()) {
+        if (absl::optional<FirstPartySetsHandlerImpl::FlattenedSets> sets =
+                FirstPartySetsHandlerImpl::GetInstance()->GetSets(
+                    base::BindOnce(
+                        [](FirstPartySetsHandlerImpl::FlattenedSets sets) {
+                          GetNetworkService()->SetFirstPartySets(
+                              std::move(sets));
+                        }));
+            sets.has_value()) {
+          g_network_service_remote->get()->SetFirstPartySets(
+              std::move(sets.value()));
+        }
       }
 
       GetContentClient()->browser()->OnNetworkServiceCreated(
@@ -749,9 +747,13 @@ GetCertVerifierServiceFactoryRemoteStorage() {
   return cert_verifier_service_factory_remote.GetOrCreateValue();
 }
 
+}  // namespace
+
 // Returns a pointer to a CertVerifierServiceFactory usable on the UI thread.
 cert_verifier::mojom::CertVerifierServiceFactory*
 GetCertVerifierServiceFactory() {
+  DCHECK(!BrowserThread::IsThreadInitialized(BrowserThread::UI) ||
+         BrowserThread::CurrentlyOn(BrowserThread::UI));
   if (g_cert_verifier_service_factory_for_testing)
     return g_cert_verifier_service_factory_for_testing;
 
@@ -776,8 +778,6 @@ GetCertVerifierServiceFactory() {
   }
   return factory_remote_storage.get();
 }
-
-}  // namespace
 
 network::mojom::CertVerifierServiceRemoteParamsPtr GetCertVerifierParams(
     cert_verifier::mojom::CertVerifierCreationParamsPtr
@@ -816,11 +816,53 @@ void CreateNetworkContextInNetworkService(
 
   MaybeCleanCacheDirectory(params.get());
 
+  const bool has_valid_http_cache_path =
+      params->http_cache_enabled && params->http_cache_directory &&
+      !params->http_cache_directory->path().empty();
+  const bool brokering_is_enabled =
+      IsOutOfProcessNetworkService() &&
+      base::FeatureList::IsEnabled(
+          features::kBrokerFileOperationsOnDiskCacheInNetworkService);
+  if (has_valid_http_cache_path && brokering_is_enabled) {
+    mojo::MakeSelfOwnedReceiver(
+        std::make_unique<HttpCacheBackendFileOperationsFactory>(
+            params->http_cache_directory->path()),
+        params->http_cache_file_operations_factory
+            .InitWithNewPipeAndPassReceiver());
+  }
+
 #if BUILDFLAG(IS_ANDROID)
+  // On Android, if a cookie_manager pending receiver was passed then migration
+  // should not be attempted as the cookie file is already being accessed by the
+  // browser instance.
+  if (params->cookie_manager) {
+    if (params->file_paths) {
+      // No migration should ever be attempted under this configuration.
+      DCHECK(!params->file_paths->unsandboxed_data_path);
+    }
+    CreateNetworkContextInternal(
+        std::move(context), std::move(params),
+        SandboxGrantResult::kDidNotAttemptToGrantSandboxAccess);
+    return;
+  }
+
+  // Note: This logic is duplicated from MaybeGrantAccessToDataPath to this fast
+  // path. This should be kept in sync if there are any changes to the logic.
+  SandboxGrantResult grant_result = SandboxGrantResult::kNoMigrationRequested;
+  if (!params->file_paths) {
+    // No file paths (e.g. in-memory context) so nothing to do.
+    grant_result = SandboxGrantResult::kDidNotAttemptToGrantSandboxAccess;
+  } else {
+    // If no `unsandboxed_data_path` is supplied, it means this is network
+    // context has been created by Android Webview, which does not understand
+    // the concept of `unsandboxed_data_path`. In this case, `data_directory`
+    // should always be used, if present.
+    if (!params->file_paths->unsandboxed_data_path)
+      grant_result = SandboxGrantResult::kDidNotAttemptToGrantSandboxAccess;
+  }
   // Create network context immediately without thread hops.
-  CreateNetworkContextInternal(
-      std::move(context), std::move(params),
-      SandboxGrantResult::kDidNotAttemptToGrantSandboxAccess);
+  CreateNetworkContextInternal(std::move(context), std::move(params),
+                               grant_result);
 #else
   // Restrict disk access to a certain path (on another thread) and continue
   // with network context creation.

@@ -33,6 +33,7 @@
 #include "chrome/browser/ash/drive/file_system_util.h"
 #include "chrome/browser/ash/input_method/input_method_persistence.h"
 #include "chrome/browser/ash/input_method/input_method_syncer.h"
+#include "chrome/browser/ash/login/consolidated_consent_field_trial.h"
 #include "chrome/browser/ash/login/login_pref_names.h"
 #include "chrome/browser/ash/login/session/user_session_manager.h"
 #include "chrome/browser/ash/profiles/profile_helper.h"
@@ -48,7 +49,11 @@
 #include "chrome/browser/ui/ash/system_tray_client_impl.h"
 #include "chrome/common/chrome_features.h"
 #include "chrome/common/pref_names.h"
-#include "chromeos/dbus/pciguard/pciguard_client.h"
+#include "chromeos/ash/components/dbus/pciguard/pciguard_client.h"
+#include "chromeos/components/disks/disks_prefs.h"
+#include "chromeos/dbus/dbus_thread_manager.h"
+#include "chromeos/dbus/update_engine/update_engine.pb.h"
+#include "chromeos/dbus/update_engine/update_engine_client.h"
 #include "chromeos/system/devicemode.h"
 #include "chromeos/system/statistics_provider.h"
 #include "components/drive/drive_pref_names.h"
@@ -119,6 +124,7 @@ Preferences::Preferences(input_method::InputMethodManager* input_method_manager)
 Preferences::~Preferences() {
   prefs_->RemoveObserver(this);
   user_manager::UserManager::Get()->RemoveSessionStateObserver(this);
+  DBusThreadManager::Get()->GetUpdateEngineClient()->RemoveObserver(this);
 }
 
 // static
@@ -147,8 +153,10 @@ void Preferences::RegisterPrefs(PrefRegistrySimple* registry) {
   registry->RegisterBooleanPref(prefs::kDeviceI18nShortcutsEnabled, true);
   registry->RegisterBooleanPref(prefs::kChromadToCloudMigrationEnabled, false);
   registry->RegisterBooleanPref(prefs::kLoginScreenWebUILazyLoading, false);
+  registry->RegisterBooleanPref(::prefs::kConsumerAutoUpdateToggle, true);
 
   RegisterLocalStatePrefs(registry);
+  ash::consolidated_consent_field_trial::RegisterLocalStatePrefs(registry);
 }
 
 // static
@@ -171,11 +179,6 @@ void Preferences::RegisterProfilePrefs(
   }
 
   registry->RegisterBooleanPref(::prefs::kPerformanceTracingEnabled, false);
-
-  // This pref is device specific and must not be synced.
-  registry->RegisterIntegerPref(
-      ::prefs::kAccountManagerNumTimesWelcomeScreenShown,
-      0 /* default_value */);
 
   registry->RegisterBooleanPref(
       ::prefs::kTapToClickEnabled, true,
@@ -349,9 +352,7 @@ void Preferences::RegisterProfilePrefs(
       ::prefs::kChromeOSReleaseNotesVersion, "0.0.0.0",
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
-  registry->RegisterBooleanPref(::prefs::kExternalStorageDisabled, false);
-
-  registry->RegisterBooleanPref(::prefs::kExternalStorageReadOnly, false);
+  disks::prefs::RegisterProfilePrefs(registry);
 
   registry->RegisterStringPref(::prefs::kTermsOfServiceURL, "");
 
@@ -397,6 +398,11 @@ void Preferences::RegisterProfilePrefs(
       ::prefs::kCaptivePortalAuthenticationIgnoresProxy, true);
 
   registry->RegisterBooleanPref(::prefs::kLanguageImeMenuActivated, false);
+
+  // TODO(b/227674947): Eventually delete this after Sign in with Smart Lock has
+  // been removed and enough time has elapsed for users to be notified.
+  registry->RegisterBooleanPref(
+      ::prefs::kHasSeenSmartLockSignInRemovedNotification, false);
 
   registry->RegisterInt64Pref(::prefs::kHatsLastInteractionTimestamp, 0);
 
@@ -483,9 +489,6 @@ void Preferences::RegisterProfilePrefs(
       ::prefs::kTextToSpeechVolume, blink::mojom::kSpeechSynthesisDefaultVolume,
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
-  // By default showing Sync Consent is set to true. It can changed by policy.
-  registry->RegisterBooleanPref(::prefs::kEnableSyncConsent, true);
-
   registry->RegisterBooleanPref(prefs::kSyncOobeCompleted, false);
 
   registry->RegisterBooleanPref(::prefs::kTPMFirmwareUpdateCleanupDismissed,
@@ -512,9 +515,6 @@ void Preferences::RegisterProfilePrefs(
       user_prefs::PrefRegistrySyncable::SYNCABLE_OS_PREF);
 
   registry->RegisterDictionaryPref(prefs::kLauncherSearchNormalizerParameters);
-
-  registry->RegisterListPref(
-      ::prefs::kRestrictedManagedGuestSessionExtensionCleanupExemptList);
 
   registry->RegisterListPref(
       prefs::kFilesAppFolderShortcuts,
@@ -592,6 +592,10 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
       prefs::kLocalStateDevicePeripheralDataAccessEnabled,
       g_browser_process->local_state(), callback);
 
+  consumer_auto_update_toggle_pref_.Init(::prefs::kConsumerAutoUpdateToggle,
+                                         g_browser_process->local_state(),
+                                         callback);
+
   pref_change_registrar_.Init(prefs);
   pref_change_registrar_.Add(::prefs::kUserTimezone, callback);
   pref_change_registrar_.Add(::prefs::kResolveTimezoneByGeolocationMethod,
@@ -599,6 +603,22 @@ void Preferences::InitUserPrefs(sync_preferences::PrefServiceSyncable* prefs) {
   pref_change_registrar_.Add(::prefs::kParentAccessCodeConfig, callback);
   for (auto* copy_pref : kCopyToKnownUserPrefs)
     pref_change_registrar_.Add(copy_pref, callback);
+
+  // Re-enable OTA update when feature flag is disabled by owner.
+  auto* update_engine_client =
+      DBusThreadManager::Get()->GetUpdateEngineClient();
+  if (user_manager::UserManager::Get()->IsCurrentUserOwner() &&
+      !features::IsConsumerAutoUpdateToggleAllowed()) {
+    // Write into the platform will signal back so pref gets synced.
+    update_engine_client->ToggleFeature(
+        update_engine::kFeatureConsumerAutoUpdate, true);
+  } else {
+    // Otherwise, trigger a read + sync with signal.
+    update_engine_client->IsFeatureEnabled(
+        update_engine::kFeatureConsumerAutoUpdate,
+        base::BindOnce(&Preferences::OnIsConsumerAutoUpdateEnabled,
+                       weak_ptr_factory_.GetWeakPtr()));
+  }
 }
 
 void Preferences::Init(Profile* profile, const user_manager::User* user) {
@@ -609,6 +629,8 @@ void Preferences::Init(Profile* profile, const user_manager::User* user) {
   // This causes OnIsSyncingChanged to be called when the value of
   // PrefService::IsSyncing() changes.
   prefs->AddObserver(this);
+  DBusThreadManager::Get()->GetUpdateEngineClient()->AddObserver(this);
+
   user_ = user;
   user_is_primary_ =
       user_manager::UserManager::Get()->GetPrimaryUser() == user_;
@@ -673,6 +695,10 @@ void Preferences::InitUserPrefsForTesting(
     input_method_manager_->SetState(ime_state);
 
   InitUserPrefs(prefs);
+
+  auto* update_engine_client =
+      DBusThreadManager::Get()->GetUpdateEngineClient();
+  update_engine_client->AddObserver(this);
 
   input_method_syncer_ =
       std::make_unique<input_method::InputMethodSyncer>(prefs, ime_state_);
@@ -967,7 +993,14 @@ void Preferences::ApplyPreferences(ApplyReason reason,
         allowed_input_methods_.GetValue();
 
     bool managed_by_policy =
-        ime_state_->SetAllowedInputMethods(allowed_input_methods, false);
+        ime_state_->SetAllowedInputMethods(allowed_input_methods);
+    bool success = ime_state_->ReplaceEnabledInputMethods(
+        ime_state_->GetEnabledInputMethodIds());
+    if (!success) {
+      const std::vector<std::string> fallback = {
+          ime_state_->GetAllowedFallBackKeyboardLayout()};
+      ime_state_->ReplaceEnabledInputMethods(fallback);
+    }
 
     if (managed_by_policy) {
       preload_engines_.SetValue(
@@ -1189,6 +1222,34 @@ void Preferences::ActiveUserChanged(user_manager::User* active_user) {
   if (active_user != user_)
     return;
   ApplyPreferences(REASON_ACTIVE_USER_CHANGED, "");
+}
+
+void Preferences::UpdateStatusChanged(
+    const update_engine::StatusResult& status) {
+  DVLOG(1) << "UpdateStatusChanged";
+  for (int i = 0; i < status.features_size(); ++i) {
+    const update_engine::Feature& feature = status.features(i);
+    bool enabled = feature.enabled();
+    DVLOG(1) << "Feature name=" << feature.name() << " enabled=" << enabled;
+    if (feature.name() == update_engine::kFeatureConsumerAutoUpdate) {
+      // Writes into this preference are only flushed by listening to
+      // platform side signals. This means Chrome side writes into this
+      // preference will not be visible outside of Chrome. This preference
+      // should be updated by making DBus calls into the platform side, which
+      // will signal out the true value of this preference as the true value is
+      // managed by the update_engine daemon.
+      consumer_auto_update_toggle_pref_.SetValue(enabled);
+    }
+  }
+}
+
+void Preferences::OnIsConsumerAutoUpdateEnabled(absl::optional<bool> enabled) {
+  DVLOG(1) << "OnIsConsumerAutoUpdateEnabled";
+  if (!enabled.has_value()) {
+    VLOG(1) << "Failed to retrieve consumer auto update feature value.";
+    return;
+  }
+  consumer_auto_update_toggle_pref_.SetValue(enabled.value());
 }
 
 }  // namespace ash

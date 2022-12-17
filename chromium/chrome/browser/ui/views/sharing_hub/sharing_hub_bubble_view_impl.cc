@@ -6,7 +6,7 @@
 
 #include "chrome/browser/share/share_metrics.h"
 #include "chrome/browser/sharing_hub/sharing_hub_model.h"
-#include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller.h"
+#include "chrome/browser/ui/sharing_hub/sharing_hub_bubble_controller_desktop_impl.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/sharing_hub/preview_view.h"
@@ -37,17 +37,20 @@ constexpr int kActionButtonGroup = 0;
 
 }  // namespace
 
-SharingHubBubbleViewImpl::SharingHubBubbleViewImpl(
-    views::View* anchor_view,
-    content::WebContents* web_contents,
-    SharingHubBubbleController* controller)
-    : LocationBarBubbleDelegateView(anchor_view, web_contents),
-      controller_(controller->AsWeakPtr()) {
+SharingHubBubbleViewImpl::SharingHubBubbleViewImpl(views::View* anchor_view,
+                                                   share::ShareAttempt attempt)
+    : LocationBarBubbleDelegateView(anchor_view, attempt.web_contents.get()),
+      attempt_(attempt) {
   SetButtons(ui::DIALOG_BUTTON_NONE);
   set_fixed_width(views::LayoutProvider::Get()->GetDistanceMetric(
       views::DISTANCE_BUBBLE_PREFERRED_WIDTH));
   SetEnableArrowKeyTraversal(true);
-  DCHECK(controller);
+
+  SharingHubBubbleControllerDesktopImpl* controller =
+      static_cast<SharingHubBubbleControllerDesktopImpl*>(
+          SharingHubBubbleController::CreateOrGetFromWebContents(
+              attempt.web_contents.get()));
+  controller_ = controller->AsWeakPtr();
 }
 
 SharingHubBubbleViewImpl::~SharingHubBubbleViewImpl() = default;
@@ -127,8 +130,7 @@ void SharingHubBubbleViewImpl::Init() {
   layout->SetOrientation(views::BoxLayout::Orientation::kVertical);
   if (controller_->ShouldUsePreview()) {
     auto* preview = AddChildView(std::make_unique<PreviewView>(
-        controller_->GetPreviewTitle(), controller_->GetPreviewUrl(),
-        controller_->GetPreviewImage()));
+        attempt_, controller_->GetPreviewImage()));
     preview->TakeCallbackSubscription(
         controller_->RegisterPreviewImageChangedCallback(base::BindRepeating(
             &PreviewView::OnImageChanged, base::Unretained(preview))));

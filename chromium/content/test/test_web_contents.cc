@@ -11,6 +11,7 @@
 #include "base/no_destructor.h"
 #include "content/browser/browser_url_handler_impl.h"
 #include "content/browser/portal/portal.h"
+#include "content/browser/prerender/prerender_host.h"
 #include "content/browser/prerender/prerender_host_registry.h"
 #include "content/browser/renderer_host/cross_process_frame_connector.h"
 #include "content/browser/renderer_host/debug_urls.h"
@@ -29,8 +30,11 @@
 #include "content/public/common/url_utils.h"
 #include "content/public/test/mock_render_process_host.h"
 #include "content/public/test/navigation_simulator.h"
+#include "content/public/test/prerender_test_util.h"
 #include "content/test/navigation_simulator_impl.h"
 #include "content/test/test_render_view_host.h"
+#include "mojo/public/cpp/bindings/clone_traits.h"
+#include "third_party/blink/public/common/features.h"
 #include "third_party/blink/public/common/page_state/page_state.h"
 #include "third_party/blink/public/mojom/security_context/insecure_request_policy.mojom.h"
 #include "ui/base/page_transition_types.h"
@@ -175,6 +179,16 @@ bool TestWebContents::TestDidDownloadImage(
                                       url, http_status_code, bitmaps,
                                       original_bitmap_sizes);
   return true;
+}
+
+void TestWebContents::TestSetFaviconURL(
+    const std::vector<blink::mojom::FaviconURLPtr>& favicon_urls) {
+  GetPrimaryPage().set_favicon_urls(mojo::Clone(favicon_urls));
+}
+
+void TestWebContents::TestUpdateFaviconURL(
+    const std::vector<blink::mojom::FaviconURLPtr>& favicon_urls) {
+  GetMainFrame()->UpdateFaviconURL(mojo::Clone(favicon_urls));
 }
 
 void TestWebContents::SetLastCommittedURL(const GURL& url) {
@@ -420,6 +434,9 @@ bool TestWebContents::IsBackForwardCacheSupported() {
 }
 
 int TestWebContents::AddPrerender(const GURL& url) {
+  DCHECK(!base::FeatureList::IsEnabled(
+      blink::features::kPrerender2MemoryControls));
+
   TestRenderFrameHost* rfhi = GetMainFrame();
   return GetPrerenderHostRegistry()->CreateAndStartHost(
       PrerenderAttributes(url, PrerenderTriggerType::kSpeculationRule,
@@ -427,6 +444,7 @@ int TestWebContents::AddPrerender(const GURL& url) {
                           rfhi->GetLastCommittedOrigin(),
                           rfhi->GetLastCommittedURL(),
                           rfhi->GetProcess()->GetID(), rfhi->GetFrameToken(),
+                          rfhi->GetFrameTreeNodeId(),
                           rfhi->GetPageUkmSourceId(), ui::PAGE_TRANSITION_LINK,
                           /*url_match_predicate=*/absl::nullopt),
       *this);
@@ -435,6 +453,8 @@ int TestWebContents::AddPrerender(const GURL& url) {
 TestRenderFrameHost* TestWebContents::AddPrerenderAndCommitNavigation(
     const GURL& url) {
   int host_id = AddPrerender(url);
+  DCHECK_NE(RenderFrameHost::kNoFrameTreeNodeId, host_id);
+
   PrerenderHost* host =
       GetPrerenderHostRegistry()->FindNonReservedHostById(host_id);
   DCHECK(host);
@@ -450,12 +470,37 @@ TestRenderFrameHost* TestWebContents::AddPrerenderAndCommitNavigation(
 std::unique_ptr<NavigationSimulator>
 TestWebContents::AddPrerenderAndStartNavigation(const GURL& url) {
   int host_id = AddPrerender(url);
+  DCHECK_NE(RenderFrameHost::kNoFrameTreeNodeId, host_id);
+
   PrerenderHost* host =
       GetPrerenderHostRegistry()->FindNonReservedHostById(host_id);
   DCHECK(host);
 
   return NavigationSimulatorImpl::CreateFromPendingInFrame(
       FrameTreeNode::GloballyFindByID(host->frame_tree_node_id()));
+}
+
+void TestWebContents::ActivatePrerenderedPage(const GURL& url) {
+  // Make sure the page for `url` has been prerendered.
+  PrerenderHostRegistry* registry = GetPrerenderHostRegistry();
+  PrerenderHost* prerender_host = registry->FindHostByUrlForTesting(url);
+  DCHECK(prerender_host);
+  int prerender_host_id = prerender_host->frame_tree_node_id();
+
+  // Activate the prerendered page.
+  test::PrerenderHostObserver prerender_host_observer(*this, prerender_host_id);
+  std::unique_ptr<NavigationSimulatorImpl> navigation =
+      NavigationSimulatorImpl::CreateRendererInitiated(url, GetMainFrame());
+  navigation->SetReferrer(blink::mojom::Referrer::New(
+      GetMainFrame()->GetLastCommittedURL(),
+      network::mojom::ReferrerPolicy::kStrictOriginWhenCrossOrigin));
+  navigation->Commit();
+  prerender_host_observer.WaitForDestroyed();
+
+  DCHECK_EQ(GetMainFrame()->GetLastCommittedURL(), url);
+
+  DCHECK(prerender_host_observer.was_activated());
+  DCHECK_EQ(registry->FindReservedHostById(prerender_host_id), nullptr);
 }
 
 base::TimeTicks TestWebContents::GetTabSwitchStartTime() {

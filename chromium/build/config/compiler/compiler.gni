@@ -30,22 +30,16 @@ if (is_ios) {
 
 declare_args() {
   # Set to true to use the android unwinder V2 implementation.
-  use_android_unwinder_v2 = false
-
-  # If this running on a GPU FYI bot.
-  # TODO(https://crbug.com/1233871): Remove this again.
-  is_gpu_fyi_bot = false
+  use_android_unwinder_v2 = true
 }
 
 declare_args() {
   # Set to true to use lld, the LLVM linker.
   # In late bring-up on macOS (see docs/mac_lld.md).
   # Tentatively used on iOS, except in cronet builds (cronet still supports
-  # 32-bit builds, which lld doesn't support) or when targeting "catalyst"
-  # (which lld doesn't support either).
+  # 32-bit builds, which lld doesn't support).
   # The default linker everywhere else.
-  use_lld = is_clang && !(is_mac && is_gpu_fyi_bot) && current_os != "zos" &&
-            !(is_ios && (is_cronet_build || target_environment == "catalyst"))
+  use_lld = is_clang && current_os != "zos" && !(is_ios && is_cronet_build)
 }
 
 declare_args() {
@@ -135,15 +129,15 @@ declare_args() {
   # performed as mitigation against Return-oriented programming (ROP).
   # https://chromium.googlesource.com/chromium/src/+/main/docs/design/sandbox.md#cet-shadow-stack
   enable_cet_shadow_stack = target_cpu == "x64"
+
+  # If true, optimize for size. Does not affect windows builds.
+  # Linux & Mac favor speed over size.
+  # TODO(brettw) it's weird that Mac and desktop Linux are different. We should
+  # explore favoring size over speed in this case as well.
+  optimize_for_size = is_android || is_chromecast || is_fuchsia || is_ios
 }
 
 assert(!is_cfi || use_thin_lto, "CFI requires ThinLTO")
-
-# If true, optimize for size. Does not affect windows builds.
-# Linux & Mac favor speed over size.
-# TODO(brettw) it's weird that Mac and desktop Linux are different. We should
-# explore favoring size over speed in this case as well.
-optimize_for_size = is_android || is_chromecast || is_fuchsia || is_ios
 
 declare_args() {
   # Whether we should consider the profile we're using to be accurate. Accurate

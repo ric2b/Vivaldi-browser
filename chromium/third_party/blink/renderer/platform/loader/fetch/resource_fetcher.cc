@@ -35,6 +35,7 @@
 #include "base/debug/dump_without_crashing.h"
 #include "base/feature_list.h"
 #include "base/logging.h"
+#include "base/metrics/histogram_functions.h"
 #include "base/metrics/histogram_macros.h"
 #include "base/time/time.h"
 #include "services/network/public/cpp/request_mode.h"
@@ -44,10 +45,11 @@
 #include "third_party/blink/public/common/thread_safe_browser_interface_broker_proxy.h"
 #include "third_party/blink/public/mojom/devtools/console_message.mojom-blink.h"
 #include "third_party/blink/public/mojom/fetch/fetch_api_request.mojom-blink.h"
-#include "third_party/blink/public/mojom/web_feature/web_feature.mojom-blink.h"
+#include "third_party/blink/public/mojom/use_counter/metrics/web_feature.mojom-blink.h"
 #include "third_party/blink/public/platform/platform.h"
 #include "third_party/blink/public/platform/scheduler/web_scoped_virtual_time_pauser.h"
 #include "third_party/blink/public/platform/web_back_forward_cache_loader_helper.h"
+#include "third_party/blink/public/platform/web_code_cache_loader.h"
 #include "third_party/blink/public/platform/web_url.h"
 #include "third_party/blink/public/platform/web_url_request.h"
 #include "third_party/blink/renderer/platform/bindings/script_forbidden_scope.h"
@@ -192,11 +194,12 @@ static ThreadSpecific<PriorityObserverMap>& PriorityObservers() {
   return map;
 }
 
-ResourceLoadPriority AdjustPriorityWithPriorityHint(
+ResourceLoadPriority AdjustPriorityWithPriorityHintAndRenderBlocking(
     ResourceLoadPriority priority_so_far,
     ResourceType type,
     const ResourceRequestHead& resource_request,
     FetchParameters::DeferOption defer_option,
+    RenderBlockingBehavior render_blocking_behavior,
     bool is_link_preload) {
   mojom::blink::FetchPriorityHint fetch_priority_hint =
       resource_request.GetFetchPriorityHint();
@@ -231,6 +234,13 @@ ResourceLoadPriority AdjustPriorityWithPriorityHint(
       break;
   }
 
+  // Render-blocking is a signal that the resource is important, so we bump it
+  // to at least kHigh.
+  if (render_blocking_behavior == RenderBlockingBehavior::kBlocking &&
+      new_priority < ResourceLoadPriority::kHigh) {
+    new_priority = ResourceLoadPriority::kHigh;
+  }
+
   return new_priority;
 }
 
@@ -249,6 +259,14 @@ std::unique_ptr<TracedValue> CreateTracedValueForUnusedPreload(
   value->SetString("url", String(url.ElidedString().Utf8()));
   value->SetInteger("status", static_cast<int>(status));
   value->SetString("requestId", request_id);
+  return value;
+}
+
+std::unique_ptr<TracedValue> CreateTracedValueForUnusedEarlyHintsPreload(
+    const KURL& url) {
+  // TODO(https://crbug.com/1317936): Consider adding more trace values.
+  auto value = std::make_unique<TracedValue>();
+  value->SetString("url", String(url.ElidedString().Utf8()));
   return value;
 }
 
@@ -390,6 +408,7 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
     ResourcePriority::VisibilityStatus visibility,
     FetchParameters::DeferOption defer_option,
     FetchParameters::SpeculativePreloadType speculative_preload_type,
+    RenderBlockingBehavior render_blocking_behavior,
     bool is_link_preload) {
   DCHECK(!resource_request.PriorityHasBeenSet() ||
          type == ResourceType::kImage);
@@ -460,11 +479,12 @@ ResourceLoadPriority ResourceFetcher::ComputeLoadPriority(
     }
   }
 
-  priority = AdjustPriorityWithPriorityHint(priority, type, resource_request,
-                                            defer_option, is_link_preload);
+  priority = AdjustPriorityWithPriorityHintAndRenderBlocking(
+      priority, type, resource_request, defer_option, render_blocking_behavior,
+      is_link_preload);
 
   if (properties_->IsSubframeDeprioritizationEnabled()) {
-    if (properties_->IsMainFrame()) {
+    if (properties_->IsOutermostMainFrame()) {
       UMA_HISTOGRAM_ENUMERATION(
           "LowPriorityIframes.MainFrameRequestPriority", priority,
           static_cast<int>(ResourceLoadPriority::kHighest) + 1);
@@ -584,7 +604,7 @@ void ResourceFetcher::DidLoadResourceFromMemoryCache(
 
   resource_load_observer_->WillSendRequest(
       request, ResourceResponse() /* redirects */, resource->GetType(),
-      resource->Options(), render_blocking_behavior);
+      resource->Options(), render_blocking_behavior, resource);
   resource_load_observer_->DidReceiveResponse(
       request.InspectorId(), request, resource->GetResponse(), resource,
       ResourceLoadObserver::ResponseSource::kFromMemoryCache);
@@ -863,7 +883,8 @@ absl::optional<ResourceRequestBlockedReason> ResourceFetcher::PrepareRequest(
     computed_load_priority = ComputeLoadPriority(
         resource_type, params.GetResourceRequest(),
         ResourcePriority::kNotVisible, params.Defer(),
-        params.GetSpeculativePreloadType(), params.IsLinkPreload());
+        params.GetSpeculativePreloadType(), params.GetRenderBlockingBehavior(),
+        params.IsLinkPreload());
   }
 
   DCHECK_NE(computed_load_priority, ResourceLoadPriority::kUnresolved);
@@ -1003,8 +1024,17 @@ Resource* ResourceFetcher::RequestResource(FetchParameters& params,
       TRACE_DISABLED_BY_DEFAULT("network"), "ResourceLoad",
       TRACE_ID_WITH_SCOPE("BlinkResourceID", TRACE_ID_LOCAL(identifier)), "url",
       resource_request.Url());
-  SCOPED_BLINK_UMA_HISTOGRAM_TIMER_THREAD_SAFE(
-      "Blink.Fetch.RequestResourceTime");
+  base::ScopedClosureRunner timer(base::BindOnce(
+      [](base::TimeTicks start, bool is_data) {
+        base::TimeDelta elapsed = base::TimeTicks::Now() - start;
+        base::UmaHistogramMicrosecondsTimes("Blink.Fetch.RequestResourceTime2",
+                                            elapsed);
+        if (is_data) {
+          base::UmaHistogramMicrosecondsTimes(
+              "Blink.Fetch.RequestResourceTime2.Data", elapsed);
+        }
+      },
+      base::TimeTicks::Now(), params.Url().ProtocolIsData()));
   TRACE_EVENT1("blink,blink.resource", "ResourceFetcher::requestResource",
                "url", params.Url().ElidedString().Utf8());
 
@@ -1841,7 +1871,7 @@ void ResourceFetcher::ScheduleWarnUnusedPreloads() {
   // If preloads_ is not empty here, it's full of link
   // preloads, as speculative preloads should have already been cleared when
   // parsing finished.
-  if (preloads_.IsEmpty())
+  if (preloads_.IsEmpty() && early_hints_preloaded_resources_.IsEmpty())
     return;
   unused_preloads_timer_ = PostDelayedCancellableTask(
       *freezable_task_runner_, FROM_HERE,
@@ -1867,6 +1897,29 @@ void ResourceFetcher::WarnUnusedPreloads() {
         CreateTracedValueForUnusedPreload(
             resource->Url(), Resource::MatchStatus::kOk,
             resource->GetResourceRequest().GetDevToolsId().value_or(String())));
+  }
+
+  for (auto& pair : early_hints_preloaded_resources_) {
+    if (pair.value.state == EarlyHintsPreloadEntry::State::kWarnedUnused)
+      continue;
+
+    // TODO(https://crbug.com/1317936): Consider not showing the following
+    // warning message when an Early Hints response requested preloading the
+    // resource but the HTTP cache already had the response and no network
+    // request was made for the resource. In such a situation not using the
+    // resource wouldn't be harmful. We need to plumb information from the
+    // browser process to check whether the resource was already in the HTTP
+    // cache.
+    String message = "The resource " + pair.key.GetString() +
+                     " was preloaded using link preload in Early Hints but not "
+                     "used within a few seconds from the window's load event.";
+    console_logger_->AddConsoleMessage(
+        mojom::blink::ConsoleMessageSource::kJavaScript,
+        mojom::blink::ConsoleMessageLevel::kWarning, message);
+    TRACE_EVENT1("blink,blink.resource",
+                 "ResourceFetcher::WarnUnusedEarlyHintsPreloads", "data",
+                 CreateTracedValueForUnusedEarlyHintsPreload(pair.key));
+    pair.value.state = EarlyHintsPreloadEntry::State::kWarnedUnused;
   }
 }
 
@@ -1901,8 +1954,7 @@ void ResourceFetcher::HandleLoaderFinish(Resource* resource,
       auto receiver = Context().TakePendingWorkerTimingReceiver(
           resource->GetResponse().RequestId());
       info->SetWorkerTimingReceiver(std::move(receiver));
-      if (resource->Options().request_initiator_context == kDocumentContext)
-        Context().AddResourceTiming(*info);
+      Context().AddResourceTiming(*info);
     }
   }
 
@@ -1958,8 +2010,7 @@ void ResourceFetcher::HandleLoaderError(Resource* resource,
   if (scoped_refptr<ResourceTimingInfo> info =
           resource_timing_info_map_.Take(resource)) {
     PopulateAndAddResourceTimingInfo(resource, info, finish_time);
-    if (resource->Options().request_initiator_context == kDocumentContext)
-      Context().AddResourceTiming(*info);
+    Context().AddResourceTiming(*info);
   }
 
   resource->VirtualTimePauser().UnpauseVirtualTime();
@@ -2030,7 +2081,7 @@ bool ResourceFetcher::StartLoad(
       ResourceResponse response;
       resource_load_observer_->WillSendRequest(
           request, response, resource->GetType(), resource->Options(),
-          render_blocking_behavior);
+          render_blocking_behavior, resource);
     }
 
     using QuotaType = decltype(inflight_keepalive_bytes_);
@@ -2197,10 +2248,7 @@ void ResourceFetcher::EmulateLoadStartedForInspector(
   resource_request.SetRequestDestination(request_destination);
   if (!resource_request.PriorityHasBeenSet()) {
     resource_request.SetPriority(ComputeLoadPriority(
-        resource->GetType(), resource_request, ResourcePriority::kNotVisible,
-        FetchParameters::DeferOption::kNoDefer,
-        FetchParameters::SpeculativePreloadType::kNotSpeculative,
-        false /* is_link_preload */));
+        resource->GetType(), resource_request, ResourcePriority::kNotVisible));
   }
   resource_request.SetReferrerString(Referrer::NoReferrer());
   resource_request.SetReferrerPolicy(network::mojom::ReferrerPolicy::kNever);
@@ -2313,9 +2361,9 @@ void ResourceFetcher::PopulateAndAddResourceTimingInfo(
           ? resource->GetResourceRequest().GetRedirectInfo()->original_url
           : resource->GetResourceRequest().Url();
 
-  auto it = early_hints_preloaded_resources_.find(initial_url);
-  if (it != early_hints_preloaded_resources_.end()) {
-    early_hints_preloaded_resources_.erase(it);
+  auto pair = early_hints_preloaded_resources_.find(initial_url);
+  if (pair != early_hints_preloaded_resources_.end()) {
+    early_hints_preloaded_resources_.erase(pair);
     const ResourceResponse& response = resource->GetResponse();
     if (!response.NetworkAccessed() &&
         (!response.WasFetchedViaServiceWorker() ||

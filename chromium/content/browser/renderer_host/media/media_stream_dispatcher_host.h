@@ -74,12 +74,12 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
   void CancelAllRequests();
 
   // mojom::MediaStreamDispatcherHost implementation
-  void GenerateStream(
+  void GenerateStreams(
       int32_t request_id,
       const blink::StreamControls& controls,
       bool user_gesture,
       blink::mojom::StreamSelectionInfoPtr audio_stream_selection_info_ptr,
-      GenerateStreamCallback callback) override;
+      GenerateStreamsCallback callback) override;
   void CancelRequest(int32_t request_id) override;
   void StopStreamDevice(
       const std::string& device_id,
@@ -107,15 +107,19 @@ class CONTENT_EXPORT MediaStreamDispatcherHost
                                 CropCallback callback,
                                 bool crop_id_passed_validation);
 #endif
-  void GetOpenDevice(const base::UnguessableToken& session_id,
+  void GetOpenDevice(int32_t page_request_id,
+                     const base::UnguessableToken& session_id,
                      GetOpenDeviceCallback callback) override;
-
-  void DoGenerateStream(
+  void DoGetOpenDevice(int32_t page_request_id,
+                       const base::UnguessableToken& session_id,
+                       GetOpenDeviceCallback callback,
+                       MediaDeviceSaltAndOrigin salt_and_origin);
+  void DoGenerateStreams(
       int32_t request_id,
       const blink::StreamControls& controls,
       bool user_gesture,
       blink::mojom::StreamSelectionInfoPtr audio_stream_selection_info_ptr,
-      GenerateStreamCallback callback,
+      GenerateStreamsCallback callback,
       MediaDeviceSaltAndOrigin salt_and_origin);
   void DoOpenDevice(int32_t request_id,
                     const std::string& device_id,

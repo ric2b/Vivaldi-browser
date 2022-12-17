@@ -28,7 +28,6 @@
 #include "chrome/browser/ui/app_list/search/common/icon_constants.h"
 #include "chrome/browser/ui/ash/shelf/chrome_shelf_controller.h"
 #include "chrome/browser/ui/web_applications/system_web_app_ui_utils.h"
-#include "chrome/browser/web_applications/system_web_apps/system_web_app_manager.h"
 #include "chrome/common/chrome_features.h"
 #include "components/favicon/core/large_icon_service.h"
 #include "components/services/app_service/public/cpp/app_update.h"
@@ -116,7 +115,8 @@ void AppServiceAppResult::GetContextMenuModel(GetMenuModelCallback callback) {
   }
 
   context_menu_ = std::make_unique<AppServiceContextMenu>(
-      this, profile(), app_id(), controller(), /*add_sort_options=*/false);
+      this, profile(), app_id(), controller(),
+      ash::AppListItemContext::kSearchResults);
   context_menu_->GetMenuModel(std::move(callback));
 }
 

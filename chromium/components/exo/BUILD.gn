@@ -30,6 +30,8 @@ static_library("exo") {
     "buffer.h",
     "capabilities.cc",
     "capabilities.h",
+    "common_utils.cc",
+    "common_utils.h",
     "data_device.cc",
     "data_device.h",
     "data_device_delegate.h",
@@ -147,7 +149,9 @@ static_library("exo") {
       "//ash/keyboard/ui",
       "//ash/public/cpp",
       "//ash/resources/vector_icons",
-      "//chromeos/crosapi/cpp",
+      "//chromeos/crosapi/cpp:crosapi_constants",
+      "//chromeos/dbus/power",
+      "//chromeos/dbus/power:power_manager_proto",
       "//chromeos/ui/base",
       "//chromeos/ui/frame",
       "//components/app_restore",
@@ -208,14 +212,6 @@ static_library("exo") {
     if (use_xkbcommon) {
       configs += [ ":xkbcommon" ]
     }
-  }
-
-  if (is_chromecast) {
-    deps += [ "//ui/accessibility:accessibility" ]
-    sources += [
-      "fullscreen_shell_surface.cc",
-      "fullscreen_shell_surface.h",
-    ]
   }
 }
 
@@ -349,6 +345,8 @@ source_set("unit_tests") {
       "//ash/public/cpp",
       "//ash/public/cpp/external_arc",
       "//build:chromeos_buildflags",
+      "//chromeos/dbus/power",
+      "//chromeos/dbus/power:power_manager_proto",
       "//chromeos/ui/base",
       "//chromeos/ui/frame",
       "//components/fullscreen_control",
@@ -359,11 +357,6 @@ source_set("unit_tests") {
       "//ui/gfx:test_support",
       "//ui/gfx/geometry",
     ]
-  }
-
-  if (is_chromecast) {
-    deps += [ "//ui/accessibility:accessibility" ]
-    sources += [ "fullscreen_shell_surface_unittest.cc" ]
   }
 }
 

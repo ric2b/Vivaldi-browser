@@ -1610,14 +1610,12 @@ class OmniboxPedalCustomizeSearchEngines : public OmniboxPedal {
 // =============================================================================
 
 const gfx::VectorIcon& GetSharingHubVectorIcon() {
-#if BUILDFLAG(IS_CHROMEOS_ASH)
-  return omnibox::kShareIcon;
-#elif BUILDFLAG(IS_MAC)
+#if BUILDFLAG(IS_MAC)
   return omnibox::kShareMacIcon;
 #elif BUILDFLAG(IS_WIN)
   return omnibox::kShareWinIcon;
 #else
-  return omnibox::kSendIcon;
+  return omnibox::kShareIcon;
 #endif
 }
 
@@ -1632,20 +1630,18 @@ GetPedalImplementations(bool incognito, bool testing) {
   };
 
 #if BUILDFLAG(IS_ANDROID)
-  if (testing || OmniboxFieldTrial::IsPedalsAndroidBatch1Enabled()) {
-    if (!incognito) {
-      add(new OmniboxPedalClearBrowsingData(incognito));
-    }
-    add(new OmniboxPedalManagePasswords());
-    add(new OmniboxPedalUpdateCreditCard());
-    add(new OmniboxPedalLaunchIncognito());
-    add(new OmniboxPedalRunChromeSafetyCheck());
-    add(new OmniboxPedalPlayChromeDinoGame());
-    add(new OmniboxPedalManageSiteSettings());
-    add(new OmniboxPedalManageChromeSettings());
-    add(new OmniboxPedalViewChromeHistory());
-    add(new OmniboxPedalManageChromeAccessibility());
+  if (!incognito) {
+    add(new OmniboxPedalClearBrowsingData(incognito));
   }
+  add(new OmniboxPedalManagePasswords());
+  add(new OmniboxPedalUpdateCreditCard());
+  add(new OmniboxPedalLaunchIncognito());
+  add(new OmniboxPedalRunChromeSafetyCheck());
+  add(new OmniboxPedalPlayChromeDinoGame());
+  add(new OmniboxPedalManageSiteSettings());
+  add(new OmniboxPedalManageChromeSettings());
+  add(new OmniboxPedalViewChromeHistory());
+  add(new OmniboxPedalManageChromeAccessibility());
 #else  // BUILDFLAG(IS_ANDROID)
 
   add(new OmniboxPedalClearBrowsingData(incognito));

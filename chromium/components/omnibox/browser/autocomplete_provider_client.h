@@ -9,14 +9,10 @@
 #include <string>
 #include <vector>
 
-#include "base/memory/ref_counted.h"
+#include "base/memory/scoped_refptr.h"
 #include "base/memory/weak_ptr.h"
 #include "components/history/core/browser/keyword_id.h"
-#include "components/history/core/browser/top_sites.h"
 #include "components/omnibox/browser/actions/omnibox_action.h"
-#include "components/omnibox/browser/keyword_extensions_delegate.h"
-#include "components/omnibox/browser/omnibox_triggered_feature_service.h"
-#include "components/omnibox/browser/shortcuts_backend.h"
 #include "third_party/metrics_proto/omnibox_event.pb.h"
 
 struct AutocompleteMatch;
@@ -26,8 +22,10 @@ class RemoteSuggestionsService;
 class DocumentSuggestionsService;
 class GURL;
 class InMemoryURLIndex;
+class KeywordExtensionsDelegate;
 class KeywordProvider;
 class OmniboxPedalProvider;
+class OmniboxTriggeredFeatureService;
 class PrefService;
 class ShortcutsBackend;
 class TabMatcher;
@@ -39,6 +37,7 @@ class BookmarkModel;
 namespace history {
 class HistoryService;
 class URLDatabase;
+class TopSites;
 }
 
 namespace history_clusters {
@@ -61,10 +60,6 @@ namespace query_tiles {
 class TileService;
 }
 
-namespace ntp_tiles {
-class MostVisitedSites;
-}
-
 class TemplateURLService;
 
 class AutocompleteProviderClient : public OmniboxAction::Client {
@@ -80,7 +75,6 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual history::HistoryService* GetHistoryService() = 0;
   virtual history_clusters::HistoryClustersService* GetHistoryClustersService();
   virtual scoped_refptr<history::TopSites> GetTopSites() = 0;
-  virtual ntp_tiles::MostVisitedSites* GetNtpMostVisitedSites();
   virtual bookmarks::BookmarkModel* GetBookmarkModel() = 0;
   virtual history::URLDatabase* GetInMemoryDatabase() = 0;
   virtual InMemoryURLIndex* GetInMemoryURLIndex() = 0;
@@ -169,7 +163,7 @@ class AutocompleteProviderClient : public OmniboxAction::Client {
   virtual void PrefetchImage(const GURL& url) = 0;
 
   // Sends a hint to the service worker context that navigation to
-  // |desination_url| is likely, unless the current profile is in incognito
+  // |destination_url| is likely, unless the current profile is in incognito
   // mode. On platforms where this is supported, the service worker lookup can
   // be expensive so this method should only be called once per input session.
   virtual void StartServiceWorker(const GURL& destination_url) {}

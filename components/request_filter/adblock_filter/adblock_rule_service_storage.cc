@@ -10,7 +10,6 @@
 #include "base/json/json_file_value_serializer.h"
 #include "base/json/json_string_value_serializer.h"
 #include "base/json/values_util.h"
-#include "base/task/post_task.h"
 #include "base/time/time.h"
 #include "components/request_filter/adblock_filter/adblock_known_sources_handler.h"
 #include "components/request_filter/adblock_filter/adblock_rule_service_impl.h"
@@ -345,17 +344,17 @@ void DoLoad(const base::FilePath& path,
           std::max(0, std::min(kCurrentStorageVersion, version.value()));
   }
 
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(std::move(done_callback), std::move(load_result)));
 }
 
 base::Value SerializeCounters(const std::map<std::string, int>& counters) {
-  std::vector<std::pair<std::string, base::Value>> buffer;
+  base::Value::Dict buffer;
   for (const auto& counter : counters) {
-    buffer.emplace_back(counter.first, counter.second);
+    buffer.Set(counter.first, counter.second);
   }
-  return base::Value(base::Value::DictStorage(std::move(buffer)));
+  return base::Value(std::move(buffer));
 }
 
 base::Value::List SerializeSourcesList(

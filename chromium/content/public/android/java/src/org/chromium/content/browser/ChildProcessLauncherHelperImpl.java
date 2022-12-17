@@ -379,10 +379,9 @@ public final class ChildProcessLauncherHelperImpl {
                 // We only support sandboxed utility processes now.
                 assert ContentSwitches.SWITCH_UTILITY_PROCESS.equals(processType);
 
-                // Network Service:
-                if (ContentSwitches.NETWORK_SANDBOX_TYPE.equals(ContentSwitchUtils.getSwitchValue(
+                if (ContentSwitches.NONE_SANDBOX_TYPE.equals(ContentSwitchUtils.getSwitchValue(
                             commandLine, ContentSwitches.SWITCH_SERVICE_SANDBOX_TYPE))) {
-                    sandboxed = ChildProcessLauncherHelperImplJni.get().isNetworkSandboxEnabled();
+                    sandboxed = false;
                 }
             }
         }
@@ -445,14 +444,11 @@ public final class ChildProcessLauncherHelperImpl {
             public void run() {
                 ChildConnectionAllocator allocator =
                         getConnectionAllocator(context, true /* sandboxed */);
-                boolean bindWaiveCpu = ContentFeatureList.isEnabled(
-                        ContentFeatureList.BINDING_MANAGEMENT_WAIVE_CPU);
                 if (ChildProcessConnection.supportVariableConnections()) {
-                    sBindingManager = new BindingManager(
-                            context, sSandboxedChildConnectionRanking, bindWaiveCpu);
+                    sBindingManager = new BindingManager(context, sSandboxedChildConnectionRanking);
                 } else {
                     sBindingManager = new BindingManager(context, allocator.getNumberOfServices(),
-                            sSandboxedChildConnectionRanking, bindWaiveCpu);
+                            sSandboxedChildConnectionRanking);
                 }
             }
         });
@@ -695,7 +691,7 @@ public final class ChildProcessLauncherHelperImpl {
                     // Nothing to add.
                     break;
                 case ChildProcessImportance.MODERATE:
-                    connection.addModerateBinding(false);
+                    connection.addModerateBinding();
                     break;
                 case ChildProcessImportance.IMPORTANT:
                     connection.addStrongBinding();
@@ -720,7 +716,7 @@ public final class ChildProcessLauncherHelperImpl {
                         // Nothing to remove.
                         break;
                     case ChildProcessImportance.MODERATE:
-                        connection.removeModerateBinding(false);
+                        connection.removeModerateBinding();
                         break;
                     case ChildProcessImportance.IMPORTANT:
                         connection.removeStrongBinding();
@@ -870,6 +866,5 @@ public final class ChildProcessLauncherHelperImpl {
                 int reverseRank);
 
         boolean serviceGroupImportanceEnabled();
-        boolean isNetworkSandboxEnabled();
     }
 }

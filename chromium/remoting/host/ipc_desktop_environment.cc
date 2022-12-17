@@ -24,6 +24,7 @@
 #include "remoting/host/input_injector.h"
 #include "remoting/host/keyboard_layout_monitor.h"
 #include "remoting/host/remote_open_url/url_forwarder_configurator.h"
+#include "remoting/protocol/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
 #include "third_party/webrtc/modules/desktop_capture/mouse_cursor_monitor.h"
 
@@ -66,8 +67,7 @@ std::unique_ptr<ScreenControls> IpcDesktopEnvironment::CreateScreenControls() {
   return desktop_session_proxy_->CreateScreenControls();
 }
 
-std::unique_ptr<DesktopDisplayInfoMonitor>
-IpcDesktopEnvironment::CreateDisplayInfoMonitor() {
+DesktopDisplayInfoMonitor* IpcDesktopEnvironment::GetDisplayInfoMonitor() {
   // Not used in the Network process.
   return nullptr;
 }
@@ -84,9 +84,7 @@ IpcDesktopEnvironment::CreateKeyboardLayoutMonitor(
       std::move(callback));
 }
 
-std::unique_ptr<webrtc::DesktopCapturer>
-IpcDesktopEnvironment::CreateVideoCapturer(
-    std::unique_ptr<DesktopDisplayInfoMonitor> monitor) {
+std::unique_ptr<DesktopCapturer> IpcDesktopEnvironment::CreateVideoCapturer() {
   return desktop_session_proxy_->CreateVideoCapturer();
 }
 
@@ -112,10 +110,14 @@ uint32_t IpcDesktopEnvironment::GetDesktopSessionId() const {
 }
 
 std::unique_ptr<DesktopAndCursorConditionalComposer>
-IpcDesktopEnvironment::CreateComposingVideoCapturer(
-    std::unique_ptr<DesktopDisplayInfoMonitor> monitor) {
+IpcDesktopEnvironment::CreateComposingVideoCapturer() {
   // Cursor compositing is done by the desktop process if necessary.
   return nullptr;
+}
+
+std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
+IpcDesktopEnvironment::CreateRemoteWebAuthnStateChangeNotifier() {
+  return desktop_session_proxy_->CreateRemoteWebAuthnStateChangeNotifier();
 }
 
 IpcDesktopEnvironmentFactory::IpcDesktopEnvironmentFactory(

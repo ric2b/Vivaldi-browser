@@ -10,9 +10,9 @@
 #include "base/json/json_reader.h"
 #include "base/json/json_writer.h"
 #include "base/notreached.h"
+#include "base/strings/escape.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/values.h"
-#include "net/base/escape.h"
 #include "net/traffic_annotation/network_traffic_annotation.h"
 #include "services/network/public/cpp/resource_request.h"
 #include "services/network/public/cpp/shared_url_loader_factory.h"
@@ -90,7 +90,7 @@ void HttpExchange::Exchange(
       if (!data.empty()) {
         data += "&";
       }
-      data += net::EscapeUrlEncodedData(kv.first, true);
+      data += base::EscapeUrlEncodedData(kv.first, true);
       data += "=";
       switch (kv.second.type()) {
         case base::Value::Type::BOOLEAN:
@@ -100,7 +100,7 @@ void HttpExchange::Exchange(
           data += base::NumberToString(kv.second.GetInt());
           break;
         case base::Value::Type::STRING:
-          data += net::EscapeUrlEncodedData(kv.second.GetString(), true);
+          data += base::EscapeUrlEncodedData(kv.second.GetString(), true);
           break;
         default:
           error_msg_ = "Cannot save a vector value as x-www-form-urlencoded.";
@@ -267,15 +267,15 @@ bool HttpExchange::ParamArrayStringContains(const std::string& name,
                                             bool required,
                                             const std::string& value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_list()) {
     error_msg_ = "Field " + name + " must be an array.";
     return false;
   }
-  auto nodeAsList = base::Value::AsListValue(*node).GetListDeprecated();
-  for (auto& element : nodeAsList) {
+  const auto& node_as_list = node->GetList();
+  for (auto& element : node_as_list) {
     if (element.is_string() && element.GetString() == value) {
       // Success!
       return true;
@@ -290,19 +290,19 @@ bool HttpExchange::ParamArrayStringEquals(
     bool required,
     const std::vector<std::string>& value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_list()) {
     error_msg_ = "Field " + name + " must be an array";
     return false;
   }
-  auto nodeAsList = base::Value::AsListValue(*node).GetListDeprecated();
-  if (nodeAsList.size() == value.size()) {
+  const base::Value::List& node_as_list = node->GetList();
+  if (node_as_list.size() == value.size()) {
     // Compares the vectors, element by element.
     bool are_equal = true;
     for (size_t i = 0; i < value.size() && are_equal; ++i) {
-      const auto& element = nodeAsList[i];
+      const auto& element = node_as_list[i];
       if (!element.is_string() || element.GetString() != value[i]) {
         are_equal = false;
       }
@@ -329,14 +329,14 @@ bool HttpExchange::ParamStringGet(const std::string& name,
                                   bool required,
                                   std::string* value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_string()) {
     error_msg_ = "Field " + name + " must be a string";
     return false;
   }
-  if (value != nullptr) {
+  if (value) {
     *value = node->GetString();
   }
   return true;
@@ -346,7 +346,7 @@ bool HttpExchange::ParamStringEquals(const std::string& name,
                                      bool required,
                                      const std::string& value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_string()) {
@@ -364,7 +364,7 @@ bool HttpExchange::ParamURLGet(const std::string& name,
                                bool required,
                                GURL* value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_string()) {
@@ -374,7 +374,7 @@ bool HttpExchange::ParamURLGet(const std::string& name,
   GURL gurl(node->GetString());
   if (gurl.is_valid() && gurl.IsStandard() && gurl.scheme() == "https") {
     // Success!
-    if (value != nullptr) {
+    if (value) {
       *value = gurl;
     }
     return true;
@@ -387,7 +387,7 @@ bool HttpExchange::ParamURLEquals(const std::string& name,
                                   bool required,
                                   const GURL& value) {
   base::Value* node = FindNode(name, required);
-  if (node == nullptr) {
+  if (!node) {
     return !required;
   }
   if (!node->is_string()) {
@@ -407,7 +407,7 @@ const std::string& HttpExchange::GetErrorMessage() const {
 
 base::Value* HttpExchange::FindNode(const std::string& name, bool required) {
   base::Value* value = content_.FindKey(name);
-  if (required && value == nullptr) {
+  if (required && !value) {
     error_msg_ = "Field " + name + " is missing";
   }
   return value;

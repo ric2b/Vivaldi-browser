@@ -24,13 +24,13 @@
 #include "chrome/browser/ui/chrome_pages.h"
 #include "chrome/browser/ui/signin/profile_colors_util.h"
 #include "chrome/browser/ui/ui_features.h"
-#include "chrome/browser/ui/user_education/feature_promo_controller.h"
 #include "chrome/browser/ui/views/chrome_layout_provider.h"
 #include "chrome/browser/ui/views/chrome_typography.h"
 #include "chrome/browser/ui/views/hover_button.h"
 #include "chrome/browser/ui/views/profiles/incognito_menu_view.h"
 #include "chrome/grit/generated_resources.h"
 #include "components/feature_engagement/public/feature_constants.h"
+#include "components/user_education/common/feature_promo_controller.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/metadata/metadata_header_macros.h"
 #include "ui/base/metadata/metadata_impl_macros.h"
@@ -62,7 +62,6 @@
 
 #if !BUILDFLAG(IS_CHROMEOS_ASH)
 #include "chrome/browser/ui/views/profiles/profile_menu_view.h"
-#include "chrome/browser/ui/views/sync/dice_signin_button_view.h"
 #endif
 
 namespace {
@@ -497,8 +496,7 @@ ProfileMenuViewBase::EditButtonParams::EditButtonParams(
     const EditButtonParams&) = default;
 
 // static
-void ProfileMenuViewBase::ShowBubble(profiles::BubbleViewMode view_mode,
-                                     views::Button* anchor_button,
+void ProfileMenuViewBase::ShowBubble(views::Button* anchor_button,
                                      Browser* browser,
                                      bool is_source_accelerator) {
   if (IsShowing())
@@ -510,8 +508,7 @@ void ProfileMenuViewBase::ShowBubble(profiles::BubbleViewMode view_mode,
       feature_engagement::kIPHProfileSwitchFeature);
 
   ProfileMenuViewBase* bubble = nullptr;
-  if (view_mode == profiles::BUBBLE_VIEW_MODE_INCOGNITO) {
-    DCHECK(browser->profile()->IsIncognitoProfile());
+  if (browser->profile()->IsIncognitoProfile()) {
     bubble = new IncognitoMenuView(anchor_button, browser);
   } else {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
@@ -519,7 +516,6 @@ void ProfileMenuViewBase::ShowBubble(profiles::BubbleViewMode view_mode,
     // BUBBLE_VIEW_MODE_INCOGNITO.
     NOTREACHED() << "The profile menu is not implemented on Ash.";
 #else
-    DCHECK_EQ(profiles::BUBBLE_VIEW_MODE_PROFILE_CHOOSER, view_mode);
     bubble = new ProfileMenuView(anchor_button, browser);
 #endif
   }
@@ -937,8 +933,6 @@ void ProfileMenuViewBase::Reset() {
 
   // Create and add new component containers in the correct order.
   // First, add the parts of the current profile.
-  heading_container_ =
-      components->AddChildView(std::make_unique<views::View>());
   identity_info_container_ =
       components->AddChildView(std::make_unique<views::View>());
   shortcut_features_container_ =

@@ -264,7 +264,8 @@ ax::mojom::blink::Role AXLayoutObject::RoleFromLayoutObjectOrNode() const {
     }
     if (layout_object_->IsSVGShape())
       return ax::mojom::blink::Role::kGraphicsSymbol;
-    if (layout_object_->IsSVGForeignObject() || IsA<SVGGElement>(node))
+    if (layout_object_->IsSVGForeignObjectIncludingNG() ||
+        IsA<SVGGElement>(node))
       return ax::mojom::blink::Role::kGroup;
     if (IsA<SVGUseElement>(node))
       return ax::mojom::blink::Role::kGraphicsObject;
@@ -514,7 +515,7 @@ bool AXLayoutObject::ComputeAccessibilityIsIgnored(
   }
 
   // The SVG-AAM says the foreignObject element is normally presentational.
-  if (layout_object_->IsSVGForeignObject()) {
+  if (layout_object_->IsSVGForeignObjectIncludingNG()) {
     if (ignored_reasons)
       ignored_reasons->push_back(IgnoredReason(kAXPresentational));
     return true;
@@ -1172,8 +1173,8 @@ String AXLayoutObject::TextAlternative(
 //
 
 AXObject* AXLayoutObject::AccessibilityHitTest(const gfx::Point& point) const {
-  // Must be called for the document.
-  if (!IsRoot() || !layout_object_)
+  // Must be called for the document's root or a popup's root.
+  if (RoleValue() != ax::mojom::blink::Role::kRootWebArea || !layout_object_)
     return nullptr;
 
   // Must be called with lifecycle >= pre-paint clean
@@ -1470,7 +1471,7 @@ unsigned AXLayoutObject::ColumnCount() const {
   LayoutNGTableInterface* table =
       ToInterface<LayoutNGTableInterface>(layout_object);
   table->RecalcSectionsIfNeeded();
-  LayoutNGTableSectionInterface* table_section = table->TopSectionInterface();
+  LayoutNGTableSectionInterface* table_section = table->FirstSectionInterface();
   if (!table_section)
     return AXNodeObject::ColumnCount();
 
@@ -1491,14 +1492,14 @@ unsigned AXLayoutObject::RowCount() const {
 
   unsigned row_count = 0;
   const LayoutNGTableSectionInterface* table_section =
-      table->TopSectionInterface();
+      table->FirstSectionInterface();
   if (!table_section)
     return AXNodeObject::RowCount();
 
   while (table_section) {
     row_count += table_section->NumRows();
     table_section =
-        table->SectionBelowInterface(table_section, kSkipEmptySections);
+        table->NextSectionInterface(table_section, kSkipEmptySections);
   }
   return row_count;
 }
@@ -1548,10 +1549,10 @@ unsigned AXLayoutObject::RowIndex() const {
   // Since our table might have multiple sections, we have to offset our row
   // appropriately.
   table->RecalcSectionsIfNeeded();
-  const LayoutNGTableSectionInterface* section = table->TopSectionInterface();
+  const LayoutNGTableSectionInterface* section = table->FirstSectionInterface();
   while (section && section != row_section) {
     row_index += section->NumRows();
-    section = table->SectionBelowInterface(section, kSkipEmptySections);
+    section = table->NextSectionInterface(section, kSkipEmptySections);
   }
 
   return row_index;
@@ -1619,7 +1620,7 @@ AXObject* AXLayoutObject::CellForColumnAndRow(unsigned target_column_index,
       ToInterface<LayoutNGTableInterface>(layout_object);
   table->RecalcSectionsIfNeeded();
 
-  LayoutNGTableSectionInterface* table_section = table->TopSectionInterface();
+  LayoutNGTableSectionInterface* table_section = table->FirstSectionInterface();
   if (!table_section) {
     return AXNodeObject::CellForColumnAndRow(target_column_index,
                                              target_row_index);
@@ -1654,7 +1655,7 @@ AXObject* AXLayoutObject::CellForColumnAndRow(unsigned target_column_index,
 
     row_offset += table_section->NumRows();
     table_section =
-        table->SectionBelowInterface(table_section, kSkipEmptySections);
+        table->NextSectionInterface(table_section, kSkipEmptySections);
   }
 
   return nullptr;
@@ -1670,7 +1671,7 @@ bool AXLayoutObject::FindAllTableCellsWithRole(ax::mojom::blink::Role role,
       ToInterface<LayoutNGTableInterface>(layout_object);
   table->RecalcSectionsIfNeeded();
 
-  LayoutNGTableSectionInterface* table_section = table->TopSectionInterface();
+  LayoutNGTableSectionInterface* table_section = table->FirstSectionInterface();
   if (!table_section)
     return true;
 
@@ -1687,7 +1688,7 @@ bool AXLayoutObject::FindAllTableCellsWithRole(ax::mojom::blink::Role role,
     }
 
     table_section =
-        table->SectionBelowInterface(table_section, kSkipEmptySections);
+        table->NextSectionInterface(table_section, kSkipEmptySections);
   }
 
   return true;

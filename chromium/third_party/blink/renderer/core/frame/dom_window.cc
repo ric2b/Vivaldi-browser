@@ -379,7 +379,7 @@ void DOMWindow::close(v8::Isolate* isolate) {
 void DOMWindow::Close(LocalDOMWindow* incumbent_window) {
   DCHECK(incumbent_window);
 
-  if (!GetFrame() || !GetFrame()->IsMainFrame())
+  if (!GetFrame() || !GetFrame()->IsOutermostMainFrame())
     return;
 
   Page* page = GetFrame()->GetPage();
@@ -476,7 +476,7 @@ void DOMWindow::focus(v8::Isolate* isolate) {
   }
 
   // If we're a top level window, bring the window to the front.
-  if (frame->IsMainFrame() && allow_focus) {
+  if (frame->IsOutermostMainFrame() && allow_focus) {
     frame->FocusPage(incumbent_window->GetFrame());
   } else if (auto* local_frame = DynamicTo<LocalFrame>(frame)) {
     // We are depending on user activation twice since IsFocusAllowed() will
@@ -524,6 +524,7 @@ void DOMWindow::InstallCoopAccessMonitor(
   CoopAccessMonitor monitor;
 
   DCHECK(accessing_frame->IsMainFrame());
+  DCHECK(!accessing_frame->IsInFencedFrameTree());
   monitor.report_type = coop_reporter_params->report_type;
   monitor.accessing_main_frame = accessing_frame->GetLocalFrameToken();
   monitor.endpoint_defined = coop_reporter_params->endpoint_defined;
@@ -761,16 +762,47 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
   if (options->includeUserActivation())
     user_activation = UserActivation::CreateSnapshot(source);
 
-  // TODO(mustaq): This is an ad-hoc mechanism to support delegating a single
-  // capability.  We need to add a structure to support passing other
-  // capabilities.  An explainer for the general delegation API is here:
-  // https://github.com/mustaqahmed/capability-delegation
-  bool delegate_payment_request = false;
-  if (LocalFrame::HasTransientUserActivation(source_frame) &&
-      options->hasDelegate()) {
+  // Capability Delegation permits a script to delegate its ability to call a
+  // restricted API to another browsing context it trusts. User activation is
+  // currently consumed when a supported capability is specified, to prevent
+  // potentially abusive repeated delegation attempts.
+  // https://wicg.github.io/capability-delegation/spec.html
+  // TODO(mustaq): Explore use cases for delegating multiple capabilities.
+  mojom::blink::DelegatedCapability delegated_capability =
+      mojom::blink::DelegatedCapability::kNone;
+  if (options->hasDelegate()) {
     Vector<String> capability_list;
     options->delegate().Split(' ', capability_list);
-    delegate_payment_request = capability_list.Contains("payment");
+    if (capability_list.Contains("payment")) {
+      delegated_capability = mojom::blink::DelegatedCapability::kPaymentRequest;
+    } else if (capability_list.Contains("fullscreen")) {
+      delegated_capability =
+          mojom::blink::DelegatedCapability::kFullscreenRequest;
+    } else {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotSupportedError,
+          "Delegation of \'" + options->delegate() + "\' is not supported.");
+      return;
+    }
+
+    // TODO(mustaq): Add checks for allowed-to-use policy as proposed here:
+    // https://wicg.github.io/capability-delegation/spec.html#monkey-patch-to-html-initiating-delegation
+
+    if (!target) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "Delegation to target origin '*' is not allowed.");
+      return;
+    }
+
+    if (!LocalFrame::HasTransientUserActivation(source_frame)) {
+      exception_state.ThrowDOMException(
+          DOMExceptionCode::kNotAllowedError,
+          "Delegation is not allowed without transient user activation.");
+      return;
+    }
+
+    LocalFrame::ConsumeTransientUserActivation(source_frame);
   }
 
   PostedMessage* posted_message = MakeGarbageCollected<PostedMessage>();
@@ -780,7 +812,7 @@ void DOMWindow::DoPostMessage(scoped_refptr<SerializedScriptValue> message,
   posted_message->channels = std::move(channels);
   posted_message->source = source;
   posted_message->user_activation = user_activation;
-  posted_message->delegate_payment_request = delegate_payment_request;
+  posted_message->delegated_capability = delegated_capability;
   SchedulePostMessage(posted_message);
 }
 
@@ -842,7 +874,7 @@ DOMWindow::PostedMessage::ToBlinkTransferableMessage() && {
   }
 
   // Capability delegation
-  result.delegate_payment_request = delegate_payment_request;
+  result.delegated_capability = delegated_capability;
 
   return result;
 }

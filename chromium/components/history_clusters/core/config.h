@@ -7,13 +7,16 @@
 
 #include <string>
 
-#include "base/containers/flat_set.h"
 #include "base/time/time.h"
 
 namespace history_clusters {
 
 // The default configuration. Always use |GetConfig()| to get the current
 // configuration.
+//
+// Config has the same thread-safety as base::FeatureList. The first call to
+// GetConfig() (which performs initialization) must be done single threaded on
+// the main thread. After that, Config can be read from any thread.
 struct Config {
   // True if journeys feature is enabled as per field trial check. Does not
   // check for any user-specific conditions (such as locales).
@@ -22,12 +25,6 @@ struct Config {
   // The max number of visits to use for each clustering iteration. This limits
   // the number of visits sent to the clustering backend per batch.
   int max_visits_to_cluster = 1000;
-
-  // The recency threshold controlling which visits will be clustered. This
-  // isn't the only factor; i.e. visits older than `MaxDaysToCluster()` may
-  // still be clustered. Only applies when using persisted visit context
-  // annotations; i.e. `kPersistContextAnnotationsInHistoryDb` is true.
-  int max_days_to_cluster = 9;
 
   // A soft cap on the number of keyword phrases to cache. 5000 should be more
   // than enough, as the 99.9th percentile of users has 2000. A few nuances:
@@ -61,7 +58,7 @@ struct Config {
 
   // If enabled, hidden visits are dropped entirely, instead of being gated
   // behind a "Show More" UI control.
-  bool drop_hidden_visits = false;
+  bool drop_hidden_visits = true;
 
   // If enabled, when there is a Journeys search query, the backend re-scores
   // visits within a cluster to account for whether or not that visit matches.
@@ -77,12 +74,58 @@ struct Config {
   bool omnibox_action = false;
 
   // If enabled, allows the Omnibox Action chip to also appear on URLs. This
-  // does nothing if `omnibox_action` is disabled.
+  // does nothing if `omnibox_action` is disabled. Note, that if you turn this
+  // flag to true, you almost certainly will want to set
+  // `omnibox_action_on_navigation_intents` to true as well, as otherwise your
+  // desired action chips on URLs will almost certainly all be suppressed.
   bool omnibox_action_on_urls = false;
 
   // If enabled, allows the Omnibox Action chip to appear on URLs from noisy
-  // visits. This does nothing if `omnibox_action_on_urls` is false.
+  // visits. This does nothing if `omnibox_action_on_urls` is disabled.
   bool omnibox_action_on_noisy_urls = true;
+
+  // If enabled, allows the Omnibox Action chip to appear when it's likely the
+  // user is intending to perform a navigation. This does not affect which
+  // suggestions are allowed to display the chip. Does nothing if
+  // `omnibox_action` is disabled.
+  bool omnibox_action_on_navigation_intents = false;
+
+  // If `omnibox_action_on_navigation_intents` is enabled, this threshold
+  // helps determine when the user is intending to perform a navigation.
+  int omnibox_action_navigation_intent_score_threshold = 1300;
+
+  // If enabled, allows the Omnibox Action chip to appear when the suggestions
+  // contain pedals. Does nothing if `omnibox_action` is disabled.
+  bool omnibox_action_with_pedals = false;
+
+  // If enabled, adds the keywords of aliases for detected entity names to a
+  // cluster.
+  bool keyword_filter_on_entity_aliases = false;
+
+  // If greater than 0, the max number of aliases to include in keywords. If <=
+  // 0, all aliases will be included.
+  size_t max_entity_aliases_in_keywords = 0;
+
+  // If enabled, adds the keywords of categories for detected entities to a
+  // cluster.
+  bool keyword_filter_on_categories = true;
+
+  // If enabled, adds the keywords of detected entities from noisy visits to a
+  // cluster.
+  bool keyword_filter_on_noisy_visits = true;
+
+  // If enabled, adds the search terms of the visits that have them.
+  bool keyword_filter_on_search_terms = false;
+
+  // If enabled, adds the keywords of detected entities that may be for
+  // the visit's host.
+  bool keyword_filter_on_visit_hosts = true;
+
+  // The weight for category keyword scores per cluster.
+  float category_keyword_score_weight = 1.0;
+
+  // Maximum number of keywords to keep per cluster.
+  size_t max_num_keywords_per_cluster = 20;
 
   // Enables debug info in non-user-visible surfaces, like Chrome Inspector.
   // Does nothing if `kJourneys` is disabled.
@@ -140,9 +183,9 @@ struct Config {
   // Whether to hide single-visit clusters on prominent UI surfaces.
   bool should_hide_single_visit_clusters_on_prominent_ui_surfaces = true;
 
-  // Whether to collapse visits within a cluster that will show on the UI in the
-  // same way.
-  bool should_dedupe_similar_visits = true;
+  // Whether to hide clusters that only contain URLs from the same domain on
+  // prominent UI surfaces.
+  bool should_hide_single_domain_clusters_on_prominent_ui_surfaces = false;
 
   // Whether to filter clusters that are noisy from the UI. This will
   // heuristically remove clusters that are unlikely to be "interesting".
@@ -188,13 +231,6 @@ struct Config {
   // use when clustering based on intersection score.
   int cluster_interaction_threshold = 2;
 
-  // Whether to include category names in the keywords for a cluster.
-  bool should_include_categories_in_keywords = true;
-
-  // Whether to exclude keywords from visits that may be considered "noisy" to
-  // the user (i.e. highly engaged, non-SRP).
-  bool should_exclude_keywords_from_noisy_visits = false;
-
   // Returns the default batch size for annotating visits when clustering.
   size_t clustering_tasks_batch_size = 250;
 
@@ -203,7 +239,9 @@ struct Config {
 
   // Whether to assign labels to clusters. If the label exists, it will be shown
   // in the UI. If the label doesn't exist, the UI will emphasize the top visit.
-  bool should_label_clusters = false;
+  // Note: The default value here is meaningless, because the actual default
+  // value is derived from the base::Feature.
+  bool should_label_clusters = true;
 
   // Whether to assign labels to clusters from the hostnames of the cluster.
   // Does nothing if `should_label_clusters` is false. Note that since every
@@ -215,9 +253,15 @@ struct Config {
   // Does nothing if `should_label_clusters` is false.
   bool labels_from_entities = false;
 
-  // The set of hosts for which all visits belonging to that host will not be in
-  // any cluster.
-  base::flat_set<std::string> hosts_to_skip_clustering_for;
+  // Whether to check if all visits for a host should be in resulting clusters.
+  bool should_check_hosts_to_skip_clustering_for = false;
+
+  // The max number of hosts that should be stored in the engagement score
+  // cache.
+  int engagement_score_cache_size = 100;
+
+  // The max time a host should be stored in the engagement score cache.
+  base::TimeDelta engagement_score_cache_refresh_duration = base::Minutes(120);
 
   // True if the task runner should use trait CONTINUE_ON_SHUTDOWN.
   bool use_continue_on_shutdown = true;

@@ -28,10 +28,12 @@
 #include "remoting/host/mojom/desktop_session.mojom.h"
 #include "remoting/host/mojom/remoting_mojom_traits.h"
 #include "remoting/host/remote_open_url/url_forwarder_configurator.h"
+#include "remoting/host/webauthn/remote_webauthn_state_change_notifier.h"
 #include "remoting/proto/control.pb.h"
 #include "remoting/proto/event.pb.h"
 #include "remoting/proto/url_forwarder_control.pb.h"
 #include "remoting/protocol/clipboard_stub.h"
+#include "remoting/protocol/desktop_capturer.h"
 #include "remoting/protocol/errors.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/webrtc/modules/desktop_capture/desktop_capturer.h"
@@ -102,12 +104,14 @@ class DesktopSessionProxy
   std::unique_ptr<AudioCapturer> CreateAudioCapturer();
   std::unique_ptr<InputInjector> CreateInputInjector();
   std::unique_ptr<ScreenControls> CreateScreenControls();
-  std::unique_ptr<webrtc::DesktopCapturer> CreateVideoCapturer();
+  std::unique_ptr<DesktopCapturer> CreateVideoCapturer();
   std::unique_ptr<webrtc::MouseCursorMonitor> CreateMouseCursorMonitor();
   std::unique_ptr<KeyboardLayoutMonitor> CreateKeyboardLayoutMonitor(
       base::RepeatingCallback<void(const protocol::KeyboardLayout&)> callback);
   std::unique_ptr<FileOperations> CreateFileOperations();
   std::unique_ptr<UrlForwarderConfigurator> CreateUrlForwarderConfigurator();
+  std::unique_ptr<RemoteWebAuthnStateChangeNotifier>
+  CreateRemoteWebAuthnStateChangeNotifier();
   std::string GetCapabilities() const;
   void SetCapabilities(const std::string& capabilities);
 
@@ -187,6 +191,9 @@ class DesktopSessionProxy
                                    uint32_t size) override;
   void OnSharedMemoryRegionReleased(int id) override;
   void OnCaptureResult(mojom::CaptureResultPtr capture_result) override;
+  void OnDesktopDisplayChanged(const protocol::VideoLayout& layout) override;
+  void OnMouseCursorChanged(const webrtc::MouseCursor& mouse_cursor) override;
+  void OnKeyboardLayoutChanged(const protocol::KeyboardLayout& layout) override;
 
   // mojom::DesktopSessionStateHandler implementation.
   void DisconnectSession(protocol::ErrorCode error) override;
@@ -218,18 +225,11 @@ class DesktopSessionProxy
       mojo::PendingAssociatedRemote<mojom::DesktopSessionControl>
           pending_remote);
 
-  // Handles DesktopDisplayChange notification from the desktop session agent.
-  void OnDesktopDisplayChanged(const protocol::VideoLayout& layout);
-
   // Handles CaptureResult notification from the desktop session agent.
   void OnCaptureResult(webrtc::DesktopCapturer::Result result,
                        const SerializedDesktopFrame& serialized_frame);
 
-  // Handles MouseCursor notification from the desktop session agent.
-  void OnMouseCursor(const webrtc::MouseCursor& mouse_cursor);
-
-  // Handles KeyboardChanged notification from the desktop session agent.
-  void OnKeyboardChanged(const protocol::KeyboardLayout& layout);
+  void SignalWebAuthnExtension();
 
   // Sends a message to the desktop session agent. The message is silently
   // deleted if the channel is broken.

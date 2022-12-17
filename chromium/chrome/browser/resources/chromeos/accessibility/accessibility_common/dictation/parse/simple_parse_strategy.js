@@ -7,13 +7,14 @@
  * it into a Macro.
  */
 
-import {InputController} from './../input_controller.js';
-import {InputTextViewMacro, NewLineMacro} from './../macros/input_text_view_macro.js';
-import {ListCommandsMacro} from './../macros/list_commands_macro.js';
-import {Macro} from './../macros/macro.js';
-import {MacroName} from './../macros/macro_names.js';
-import * as RepeatableKeyPressMacro from './../macros/repeatable_key_press_macro.js';
-import {ParseStrategy} from './parse_strategy.js';
+import {InputController} from '/accessibility_common/dictation/input_controller.js';
+import {HiddenMacroManager} from '/accessibility_common/dictation/macros/hidden_macro_manager.js';
+import {InputTextViewMacro, NewLineMacro} from '/accessibility_common/dictation/macros/input_text_view_macro.js';
+import {ListCommandsMacro} from '/accessibility_common/dictation/macros/list_commands_macro.js';
+import {Macro} from '/accessibility_common/dictation/macros/macro.js';
+import {MacroName} from '/accessibility_common/dictation/macros/macro_names.js';
+import * as RepeatableKeyPressMacro from '/accessibility_common/dictation/macros/repeatable_key_press_macro.js';
+import {ParseStrategy} from '/accessibility_common/dictation/parse/parse_strategy.js';
 
 /**
  * @typedef {{
@@ -164,7 +165,9 @@ export class SimpleParseStrategy extends ParseStrategy {
   initialize_() {
     for (const key in MacroName) {
       const name = MacroName[key];
-      if (name === MacroName.INPUT_TEXT_VIEW || name === MacroName.UNSPECIFID) {
+      if (HiddenMacroManager.isHiddenMacro(name) ||
+          name === MacroName.INPUT_TEXT_VIEW ||
+          name === MacroName.UNSPECIFIED) {
         continue;
       }
 

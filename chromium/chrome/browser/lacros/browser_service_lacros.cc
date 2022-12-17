@@ -7,6 +7,7 @@
 #include "base/callback.h"
 #include "base/callback_helpers.h"
 #include "base/check.h"
+#include "base/command_line.h"
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/logging.h"
@@ -20,6 +21,7 @@
 #include "chrome/browser/lacros/app_mode/kiosk_session_service_lacros.h"
 #include "chrome/browser/lacros/feedback_util.h"
 #include "chrome/browser/lacros/system_logs/lacros_system_log_fetcher.h"
+#include "chrome/browser/prefs/incognito_mode_prefs.h"
 #include "chrome/browser/profiles/profile.h"
 #include "chrome/browser/profiles/profile_manager.h"
 #include "chrome/browser/profiles/profile_window.h"
@@ -34,7 +36,7 @@
 #include "chrome/browser/ui/browser_navigator_params.h"
 #include "chrome/browser/ui/browser_window.h"
 #include "chrome/browser/ui/profile_picker.h"
-#include "chrome/browser/ui/startup/first_run_lacros.h"
+#include "chrome/browser/ui/startup/lacros_first_run_service.h"
 #include "chrome/browser/ui/startup/startup_browser_creator.h"
 #include "chrome/browser/ui/startup/startup_tab.h"
 #include "chrome/browser/ui/views/tabs/tab_scrubber_chromeos.h"
@@ -44,6 +46,7 @@
 #include "chrome/common/webui_url_constants.h"
 #include "chromeos/crosapi/mojom/crosapi.mojom.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
 #include "components/feedback/feedback_common.h"
 #include "components/feedback/feedback_report.h"
 #include "components/feedback/feedback_util.h"
@@ -53,7 +56,7 @@
 #include "content/public/browser/browser_thread.h"
 #include "google_apis/gaia/gaia_auth_util.h"
 #include "ui/platform_window/platform_window.h"
-#include "ui/views/widget/desktop_aura/desktop_window_tree_host_linux.h"
+#include "ui/views/widget/desktop_aura/desktop_window_tree_host_lacros.h"
 #include "url/gurl.h"
 
 namespace {
@@ -98,10 +101,13 @@ void OnMainProfileLoaded(base::OnceCallback<void(Profile*)>& callback,
     case Profile::CREATE_STATUS_INITIALIZED:
       DCHECK(profile);
 
-      if (can_trigger_fre && ShouldOpenPrimaryProfileFirstRun()) {
+      auto* fre_service =
+          LacrosFirstRunServiceFactory::GetForBrowserContext(profile);
+      DCHECK(fre_service);
+      if (can_trigger_fre && fre_service->ShouldOpenFirstRun()) {
         // TODO(https://crbug.com/1313848): Consider taking a
         // `ScopedProfileKeepAlive`.
-        OpenPrimaryProfileFirstRunIfNeeded(
+        fre_service->OpenFirstRunIfNeeded(
             base::BindOnce(&MaybeProceedWithProfile, std::move(callback),
                            base::Unretained(profile)));
       } else {
@@ -123,6 +129,16 @@ void LoadMainProfile(base::OnceCallback<void(Profile*)> callback,
                           can_trigger_fre));
 }
 
+NavigateParams::PathBehavior ConvertPathBehavior(
+    crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior path_behavior) {
+  switch (path_behavior) {
+    case crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior::kRespect:
+      return NavigateParams::RESPECT;
+    case crosapi::mojom::OpenUrlParams_SwitchToTabPathBehavior::kIgnore:
+      return NavigateParams::IGNORE_AND_NAVIGATE;
+  }
+}
+
 }  // namespace
 
 // A struct to keep the pending OpenUrl task.
@@ -140,7 +156,7 @@ BrowserServiceLacros::BrowserServiceLacros() {
                               weak_ptr_factory_.GetWeakPtr()));
 
   auto* lacros_service = chromeos::LacrosService::Get();
-  const auto* init_params = lacros_service->init_params();
+  const auto* init_params = chromeos::BrowserInitParams::Get();
 
   if (init_params->initial_keep_alive ==
       crosapi::mojom::BrowserInitParams::InitialKeepAlive::kUnknown) {
@@ -183,16 +199,22 @@ void BrowserServiceLacros::REMOVED_2(crosapi::mojom::BrowserInitParamsPtr) {
   NOTIMPLEMENTED();
 }
 
+void BrowserServiceLacros::REMOVED_16(
+    base::flat_map<policy::PolicyNamespace, std::vector<uint8_t>> policy) {
+  NOTIMPLEMENTED();
+}
+
 void BrowserServiceLacros::NewWindow(bool incognito,
                                      bool should_trigger_session_restore,
                                      NewWindowCallback callback) {
   if (ProfilePicker::ShouldShowAtLaunch() && !incognito) {
     // Profile picker does not support passing through the incognito param. It
-    // also does not support passing though the `should_trigger_session_restore`
-    // param but that's true very common (left clicking the launcher icon) so
-    // we can't skip the picker in this case. The default behavior for the first
-    // browser window supports session restore, additional windows are opened
-    // blank and thus it works reasonably well for BrowserServiceLacros.
+    // also does not support passing through the
+    // `should_trigger_session_restore` param but that's very common (left
+    // clicking the launcher icon) so we can't skip the picker in this case. The
+    // default behavior for the first browser window supports session restore,
+    // additional windows are opened blank and thus it works reasonably well for
+    // BrowserServiceLacros.
     ProfilePicker::Show(ProfilePicker::Params::FromEntryPoint(
         ProfilePicker::EntryPoint::kNewSessionOnExistingProcess));
     std::move(callback).Run();
@@ -233,10 +255,12 @@ void BrowserServiceLacros::NewWindowForDetachingTab(
       /*can_trigger_fre=*/false);
 }
 
-void BrowserServiceLacros::NewTab(NewTabCallback callback) {
+void BrowserServiceLacros::NewTab(bool should_trigger_session_restore,
+                                  NewTabCallback callback) {
   LoadMainProfile(
       base::BindOnce(&BrowserServiceLacros::NewTabWithProfile,
-                     weak_ptr_factory_.GetWeakPtr(), std::move(callback)),
+                     weak_ptr_factory_.GetWeakPtr(),
+                     should_trigger_session_restore, std::move(callback)),
       /*can_trigger_fre=*/true);
 }
 
@@ -297,6 +321,10 @@ void BrowserServiceLacros::GetActiveTabUrl(GetActiveTabUrlCallback callback) {
 void BrowserServiceLacros::UpdateDeviceAccountPolicy(
     const std::vector<uint8_t>& policy) {
   chromeos::LacrosService::Get()->NotifyPolicyUpdated(policy);
+}
+
+void BrowserServiceLacros::NotifyPolicyFetchAttempt() {
+  chromeos::LacrosService::Get()->NotifyPolicyFetchAttempt();
 }
 
 void BrowserServiceLacros::UpdateKeepAlive(bool enabled) {
@@ -411,6 +439,8 @@ void BrowserServiceLacros::OpenUrlImpl(Profile* profile,
       break;
     case OpenUrlParams::WindowOpenDisposition::kSwitchToTab:
       navigate_params.disposition = WindowOpenDisposition::SWITCH_TO_TAB;
+      navigate_params.path_behavior =
+          ConvertPathBehavior(params->path_behavior);
       break;
   }
 
@@ -440,6 +470,21 @@ void BrowserServiceLacros::NewWindowWithProfile(
                     "Aborting the requested action.";
     std::move(callback).Run();
     return;
+  }
+
+  switch (IncognitoModePrefs::GetAvailability(profile->GetPrefs())) {
+    case IncognitoModePrefs::Availability::kEnabled:
+      // Default behavior: both incognito and regular mode are allowed.
+      break;
+    case IncognitoModePrefs::Availability::kDisabled:
+      incognito = false;
+      break;
+    case IncognitoModePrefs::Availability::kForced:
+      incognito = true;
+      break;
+    case IncognitoModePrefs::Availability::kNumTypes:
+      NOTREACHED();
+      break;
   }
 
   chrome::NewEmptyWindow(
@@ -477,7 +522,7 @@ void BrowserServiceLacros::NewFullscreenWindowWithProfile(
 
   browser->window()->Show();
 
-  if (chromeos::LacrosService::Get()->init_params()->session_type ==
+  if (chromeos::BrowserInitParams::Get()->session_type ==
       crosapi::mojom::SessionType::kWebKioskSession) {
     KioskSessionServiceLacros::Get()->InitWebKioskSession(browser, url);
   }
@@ -526,15 +571,17 @@ void BrowserServiceLacros::NewWindowForDetachingTabWithProfile(
   new_browser->window()->Show();
 
   auto* native_window = new_browser->window()->GetNativeWindow();
-  auto* dwth_linux =
-      views::DesktopWindowTreeHostLinux::From(native_window->GetHost());
-  auto* platform_window = dwth_linux->platform_window();
+  auto* dwth_platform =
+      views::DesktopWindowTreeHostLacros::From(native_window->GetHost());
+  auto* platform_window = dwth_platform->platform_window();
   std::move(callback).Run(crosapi::mojom::CreationResult::kSuccess,
                           platform_window->GetWindowUniqueId());
 }
 
-void BrowserServiceLacros::NewTabWithProfile(NewTabCallback callback,
-                                             Profile* profile) {
+void BrowserServiceLacros::NewTabWithProfile(
+    bool should_trigger_session_restore,
+    NewTabCallback callback,
+    Profile* profile) {
   if (!profile) {
     LOG(WARNING) << "No profile, it might be an early exit from the FRE. "
                     "Aborting the requested action.";
@@ -546,7 +593,7 @@ void BrowserServiceLacros::NewTabWithProfile(NewTabCallback callback,
   if (browser) {
     chrome::NewTab(browser);
   } else {
-    chrome::NewEmptyWindow(profile, /*should_trigger_session_restore=*/false);
+    chrome::NewEmptyWindow(profile, should_trigger_session_restore);
   }
   std::move(callback).Run();
 }
@@ -653,8 +700,9 @@ void BrowserServiceLacros::OpenForFullRestoreWithProfile(Profile* profile) {
 }
 
 void BrowserServiceLacros::UpdateComponentPolicy(
-    base::flat_map<policy::PolicyNamespace, std::vector<uint8_t>> policy) {
-  // TODO(crbug.com/1284279): Process received data in Lacros.
+    policy::ComponentPolicyMap policy) {
+  chromeos::LacrosService::Get()->NotifyComponentPolicyUpdated(
+      std::move(policy));
 }
 
 void BrowserServiceLacros::OnBrowserAdded(Browser* browser) {

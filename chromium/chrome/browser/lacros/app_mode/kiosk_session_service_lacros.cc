@@ -6,9 +6,12 @@
 
 #include "base/bind.h"
 #include "base/check.h"
+#include "chrome/browser/browser_process.h"
 #include "chrome/browser/chromeos/app_mode/app_session.h"
 #include "chrome/browser/ui/browser.h"
 #include "chromeos/lacros/lacros_service.h"
+#include "chromeos/startup/browser_init_params.h"
+#include "components/prefs/pref_registry_simple.h"
 
 namespace {
 
@@ -27,6 +30,12 @@ KioskSessionServiceLacros* KioskSessionServiceLacros::Get() {
   return g_kiosk_session_service;
 }
 
+// static
+void KioskSessionServiceLacros::RegisterLocalStatePrefs(
+    PrefRegistrySimple* registry) {
+  chromeos::AppSession::RegisterPrefs(registry);
+}
+
 KioskSessionServiceLacros::KioskSessionServiceLacros() {
   g_kiosk_session_service = this;
 }
@@ -35,11 +44,24 @@ KioskSessionServiceLacros::~KioskSessionServiceLacros() {
   g_kiosk_session_service = nullptr;
 }
 
+void KioskSessionServiceLacros::InitChromeKioskSession(
+    Profile* profile,
+    const std::string& app_id) {
+  LOG_IF(FATAL, app_session_) << "Kiosk session is already initialized.";
+  app_session_ = std::make_unique<chromeos::AppSession>(
+      base::BindOnce(&KioskSessionServiceLacros::AttemptUserExit,
+                     weak_factory_.GetWeakPtr()),
+      g_browser_process->local_state());
+  app_session_->Init(profile, app_id);
+}
+
 void KioskSessionServiceLacros::InitWebKioskSession(Browser* browser,
                                                     const GURL& install_url) {
-  LOG_IF(FATAL, app_session_) << "Web Kiosk session is already initialized.";
-  app_session_ = std::make_unique<chromeos::AppSession>(base::BindOnce(
-      &KioskSessionServiceLacros::AttemptUserExit, weak_factory_.GetWeakPtr()));
+  LOG_IF(FATAL, app_session_) << "Kiosk session is already initialized.";
+  app_session_ = std::make_unique<chromeos::AppSession>(
+      base::BindOnce(&KioskSessionServiceLacros::AttemptUserExit,
+                     weak_factory_.GetWeakPtr()),
+      g_browser_process->local_state());
   app_session_->InitForWebKiosk(browser);
   install_url_ = install_url;
 }
@@ -60,7 +82,7 @@ bool KioskSessionServiceLacros::RestartDevice(const std::string& description) {
   chromeos::LacrosService* service = chromeos::LacrosService::Get();
   CHECK(service);
 
-  if (IsKioskSession(service->init_params()->session_type) &&
+  if (IsKioskSession(chromeos::BrowserInitParams::Get()->session_type) &&
       service->IsAvailable<crosapi::mojom::KioskSessionService>()) {
     int remote_version = service->GetInterfaceVersion(
         crosapi::mojom::KioskSessionService::Uuid_);

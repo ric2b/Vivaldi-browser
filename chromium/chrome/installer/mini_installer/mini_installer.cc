@@ -51,6 +51,7 @@
 #include "installer/util/vivaldi_install_constants.h"
 
 extern bool g_vivaldi_has_unpack_switch;
+extern bool g_vivaldi_has_silent_switch;
 #endif
 
 namespace mini_installer {
@@ -251,6 +252,15 @@ ProcessExitResult RunProcessAndWait(const wchar_t* exe_path,
                                     DWORD generic_failure_code) {
   STARTUPINFOW si = {sizeof(si)};
   PROCESS_INFORMATION pi = {0};
+
+#ifdef VIVALDI_BUILD
+  if (g_vivaldi_has_silent_switch) {
+    si.dwFlags |= STARTF_FORCEOFFFEEDBACK;
+    si.dwFlags |= STARTF_USESHOWWINDOW;
+    si.wShowWindow = SW_HIDE;
+  }
+#endif
+
   if (!::CreateProcess(exe_path, cmdline, nullptr, nullptr, FALSE,
                        CREATE_NO_WINDOW, nullptr, nullptr, &si, &pi)) {
     // Split specific failure modes. If setup.exe couldn't be launched because

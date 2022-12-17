@@ -64,6 +64,7 @@ class AuthStatusConsumer;
 class OnboardingUserActivityCounter;
 class StubAuthenticatorBuilder;
 class TokenHandleFetcher;
+class EasyUnlockNotificationController;
 
 namespace test {
 class UserSessionManagerTestApi;
@@ -375,7 +376,7 @@ class UserSessionManager
   friend class test::UserSessionManagerTestApi;
   friend struct base::DefaultSingletonTraits<UserSessionManager>;
 
-  typedef std::set<std::string> SigninSessionRestoreStateSet;
+  using SigninSessionRestoreStateSet = std::set<AccountId>;
 
   void SetNetworkConnectionTracker(
       network::NetworkConnectionTracker* network_connection_tracker);
@@ -450,9 +451,6 @@ class UserSessionManager
   // Launch browser or proceed to alternative login flow. Should be called after
   // profile is ready.
   void InitializeBrowser(Profile* profile);
-
-  // Starts out-of-box flow with the specified screen.
-  void ActivateWizard(OobeScreenId screen);
 
   // Launches the Help App depending on flags / prefs / user.
   void MaybeLaunchHelpApp(Profile* profile) const;
@@ -673,6 +671,11 @@ class UserSessionManager
 
   std::unique_ptr<HelpAppNotificationController>
       help_app_notification_controller_;
+
+  // TODO(b/227674947): Eventually delete this after Sign in with Smart Lock has
+  // been removed and enough time has elapsed for users to be notified.
+  std::unique_ptr<EasyUnlockNotificationController>
+      easy_unlock_notification_controller_;
 
   bool token_handle_backfill_tried_for_testing_ = false;
 

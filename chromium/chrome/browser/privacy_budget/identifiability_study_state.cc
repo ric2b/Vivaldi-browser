@@ -80,11 +80,20 @@ bool IdentifiabilityStudyState::ShouldRecordSurface(
   if (LIKELY(!settings_.enabled()))
     return false;
 
+  // We always record surfaces of type zero.
+  if (surface.GetType() == blink::IdentifiableSurface::Type::kReservedInternal)
+    return true;
+
   if (base::Contains(active_surfaces_, surface))
     return true;
 
   if (settings_.is_using_assigned_block_sampling())
     return false;
+
+  if ((settings_.allowed_random_types().size() > 0) &&
+      (!base::Contains(settings_.allowed_random_types(), surface.GetType()))) {
+    return false;
+  }
 
   if (!CanAddOneMoreActiveSurface())
     return false;
@@ -572,6 +581,12 @@ bool IdentifiabilityStudyState::ShouldReportEncounteredSurface(
           blink::IdentifiableSurface::Type::kMeasuredSurface)) {
     return false;
   }
+
+  if (surface.GetType() ==
+      blink::IdentifiableSurface::Type::kReservedInternal) {
+    return false;
+  }
+
   return surface_encounters_.IsNewEncounter(source_id,
                                             surface.ToUkmMetricHash());
 }

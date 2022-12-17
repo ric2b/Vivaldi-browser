@@ -138,6 +138,7 @@
 <translation id="3360297538363969800">A nyomtatás sikertelen. Ellenőrizd a nyomtatót, majd próbáld újra.</translation>
 <translation id="3378572629723696641">Lehet, hogy ez a bővítmény sérült.</translation>
 <translation id="3387614642886316601">Továbbfejlesztett helyesírás-ellenőrzés használata</translation>
+<translation id="3393582007140394275">Nem sikerült átküldeni a képernyő tartalmát.</translation>
 <translation id="3432227430032737297">Az összes megjelenített eltávolítása</translation>
 <translation id="345693547134384690">Kép &amp;megnyitása új lapon</translation>
 <translation id="3494769164076977169">Kérdezzen rá, ha egy webhely automatikusan próbál letölteni fájlokat az első fájl után (ajánlott)</translation>
@@ -210,8 +211,10 @@
 <translation id="488785315393301722">Részletek megjelenítése</translation>
 <translation id="4907306957610201395">Engedélykategória</translation>
 <translation id="4912643508233590958">Tétlen aktiválások</translation>
+<translation id="49265687513387605">Nem sikerült átküldeni a képernyő tartalmát. Ellenőrizd, hogy megerősítetted-e a képernyő megosztásának megkezdésére vonatkozó kérdést.</translation>
 <translation id="4927753642311223124">Nincs itt semmi látnivaló, menj tovább.</translation>
 <translation id="4930714375720679147">Bekapcsolás</translation>
+<translation id="4961318399572185831">Képernyő átküldése</translation>
 <translation id="4988526792673242964">Oldal</translation>
 <translation id="49896407730300355">Forgatás &amp;balra</translation>
 <translation id="4989966318180235467">&amp;Háttéroldal vizsgálata</translation>

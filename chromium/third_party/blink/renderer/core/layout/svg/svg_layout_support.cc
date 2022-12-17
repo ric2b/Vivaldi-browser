@@ -193,7 +193,7 @@ void SVGLayoutSupport::MapAncestorToLocal(const LayoutObject& object,
   DCHECK_NE(ancestor, &object);
   DCHECK(object.IsSVGContainer() || object.IsSVGShape() ||
          object.IsSVGImage() || object.IsSVGText() ||
-         object.IsSVGForeignObject());
+         object.IsSVGForeignObjectIncludingNG());
   AffineTransform local_to_svg_root;
   const LayoutSVGRoot& svg_root =
       ComputeTransformToSVGRoot(object, local_to_svg_root, nullptr);
@@ -239,6 +239,7 @@ bool SVGLayoutSupport::IsOverflowHidden(const LayoutObject& object) {
 
 bool SVGLayoutSupport::IsOverflowHidden(const ComputedStyle& style) {
   return style.OverflowX() == EOverflow::kHidden ||
+         style.OverflowX() == EOverflow::kClip ||
          style.OverflowX() == EOverflow::kScroll;
 }
 

@@ -18,6 +18,7 @@
 #include "base/files/file_path.h"
 #include "base/files/file_util.h"
 #include "base/files/platform_file.h"
+#include "base/logging.h"
 #include "base/strings/strcat.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/task/task_runner.h"
@@ -30,6 +31,9 @@
 #include "components/reporting/encryption/primitives.h"
 #include "components/reporting/encryption/verification.h"
 #include "components/reporting/proto/synced/record.pb.h"
+#include "components/reporting/resources/disk_resource_impl.h"
+#include "components/reporting/resources/memory_resource_impl.h"
+#include "components/reporting/resources/resource_interface.h"
 #include "components/reporting/storage/storage_configuration.h"
 #include "components/reporting/storage/storage_queue.h"
 #include "components/reporting/storage/storage_uploader_interface.h"
@@ -83,8 +87,8 @@ constexpr base::TimeDelta kManualUploadPeriod = base::TimeDelta::Max();
 
 constexpr base::FilePath::CharType kEncryptionKeyFilePrefix[] =
     FILE_PATH_LITERAL("EncryptionKey.");
-const int32_t kEncryptionKeyMaxFileSize = 256;
-const uint64_t kQueueSize = 2 * 1024LL * 1024LL;
+constexpr int32_t kEncryptionKeyMaxFileSize = 256;
+constexpr uint64_t kQueueSize = 2UL * 1024UL * 1024UL;
 
 // Failed upload retry delay: if an upload fails and there are no more incoming
 // events, collected events will not get uploaded for an indefinite time (see
@@ -108,18 +112,16 @@ std::vector<std::pair<Priority, QueueOptions>> ExpectedQueues(
                          .set_file_prefix(kImmediateQueuePrefix)
                          .set_upload_retry_delay(kFailedUploadRetryDelay)
                          .set_max_single_file_size(kQueueSize)),
-      std::make_pair(FAST_BATCH,
-                     QueueOptions(options)
-                         .set_subdirectory(kFastBatchQueueSubdir)
-                         .set_file_prefix(kFastBatchQueuePrefix)
-                         .set_upload_period(kFastBatchUploadPeriod)
-                         .set_max_single_file_size(kQueueSize)),
-      std::make_pair(SLOW_BATCH,
-                     QueueOptions(options)
-                         .set_subdirectory(kSlowBatchQueueSubdir)
-                         .set_file_prefix(kSlowBatchQueuePrefix)
-                         .set_upload_period(kSlowBatchUploadPeriod)
-                         .set_max_single_file_size(kQueueSize)),
+      std::make_pair(FAST_BATCH, QueueOptions(options)
+                                     .set_subdirectory(kFastBatchQueueSubdir)
+                                     .set_file_prefix(kFastBatchQueuePrefix)
+                                     .set_upload_period(kFastBatchUploadPeriod)
+                                     .set_max_single_file_size(kQueueSize)),
+      std::make_pair(SLOW_BATCH, QueueOptions(options)
+                                     .set_subdirectory(kSlowBatchQueueSubdir)
+                                     .set_file_prefix(kSlowBatchQueuePrefix)
+                                     .set_upload_period(kSlowBatchUploadPeriod)
+                                     .set_max_single_file_size(kQueueSize)),
       std::make_pair(BACKGROUND_BATCH,
                      QueueOptions(options)
                          .set_subdirectory(kBackgroundQueueSubdir)
@@ -135,7 +137,6 @@ std::vector<std::pair<Priority, QueueOptions>> ExpectedQueues(
                          .set_max_single_file_size(kQueueSize)),
   };
 }
-
 }  // namespace
 
 // Uploader interface adaptor for individual queue.
@@ -161,12 +162,14 @@ class Storage::QueueUploaderInterface : public UploaderInterface {
   }
 
   void ProcessRecord(EncryptedRecord encrypted_record,
+                     ScopedReservation scoped_reservation,
                      base::OnceCallback<void(bool)> processed_cb) override {
     // Update sequence information: add Priority.
     SequenceInformation* const sequence_info =
         encrypted_record.mutable_sequence_information();
     sequence_info->set_priority(priority_);
     storage_interface_->ProcessRecord(std::move(encrypted_record),
+                                      std::move(scoped_reservation),
                                       std::move(processed_cb));
   }
 
@@ -452,8 +455,8 @@ class Storage::KeyInStorage {
         directory_,
         /*recursive=*/false, base::FileEnumerator::FILES,
         base::StrCat({kEncryptionKeyFilePrefix, FILE_PATH_LITERAL("*")}));
-    base::FilePath full_name;
-    while (full_name = dir_enum.Next(), !full_name.empty()) {
+    for (auto full_name = dir_enum.Next(); !full_name.empty();
+         full_name = dir_enum.Next()) {
       if (!all_key_files->emplace(full_name).second) {
         // Duplicate file name. Should not happen.
         continue;

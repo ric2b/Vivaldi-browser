@@ -37,7 +37,7 @@ class SESSIONS_EXPORT LiveTab {
   virtual SerializedUserAgentOverride GetUserAgentOverride() = 0;
 
   // vivaldi:
-  virtual const std::string& GetVivExtData() const = 0;
+  virtual const std::string& GetVivExtData() const;
 };
 
 }  // namespace sessions

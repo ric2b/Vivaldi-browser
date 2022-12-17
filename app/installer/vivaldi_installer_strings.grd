@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<grit base_dir="." latest_public_release="0" current_release="1"
+      source_lang_id="en" enc_check="möl">
+  <outputs>
+    <output filename="grit/vivaldi_installer_strings.h" type="rc_header">
+      <emit emit_type='prepend'></emit>
+    </output>
+    <output filename="vivaldi_installer_strings_af.pak" type="data_package" lang="af" />
+    <output filename="vivaldi_installer_strings_am.pak" type="data_package" lang="am" />
+    <output filename="vivaldi_installer_strings_ar.pak" type="data_package" lang="ar" />
+    <output filename="vivaldi_installer_strings_ar-XB.pak" type="data_package" lang="ar-XB" />
+    <output filename="vivaldi_installer_strings_az.pak" type="data_package" lang="az" />
+    <output filename="vivaldi_installer_strings_be.pak" type="data_package" lang="be" />
+    <output filename="vivaldi_installer_strings_bg.pak" type="data_package" lang="bg" />
+    <output filename="vivaldi_installer_strings_bn.pak" type="data_package" lang="bn" />
+    <output filename="vivaldi_installer_strings_ca.pak" type="data_package" lang="ca" />
+    <output filename="vivaldi_installer_strings_cs.pak" type="data_package" lang="cs" />
+    <output filename="vivaldi_installer_strings_da.pak" type="data_package" lang="da" />
+    <output filename="vivaldi_installer_strings_de.pak" type="data_package" lang="de" />
+    <output filename="vivaldi_installer_strings_de-CH.pak" type="data_package" lang="de-CH" />
+    <output filename="vivaldi_installer_strings_el.pak" type="data_package" lang="el" />
+    <output filename="vivaldi_installer_strings_en-GB.pak" type="data_package" lang="en-GB" />
+    <output filename="vivaldi_installer_strings_en-US.pak" type="data_package" lang="en" />
+    <output filename="vivaldi_installer_strings_en-XA.pak" type="data_package" lang="en-XA" />
+    <output filename="vivaldi_installer_strings_eo.pak" type="data_package" lang="eo" />
+    <output filename="vivaldi_installer_strings_es.pak" type="data_package" lang="es" />
+    <output filename="vivaldi_installer_strings_es-419.pak" type="data_package" lang="es-419" />
+    <output filename="vivaldi_installer_strings_es-PE.pak" type="data_package" lang="es-PE" />
+    <output filename="vivaldi_installer_strings_et.pak" type="data_package" lang="et" />
+    <output filename="vivaldi_installer_strings_eu.pak" type="data_package" lang="eu" />
+    <output filename="vivaldi_installer_strings_fa.pak" type="data_package" lang="fa" />
+    <output filename="vivaldi_installer_strings_fi.pak" type="data_package" lang="fi" />
+    <output filename="vivaldi_installer_strings_fil.pak" type="data_package" lang="fil" />
+    <output filename="vivaldi_installer_strings_fr.pak" type="data_package" lang="fr" />
+    <output filename="vivaldi_installer_strings_fy.pak" type="data_package" lang="fy" />
+    <output filename="vivaldi_installer_strings_gd.pak" type="data_package" lang="gd" />
+    <output filename="vivaldi_installer_strings_gl.pak" type="data_package" lang="gl" />
+    <output filename="vivaldi_installer_strings_gu.pak" type="data_package" lang="gu" />
+    <output filename="vivaldi_installer_strings_he.pak" type="data_package" lang="he" />
+    <output filename="vivaldi_installer_strings_hi.pak" type="data_package" lang="hi" />
+    <output filename="vivaldi_installer_strings_hr.pak" type="data_package" lang="hr" />
+    <output filename="vivaldi_installer_strings_hu.pak" type="data_package" lang="hu" />
+    <output filename="vivaldi_installer_strings_hy.pak" type="data_package" lang="hy" />
+    <output filename="vivaldi_installer_strings_id.pak" type="data_package" lang="id" />
+    <output filename="vivaldi_installer_strings_io.pak" type="data_package" lang="io" />
+    <output filename="vivaldi_installer_strings_is.pak" type="data_package" lang="is" />
+    <output filename="vivaldi_installer_strings_it.pak" type="data_package" lang="it" />
+    <output filename="vivaldi_installer_strings_ja.pak" type="data_package" lang="ja" />
+    <output filename="vivaldi_installer_strings_ja-KS.pak" type="data_package" lang="ja-KS" />
+    <output filename="vivaldi_installer_strings_jbo.pak" type="data_package" lang="jbo" />
+    <output filename="vivaldi_installer_strings_ka.pak" type="data_package" lang="ka" />
+    <output filename="vivaldi_installer_strings_kab.pak" type="data_package" lang="kab" />
+    <output filename="vivaldi_installer_strings_kn.pak" type="data_package" lang="kn" />
+    <output filename="vivaldi_installer_strings_ko.pak" type="data_package" lang="ko" />
+    <output filename="vivaldi_installer_strings_ku.pak" type="data_package" lang="ku" />
+    <output filename="vivaldi_installer_strings_lt.pak" type="data_package" lang="lt" />
+    <output filename="vivaldi_installer_strings_lv.pak" type="data_package" lang="lv" />
+    <output filename="vivaldi_installer_strings_mk.pak" type="data_package" lang="mk" />
+    <output filename="vivaldi_installer_strings_ml.pak" type="data_package" lang="ml" />
+    <output filename="vivaldi_installer_strings_mr.pak" type="data_package" lang="mr" />
+    <output filename="vivaldi_installer_strings_ms.pak" type="data_package" lang="ms" />
+    <output filename="vivaldi_installer_strings_nb.pak" type="data_package" lang="no" />
+    <output filename="vivaldi_installer_strings_nl.pak" type="data_package" lang="nl" />
+    <output filename="vivaldi_installer_strings_nn.pak" type="data_package" lang="nn" />
+    <output filename="vivaldi_installer_strings_pa.pak" type="data_package" lang="pa" />
+    <output filename="vivaldi_installer_strings_pl.pak" type="data_package" lang="pl" />
+    <output filename="vivaldi_installer_strings_pt-BR.pak" type="data_package" lang="pt-BR" />
+    <output filename="vivaldi_installer_strings_pt-PT.pak" type="data_package" lang="pt-PT" />
+    <output filename="vivaldi_installer_strings_ro.pak" type="data_package" lang="ro" />
+    <output filename="vivaldi_installer_strings_ru.pak" type="data_package" lang="ru" />
+    <output filename="vivaldi_installer_strings_sc.pak" type="data_package" lang="sc" />
+    <output filename="vivaldi_installer_strings_sk.pak" type="data_package" lang="sk" />
+    <output filename="vivaldi_installer_strings_sl.pak" type="data_package" lang="sl" />
+    <output filename="vivaldi_installer_strings_sq.pak" type="data_package" lang="sq" />
+    <output filename="vivaldi_installer_strings_sr.pak" type="data_package" lang="sr" />
+    <output filename="vivaldi_installer_strings_sr-Latn.pak" type="data_package" lang="sr-Latn" />
+    <output filename="vivaldi_installer_strings_sv.pak" type="data_package" lang="sv" />
+    <output filename="vivaldi_installer_strings_sw.pak" type="data_package" lang="sw" />
+    <output filename="vivaldi_installer_strings_ta.pak" type="data_package" lang="ta" />
+    <output filename="vivaldi_installer_strings_te.pak" type="data_package" lang="te" />
+    <output filename="vivaldi_installer_strings_th.pak" type="data_package" lang="th" />
+    <output filename="vivaldi_installer_strings_tr.pak" type="data_package" lang="tr" />
+    <output filename="vivaldi_installer_strings_uk.pak" type="data_package" lang="uk" />
+    <output filename="vivaldi_installer_strings_vi.pak" type="data_package" lang="vi" />
+    <output filename="vivaldi_installer_strings_zh-CN.pak" type="data_package" lang="zh-CN" />
+    <output filename="vivaldi_installer_strings_zh-TW.pak" type="data_package" lang="zh-TW" />
+    <output filename="vivaldi_installer_strings_ur.pak" type="data_package" lang="ur" />
+  </outputs>
+  <translations>
+    <file path="strings/vivaldi_installer_strings_am.xtb" lang="am" />
+    <file path="strings/vivaldi_installer_strings_ar.xtb" lang="ar" />
+    <file path="strings/vivaldi_installer_strings_ar-XB.xtb" lang="ar-XB" />
+    <file path="strings/vivaldi_installer_strings_as.xtb" lang="as" />
+    <file path="strings/vivaldi_installer_strings_az.xtb" lang="az" />
+    <file path="strings/vivaldi_installer_strings_bg.xtb" lang="bg" />
+    <file path="strings/vivaldi_installer_strings_bn.xtb" lang="bn" />
+    <file path="strings/vivaldi_installer_strings_bs.xtb" lang="bs" />
+    <file path="strings/vivaldi_installer_strings_ca.xtb" lang="ca" />
+    <file path="strings/vivaldi_installer_strings_cs.xtb" lang="cs" />
+    <file path="strings/vivaldi_installer_strings_da.xtb" lang="da" />
+    <file path="strings/vivaldi_installer_strings_de.xtb" lang="de" />
+    <file path="strings/vivaldi_installer_strings_el.xtb" lang="el" />
+    <file path="strings/vivaldi_installer_strings_en-GB.xtb" lang="en-GB" />
+    <file path="strings/vivaldi_installer_strings_en-XA.xtb" lang="en-XA" />
+    <file path="strings/vivaldi_installer_strings_es.xtb" lang="es" />
+    <file path="strings/vivaldi_installer_strings_et.xtb" lang="et" />
+    <file path="strings/vivaldi_installer_strings_fa.xtb" lang="fa" />
+    <file path="strings/vivaldi_installer_strings_fi.xtb" lang="fi" />
+    <file path="strings/vivaldi_installer_strings_fil.xtb" lang="fil" />
+    <file path="strings/vivaldi_installer_strings_fr.xtb" lang="fr" />
+    <file path="strings/vivaldi_installer_strings_fr-CA.xtb" lang="fr-CA" />
+    <file path="strings/vivaldi_installer_strings_gu.xtb" lang="gu" />
+    <file path="strings/vivaldi_installer_strings_he.xtb" lang="he" />
+    <file path="strings/vivaldi_installer_strings_hi.xtb" lang="hi" />
+    <file path="strings/vivaldi_installer_strings_hr.xtb" lang="hr" />
+    <file path="strings/vivaldi_installer_strings_hu.xtb" lang="hu" />
+    <file path="strings/vivaldi_installer_strings_id.xtb" lang="id" />
+    <file path="strings/vivaldi_installer_strings_it.xtb" lang="it" />
+    <file path="strings/vivaldi_installer_strings_ja.xtb" lang="ja" />
+    <file path="strings/vivaldi_installer_strings_ja-KS.xtb" lang="ja-KS" />
+    <file path="strings/vivaldi_installer_strings_kab.xtb" lang="kab" />
+    <file path="strings/vivaldi_installer_strings_kk.xtb" lang="kk" />
+    <file path="strings/vivaldi_installer_strings_km.xtb" lang="km" />
+    <file path="strings/vivaldi_installer_strings_kn.xtb" lang="kn" />
+    <file path="strings/vivaldi_installer_strings_ko.xtb" lang="ko" />
+    <file path="strings/vivaldi_installer_strings_ky.xtb" lang="ky" />
+    <file path="strings/vivaldi_installer_strings_lt.xtb" lang="lt" />
+    <file path="strings/vivaldi_installer_strings_lo.xtb" lang="lo" />
+    <file path="strings/vivaldi_installer_strings_lv.xtb" lang="lv" />
+    <file path="strings/vivaldi_installer_strings_ml.xtb" lang="ml" />
+    <file path="strings/vivaldi_installer_strings_mn.xtb" lang="mn" />
+    <file path="strings/vivaldi_installer_strings_mr.xtb" lang="mr" />
+    <file path="strings/vivaldi_installer_strings_ms.xtb" lang="ms" />
+    <file path="strings/vivaldi_installer_strings_my.xtb" lang="my" />
+    <file path="strings/vivaldi_installer_strings_nb.xtb" lang="no" />
+    <file path="strings/vivaldi_installer_strings_ne.xtb" lang="ne" />
+    <file path="strings/vivaldi_installer_strings_nl.xtb" lang="nl" />
+    <file path="strings/vivaldi_installer_strings_or.xtb" lang="or" />
+    <file path="strings/vivaldi_installer_strings_pa.xtb" lang="pa" />
+    <file path="strings/vivaldi_installer_strings_pl.xtb" lang="pl" />
+    <file path="strings/vivaldi_installer_strings_pt-PT.xtb" lang="pt-PT" />
+    <file path="strings/vivaldi_installer_strings_ro.xtb" lang="ro" />
+    <file path="strings/vivaldi_installer_strings_ru.xtb" lang="ru" />
+    <file path="strings/vivaldi_installer_strings_si.xtb" lang="si" />
+    <file path="strings/vivaldi_installer_strings_sk.xtb" lang="sk" />
+    <file path="strings/vivaldi_installer_strings_sl.xtb" lang="sl" />
+    <file path="strings/vivaldi_installer_strings_sr.xtb" lang="sr" />
+    <file path="strings/vivaldi_installer_strings_sv.xtb" lang="sv" />
+    <file path="strings/vivaldi_installer_strings_sw.xtb" lang="sw" />
+    <file path="strings/vivaldi_installer_strings_ta.xtb" lang="ta" />
+    <file path="strings/vivaldi_installer_strings_te.xtb" lang="te" />
+    <file path="strings/vivaldi_installer_strings_th.xtb" lang="th" />
+    <file path="strings/vivaldi_installer_strings_tr.xtb" lang="tr" />
+    <file path="strings/vivaldi_installer_strings_uk.xtb" lang="uk" />
+    <file path="strings/vivaldi_installer_strings_ur.xtb" lang="ur" />
+    <file path="strings/vivaldi_installer_strings_uz.xtb" lang="uz" />
+    <file path="strings/vivaldi_installer_strings_vi.xtb" lang="vi" />
+    <file path="strings/vivaldi_installer_strings_zh-CN.xtb" lang="zh-CN" />
+    <file path="strings/vivaldi_installer_strings_zh-HK.xtb" lang="zh-HK" />
+    <file path="strings/vivaldi_installer_strings_zh-TW.xtb" lang="zh-TW" />
+    <file path="strings/vivaldi_installer_strings_zu.xtb" lang="zu" />
+    <file path="strings/vivaldi_installer_strings_es-419.xtb" lang="es-419" />
+    <file path="strings/vivaldi_installer_strings_pt-BR.xtb" lang="pt-BR" />
+    <file path="strings/vivaldi_installer_strings_af.xtb" lang="af" />
+    <file path="strings/vivaldi_installer_strings_be.xtb" lang="be" />
+    <file path="strings/vivaldi_installer_strings_de-CH.xtb" lang="de-CH" />
+    <file path="strings/vivaldi_installer_strings_eo.xtb" lang="eo" />
+    <file path="strings/vivaldi_installer_strings_es-PE.xtb" lang="es-PE" />
+    <file path="strings/vivaldi_installer_strings_eu.xtb" lang="eu" />
+    <file path="strings/vivaldi_installer_strings_fy.xtb" lang="fy" />
+    <file path="strings/vivaldi_installer_strings_gd.xtb" lang="gd" />
+    <file path="strings/vivaldi_installer_strings_gl.xtb" lang="gl" />
+    <file path="strings/vivaldi_installer_strings_hy.xtb" lang="hy" />
+    <file path="strings/vivaldi_installer_strings_io.xtb" lang="io" />
+    <file path="strings/vivaldi_installer_strings_is.xtb" lang="is" />
+    <file path="strings/vivaldi_installer_strings_jbo.xtb" lang="jbo" />
+    <file path="strings/vivaldi_installer_strings_ka.xtb" lang="ka" />
+    <file path="strings/vivaldi_installer_strings_ku.xtb" lang="ku" />
+    <file path="strings/vivaldi_installer_strings_mk.xtb" lang="mk" />
+    <file path="strings/vivaldi_installer_strings_sc.xtb" lang="sc" />
+    <file path="strings/vivaldi_installer_strings_sq.xtb" lang="sq" />
+    <file path="strings/vivaldi_installer_strings_nn.xtb" lang="nn" />
+    <file path="strings/vivaldi_installer_strings_sr-Latn.xtb" lang="sr-Latn" />
+  </translations>
+  <release seq="1" allow_pseudo="false">
+    <messages fallback_to_english="true">
+      <!-- Vivaldi installer -->
+      <message name="IDS_INSTALL_MODE_ADVANCED" desc="Text of the installer mode toggle button (Advanced/Simple)">
+        Advanced
+      </message>
+      <message name="IDS_INSTALL_MODE_SIMPLE" desc="Text of the installer mode toggle button (Advanced/Simple)">
+        Simple
+      </message>
+      <message name="IDS_INSTALL_TXT_TOS_ACCEPT_AND_INSTALL" desc="Description text for the TOS 'Accept and Install' button">
+        By clicking on the 'Accept and Install' button you are agreeing to Vivaldi's &lt;a&gt;Terms of Service&lt;/a&gt;
+      </message>
+      <message name="IDS_INSTALL_TXT_TOS_ACCEPT_AND_UPDATE" desc="Description text for the TOS 'Accept and Update' button">
+        By clicking on the 'Accept and Update' button you are agreeing to Vivaldi's &lt;a&gt;Terms of Service&lt;/a&gt;
+      </message>
+      <message name="IDS_INSTALL_TOS_ACCEPT_AND_INSTALL" desc="Text of the TOS 'Accept and Install' button">
+        Accept and Install
+      </message>
+      <message name="IDS_INSTALL_TOS_ACCEPT_AND_UPDATE" desc="Text of the TOS 'Accept and Update' button">
+        Accept and Update
+      </message>
+      <message name="IDS_INSTALL_INSTALL_FOR_ALL_USERS" desc="Item text of the install type combo box">
+        Install for all users
+      </message>
+      <message name="IDS_INSTALL_INSTALL_PER_USER" desc="Item text of the install type combo box">
+        Install per user
+      </message>
+      <message name="IDS_INSTALL_INSTALL_STANDALONE" desc="Item text of the install type combo box">
+        Install standalone
+      </message>
+      <message name="IDS_INSTALL_SELECT_A_FOLDER" desc="Browse-for-folder dialog title">
+        Select a folder
+      </message>
+      <message name="IDS_INSTALL_DEST_FOLDER_INVALID" desc="Destination-folder-invalid message box">
+        The destination folder is invalid. Please choose another.
+      </message>
+      <message name="IDS_INSTALL_NOT_FINISHED_PROMPT" desc="Really exit now prompt">
+        The Vivaldi Installer is not finished installing the Vivaldi Browser. Are you sure you want to exit now?
+      </message>
+      <message name="IDS_INSTALL_INSTALLER_NAME" desc="Name of the Vivaldi installer">
+        Vivaldi Installer
+      </message>
+      <message name="IDS_INSTALL_INSTALL_CAPTION" desc="Caption of the installer main dialog">
+        Install Vivaldi
+      </message>
+      <message name="IDS_INSTALL_LANGUAGE" desc="Static text label for the language selection combo box">
+        Language
+      </message>
+      <message name="IDS_INSTALL_INSTALLATION_TYPE" desc="Static text label for the install type combo box">
+        Installation Type
+      </message>
+      <message name="IDS_INSTALL_DEST_FOLDER" desc="Static text label for the destination folder input field">
+        Destination Folder
+      </message>
+      <message name="IDS_INSTALL_BROWSE" desc="Button text for browse folder button">
+        Browse...
+      </message>
+      <message name="IDS_INSTALL_SET_AS_DEFAULT" desc="Set-as-default checkbox text">
+        Set Vivaldi as default browser
+      </message>
+      <message name="IDS_INSTALL_MAKE_STANDALONE_AVAIL" desc="Register-standalone-as-available checkbox text">
+        Make standalone Vivaldi available as a default app
+      </message>
+      <message name="IDS_DISABLE_AUTOUPDATE" desc="Disable by default automatic updates.">
+        Disable automatic updates (not recommended)
+      </message>
+      <message name="IDS_INSTALL_RELAUNCH_WARNING" desc="Static text warning about close and relaunch">
+        Note: If updating a running Vivaldi browser, that instance will be closed and relaunched
+      </message>
+      <message name="IDS_INSTALL_CANCEL" desc="Cancel button text">
+        Cancel
+      </message>
+      <message name="IDS_INSTALL_PROGRESS_CAPTION" desc="Caption of progress dialog">
+        Installing Vivaldi
+      </message>
+      <message name="IDS_INSTALL_COPYRIGHT_AND_POLICY" desc="Copyright information and privacy policy link">
+        Copyright <ph name="YEAR">$1</ph> Vivaldi Technologies AS. All rights reserved. &lt;a&gt;Privacy Policy&lt;/a&gt;
+      </message>
+    </messages>
+  </release>
+</grit>

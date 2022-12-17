@@ -35,6 +35,7 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   bool AddPassword(const std::string& url,
                    const std::u16string& username,
                    const std::u16string& password,
+                   const std::u16string& note,
                    bool use_account_store,
                    content::WebContents* web_contents) override;
   // Fake implementation of ChangeSavedPassword. This succeeds if the current
@@ -88,6 +89,11 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   // delegate knows of a insecure credential with the same id.
   bool UnmuteInsecureCredential(
       const api::passwords_private::InsecureCredential& credential) override;
+  // Fake implementation of RecordChangePasswordFlowStarted. Sets the url
+  // returned by |last_change_flow_url()|.
+  void RecordChangePasswordFlowStarted(
+      const api::passwords_private::InsecureCredential& credential,
+      bool is_manual_flow) override;
   void StartPasswordCheck(StartPasswordCheckCallback callback) override;
   void StopPasswordCheck() override;
   api::passwords_private::PasswordCheckStatus GetPasswordCheckStatus() override;
@@ -116,6 +122,8 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
       password_manager::BulkLeakCheckService::State state) {
     start_password_check_state_ = state;
   }
+
+  const std::string& last_change_flow_url() { return last_change_flow_url_; }
 
   const std::vector<int>& last_moved_passwords() const {
     return last_moved_passwords_;
@@ -159,6 +167,10 @@ class TestPasswordsPrivateDelegate : public PasswordsPrivateDelegate {
   bool stop_password_check_triggered_ = false;
   password_manager::BulkLeakCheckService::State start_password_check_state_ =
       password_manager::BulkLeakCheckService::State::kRunning;
+
+  // Url of the last reported change password flow. Defaults to empty if
+  // none has been registered.
+  std::string last_change_flow_url_;
 
   // Records the ids of the passwords that were last moved.
   std::vector<int> last_moved_passwords_;

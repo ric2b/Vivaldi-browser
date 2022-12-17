@@ -171,6 +171,22 @@ base::FilePath GetInstallBinaryDir() {
   return path;
 }
 
+void AppendInstallChildProcessSwitches(base::CommandLine& command_line) {
+  if (!g_inside_installer_application) {
+    // This brunch can be hit in Chromium tests.
+    return;
+  }
+  // Let the child process to know where to install and if it is a standalone.
+  // Chromium passes installer::switches::kSystemLevel itself.
+  const char* const switched_to_copy[] = {
+      vivaldi::constants::kVivaldiInstallDir,
+      vivaldi::constants::kVivaldiStandalone,
+  };
+  const base::CommandLine& current = *base::CommandLine::ForCurrentProcess();
+  command_line.CopySwitchesFrom(current, switched_to_copy,
+                                std::size(switched_to_copy));
+}
+
 namespace {
 
 base::Version ReadExeVersion(const base::FilePath& exe_path) {

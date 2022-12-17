@@ -34,6 +34,7 @@
 #include "ash/test/ash_test_base.h"
 #include "ash/test/test_window_builder.h"
 #include "ash/wm/desks/desks_bar_view.h"
+#include "ash/wm/desks/desks_test_util.h"
 #include "ash/wm/desks/desks_util.h"
 #include "ash/wm/drag_window_resizer.h"
 #include "ash/wm/gestures/back_gesture/back_gesture_event_handler.h"
@@ -177,6 +178,7 @@ class TestDestroyedWidgetObserver : public views::WidgetObserver {
   void OnWidgetDestroyed(views::Widget* widget) override {
     DCHECK(!widget_destroyed_);
     widget_destroyed_ = true;
+    observation_.Reset();
   }
 
   bool widget_destroyed() const { return widget_destroyed_; }
@@ -777,7 +779,8 @@ TEST_P(OverviewSessionTest, CloseButtonOnMultipleDisplay) {
 }
 
 // Tests entering overview mode with two windows and selecting one.
-TEST_P(OverviewSessionTest, FullscreenWindow) {
+// TODO(crbug.com/1323145): Flaky.
+TEST_P(OverviewSessionTest, DISABLED_FullscreenWindow) {
   ui::ScopedAnimationDurationScaleMode anmatin_scale(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
@@ -814,7 +817,8 @@ TEST_P(OverviewSessionTest, FullscreenWindow) {
 }
 
 // Tests entering overview mode with maximized window.
-TEST_P(OverviewSessionTest, MaximizedWindow) {
+// TODO(crbug.com/1325386): Flaky.
+TEST_P(OverviewSessionTest, DISABLED_MaximizedWindow) {
   ui::ScopedAnimationDurationScaleMode anmatin_scale(
       ui::ScopedAnimationDurationScaleMode::NON_ZERO_DURATION);
 
@@ -1850,7 +1854,10 @@ TEST_P(OverviewSessionTest, NoWindowsIndicatorPositionSplitview) {
   // account.
   const int bounds_left = 200 + 4;
   int expected_x = bounds_left + (400 - (bounds_left)) / 2;
-  const int workarea_bottom_inset = ShelfConfig::Get()->in_app_shelf_size();
+  const int workarea_bottom_inset =
+      ShelfConfig::Get()->in_app_shelf_size() +
+      ShelfConfig::Get()->system_shelf_size() +
+      ShelfConfig::Get()->hotseat_bottom_padding();
   const int expected_y = (300 - workarea_bottom_inset) / 2;
   EXPECT_EQ(gfx::Point(expected_x, expected_y),
             no_windows_widget->GetWindowBoundsInScreen().CenterPoint());
@@ -3202,16 +3209,34 @@ TEST_P(OverviewSessionTest, RemoveTransientNoCrash) {
 // that closing does not destroy transient children which are ShellSurfaceBase,
 // but this test covers the regular case.
 TEST_P(OverviewSessionTest, ClosingTransientTree) {
-  auto widget = CreateTestWidget();
-  aura::Window* window = widget->GetNativeWindow();
-  auto child_widget = CreateTestWidget();
-  ::wm::AddTransientChild(window, child_widget->GetNativeWindow());
+  // Release ownership as it will get deleted by the transient window manager,
+  // when the associated overview item is closed later.
+  auto* window = CreateAppWindow().release();
 
-  TestDestroyedWidgetObserver widget_observer(widget.get());
-  TestDestroyedWidgetObserver child_widget_observer(child_widget.get());
+  auto* child_window1 = CreateAppWindow().release();
+  wm::AddTransientChild(window, child_window1);
+
+  // Add a second child that is not backed by a widget.
+  auto* child_window2 = CreateTestWindow().release();
+  wm::AddTransientChild(window, child_window2);
+
+  TestDestroyedWidgetObserver widget_observer(
+      views::Widget::GetWidgetForNativeWindow(window));
+  TestDestroyedWidgetObserver child_widget_observer(
+      views::Widget::GetWidgetForNativeWindow(child_window1));
 
   ToggleOverview();
+
+  // There is a uaf that happens after adding a new desk and removing a desk,
+  // which transfers all windows to the new desk, removes the OverviewItem for
+  // the window and then adds a new `OverviewItem` for the window. We replicate
+  // that over here. See crbug.com/1317875.
+  auto* controller = DesksController::Get();
+  controller->NewDesk(DesksCreationRemovalSource::kKeyboard);
+  RemoveDesk(controller->active_desk(), DeskCloseType::kCombineDesks);
+
   OverviewItem* item = GetOverviewItemForWindow(window);
+  ASSERT_TRUE(item);
   item->CloseWindow();
 
   // `NativeWidgetAura::Close()` fires a post task.
@@ -3675,6 +3700,31 @@ TEST_F(TabletModeOverviewSessionTest, HorizontalScrollingOnOverviewItem) {
 
   GenerateScrollSequence(topleft_window_center, gfx::Point(-500, 50));
   EXPECT_LT(leftmost_window->target_bounds(), left_bounds);
+}
+
+// Tests that dragging a fullscreened window to snap in overview does not result
+// in a u-a-f. Regression test for crbug.com/1330042.
+TEST_F(TabletModeOverviewSessionTest, SnappingFullscreenWindow) {
+  UpdateDisplay("800x600");
+
+  auto window = CreateAppWindow(gfx::Rect(300, 300));
+
+  const WMEvent fullscreen_event(WM_EVENT_FULLSCREEN);
+  WindowState::Get(window.get())->OnWMEvent(&fullscreen_event);
+  EXPECT_TRUE(WindowState::Get(window.get())->IsFullscreen());
+
+  ToggleOverview();
+  ASSERT_TRUE(InOverviewSession());
+
+  OverviewItem* item = GetOverviewItemForWindow(window.get());
+  ui::test::EventGenerator* generator = GetEventGenerator();
+  generator->set_current_screen_location(
+      gfx::ToRoundedPoint(item->target_bounds().CenterPoint()));
+  generator->PressLeftButton();
+  generator->MoveMouseTo(gfx::Point(10, 300));
+  generator->ReleaseLeftButton();
+
+  EXPECT_TRUE(WindowState::Get(window.get())->IsSnapped());
 }
 
 // A unique test class for testing flings in overview as those rely on observing
@@ -4527,11 +4577,14 @@ TEST_F(SplitViewOverviewSessionTest,
   // Verify that when there is a snapped window, the window grid bounds remain
   // constant despite overview items being dragged left and right.
   GetOverviewSession()->Drag(overview_item, left);
-  EXPECT_EQ(GetSplitViewRightWindowBounds(), GetGridBounds());
+  EXPECT_EQ(ShrinkBoundsByHotseatInset(GetSplitViewRightWindowBounds()),
+            GetGridBounds());
   GetOverviewSession()->Drag(overview_item, right);
-  EXPECT_EQ(GetSplitViewRightWindowBounds(), GetGridBounds());
+  EXPECT_EQ(ShrinkBoundsByHotseatInset(GetSplitViewRightWindowBounds()),
+            GetGridBounds());
   GetOverviewSession()->Drag(overview_item, center);
-  EXPECT_EQ(GetSplitViewRightWindowBounds(), GetGridBounds());
+  EXPECT_EQ(ShrinkBoundsByHotseatInset(GetSplitViewRightWindowBounds()),
+            GetGridBounds());
 }
 
 // Tests dragging a unsnappable window.
@@ -6049,10 +6102,11 @@ TEST_F(SplitViewOverviewSessionTest, SwapWindowAndOverviewGrid) {
   EXPECT_EQ(split_view_controller()->default_snap_position(),
             SplitViewController::LEFT);
   EXPECT_TRUE(GetOverviewController()->InOverviewSession());
-  EXPECT_EQ(
-      GetGridBounds(),
-      split_view_controller()->GetSnappedWindowBoundsInScreen(
-          SplitViewController::RIGHT, /*window_for_minimum_size=*/nullptr));
+  EXPECT_EQ(GetGridBounds(),
+            ShrinkBoundsByHotseatInset(
+                split_view_controller()->GetSnappedWindowBoundsInScreen(
+                    SplitViewController::RIGHT,
+                    /*window_for_minimum_size=*/nullptr)));
 
   split_view_controller()->SwapWindows();
   EXPECT_EQ(split_view_controller()->state(),
@@ -6061,8 +6115,9 @@ TEST_F(SplitViewOverviewSessionTest, SwapWindowAndOverviewGrid) {
             SplitViewController::RIGHT);
   EXPECT_EQ(
       GetGridBounds(),
-      split_view_controller()->GetSnappedWindowBoundsInScreen(
-          SplitViewController::LEFT, /*window_for_minimum_size=*/nullptr));
+      ShrinkBoundsByHotseatInset(
+          split_view_controller()->GetSnappedWindowBoundsInScreen(
+              SplitViewController::LEFT, /*window_for_minimum_size=*/nullptr)));
 }
 
 // Test that in tablet mode, pressing tab key in overview should not crash.

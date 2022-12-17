@@ -14,6 +14,7 @@
 #include "ash/components/settings/cros_settings_provider.h"
 #include "ash/components/settings/timezone_settings.h"
 #include "ash/components/timezone/timezone_resolver.h"
+#include "ash/constants/ash_features.h"
 #include "ash/constants/ash_switches.h"
 #include "ash/public/cpp/locale_update_controller.h"
 #include "ash/public/cpp/login_accelerators.h"
@@ -236,13 +237,16 @@ void ShowLoginWizardFinish(
   if (LoginDisplayHost::default_host()) {
     // Tests may have already allocated an instance for us to use.
     display_host = LoginDisplayHost::default_host();
-  } else if (ShouldShowSigninScreen(first_screen) ||
-             first_screen == LacrosDataMigrationScreenView::kScreenId) {
+  } else if (ShouldShowSigninScreen(first_screen)) {
+    display_host = new LoginDisplayHostMojo(DisplayedScreen::SIGN_IN_SCREEN);
+  } else if (first_screen == LacrosDataMigrationScreenView::kScreenId) {
     // TODO(crbug.com/1178702): Once lacros is officially released,
     // `ShowLoginWizard()` will no longer be called with lacros screen id.
     // Instead simply call `SigninUI::StartBrowserDataMigration()` as part of
     // the login flow.
     display_host = new LoginDisplayHostMojo(DisplayedScreen::SIGN_IN_SCREEN);
+    DCHECK(session_manager::SessionManager::Get());
+    session_manager::SessionManager::Get()->NotifyLoginOrLockScreenVisible();
   } else {
     display_host = new LoginDisplayHostWebUI();
   }
@@ -603,6 +607,7 @@ void LoginDisplayHostWebUI::OnStartSignInScreen() {
         "ui", "StartSignInScreen",
         TRACE_ID_WITH_SCOPE(kShowLoginWebUIid, TRACE_ID_GLOBAL(1)));
     BootTimesRecorder::Get()->RecordCurrentStats("login-start-signin-screen");
+    CHECK(base::FeatureList::IsEnabled(features::kOobeLoginUrl));
     LoadURL(GURL(kLoginURL));
   }
 
@@ -1195,9 +1200,7 @@ void ShowLoginWizard(OobeScreenId first_screen) {
 
   // Check whether we need to execute OOBE flow.
   const policy::EnrollmentConfig enrollment_config =
-      g_browser_process->platform_part()
-          ->browser_policy_connector_ash()
-          ->GetPrescribedEnrollmentConfig();
+      policy::EnrollmentConfig::GetPrescribedEnrollmentConfig();
   if (enrollment_config.should_enroll() &&
       first_screen == ash::OOBE_SCREEN_UNKNOWN) {
     // Manages its own lifetime. See ShutdownDisplayHost().

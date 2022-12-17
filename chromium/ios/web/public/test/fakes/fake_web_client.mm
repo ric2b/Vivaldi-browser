@@ -64,7 +64,7 @@ NSString* FakeWebClient::GetDocumentStartScriptForMainFrame(
 
 NSString* FakeWebClient::GetDocumentStartScriptForAllFrames(
     BrowserState* browser_state) const {
-  return web::test::GetPageScript(@"all_frames_web_test_bundle");
+  return web::test::GetPageScript(@"cookie_test");
 }
 
 void FakeWebClient::SetPluginNotSupportedText(const std::u16string& text) {
@@ -99,7 +99,7 @@ UIView* FakeWebClient::GetWindowedContainer() {
 }
 
 UserAgentType FakeWebClient::GetDefaultUserAgent(web::WebState* web_state,
-                                                 const GURL& url) {
+                                                 const GURL& url) const {
   return default_user_agent_;
 }
 

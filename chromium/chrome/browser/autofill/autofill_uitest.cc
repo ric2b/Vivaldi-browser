@@ -132,8 +132,9 @@ void AutofillUiTest::SetUpOnMainThread() {
   ChromeAutofillClient::FromWebContents(GetWebContents())
       ->KeepPopupOpenForTesting();
   // Inject the test delegate into the BrowserAutofillManager of the main frame.
-  RenderFrameHostChanged(/* old_host = */ nullptr,
-                         /* new_host = */ GetWebContents()->GetMainFrame());
+  RenderFrameHostChanged(
+      /* old_host = */ nullptr,
+      /* new_host = */ GetWebContents()->GetPrimaryMainFrame());
   Observe(GetWebContents());
 
   // Wait for Personal Data Manager to be fully loaded to prevent that
@@ -155,8 +156,7 @@ void AutofillUiTest::TearDownOnMainThread() {
   // Make sure to close any showing popups prior to tearing down the UI.
   BrowserAutofillManager* autofill_manager = GetBrowserAutofillManager();
   if (autofill_manager)
-    autofill_manager->client()->HideAutofillPopup(
-        autofill::PopupHidingReason::kTabGone);
+    autofill_manager->client()->HideAutofillPopup(PopupHidingReason::kTabGone);
 }
 
 bool AutofillUiTest::SendKeyToPageAndWait(
@@ -260,7 +260,7 @@ content::WebContents* AutofillUiTest::GetWebContents() {
 }
 
 content::RenderViewHost* AutofillUiTest::GetRenderViewHost() {
-  return GetWebContents()->GetMainFrame()->GetRenderViewHost();
+  return GetWebContents()->GetPrimaryMainFrame()->GetRenderViewHost();
 }
 
 BrowserAutofillManager* AutofillUiTest::GetBrowserAutofillManager() {
@@ -272,7 +272,7 @@ BrowserAutofillManager* AutofillUiTest::GetBrowserAutofillManager() {
   // when there is a web page popup during teardown
   if (!driver)
     return nullptr;
-  return driver->browser_autofill_manager();
+  return static_cast<BrowserAutofillManager*>(driver->autofill_manager());
 }
 
 void AutofillUiTest::RenderFrameHostChanged(

@@ -122,7 +122,7 @@ void VivaldiThemeDownloadHelper::SendResult(
   }
   GetOneShotFileTaskRunner()->PostTask(
       FROM_HERE,
-      base::BindOnce(base::GetDeleteFileCallback(), temporary_file_));
+      base::BindOnce(base::GetDeleteFileCallback(temporary_file_)));
 
   // `this` can be deleted after the callback call.
   std::move(callback_).Run(theme_id, std::move(error));

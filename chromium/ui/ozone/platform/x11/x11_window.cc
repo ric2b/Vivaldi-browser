@@ -5,6 +5,7 @@
 #include "ui/ozone/platform/x11/x11_window.h"
 
 #include "base/memory/scoped_refptr.h"
+#include "base/notreached.h"
 #include "base/strings/string_number_conversions.h"
 #include "base/threading/thread_task_runner_handle.h"
 #include "base/trace_event/trace_event.h"
@@ -33,6 +34,7 @@
 #include "ui/events/x/events_x_utils.h"
 #include "ui/events/x/x11_event_translation.h"
 #include "ui/gfx/geometry/skia_conversions.h"
+#include "ui/gfx/geometry/transform.h"
 #include "ui/gfx/image/image_skia_rep.h"
 #include "ui/gfx/x/x11_atom_cache.h"
 #include "ui/gfx/x/x11_path.h"
@@ -469,7 +471,7 @@ void X11Window::PrepareForShutdown() {
   X11EventSource::GetInstance()->RemovePlatformEventDispatcher(this);
 }
 
-void X11Window::SetBounds(const gfx::Rect& bounds) {
+void X11Window::SetBoundsInPixels(const gfx::Rect& bounds) {
   gfx::Rect new_bounds_in_pixels(bounds.origin(),
                                  AdjustSizeForDisplay(bounds.size()));
 
@@ -532,8 +534,17 @@ void X11Window::SetBounds(const gfx::Rect& bounds) {
   OnXWindowBoundsChanged(new_bounds_in_pixels);
 }
 
-gfx::Rect X11Window::GetBounds() const {
+gfx::Rect X11Window::GetBoundsInPixels() const {
   return bounds_in_pixels_;
+}
+
+void X11Window::SetBoundsInDIP(const gfx::Rect& bounds_in_dip) {
+  SetBoundsInPixels(
+      platform_window_delegate_->ConvertRectToPixels(bounds_in_dip));
+}
+
+gfx::Rect X11Window::GetBoundsInDIP() const {
+  return platform_window_delegate_->ConvertRectToDIP(bounds_in_pixels_);
 }
 
 void X11Window::SetTitle(const std::u16string& title) {
@@ -613,9 +624,9 @@ void X11Window::ToggleFullscreen() {
   // - works around Flash content which expects to have the size updated
   //   synchronously.
   // See https://crbug.com/361408
-  gfx::Rect new_bounds_px = GetBounds();
+  gfx::Rect new_bounds_px = GetBoundsInPixels();
   if (fullscreen) {
-    SetRestoredBoundsInPixels(new_bounds_px);
+    restored_bounds_in_pixels_ = new_bounds_px;
     if (x11_extension_delegate_)
       new_bounds_px = x11_extension_delegate_->GetGuessedFullScreenSizeInPx();
   } else {
@@ -625,9 +636,9 @@ void X11Window::ToggleFullscreen() {
     // before trying to restore its bounds (saved before entering in browser
     // fullscreen mode).
     if (was_fullscreen)
-      new_bounds_px = GetRestoredBoundsInPixels();
+      new_bounds_px = restored_bounds_in_pixels_;
     else
-      SetRestoredBoundsInPixels({});
+      restored_bounds_in_pixels_ = gfx::Rect();
   }
 
   // Do not go through SetBounds as long as it adjusts bounds and sets them to X
@@ -657,18 +668,18 @@ void X11Window::Maximize() {
     // Resize the window so that it does not have the same size as a monitor.
     // (Otherwise, some window managers immediately put the window back in
     // fullscreen mode).
-    gfx::Rect bounds_in_pixels = GetBounds();
+    gfx::Rect bounds_in_pixels = GetBoundsInPixels();
     gfx::Rect adjusted_bounds_in_pixels(
         bounds_in_pixels.origin(),
         AdjustSizeForDisplay(bounds_in_pixels.size()));
     if (adjusted_bounds_in_pixels != bounds_in_pixels)
-      SetBounds(adjusted_bounds_in_pixels);
+      SetBoundsInPixels(adjusted_bounds_in_pixels);
   }
 
   // When we are in the process of requesting to maximize a window, we can
   // accurately keep track of our restored bounds instead of relying on the
   // heuristics that are in the PropertyNotify and ConfigureNotify handlers.
-  SetRestoredBoundsInPixels(GetBounds());
+  restored_bounds_in_pixels_ = GetBoundsInPixels();
 
   // Some WMs do not respect maximization hints on unmapped windows, so we
   // save this one for later too.
@@ -840,12 +851,14 @@ void X11Window::ConfineCursorToBounds(const gfx::Rect& bounds) {
   has_pointer_barriers_ = true;
 }
 
-void X11Window::SetRestoredBoundsInPixels(const gfx::Rect& bounds) {
-  restored_bounds_in_pixels_ = bounds;
+void X11Window::SetRestoredBoundsInDIP(const gfx::Rect& bounds) {
+  restored_bounds_in_pixels_ =
+      platform_window_delegate_->ConvertRectToPixels(bounds);
 }
 
-gfx::Rect X11Window::GetRestoredBoundsInPixels() const {
-  return restored_bounds_in_pixels_;
+gfx::Rect X11Window::GetRestoredBoundsInDIP() const {
+  return platform_window_delegate_->ConvertRectToDIP(
+      restored_bounds_in_pixels_);
 }
 
 bool X11Window::ShouldWindowContentsBeTransparent() const {
@@ -1084,6 +1097,43 @@ void X11Window::SetInputRegion(const gfx::Rect* region_px) {
   });
 }
 
+void X11Window::NotifyStartupComplete(const std::string& startup_id) {
+  std::string message = "remove: ID=\"";
+  for (char c : startup_id) {
+    if (c == ' ' || c == '"' || c == '\\')
+      message.push_back('\\');
+    message.push_back(c);
+  }
+  message.push_back('"');
+
+  auto window = x11::CreateDummyWindow();
+  x11::ClientMessageEvent event{
+      .format = 8,
+      .window = window,
+      .type = x11::GetAtom("_NET_STARTUP_INFO_BEGIN"),
+  };
+  constexpr size_t kChunkSize = event.data.data8.size();
+  const x11::Atom net_startup_info = x11::GetAtom("_NET_STARTUP_INFO");
+
+  // X11 ClientMessageEvents are fixed size, but we need to send a variable
+  // sized message.  Send the message `kChunkSize` bytes at a time with the
+  // first message having type _NET_STARTUP_INFO_BEGIN and subsequent messages
+  // having type _NET_STARTUP_INFO.
+  const char* data = message.c_str();
+  const size_t data_size = message.size() + 1;
+  for (size_t offset = 0; offset < data_size; offset += kChunkSize) {
+    size_t copy_size = std::min<size_t>(kChunkSize, data_size - offset);
+    uint8_t* dst = &event.data.data8[0];
+    memcpy(dst, data + offset, copy_size);
+    memset(dst + copy_size, 0, kChunkSize - copy_size);
+    SendEvent(event, x_root_window_, x11::EventMask::PropertyChange);
+    event.type = net_startup_info;
+  }
+
+  connection_->DestroyWindow(window);
+  connection_->Flush();
+}
+
 std::string X11Window::GetWorkspace() const {
   absl::optional<int> workspace_id = workspace_;
   return workspace_id.has_value() ? base::NumberToString(workspace_id.value())
@@ -1276,8 +1326,8 @@ void X11Window::DispatchUiEvent(ui::Event* event, const x11::Event& xev) {
       // Another X11Window has installed itself as capture. Translate the
       // event's location and dispatch to the other.
       ConvertEventLocationToTargetWindowLocation(
-          located_events_grabber->GetBounds().origin(), GetBounds().origin(),
-          event->AsLocatedEvent());
+          located_events_grabber->GetBoundsInPixels().origin(),
+          GetBoundsInPixels().origin(), event->AsLocatedEvent());
     }
     return located_events_grabber->DispatchUiEvent(event, xev);
   }
@@ -1335,19 +1385,19 @@ void X11Window::OnXWindowStateChanged() {
   if (window_fullscreen_mode != browser_fullscreen_mode)
     return;
 
-  if (GetRestoredBoundsInPixels().IsEmpty()) {
+  if (restored_bounds_in_pixels_.IsEmpty()) {
     if (IsMaximized()) {
       // The request that we become maximized originated from a different
       // process. |bounds_in_pixels_| already contains our maximized bounds. Do
       // a best effort attempt to get restored bounds by setting it to our
       // previously set bounds (and if we get this wrong, we aren't any worse
       // off since we'd otherwise be returning our maximized bounds).
-      SetRestoredBoundsInPixels(previous_bounds_in_pixels_);
+      restored_bounds_in_pixels_ = previous_bounds_in_pixels_;
     }
   } else if (!IsMaximized() && !IsFullscreen()) {
     // If we have restored bounds, but WM_STATE no longer claims to be
     // maximized or fullscreen, we should clear our restored bounds.
-    SetRestoredBoundsInPixels(gfx::Rect());
+    restored_bounds_in_pixels_ = gfx::Rect();
   }
 
   if (new_state != state_) {
@@ -1394,11 +1444,17 @@ void X11Window::OnXWindowDragDropEvent(const x11::ClientMessageEvent& xev) {
 }
 
 absl::optional<gfx::Size> X11Window::GetMinimumSizeForXWindow() {
-  return platform_window_delegate_->GetMinimumSizeForWindow();
+  if (auto max_size = platform_window_delegate_->GetMinimumSizeForWindow())
+    return platform_window_delegate_->ConvertRectToPixels(gfx::Rect(*max_size))
+        .size();
+  return absl::nullopt;
 }
 
 absl::optional<gfx::Size> X11Window::GetMaximumSizeForXWindow() {
-  return platform_window_delegate_->GetMaximumSizeForWindow();
+  if (auto max_size = platform_window_delegate_->GetMaximumSizeForWindow())
+    return platform_window_delegate_->ConvertRectToPixels(gfx::Rect(*max_size))
+        .size();
+  return absl::nullopt;
 }
 
 SkPath X11Window::GetWindowMaskForXWindow() {
@@ -1424,16 +1480,19 @@ void X11Window::EndMoveLoop() {
   x11_window_move_client_->EndMoveLoop();
 }
 
-bool X11Window::StartDrag(const OSExchangeData& data,
-                          int operations,
-                          mojom::DragEventSource source,
-                          gfx::NativeCursor cursor,
-                          bool can_grab_pointer,
-                          WmDragHandler::Delegate* delegate) {
+bool X11Window::StartDrag(
+    const OSExchangeData& data,
+    int operations,
+    mojom::DragEventSource source,
+    gfx::NativeCursor cursor,
+    bool can_grab_pointer,
+    WmDragHandler::DragFinishedCallback drag_finished_callback,
+    WmDragHandler::LocationDelegate* location_delegate) {
   DCHECK(drag_drop_client_);
-  DCHECK(!drag_handler_delegate_);
+  DCHECK(!drag_location_delegate_);
 
-  drag_handler_delegate_ = delegate;
+  drag_finished_callback_ = std::move(drag_finished_callback);
+  drag_location_delegate_ = location_delegate;
   drag_drop_client_->InitDrag(operations, &data);
   allowed_drag_operations_ = 0;
   notified_enter_ = false;
@@ -1447,7 +1506,7 @@ bool X11Window::StartDrag(const OSExchangeData& data,
     return false;
 
   drag_loop_.reset();
-  drag_handler_delegate_ = nullptr;
+  drag_location_delegate_ = nullptr;
   drag_drop_client_->CleanupDrag();
   return dropped;
 }
@@ -1457,8 +1516,8 @@ void X11Window::CancelDrag() {
 }
 
 absl::optional<gfx::AcceleratedWidget> X11Window::GetDragWidget() {
-  DCHECK(drag_handler_delegate_);
-  return drag_handler_delegate_->GetDragWidget();
+  DCHECK(drag_location_delegate_);
+  return drag_location_delegate_->GetDragWidget();
 }
 
 int X11Window::UpdateDrag(const gfx::Point& screen_point) {
@@ -1488,21 +1547,22 @@ int X11Window::UpdateDrag(const gfx::Point& screen_point) {
 
   XDragDropClient* source_client =
       XDragDropClient::GetForWindow(target_current_context->source_window());
+  gfx::PointF local_point_in_dip =
+      platform_window_delegate_->ConvertScreenPointToLocalDIP(screen_point);
   if (!notified_enter_) {
-    drop_handler->OnDragEnter(gfx::PointF(screen_point), std::move(data),
+    drop_handler->OnDragEnter(local_point_in_dip, std::move(data),
                               suggested_operations,
                               GetKeyModifiers(source_client));
     notified_enter_ = true;
   }
   allowed_drag_operations_ = drop_handler->OnDragMotion(
-      gfx::PointF(screen_point), suggested_operations,
-      GetKeyModifiers(source_client));
+      local_point_in_dip, suggested_operations, GetKeyModifiers(source_client));
   return allowed_drag_operations_;
 }
 
 void X11Window::UpdateCursor(DragOperation negotiated_operation) {
-  DCHECK(drag_handler_delegate_);
-  drag_handler_delegate_->OnDragOperationChanged(negotiated_operation);
+  DCHECK(drag_location_delegate_);
+  drag_location_delegate_->OnDragOperationChanged(negotiated_operation);
 }
 
 void X11Window::OnBeginForeignDrag(x11::Window window) {
@@ -1539,17 +1599,16 @@ DragOperation X11Window::PerformDrop() {
 }
 
 void X11Window::EndDragLoop() {
-  DCHECK(drag_handler_delegate_);
-
-  drag_handler_delegate_->OnDragFinished(
-      PreferredDragOperation(allowed_drag_operations_));
+  DCHECK(!drag_finished_callback_.is_null());
+  std::move(drag_finished_callback_)
+      .Run(PreferredDragOperation(allowed_drag_operations_));
   drag_loop_->EndMoveLoop();
 }
 
 void X11Window::OnMouseMovement(const gfx::Point& screen_point,
                                 int flags,
                                 base::TimeTicks event_time) {
-  drag_handler_delegate_->OnDragLocationChanged(screen_point);
+  drag_location_delegate_->OnDragLocationChanged(screen_point);
   drag_drop_client_->HandleMouseMovement(screen_point, flags, event_time);
 }
 
@@ -1562,7 +1621,7 @@ void X11Window::OnMoveLoopEnded() {
 }
 
 void X11Window::SetBoundsOnMove(const gfx::Rect& requested_bounds) {
-  SetBounds(requested_bounds);
+  SetBoundsInPixels(requested_bounds);
 }
 
 scoped_refptr<X11Cursor> X11Window::GetLastCursor() {

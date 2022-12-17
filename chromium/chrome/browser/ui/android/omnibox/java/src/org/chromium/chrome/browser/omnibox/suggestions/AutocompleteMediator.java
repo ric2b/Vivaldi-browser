@@ -176,7 +176,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         mDropdownViewInfoListBuilder = new DropdownItemViewInfoListBuilder(
                 activityTabSupplier, bookmarkState, exploreIconProvider, omniboxPedalDelegate);
         mDropdownViewInfoListBuilder.setShareDelegateSupplier(shareDelegateSupplier);
-        mDropdownViewInfoListManager = new DropdownItemViewInfoListManager(mSuggestionModels);
+        mDropdownViewInfoListManager =
+                new DropdownItemViewInfoListManager(mSuggestionModels, context);
     }
 
     /**
@@ -281,7 +282,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
         // initialization. Hence we skip showing the cached suggestion till the native is loaded to
         // avoid blank white space.
         if (mNativeInitialized || showSearchEngineSuggestionBar()) return;
-        onSuggestionsReceived(CachedZeroSuggestionsManager.readFromCache(), "");
+        onSuggestionsReceived(CachedZeroSuggestionsManager.readFromCache(), "", true);
     }
 
     /** Notify the mediator that a item selection is pending and should be accepted. */
@@ -704,7 +705,7 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
     @Override
     public void onSuggestionsReceived(
-            AutocompleteResult autocompleteResult, String inlineAutocompleteText) {
+            AutocompleteResult autocompleteResult, String inlineAutocompleteText, boolean isFinal) {
         if (mShouldPreventOmniboxAutocomplete
                 || getSuggestionVisibilityState() == SuggestionVisibilityState.DISALLOWED) {
             return;
@@ -732,6 +733,8 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
             mDelegate.onSuggestionsChanged(inlineAutocompleteText, defaultMatchIsSearch);
             updateOmniboxSuggestionsVisibility();
         }
+
+        mListPropertyModel.set(SuggestionListProperties.LIST_IS_FINAL, isFinal);
     }
 
     @Override
@@ -833,6 +836,12 @@ import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
 
             transition = PageTransition.LINK;
         }
+
+        // Kick off an action to clear focus and dismiss the suggestions list.
+        // This normally happens when the target site loads and focus is moved to the webcontents.
+        // On Android T we occasionally observe focus events to be lost, resulting with Suggestions
+        // list obscuring the view.
+        mDelegate.clearOmniboxFocus();
 
         if (suggestion.getType() == OmniboxSuggestionType.CLIPBOARD_IMAGE) {
             mDelegate.loadUrlWithPostData(url.getSpec(), transition, inputStart,

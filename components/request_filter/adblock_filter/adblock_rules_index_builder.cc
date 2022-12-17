@@ -12,7 +12,6 @@
 
 #include "base/files/file.h"
 #include "base/strings/string_split.h"
-#include "base/task/post_task.h"
 #include "components/request_filter/adblock_filter/adblock_rules_index.h"
 #include "components/request_filter/adblock_filter/stylesheet_builder.h"
 #include "components/request_filter/adblock_filter/utils.h"
@@ -237,8 +236,8 @@ std::string DoSaveIndex(base::span<const uint8_t> data,
 void SaveIndex(std::unique_ptr<flatbuffers::FlatBufferBuilder> index_builder,
                const base::FilePath& index_path,
                IndexSavedCallback index_saved_callback) {
-  base::PostTask(
-      FROM_HERE, {content::BrowserThread::UI},
+  content::GetUIThreadTaskRunner({})->PostTask(
+      FROM_HERE,
       base::BindOnce(
           std::move(index_saved_callback),
           DoSaveIndex(base::make_span(index_builder->GetBufferPointer(),

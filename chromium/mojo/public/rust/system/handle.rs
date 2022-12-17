@@ -14,6 +14,8 @@
 //! but act much the same as untyped handles.
 
 use crate::system::ffi;
+use crate::system::wait::*;
+
 // This full import is intentional; nearly every type in mojo_types needs to be used.
 use crate::system::mojo_types::*;
 
@@ -46,34 +48,99 @@ pub trait Handle {
     ///
     /// Returns the satisfied and satisfiable signals respectively for this
     /// handle when waiting is done.
-    fn wait(&self, signals: HandleSignals) -> (SignalsState, MojoResult) {
+    fn wait(&self, signals: HandleSignals) -> WaitResult {
+        wait(self.get_native_handle(), signals)
+    }
+
+    /// Gets the last known signals state of the handle. The state may change at any time during or after this call.
+    fn query_signals_state(&self) -> Result<SignalsState, MojoResult> {
         let mut state: SignalsState = Default::default();
-        let r = unsafe {
-            ffi::MojoWait(self.get_native_handle(), signals.get_bits(), &mut state.0 as *mut _)
-        };
-        (state, MojoResult::from_code(r))
+        let r = MojoResult::from_code(unsafe {
+            ffi::MojoQueryHandleSignalsState(self.get_native_handle(), state.as_raw_mut_ptr())
+        });
+
+        match r {
+            MojoResult::Okay => Ok(state),
+            r => Err(r),
+        }
     }
 }
 
-/// The basic untyped handle that wraps a MojoHandle (a u32)
+/// The basic untyped handle that wraps a MojoHandle. It is "untyped" in the
+/// sense that there are no guarantees about what type of Mojo object it holds.
+/// Other Mojo wrappers can implement `Handle` and `CastHandle` while providing
+/// type safety.
+///
+/// `UntypedHandle` must hold either a valid `MojoHandle` or be
+/// `UntypedHandle::invalid()` (i.e. a 0 `MojoHandle`). The handle will be
+/// closed on `drop` if it is not `invalid()`.
+#[repr(transparent)]
 pub struct UntypedHandle {
-    /// The native Mojo handle
+    /// The native Mojo handle.
     value: MojoHandle,
 }
 
 impl UntypedHandle {
+    /// Get an invalid handle.
+    pub fn invalid() -> UntypedHandle {
+        UntypedHandle { value: 0 }
+    }
+
     /// Invalidates the Handle by setting its native handle to
     /// zero, the canonical invalid handle in Mojo.
     ///
-    /// This function is unsafe because clearing a native handle
-    /// without closing it is a resource leak.
-    pub unsafe fn invalidate(&mut self) {
-        self.value = 0
+    /// Using this improperly will leak Mojo resources.
+    pub fn invalidate(&mut self) {
+        self.value = 0;
     }
 
     /// Checks if the native handle is valid (0 = canonical invalid handle).
     pub fn is_valid(&self) -> bool {
         self.value != 0
+    }
+
+    /// Get a pointer to the wrapped `MojoHandle` value. Use with care: if a
+    /// valid handle is overwritten, it will be leaked. This method is unsafe
+    /// because writing a valid handle value owned by another `UntypedHandle`
+    /// instance can cause undefined behavior. Furthermore, an arbitrary
+    /// non-zero value may at any time become a valid handle owned somewhere
+    /// else.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure a `MojoHandle` stored here is either 0 or a valid
+    /// handle returned from Mojo. Additionally, the handle must not be owned by
+    /// any other instance.
+    ///
+    /// The caller must ensure `self` outlives the returned pointer.
+    pub unsafe fn as_mut_ptr(&mut self) -> *mut MojoHandle {
+        &mut self.value as *mut _
+    }
+
+    /// Get an immutable pointer to a slice of wrapped handle.
+    ///
+    /// The caller must ensure `handles` outlives the returned pointer. The
+    /// handle must not be closed or wrapped by another instance.
+    pub fn slice_as_ptr(handles: &[Self]) -> *const MojoHandle {
+        // `Self` is a repr(transparent) wrapper for `MojoHandle`, so the
+        // pointer cast is sound.
+        handles.as_ptr() as *const _
+    }
+
+    /// Get a mutable pointer to a slice of wrapped handles. Comes with the same
+    /// caveats as `as_mut_ptr()`.
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that *all* stored `MojoHandle`s meet the
+    /// requirements of `as_mut_ptr()`. It follows that all handles must be
+    /// unique or 0.
+    ///
+    /// The caller must ensure `handles` outlives the returned pointer.
+    pub unsafe fn slice_as_mut_ptr(handles: &mut [Self]) -> *mut MojoHandle {
+        // `Self` is a repr(transparent) wrapper for `MojoHandle`, so the
+        // pointer cast is sound.
+        handles.as_mut_ptr() as *mut _
     }
 }
 

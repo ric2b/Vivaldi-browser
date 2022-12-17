@@ -5,10 +5,13 @@
 /**
  * @fileoverview Handles output for Chrome's built-in find.
  */
+import {ChromeVoxState} from '/chromevox/background/chromevox_state.js';
+import {Output} from '/chromevox/background/output/output.js';
 
 const TreeChangeObserverFilter = chrome.automation.TreeChangeObserverFilter;
 
 export class FindHandler {
+  /** @private */
   constructor() {
     /**
      * The last time a find marker was received.
@@ -17,7 +20,7 @@ export class FindHandler {
     this.lastFindMarkerReceived = new Date();
 
     /** @private {function(chrome.automation.TreeChange)} */
-    this.treeChangeObserver_ = (change) => this.onTextMatch_(change);
+    this.treeChangeObserver_ = change => this.onTextMatch_(change);
 
     chrome.automation.addTreeChangeObserver(
         TreeChangeObserverFilter.TEXT_MARKER_CHANGES, this.treeChangeObserver_);
@@ -25,6 +28,9 @@ export class FindHandler {
 
   /** Initializes this module. */
   static init() {
+    if (FindHandler.instance) {
+      throw 'Error: Trying to create two instances of singleton FindHandler';
+    }
     FindHandler.instance = new FindHandler();
   }
 
@@ -70,3 +76,6 @@ export class FindHandler {
  * @const {number}
  */
 FindHandler.DROP_MATCH_WITHIN_TIME_MS = 50;
+
+/** @type {FindHandler} */
+FindHandler.instance;

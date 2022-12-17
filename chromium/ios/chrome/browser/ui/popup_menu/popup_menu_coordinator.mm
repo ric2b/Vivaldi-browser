@@ -12,8 +12,12 @@
 #include "ios/chrome/browser/application_context.h"
 #include "ios/chrome/browser/bookmarks/bookmark_model_factory.h"
 #include "ios/chrome/browser/browser_state/chrome_browser_state.h"
+#include "ios/chrome/browser/discover_feed/discover_feed_service.h"
+#include "ios/chrome/browser/discover_feed/discover_feed_service_factory.h"
 #include "ios/chrome/browser/feature_engagement/tracker_factory.h"
+#import "ios/chrome/browser/follow/follow_action_state.h"
 #import "ios/chrome/browser/main/browser.h"
+#import "ios/chrome/browser/ntp/features.h"
 #import "ios/chrome/browser/overlays/public/overlay_presenter.h"
 #include "ios/chrome/browser/reading_list/reading_list_model_factory.h"
 #import "ios/chrome/browser/search_engines/template_url_service_factory.h"
@@ -24,9 +28,6 @@
 #import "ios/chrome/browser/ui/commands/command_dispatcher.h"
 #import "ios/chrome/browser/ui/commands/find_in_page_commands.h"
 #import "ios/chrome/browser/ui/commands/popup_menu_commands.h"
-#import "ios/chrome/browser/ui/follow/follow_action_state.h"
-#import "ios/chrome/browser/ui/follow/follow_util.h"
-#import "ios/chrome/browser/ui/ntp/new_tab_page_feature.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/feature_flags.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_mediator.h"
 #import "ios/chrome/browser/ui/popup_menu/overflow_menu/overflow_menu_swift.h"
@@ -321,6 +322,12 @@ enum class IOSOverflowMenuActionType {
             .triggerFollowUpAction;
     self.bubblePresenter.incognitoTabTipBubblePresenter.triggerFollowUpAction =
         NO;
+    if (IsWebChannelsEnabled() &&
+        !self.browser->GetBrowserState()->IsOffTheRecord()) {
+      ios::GetChromeBrowserProvider()
+          .GetFollowProvider()
+          ->SetFollowEventDelegate(self.browser);
+    }
   }
 
   OverlayPresenter* overlayPresenter = OverlayPresenter::FromBrowser(
@@ -352,8 +359,10 @@ enum class IOSOverflowMenuActionType {
         self.overflowMenuMediator.bookmarkModel =
             ios::BookmarkModelFactory::GetForBrowserState(
                 self.browser->GetBrowserState());
-        self.overflowMenuMediator.prefService =
+        self.overflowMenuMediator.browserStatePrefs =
             self.browser->GetBrowserState()->GetPrefs();
+        self.overflowMenuMediator.localStatePrefs =
+            GetApplicationContext()->GetLocalState();
         self.overflowMenuMediator.engagementTracker =
             feature_engagement::TrackerFactory::GetForBrowserState(
                 self.browser->GetBrowserState());
@@ -361,16 +370,14 @@ enum class IOSOverflowMenuActionType {
             overlayPresenter;
         self.overflowMenuMediator.browserPolicyConnector =
             GetApplicationContext()->GetBrowserPolicyConnector();
-            
-        if (IsWebChannelsEnabled()) {
-          self.overflowMenuMediator.followActionState = GetFollowActionState(
-              self.browser->GetWebStateList()->GetActiveWebState(),
-              self.browser->GetBrowserState());
-          ios::GetChromeBrowserProvider()
-              .GetFollowProvider()
-              ->SetFollowEventDelegate(self.browser);
-        } else {
-          self.overflowMenuMediator.followActionState = FollowActionStateHidden;
+
+        if (IsWebChannelsEnabled() &&
+            DiscoverFeedServiceFactory::GetForBrowserState(
+                self.browser->GetBrowserState())) {
+          self.overflowMenuMediator.feedMetricsRecorder =
+              DiscoverFeedServiceFactory::GetForBrowserState(
+                  self.browser->GetBrowserState())
+                  ->GetFeedMetricsRecorder();
         }
 
         self.contentBlockerMediator.consumer = self.overflowMenuMediator;
@@ -378,7 +385,8 @@ enum class IOSOverflowMenuActionType {
         UIViewController* menu = [OverflowMenuViewProvider
             makeViewControllerWithModel:self.overflowMenuMediator
                                             .overflowMenuModel
-                         metricsHandler:self];
+                         metricsHandler:self
+                carouselMetricsDelegate:self.overflowMenuMediator];
 
         NamedGuide* guide =
             [NamedGuide guideWithName:guideName
@@ -447,6 +455,13 @@ enum class IOSOverflowMenuActionType {
   self.mediator.webContentAreaOverlayPresenter = overlayPresenter;
   self.mediator.URLLoadingBrowserAgent =
       UrlLoadingBrowserAgent::FromBrowser(self.browser);
+  if (IsWebChannelsEnabled() && DiscoverFeedServiceFactory::GetForBrowserState(
+                                    self.browser->GetBrowserState())) {
+    self.mediator.feedMetricsRecorder =
+        DiscoverFeedServiceFactory::GetForBrowserState(
+            self.browser->GetBrowserState())
+            ->GetFeedMetricsRecorder();
+  }
 
   self.contentBlockerMediator.consumer = self.mediator;
 

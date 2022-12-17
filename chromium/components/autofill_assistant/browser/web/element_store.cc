@@ -6,7 +6,7 @@
 
 #include "components/autofill_assistant/browser/client_status.h"
 #include "components/autofill_assistant/browser/web/element.h"
-#include "components/autofill_assistant/browser/web/element_finder.h"
+#include "components/autofill_assistant/browser/web/element_finder_result.h"
 #include "content/public/browser/render_frame_host.h"
 #include "content/public/browser/web_contents.h"
 
@@ -37,6 +37,7 @@ ClientStatus ElementStore::RestoreElement(
     const DomObjectFrameStack& object,
     ElementFinderResult* out_element) const {
   out_element->SetObjectId(object.object_data.object_id);
+  out_element->SetBackendNodeId(object.object_data.backend_node_id);
   out_element->SetNodeFrameId(object.object_data.node_frame_id);
   out_element->SetFrameStack(object.frame_stack);
   auto* frame = FindCorrespondingRenderFrameHost(

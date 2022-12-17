@@ -14,6 +14,7 @@
 
 #include "base/base_export.h"
 #include "base/containers/flat_map.h"
+#include "base/dcheck_is_on.h"
 #include "base/feature_list_buildflags.h"
 #include "base/gtest_prod_util.h"
 #include "base/logging.h"
@@ -400,7 +401,7 @@ class BASE_EXPORT FeatureList {
 
   // Returns the override state of a given |feature|. If the feature was not
   // overridden, returns OVERRIDE_USE_DEFAULT. Performs any necessary callbacks
-  // for when the feature state has been observed, e.g. actvating field trials.
+  // for when the feature state has been observed, e.g. activating field trials.
   OverrideState GetOverrideState(const Feature& feature) const;
 
   // Same as GetOverrideState(), but without a default value.

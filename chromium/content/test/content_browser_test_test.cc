@@ -101,7 +101,14 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MANUAL_RendererCrash) {
 #endif
 
 // Tests that browser tests print the callstack when a child process crashes.
-IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RendererCrashCallStack) {
+// TODO(https://crbug.com/1317397): Enable this test on Fuchsia once the test
+// expectations have been updated.
+#if BUILDFLAG(IS_FUCHSIA)
+#define MAYBE_RendererCrashCallStack DISABLED_RendererCrashCallStack
+#else
+#define MAYBE_RendererCrashCallStack RendererCrashCallStack
+#endif
+IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MAYBE_RendererCrashCallStack) {
   base::ScopedAllowBlockingForTesting allow_blocking;
 
   base::CommandLine new_test = CreateCommandLine();
@@ -148,7 +155,9 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, MANUAL_BrowserCrash) {
 
 // Tests that browser tests print the callstack on asserts.
 // Disabled on Windows crbug.com/1034784
-#if BUILDFLAG(IS_WIN)
+// TODO(https://crbug.com/1317397): Enable this test on Fuchsia once the test
+// expectations have been updated.
+#if BUILDFLAG(IS_WIN) || BUILDFLAG(IS_FUCHSIA)
 #define MAYBE_BrowserCrashCallStack DISABLED_BrowserCrashCallStack
 #else
 #define MAYBE_BrowserCrashCallStack BrowserCrashCallStack
@@ -378,11 +387,19 @@ IN_PROC_BROWSER_TEST_F(ContentBrowserTest, RunTimeoutInstalled) {
   EXPECT_LT(run_timeout->timeout, TestTimeouts::test_launcher_timeout());
 
   static auto& static_on_timeout_cb = run_timeout->on_timeout;
+#if defined(__clang__) && defined(_MSC_VER)
+  EXPECT_FATAL_FAILURE(static_on_timeout_cb.Run(FROM_HERE),
+                       "RunLoop::Run() timed out. Timeout set at "
+                       // We don't test the line number but it would be present.
+                       "ProxyRunTestOnMainThreadLoop@content\\public\\test\\"
+                       "browser_test_base.cc:");
+#else
   EXPECT_FATAL_FAILURE(static_on_timeout_cb.Run(FROM_HERE),
                        "RunLoop::Run() timed out. Timeout set at "
                        // We don't test the line number but it would be present.
                        "ProxyRunTestOnMainThreadLoop@content/public/test/"
                        "browser_test_base.cc:");
+#endif
 }
 
 }  // namespace content

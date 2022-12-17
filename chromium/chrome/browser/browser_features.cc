@@ -74,7 +74,9 @@ const base::Feature kEnableUniveralLinks{"EnableUniveralLinks",
 // menu.
 const base::Feature kQuickSettingsPWANotifications{
     "QuickSettingsPWA", base::FEATURE_DISABLED_BY_DEFAULT};
+#endif
 
+#if BUILDFLAG(IS_CHROMEOS)
 // Enables being able to zoom a web page by double tapping in Chrome OS tablet
 // mode.
 const base::Feature kDoubleTapToZoomInTabletMode{
@@ -90,14 +92,6 @@ const base::Feature kCopyLinkToText{"CopyLinkToText",
 // Adds a "Snooze" action to mute notifications during screen sharing sessions.
 const base::Feature kMuteNotificationSnoozeAction{
     "MuteNotificationSnoozeAction", base::FEATURE_DISABLED_BY_DEFAULT};
-#endif
-
-#if BUILDFLAG(IS_WIN)
-// Results in remembering fonts used at the time of fcp, and prewarming those
-// fonts on subsequent loading of search results pages for the default search
-// engine.
-const base::Feature kPrewarmSearchResultsPageFonts{
-    "PrewarmSearchResultsPageFonts", base::FEATURE_ENABLED_BY_DEFAULT};
 #endif
 
 // Gates sandboxed iframe navigation toward external protocol behind any of:
@@ -118,9 +112,10 @@ const base::Feature kPrewarmSearchResultsPageFonts{
 // Implementation bug: https://crbug.com/1253379
 // I2S: https://groups.google.com/a/chromium.org/g/blink-dev/c/-t-f7I6VvOI
 //
-// To be enabled in M103
+// Enabled in M103. Flag to be removed in M106
 const base::Feature kSandboxExternalProtocolBlocked{
-    "SandboxExternalProtocolBlocked", base::FEATURE_DISABLED_BY_DEFAULT};
+    "SandboxExternalProtocolBlocked", base::FEATURE_ENABLED_BY_DEFAULT};
+// Enabled in M100. Flag to be removed in M106
 const base::Feature kSandboxExternalProtocolBlockedWarning{
     "SandboxExternalProtocolBlockedWarning", base::FEATURE_ENABLED_BY_DEFAULT};
 

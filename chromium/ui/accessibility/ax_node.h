@@ -16,7 +16,6 @@
 
 #include "base/containers/stack.h"
 #include "base/memory/raw_ptr.h"
-#include "base/strings/char_traits.h"
 #include "build/build_config.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/skia/include/core/SkColor.h"
@@ -49,9 +48,9 @@ class AX_EXPORT AXNode final {
   // We compute the embedded characters' length instead of manually typing it in
   // order to avoid the variable pairs getting out of sync in a future update.
   static constexpr int kEmbeddedObjectCharacterLengthUTF8 =
-      base::CharTraits<char>::length(kEmbeddedObjectCharacterUTF8);
+      std::char_traits<char>::length(kEmbeddedObjectCharacterUTF8);
   static constexpr int kEmbeddedObjectCharacterLengthUTF16 =
-      base::CharTraits<char16_t>::length(kEmbeddedObjectCharacterUTF16);
+      std::char_traits<char16_t>::length(kEmbeddedObjectCharacterUTF16);
 
   // Interface to the tree class that owns an AXNode. We use this instead
   // of letting AXNode have a pointer to its AXTree directly so that we're
@@ -70,7 +69,7 @@ class AX_EXPORT AXNode final {
     };
 
     // See AXTree::GetAXTreeID.
-    virtual AXTreeID GetAXTreeID() const = 0;
+    virtual const AXTreeID& GetAXTreeID() const = 0;
     // See `AXTree::GetTableInfo`.
     virtual AXTableInfo* GetTableInfo(const AXNode* table_node) const = 0;
     // See AXTree::GetFromId.
@@ -702,6 +701,13 @@ class AX_EXPORT AXNode final {
   // Returns false if the |data_| is uninitialized or has been taken. Returns
   // true otherwise.
   bool IsDataValid() const;
+
+  // Returns true if the node supports the read-only attribute.
+  bool IsReadOnlySupported() const;
+
+  // Returns true if the node is marked read-only or is disabled. By default,
+  // all nodes that can't be edited are read-only.
+  bool IsReadOnlyOrDisabled() const;
 
  private:
   AXTableInfo* GetAncestorTableInfo() const;

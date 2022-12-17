@@ -46,10 +46,12 @@ group("resources") {
     ":text_secondary_color",
     ":text_tertiary_color",
     ":textfield_background_color",
+    ":textfield_focused_background_color",
     ":textfield_highlight_background_color",
     ":textfield_placeholder_color",
     ":toolbar_button_color",
     ":toolbar_shadow_color",
+    ":updated_tertiary_background_color",
   ]
 }
 
@@ -177,6 +179,10 @@ colorset("tertiary_background_color") {
   sources = [ "tertiary_background_color.colorset/Contents.json" ]
 }
 
+colorset("updated_tertiary_background_color") {
+  sources = [ "updated_tertiary_background_color.colorset/Contents.json" ]
+}
+
 colorset("text_tertiary_color") {
   sources = [ "text_tertiary_color.colorset/Contents.json" ]
 }
@@ -203,6 +209,10 @@ colorset("textfield_highlight_background_color") {
 
 colorset("textfield_background_color") {
   sources = [ "textfield_background_color.colorset/Contents.json" ]
+}
+
+colorset("textfield_focused_background_color") {
+  sources = [ "textfield_focused_background_color.colorset/Contents.json" ]
 }
 
 colorset("toolbar_button_color") {

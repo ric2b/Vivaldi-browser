@@ -35,12 +35,12 @@
 #include "chrome/browser/ui/app_list/arc/arc_app_utils.h"
 #include "chrome/browser/ui/zoom/chrome_zoom_level_prefs.h"
 #include "chrome/common/pref_names.h"
+#include "chromeos/ash/components/network/onc/network_onc_utils.h"
+#include "chromeos/ash/components/network/proxy/proxy_config_service_impl.h"
 #include "chromeos/network/network_handler.h"
 #include "chromeos/network/network_state.h"
 #include "chromeos/network/network_state_handler.h"
 #include "chromeos/network/network_state_handler_observer.h"
-#include "chromeos/network/onc/network_onc_utils.h"
-#include "chromeos/network/proxy/proxy_config_service_impl.h"
 #include "components/arc/common/intent_helper/arc_intent_helper_package.h"
 #include "components/arc/intent_helper/arc_intent_helper_bridge.h"
 #include "components/language/core/browser/pref_names.h"
@@ -55,6 +55,10 @@
 #include "net/proxy_resolution/proxy_bypass_rules.h"
 #include "net/proxy_resolution/proxy_config.h"
 #include "third_party/blink/public/common/page/page_zoom.h"
+
+// Enable VLOG level 1.
+#undef ENABLED_VLOG_LEVEL
+#define ENABLED_VLOG_LEVEL 1
 
 namespace {
 
@@ -178,6 +182,7 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
   void SyncAccessibilityLargeMouseCursorEnabled() const;
   void SyncAccessibilityVirtualKeyboardEnabled() const;
   void SyncBackupEnabled() const;
+  void SyncConsumerAutoUpdateToggle() const;
   void SyncDockedMagnifierEnabled() const;
   void SyncFocusHighlightEnabled() const;
   void SyncLocale() const;
@@ -201,8 +206,13 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
   // Resets Android's display density to the default value.
   void ResetPageZoomToDefault() const;
 
-  // Registers to listen to a particular perf.
+  // Registers to listen to a particular pref.
+  // This should be used when dealing with pref per profile.
   void AddPrefToObserve(const std::string& pref_name);
+
+  // Registers to listen to a particular perf in local state.
+  // This should be used when dealing with pref per device.
+  void AddLocalStatePrefToObserve(const std::string& pref_name);
 
   // Returns the integer value of the pref.  pref_name must exist.
   int GetIntegerPref(const std::string& pref_name) const;
@@ -213,6 +223,10 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
   // Sends boolean pref broadcast to the delegate.
   void SendBoolPrefSettingsBroadcast(const std::string& pref_name,
                                      const std::string& action) const;
+
+  // Sends boolean local state pref broadcast to the delegate.
+  void SendBoolLocalStatePrefSettingsBroadcast(const std::string& pref_name,
+                                               const std::string& action) const;
 
   // Same as above, except sends a specific boolean value.
   void SendBoolValueSettingsBroadcast(bool value,
@@ -231,6 +245,7 @@ class ArcSettingsServiceImpl : public TimezoneSettings::Observer,
 
   // Manages pref observation registration.
   PrefChangeRegistrar registrar_;
+  PrefChangeRegistrar local_state_registrar_;
 
   base::CallbackListSubscription reporting_consent_subscription_;
 
@@ -297,6 +312,8 @@ void ArcSettingsServiceImpl::OnPrefChanged(const std::string& pref_name) const {
   } else if (pref_name == ::language::prefs::kApplicationLocale ||
              pref_name == ::language::prefs::kPreferredLanguages) {
     SyncLocale();
+  } else if (pref_name == ::prefs::kConsumerAutoUpdateToggle) {
+    SyncConsumerAutoUpdateToggle();
   } else if (pref_name == ::prefs::kUse24HourClock) {
     SyncUse24HourClock();
   } else if (pref_name == ::prefs::kResolveTimezoneByGeolocationMethod) {
@@ -378,6 +395,7 @@ bool ArcSettingsServiceImpl::IsPrefProxyConfigApplied() const {
 
 void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
   registrar_.Init(GetPrefs());
+  local_state_registrar_.Init(g_browser_process->local_state());
 
   // Keep these lines ordered lexicographically.
   AddPrefToObserve(ash::prefs::kAccessibilityFocusHighlightEnabled);
@@ -394,6 +412,9 @@ void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
   AddPrefToObserve(proxy_config::prefs::kProxy);
   AddPrefToObserve(onc::prefs::kDeviceOpenNetworkConfiguration);
   AddPrefToObserve(onc::prefs::kOpenNetworkConfiguration);
+
+  // Keep these lines ordered lexicographically.
+  AddLocalStatePrefToObserve(::prefs::kConsumerAutoUpdateToggle);
 
   // Note that some preferences, such as kArcBackupRestoreEnabled and
   // kArcLocationServiceEnabled, are not dynamically updated after initial
@@ -412,6 +433,7 @@ void ArcSettingsServiceImpl::StartObservingSettingsChanges() {
 
 void ArcSettingsServiceImpl::StopObservingSettingsChanges() {
   registrar_.RemoveAll();
+  local_state_registrar_.RemoveAll();
   reporting_consent_subscription_ = {};
 
   TimezoneSettings::GetInstance()->RemoveObserver(this);
@@ -430,6 +452,7 @@ void ArcSettingsServiceImpl::SyncBootTimeSettings() const {
   // Keep these lines ordered lexicographically.
   SyncAccessibilityLargeMouseCursorEnabled();
   SyncAccessibilityVirtualKeyboardEnabled();
+  SyncConsumerAutoUpdateToggle();
   SyncDockedMagnifierEnabled();
   SyncFocusHighlightEnabled();
   SyncProxySettings();
@@ -726,6 +749,12 @@ void ArcSettingsServiceImpl::SyncUse24HourClock() const {
                         extras);
 }
 
+void ArcSettingsServiceImpl::SyncConsumerAutoUpdateToggle() const {
+  SendBoolLocalStatePrefSettingsBroadcast(
+      ::prefs::kConsumerAutoUpdateToggle,
+      "org.chromium.arc.intent_helper.SET_CONSUMER_AUTO_UPDATE");
+}
+
 void ArcSettingsServiceImpl::ResetFontScaleToDefault() const {
   base::DictionaryValue extras;
   extras.SetDoubleKey("scale", kAndroidFontScaleNormal);
@@ -741,6 +770,13 @@ void ArcSettingsServiceImpl::ResetPageZoomToDefault() const {
 void ArcSettingsServiceImpl::AddPrefToObserve(const std::string& pref_name) {
   registrar_.Add(pref_name,
                  base::BindRepeating(&ArcSettingsServiceImpl::OnPrefChanged,
+                                     base::Unretained(this)));
+}
+
+void ArcSettingsServiceImpl::AddLocalStatePrefToObserve(
+    const std::string& pref_name) {
+  local_state_registrar_.Add(
+      pref_name, base::BindRepeating(&ArcSettingsServiceImpl::OnPrefChanged,
                                      base::Unretained(this)));
 }
 
@@ -760,6 +796,20 @@ bool ArcSettingsServiceImpl::IsBooleanPrefManaged(
   bool value_exists = pref->GetValue()->is_bool();
   DCHECK(value_exists);
   return !pref->IsUserModifiable();
+}
+
+void ArcSettingsServiceImpl::SendBoolLocalStatePrefSettingsBroadcast(
+    const std::string& pref_name,
+    const std::string& action) const {
+  DCHECK(g_browser_process);
+  const PrefService* local_state = g_browser_process->local_state();
+  DCHECK(local_state);
+  const PrefService::Preference* local_state_pref =
+      local_state->FindPreference(pref_name);
+  DCHECK(local_state_pref);
+  bool enabled = local_state->GetBoolean(pref_name);
+  SendBoolValueSettingsBroadcast(enabled, !local_state_pref->IsUserModifiable(),
+                                 action);
 }
 
 void ArcSettingsServiceImpl::SendBoolPrefSettingsBroadcast(

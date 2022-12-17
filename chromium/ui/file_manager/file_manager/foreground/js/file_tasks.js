@@ -271,6 +271,30 @@ export class FileTasks {
   }
 
   /**
+   * Records the elapsed time for mounting a ZIP file as a ZipMountTime
+   * histogram value.
+   *
+   * @param {?VolumeManagerCommon.RootType} rootType The type of the root where
+   *     the ZIP file has been mounted from.
+   * @param {number} time Time to be recorded in milliseconds.
+   */
+  static recordZipMountTimeUMA_(rootType, time) {
+    let root;
+    switch (rootType) {
+      case VolumeManagerCommon.RootType.MY_FILES:
+      case VolumeManagerCommon.RootType.DOWNLOADS:
+        root = 'MyFiles';
+        break;
+      case VolumeManagerCommon.RootType.DRIVE:
+        root = 'Drive';
+        break;
+      default:
+        root = 'Other';
+    }
+    metrics.recordTime(`ZipMountTime.${root}`, time);
+  }
+
+  /**
    * Records trial of opening Office file grouped by file handlers.
    *
    * @param {!VolumeManager} volumeManager
@@ -470,7 +494,7 @@ export class FileTasks {
             verbButtonLabel = 'OPEN_WITH_VERB_BUTTON_LABEL';
             break;
           default:
-            console.error('Invalid task verb: ' + task.verb + '.');
+            console.error('Invalid task verb: ' + task.verb);
         }
         if (verbButtonLabel) {
           task.label = loadTimeData.getStringF(verbButtonLabel, task.title);
@@ -896,6 +920,20 @@ export class FileTasks {
     item.type = ProgressItemType.MOUNT_ARCHIVE;
     item.message = strf('ARCHIVE_MOUNT_MESSAGE', filename);
 
+    item.cancelCallback = async () => {
+      // Remove progress panel.
+      item.state = ProgressItemState.CANCELED;
+      this.progressCenter_.updateItem(item);
+
+      // Cancel archive mounting.
+      try {
+        await this.volumeManager_.cancelMounting(url);
+      } catch (error) {
+        console.warn('Cannot cancel archive (redacted):', error);
+        console.log(`Cannot cancel archive '${url}':`, error);
+      }
+    };
+
     // Display progress panel.
     item.state = ProgressItemState.PROGRESSING;
     this.progressCenter_.updateItem(item);
@@ -958,7 +996,11 @@ export class FileTasks {
    */
   async mountArchiveAndChangeDirectory_(tracker, url) {
     try {
+      const startTime = Date.now();
       const volumeInfo = await this.mountArchive_(url);
+      // On mountArchive_ success, record mount time UMA.
+      FileTasks.recordZipMountTimeUMA_(
+          this.directoryModel_.getCurrentRootType(), Date.now() - startTime);
 
       if (tracker.hasChanged) {
         return;
@@ -972,12 +1014,13 @@ export class FileTasks {
 
         this.directoryModel_.changeDirectoryEntry(displayRoot);
       } catch (error) {
-        console.warn(`Cannot resolve display root after mounting: ${
-            error.stack || error}`);
+        console.error('Cannot resolve display root after mounting:', error);
       }
     } catch (error) {
-      // No need to display an error message if user canceled.
-      if (error === FilesPasswordDialog.USER_CANCELLED) {
+      // No need to display an error message if user canceled mounting or
+      // canceled the password prompt.
+      if (error === FilesPasswordDialog.USER_CANCELLED ||
+          error === VolumeManagerCommon.VolumeError.CANCELLED) {
         return;
       }
 
@@ -992,7 +1035,8 @@ export class FileTasks {
       item.state = ProgressItemState.ERROR;
       this.progressCenter_.updateItem(item);
 
-      console.warn(`Cannot mount '${url}': ${error.stack || error}`);
+      console.warn('Cannot mount (redacted):', error);
+      console.debug(`Cannot mount '${url}':`, error);
     }
   }
 

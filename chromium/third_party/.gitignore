@@ -3,8 +3,6 @@
 /__START__
 /accessibility-developer-tools/
 /accessibility_test_framework/lib/
-/adobe/flash/binaries
-/adobe/flash/symbols
 /aemu-linux-arm64
 /aemu-linux-x64
 /aemu-mac-arm64
@@ -70,6 +68,8 @@
 /cld_2/src
 /cld_3/src
 /colorama/src
+/content_analysis_sdk/src
+/cpuinfo/src
 /crc32c/src
 /cros
 /cros_system_api
@@ -100,6 +100,7 @@
 /fuchsia-sdk/images
 /fuchsia-sdk/images-internal
 /fuchsia-sdk/sdk
+/fxdiv/src
 /gemmlowp/src
 /gles2_conform
 /glfw/src
@@ -205,6 +206,7 @@
 /proguard/lib/
 /protobuf/java/lite/target/
 /psyco_win32
+/pthreadpool/src
 /pthreads-win32
 /py_trace_event/src
 /pyelftools
@@ -279,4 +281,5 @@
 /wix
 /wuffs/src
 /xdg-utils
+/xnnpack/src
 /xulrunner-sdk

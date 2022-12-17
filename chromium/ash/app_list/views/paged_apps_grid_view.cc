@@ -22,6 +22,7 @@
 #include "ash/public/cpp/app_list/app_list_config.h"
 #include "ash/public/cpp/app_list/app_list_features.h"
 #include "ash/public/cpp/pagination/pagination_controller.h"
+#include "ash/style/ash_color_provider.h"
 #include "base/barrier_closure.h"
 #include "base/bind.h"
 #include "base/callback.h"
@@ -197,8 +198,9 @@ class PagedAppsGridView::BackgroundCardLayer : public ui::Layer,
 
     if (features::IsProductivityLauncherEnabled() && is_active_page_) {
       // Draw a border around the active page.
-      flags.setColor(SK_ColorWHITE);
-      flags.setAlpha(0x66);
+      const bool dark_mode = AshColorProvider::Get()->IsDarkModeEnabled();
+      flags.setColor(dark_mode ? SK_ColorWHITE : SK_ColorBLACK);
+      flags.setAlpha(dark_mode ? 0x29 /*16%*/ : 0x1F /*12%*/);
       flags.setStyle(cc::PaintFlags::kStroke_Style);
       flags.setStrokeWidth(kBackgroundCardBorderStrokeWidth);
       flags.setAntiAlias(true);
@@ -662,9 +664,12 @@ bool PagedAppsGridView::MaybeAutoScroll() {
   return false;
 }
 
-void PagedAppsGridView::SetFocusAfterEndDrag() {
+void PagedAppsGridView::SetFocusAfterEndDrag(AppListItem* drag_item) {
   // Leave focus on the dragged item. Pressing tab or an arrow key will
   // highlight that item.
+  AppListItemView* drag_view = GetItemViewAt(GetModelIndexOfItem(drag_item));
+  if (drag_view)
+    drag_view->SilentlyRequestFocus();
 }
 
 void PagedAppsGridView::RecordAppMovingTypeMetrics(AppListAppMovingType type) {
@@ -1292,7 +1297,7 @@ void PagedAppsGridView::MaybeCallOnBoundsAnimatorDone() {
   --bounds_animation_for_cardified_state_in_progress_;
   if (bounds_animation_for_cardified_state_in_progress_ == 0) {
     animation_observers_.clear();
-    OnBoundsAnimatorDone(/*animator=*/nullptr);
+    DestroyLayerItemsIfNotNeeded();
 
     // Notify container that cardified state has ended once ending animations
     // are complete.
@@ -1551,11 +1556,7 @@ void PagedAppsGridView::AnimateOnNudgeRemoved() {
   }
 
   PrepareItemsForBoundsAnimation();
-
-  // Set the tween type to be used specifically for this ideal bounds animation.
-  bounds_animator()->set_tween_type(gfx::Tween::ACCEL_40_DECEL_100_3);
   AnimateToIdealBounds();
-  bounds_animator()->set_tween_type(gfx::Tween::EASE_OUT);
 }
 
 int PagedAppsGridView::GetTotalTopPaddingOnFirstPage() const {

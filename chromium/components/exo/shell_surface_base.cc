@@ -26,6 +26,7 @@
 #include "ash/wm/window_state.h"
 #include "ash/wm/window_util.h"
 #include "base/check.h"
+#include "base/debug/stack_trace.h"
 #include "base/logging.h"
 #include "base/memory/ptr_util.h"
 #include "base/strings/string_number_conversions.h"
@@ -386,18 +387,6 @@ void ShellSurfaceBase::SetIcon(const gfx::ImageSkia& icon) {
 }
 
 void ShellSurfaceBase::SetSystemModal(bool system_modal) {
-  // System modal container is used by clients to implement client side
-  // managed system modal dialogs using a single ShellSurface instance.
-  // Hit-test region will be non-empty when at least one dialog exists on
-  // the client side. Here we detect the transition between no client side
-  // dialog and at least one dialog so activatable state is properly
-  // updated.
-  if (container_ != ash::kShellWindowId_SystemModalContainer) {
-    LOG(ERROR)
-        << "Only a window in SystemModalContainer can change the modality";
-    return;
-  }
-
   if (system_modal == system_modal_)
     return;
 
@@ -529,6 +518,7 @@ void ShellSurfaceBase::SetPip() {
     pending_pip_ = true;
     return;
   }
+  pending_pip_ = false;
 
   // Set all the necessary window properties and window state.
   auto* window = widget_->GetNativeWindow();
@@ -536,15 +526,15 @@ void ShellSurfaceBase::SetPip() {
   window->SetProperty(aura::client::kZOrderingKey,
                       ui::ZOrderLevel::kFloatingWindow);
 
-  // Pip windows should start in the bottom right corner of the screen so move
-  // |window| to the bottom right of the work area and let the pip positioner
-  // move it within the work area.
+  if (initial_bounds_)
+    return;
+  // If no initial bounds is specified, pip windows should start in the bottom
+  // right corner of the screen so move |window| to the bottom right of the
+  // work area and let the pip positioner move it within the work area.
   auto display = display::Screen::GetScreen()->GetDisplayNearestWindow(window);
   gfx::Size window_size = window->bounds().size();
   window->SetBoundsInScreen(
       gfx::Rect(display.work_area().bottom_right(), window_size), display);
-
-  pending_pip_ = false;
 }
 
 void ShellSurfaceBase::UnsetPip() {
@@ -642,6 +632,23 @@ void ShellSurfaceBase::SetWindowBounds(const gfx::Rect& bounds) {
   // decoration is used.
   DCHECK(!frame_enabled());
   widget_->SetBounds(bounds);
+}
+
+void ShellSurfaceBase::SetRestoreInfo(int32_t restore_session_id,
+                                      int32_t restore_window_id) {
+  // TODO(crbug.com/1327490): Rename restore info variables.
+  // Restore information must be set before widget is created.
+  DCHECK(!widget_);
+  restore_session_id_.emplace(restore_session_id);
+  restore_window_id_.emplace(restore_window_id);
+}
+
+void ShellSurfaceBase::SetRestoreInfoWithWindowIdSource(
+    int32_t restore_session_id,
+    const std::string& restore_window_id_source) {
+  restore_session_id_.emplace(restore_session_id);
+  if (!restore_window_id_source.empty())
+    restore_window_id_source_.emplace(restore_window_id_source);
 }
 
 void ShellSurfaceBase::SetDisplay(int64_t display_id) {
@@ -1010,6 +1017,10 @@ ShellSurfaceBase::CreateNonClientFrameView(views::Widget* widget) {
   return CreateNonClientFrameViewInternal(widget);
 }
 
+bool ShellSurfaceBase::ShouldSaveWindowPlacement() const {
+  return !is_popup_ && !movement_disabled_;
+}
+
 bool ShellSurfaceBase::WidgetHasHitTestMask() const {
   return true;
 }
@@ -1217,6 +1228,9 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
     DisableMovement();
   }
 
+  if (system_modal_)
+    SetModalType(ui::MODAL_TYPE_SYSTEM);
+
   views::Widget::InitParams params;
   params.type = emulate_x11_override_redirect
                     ? views::Widget::InitParams::TYPE_MENU
@@ -1280,12 +1294,33 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   params.activatable = activatable
                            ? views::Widget::InitParams::Activatable::kYes
                            : views::Widget::InitParams::Activatable::kNo;
+  if (restore_session_id_) {
+    params.init_properties_container.SetProperty(app_restore::kWindowIdKey,
+                                                 *restore_session_id_);
+  }
+  if (restore_window_id_) {
+    params.init_properties_container.SetProperty(
+        app_restore::kRestoreWindowIdKey, *restore_window_id_);
+  }
+  if (restore_window_id_source_) {
+    params.init_properties_container.SetProperty(
+        app_restore::kRestoreWindowIdKey,
+        app_restore::FetchRestoreWindowId(*restore_window_id_source_));
+    params.init_properties_container.SetProperty(
+        app_restore::kAppIdKey, restore_window_id_source_.value());
+  }
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
+  // Restore `params` to those of the saved `restore_window_id_`.
   app_restore::ModifyWidgetParams(params.init_properties_container.GetProperty(
                                       app_restore::kRestoreWindowIdKey),
                                   &params);
 #endif
+
+  // If app restore specifies the initial bounds, set `initial_bounds_` to it so
+  // that shell surface knows the initial bounds is set.
+  if (!params.bounds.IsEmpty() && !initial_bounds_)
+    initial_bounds_.emplace(params.bounds);
 
   OverrideInitParams(&params);
 
@@ -1334,10 +1369,8 @@ void ShellSurfaceBase::CreateShellSurfaceWidget(
   if (frame_type_ != SurfaceFrameType::NONE)
     OnSetFrame(frame_type_);
 
-  if (pending_pip_) {
+  if (pending_pip_)
     SetPip();
-    pending_pip_ = false;
-  }
 
   root_surface()->OnDeskChanged(GetWindowDeskStateChanged(window));
 
@@ -1708,8 +1741,10 @@ void ShellSurfaceBase::CommitWidget() {
 
     // TODO(crbug.com/1291592): Hook this up with the WM's window positioning
     // logic.
-    if (needs_layout_on_show_)
+    if (needs_layout_on_show_) {
       widget_->CenterWindow(GetWidgetBoundsFromVisibleBounds().size());
+      needs_layout_on_show_ = false;
+    }
 
     widget_->Show();
     if (has_grab_)

@@ -1,4 +1,4 @@
-// Copyright 2021 The Chromium Authors. All rights reserved.
+// Copyright 2022 The Chromium Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -405,7 +405,6 @@ chrome.automation.ActionType = {
   LOAD_INLINE_TEXT_BOXES: 'loadInlineTextBoxes',
   REPLACE_SELECTED_TEXT: 'replaceSelectedText',
   RESUME_MEDIA: 'resumeMedia',
-  RUN_SCREEN_AI: 'runScreenAi',
   SCROLL_BACKWARD: 'scrollBackward',
   SCROLL_DOWN: 'scrollDown',
   SCROLL_FORWARD: 'scrollForward',
@@ -463,6 +462,7 @@ chrome.automation.NameFromType = {
 chrome.automation.DescriptionFromType = {
   ARIA_DESCRIPTION: 'ariaDescription',
   BUTTON_LABEL: 'buttonLabel',
+  POPUP_ELEMENT: 'popupElement',
   RELATED_ELEMENT: 'relatedElement',
   RUBY_ANNOTATION: 'rubyAnnotation',
   SUMMARY: 'summary',

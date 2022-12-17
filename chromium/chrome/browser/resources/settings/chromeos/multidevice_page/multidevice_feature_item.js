@@ -40,8 +40,8 @@ Polymer({
 
     /**
      * If it is truthy, the item should be actionable and clicking on it should
-     * navigate to the provided route. Otherwise, the item is simply not
-     * actionable.
+     * navigate to the provided route. Otherwise, the item does not have a
+     * subpage to navigate to.
      * @type {!Route|undefined}
      */
     subpageRoute: Object,
@@ -128,7 +128,7 @@ Polymer({
   /** @private */
   handleItemClick_(event) {
     // We do not navigate away if the click was on a link.
-    if (event.path[0].tagName === 'A') {
+    if (event.composedPath()[0].tagName === 'A') {
       event.stopPropagation();
       return;
     }

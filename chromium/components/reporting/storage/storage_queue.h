@@ -11,6 +11,7 @@
 #include <string>
 
 #include "base/callback.h"
+#include "base/containers/flat_map.h"
 #include "base/containers/flat_set.h"
 #include "base/files/file.h"
 #include "base/files/file_enumerator.h"
@@ -146,7 +147,15 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
     // space) returns status.
     static StatusOr<scoped_refptr<SingleFile>> Create(
         const base::FilePath& filename,
-        int64_t size);
+        int64_t size,
+        scoped_refptr<ResourceInterface> memory_resource,
+        scoped_refptr<ResourceInterface> disk_space_resource);
+
+    // Returns the file sequence ID (the first sequence ID in the file) if the
+    // sequence ID can be extracted from the extension. Otherwise, returns an
+    // error status.
+    static StatusOr<int64_t> GetFileSequenceIdFromPath(
+        const base::FilePath& file_name);
 
     Status Open(bool read_only);  // No-op if already opened.
     void Close();                 // No-op if not opened.
@@ -185,7 +194,10 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
     friend class base::RefCountedThreadSafe<SingleFile>;
 
     // Private constructor, called by factory method only.
-    SingleFile(const base::FilePath& filename, int64_t size);
+    SingleFile(const base::FilePath& filename,
+               int64_t size,
+               scoped_refptr<ResourceInterface> memory_resource,
+               scoped_refptr<ResourceInterface> disk_space_resource);
 
     // Flag (valid for opened file only): true if file was opened for reading
     // only, false otherwise.
@@ -195,6 +207,9 @@ class StorageQueue : public base::RefCountedDeleteOnSequence<StorageQueue> {
     uint64_t size_ = 0;  // tracked internally rather than by filesystem
 
     std::unique_ptr<base::File> handle_;  // Set only when opened/created.
+
+    scoped_refptr<ResourceInterface> memory_resource_;
+    scoped_refptr<ResourceInterface> disk_space_resource_;
 
     // When reading the file, this is the buffer and data positions.
     // If the data is read sequentially, buffered portions are reused

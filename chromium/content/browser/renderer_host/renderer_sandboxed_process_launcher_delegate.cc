@@ -10,6 +10,12 @@
 #include "content/public/common/content_client.h"
 
 #if BUILDFLAG(IS_WIN)
+#include <windows.h>
+
+#include "base/check.h"
+#include "base/metrics/histogram_functions.h"
+#include "base/time/time.h"
+#include "base/win/nt_status.h"
 #include "sandbox/policy/win/sandbox_win.h"
 #include "sandbox/win/src/sandbox_policy_base.h"
 #include "sandbox/win/src/security_level.h"
@@ -51,7 +57,9 @@ RendererSandboxedProcessLauncherDelegateWin::
     RendererSandboxedProcessLauncherDelegateWin(base::CommandLine* cmd_line,
                                                 bool is_jit_disabled)
     : renderer_code_integrity_enabled_(
-          GetContentClient()->browser()->IsRendererCodeIntegrityEnabled()) {
+          GetContentClient()->browser()->IsRendererCodeIntegrityEnabled()),
+      renderer_app_container_disabled_(
+          GetContentClient()->browser()->IsRendererAppContainerDisabled()) {
   if (is_jit_disabled) {
     dynamic_code_can_be_disabled_ = true;
     return;
@@ -76,16 +84,22 @@ bool RendererSandboxedProcessLauncherDelegateWin::PreSpawnTarget(
     sandbox::TargetPolicy* policy) {
   sandbox::policy::SandboxWin::AddBaseHandleClosePolicy(policy);
 
+  ContentBrowserClient::AppContainerFlags ac_flags(
+      ContentBrowserClient::AppContainerFlags::kAppContainerFlagNone);
+  if (renderer_app_container_disabled_)
+    ac_flags = ContentBrowserClient::AppContainerFlags::
+        kAppContainerFlagDisableAppContainer;
   const std::wstring& sid =
       GetContentClient()->browser()->GetAppContainerSidForSandboxType(
-          GetSandboxType());
+          GetSandboxType(), ac_flags);
   if (!sid.empty())
     sandbox::policy::SandboxWin::AddAppContainerPolicy(policy, sid.c_str());
 
   ContentBrowserClient::ChildSpawnFlags flags(
-      ContentBrowserClient::ChildSpawnFlags::NONE);
+      ContentBrowserClient::ChildSpawnFlags::kChildSpawnFlagNone);
   if (renderer_code_integrity_enabled_) {
-    flags = ContentBrowserClient::ChildSpawnFlags::RENDERER_CODE_INTEGRITY;
+    flags = ContentBrowserClient::ChildSpawnFlags::
+        kChildSpawnFlagRendererCodeIntegrity;
 
     // If the renderer process is protected by code integrity, more
     // mitigations become available.
@@ -102,6 +116,34 @@ bool RendererSandboxedProcessLauncherDelegateWin::PreSpawnTarget(
 
   return GetContentClient()->browser()->PreSpawnChild(
       policy, sandbox::mojom::Sandbox::kRenderer, flags);
+}
+
+void RendererSandboxedProcessLauncherDelegateWin::PostSpawnTarget(
+    base::ProcessHandle process) {
+  FILETIME creation_time, exit_time, kernel_time, user_time;
+  // Should never fail. If it does, then something really bad has happened, such
+  // as something external unsuspending the renderer process.
+  if (!::GetProcessTimes(process, &creation_time, &exit_time, &kernel_time,
+                         &user_time)) {
+    // If this fails, then Win32 ::GetLastError might be ambiguous, so obtain
+    // the NT status from the TEB.
+    base::UmaHistogramSparse(
+        "BrowserRenderProcessHost.SuspendedChild.Win32Error", ::GetLastError());
+    base::UmaHistogramSparse("BrowserRenderProcessHost.SuspendedChild.NtStatus",
+                             base::win::GetLastNtStatus());
+    return;
+  }
+
+  // These should always be zero but if they are not, then something on the
+  // client has triggered execution in the child process putting it into a
+  // undefined state. Try and detect this here to diagnose this happening in the
+  // wild.
+  base::UmaHistogramBoolean(
+      "BrowserRenderProcessHost.SuspendedChild.UserExecutionRecorded",
+      base::TimeDelta::FromFileTime(user_time).InMicroseconds() > 0);
+  base::UmaHistogramBoolean(
+      "BrowserRenderProcessHost.SuspendedChild.KernelExecutionRecorded",
+      base::TimeDelta::FromFileTime(kernel_time).InMicroseconds() > 0);
 }
 
 bool RendererSandboxedProcessLauncherDelegateWin::CetCompatible() {

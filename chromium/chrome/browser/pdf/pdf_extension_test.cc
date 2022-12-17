@@ -98,7 +98,6 @@
 #include "content/public/test/accessibility_notification_waiter.h"
 #include "content/public/test/browser_test.h"
 #include "content/public/test/browser_test_utils.h"
-#include "content/public/test/dump_accessibility_test_helper.h"
 #include "content/public/test/fenced_frame_test_util.h"
 #include "content/public/test/prerender_test_util.h"
 #include "content/public/test/scoped_time_zone.h"
@@ -127,6 +126,7 @@
 #include "testing/gtest/include/gtest/gtest.h"
 #include "third_party/blink/public/common/context_menu_data/untrustworthy_context_menu_params.h"
 #include "third_party/blink/public/common/input/web_input_event.h"
+#include "third_party/blink/public/common/input/web_mouse_event.h"
 #include "third_party/blink/public/mojom/context_menu/context_menu.mojom.h"
 #include "ui/accessibility/ax_action_data.h"
 #include "ui/accessibility/ax_enum_util.h"
@@ -137,6 +137,7 @@
 #include "ui/accessibility/platform/ax_platform_node_delegate_base.h"
 #include "ui/accessibility/platform/inspect/ax_api_type.h"
 #include "ui/accessibility/platform/inspect/ax_inspect_scenario.h"
+#include "ui/accessibility/platform/inspect/ax_inspect_test_helper.h"
 #include "ui/base/clipboard/clipboard.h"
 #include "ui/base/clipboard/clipboard_monitor.h"
 #include "ui/base/clipboard/clipboard_observer.h"
@@ -348,7 +349,8 @@ class PDFExtensionTest : public extensions::ExtensionApiTest {
   }
 
   content::RenderFrameHost* GetPluginFrame(WebContents* guest_contents) const {
-    return pdf_frame_util::FindPdfChildFrame(guest_contents->GetMainFrame());
+    return pdf_frame_util::FindPdfChildFrame(
+        guest_contents->GetPrimaryMainFrame());
   }
 
   // Finds the `RenderFrameHost`s of PDF plugin frames within a given
@@ -594,7 +596,8 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTestWithTestGuestViewManager,
 
   // Start loading another PDF in the new tab, but pause during guest attach.
   // It is important that the PDF navigation uses the same RFH as `delayer`.
-  InnerWebContentsAttachDelayer delayer(new_web_contents->GetMainFrame());
+  InnerWebContentsAttachDelayer delayer(
+      new_web_contents->GetPrimaryMainFrame());
   content::TestNavigationObserver navigation_observer(new_web_contents);
   new_web_contents->GetController().LoadURLWithParams(
       content::NavigationController::LoadURLParams(main_url));
@@ -964,12 +967,15 @@ IN_PROC_BROWSER_TEST_F(PDFPluginDisabledTest, DirectNavigationToPDF) {
   ValidateSingleSuccessfulDownloadAndNoPDFPluginLaunch();
 }
 
-// TODO(crbug.com/1201401): fix flakiness and reenable
-#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+// TODO(crbug.com/1201401): fix flakiness and reenable. Also, that test
+// became flaky on Windows, see crbug.com/1323701.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) || \
+    BUILDFLAG(IS_WIN)
 #define MAYBE_EmbedPdfPlaceholderWithCSP DISABLED_EmbedPdfPlaceholderWithCSP
 #else
 #define MAYBE_EmbedPdfPlaceholderWithCSP EmbedPdfPlaceholderWithCSP
-#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC)
+#endif  // BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS) || BUILDFLAG(IS_MAC) ||
+        // BUILDFLAG(IS_WIN)
 IN_PROC_BROWSER_TEST_F(PDFPluginDisabledTest,
                        MAYBE_EmbedPdfPlaceholderWithCSP) {
   // Navigate to a page with CSP that uses <embed> to embed a PDF as a plugin.
@@ -1133,6 +1139,10 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, ZoomManager) {
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, GestureDetector) {
   RunTestsInJsModule("gesture_detector_test.js", "test.pdf");
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, SwipeDetector) {
+  RunTestsInJsModule("swipe_detector_test.js", "test.pdf");
 }
 
 IN_PROC_BROWSER_TEST_F(PDFExtensionJSTest, TouchHandling) {
@@ -1569,7 +1579,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, LinkPermissions) {
 
   GURL unfiltered_valid_link_url(valid_link_url);
   content::RenderProcessHost* rph =
-      guest_contents->GetMainFrame()->GetProcess();
+      guest_contents->GetPrimaryMainFrame()->GetProcess();
   rph->FilterURL(true, &valid_link_url);
   rph->FilterURL(true, &invalid_link_url);
 
@@ -2046,14 +2056,40 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
 
   // Makes sure that the correct frame invoked the context menu.
   content::ContextMenuInterceptor menu_interceptor(
-      guest_contents->GetMainFrame());
+      guest_contents->GetPrimaryMainFrame());
 
   // Executes the print command as soon as the context menu is shown.
   ContextMenuNotificationObserver context_menu_observer(IDC_PRINT);
 
   PrintObserver print_observer(guest_contents, plugin_frame);
-  guest_contents->GetMainFrame()->GetRenderWidgetHost()->ShowContextMenuAtPoint(
-      {1, 1}, ui::MENU_SOURCE_MOUSE);
+  guest_contents->GetPrimaryMainFrame()
+      ->GetRenderWidgetHost()
+      ->ShowContextMenuAtPoint({1, 1}, ui::MENU_SOURCE_MOUSE);
+  print_observer.WaitForPrintPreview();
+  menu_interceptor.Wait();
+}
+
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
+                       ContextMenuPrintCommandEmbeddedExtensionMainFrame) {
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(
+      embedded_test_server()->GetURL("/pdf/pdf_embed.html"));
+  content::RenderFrameHost* plugin_frame = GetPluginFrame(guest_contents);
+  ASSERT_TRUE(plugin_frame);
+
+  // Makes sure that the correct frame invoked the context menu.
+  content::ContextMenuInterceptor menu_interceptor(
+      guest_contents->GetPrimaryMainFrame());
+
+  // Executes the print command as soon as the context menu is shown.
+  ContextMenuNotificationObserver context_menu_observer(IDC_PRINT);
+
+  PrintObserver print_observer(guest_contents, plugin_frame);
+  content::SimulateMouseClickAt(guest_contents,
+                                blink::WebInputEvent::kNoModifiers,
+                                blink::WebMouseEvent::Button::kLeft, {1, 1});
+  guest_contents->GetPrimaryMainFrame()
+      ->GetRenderWidgetHost()
+      ->ShowContextMenuAtPoint({1, 1}, ui::MENU_SOURCE_MOUSE);
   print_observer.WaitForPrintPreview();
   menu_interceptor.Wait();
 }
@@ -2061,6 +2097,28 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, ContextMenuPrintCommandPluginFrame) {
   content::WebContents* guest_contents =
       LoadPdfGetGuestContents(embedded_test_server()->GetURL("/pdf/test.pdf"));
+  content::RenderFrameHost* plugin_frame = GetPluginFrame(guest_contents);
+  ASSERT_TRUE(plugin_frame);
+
+  // Makes sure that the correct frame invoked the context menu.
+  content::ContextMenuInterceptor menu_interceptor(plugin_frame);
+
+  // Executes the print command as soon as the context menu is shown.
+  ContextMenuNotificationObserver context_menu_observer(IDC_PRINT);
+
+  PrintObserver print_observer(guest_contents, plugin_frame);
+  SetInputFocusOnPlugin(guest_contents);
+  plugin_frame->GetRenderWidgetHost()->ShowContextMenuAtPoint(
+      {1, 1}, ui::MENU_SOURCE_MOUSE);
+  print_observer.WaitForPrintPreview();
+  menu_interceptor.Wait();
+}
+
+// TODO(crbug.com/1330032): Fix flakiness.
+IN_PROC_BROWSER_TEST_F(PDFExtensionTest,
+                       DISABLED_ContextMenuPrintCommandEmbeddedPluginFrame) {
+  content::WebContents* guest_contents = LoadPdfGetGuestContents(
+      embedded_test_server()->GetURL("/pdf/pdf_embed.html"));
   content::RenderFrameHost* plugin_frame = GetPluginFrame(guest_contents);
   ASSERT_TRUE(plugin_frame);
 
@@ -2112,13 +2170,14 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionRegionSearchTest,
 
   // Makes sure that the correct frame invoked the context menu.
   content::ContextMenuInterceptor menu_interceptor(
-      guest_contents->GetMainFrame());
+      guest_contents->GetPrimaryMainFrame());
 
   // Captures the command IDs of the context menu.
   ContextMenuWaiter menu_observer;
 
-  guest_contents->GetMainFrame()->GetRenderWidgetHost()->ShowContextMenuAtPoint(
-      {1, 1}, ui::MENU_SOURCE_MOUSE);
+  guest_contents->GetPrimaryMainFrame()
+      ->GetRenderWidgetHost()
+      ->ShowContextMenuAtPoint({1, 1}, ui::MENU_SOURCE_MOUSE);
 
   menu_observer.WaitForMenuOpenAndClose();
   menu_interceptor.Wait();
@@ -2548,7 +2607,7 @@ IN_PROC_BROWSER_TEST_P(PDFExtensionIsolatedContentTest, DataNavigation) {
       GetPluginFrames(guest_contents);
   ASSERT_EQ(plugin_frames.size(), 1u);
   EXPECT_NE(plugin_frames[0]->GetProcess(),
-            guest_contents->GetMainFrame()->GetProcess());
+            guest_contents->GetPrimaryMainFrame()->GetProcess());
 }
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionIsolatedContentTest, HistoryNavigation) {
@@ -3418,7 +3477,8 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionClipboardTest,
 // catching future regression in docs/ and slides/ pages (see
 // https://crbug.com/763812).
 IN_PROC_BROWSER_TEST_F(PDFExtensionTest, PostMessageForZeroSizedEmbed) {
-  content::DOMMessageQueue queue;
+  content::DOMMessageQueue queue(
+      browser()->tab_strip_model()->GetActiveWebContents());
   ASSERT_TRUE(ui_test_utils::NavigateToURL(
       browser(), embedded_test_server()->GetURL(
                      "/pdf/post_message_zero_sized_embed.html")));
@@ -3850,7 +3910,6 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, Metrics) {
   constexpr int k1_7 = 8;
   histograms.ExpectUniqueSample("PDF.FormType", kAcroForm, 1);
   histograms.ExpectUniqueSample("PDF.Version", k1_7, 1);
-  histograms.ExpectUniqueSample("PDF.IsTagged", 0, 1);
   histograms.ExpectUniqueSample("PDF.HasAttachment", 0, 1);
 
   // Custom histograms.
@@ -3892,7 +3951,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionTest, DISABLED_TabInAndOutOfPDFPlugin) {
 
   // Helper to simulate a tab press and wait for a focus message.
   auto press_tab_and_wait_for_message = [guest_contents](bool reverse) {
-    content::DOMMessageQueue msg_queue;
+    content::DOMMessageQueue msg_queue(guest_contents);
     std::string reply;
     SimulateKeyPress(guest_contents, ui::DomKey::TAB, ui::DomCode::TAB,
                      ui::VKEY_TAB, false, /*shift=*/reverse, false, false);
@@ -3939,7 +3998,7 @@ class PDFExtensionAccessibilityTextExtractionTest : public PDFExtensionTest {
  private:
   void RunTest(const base::FilePath& test_file_path, const char* file_dir) {
     // Load the expectation file.
-    content::DumpAccessibilityTestHelper test_helper("content");
+    ui::AXInspectTestHelper test_helper("content");
     absl::optional<base::FilePath> expected_file_path =
         test_helper.GetExpectationFilePath(test_file_path);
     ASSERT_TRUE(expected_file_path) << "No expectation file present.";
@@ -4273,21 +4332,28 @@ class PDFExtensionAccessibilityTreeDumpTest
     return property_filters;
   }
 
-  content::DumpAccessibilityTestHelper test_helper_;
+  ui::AXInspectTestHelper test_helper_;
 };
 
 // Constructs a list of accessibility tests, one for each accessibility tree
 // formatter testpasses.
 const std::vector<ui::AXApiType::Type> GetAXTestValues() {
   std::vector<ui::AXApiType::Type> passes =
-      content::DumpAccessibilityTestHelper::TreeTestPasses();
+      ui::AXInspectTestHelper::TreeTestPasses();
   return passes;
 }
+
+struct PDFExtensionAccessibilityTreeDumpTestPassToString {
+  std::string operator()(
+      const ::testing::TestParamInfo<ui::AXApiType::Type>& i) const {
+    return std::string(i.param);
+  }
+};
 
 INSTANTIATE_TEST_SUITE_P(All,
                          PDFExtensionAccessibilityTreeDumpTest,
                          testing::ValuesIn(GetAXTestValues()),
-                         testing::PrintToStringParamName());
+                         PDFExtensionAccessibilityTreeDumpTestPassToString());
 
 IN_PROC_BROWSER_TEST_P(PDFExtensionAccessibilityTreeDumpTest, HelloWorld) {
   RunPDFTest(FILE_PATH_LITERAL("hello-world.pdf"));
@@ -4379,7 +4445,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionAccessibilityNavigationTest,
   action_data.action = ax::mojom::Action::kDoDefault;
   action_data.target_node_id = link_node->GetData().id;
   link_node->AccessibilityPerformAction(action_data);
-  event_waiter.WaitForNotification();
+  ASSERT_TRUE(event_waiter.WaitForNotification());
 
   // Test that navigation occurred correctly.
   const GURL& expected_url = GetActiveWebContents()->GetLastCommittedURL();
@@ -4544,7 +4610,7 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
       embedded_test_server()->GetURL("/fenced_frames/title1.html");
   content::RenderFrameHost* fenced_frame_host =
       fenced_frame_helper().CreateFencedFrame(
-          GetActiveWebContents()->GetMainFrame(), fenced_frame_url);
+          GetActiveWebContents()->GetPrimaryMainFrame(), fenced_frame_url);
   ASSERT_TRUE(fenced_frame_host);
 
   auto* guest_web_contents = GetGuestViewManager()->WaitForSingleGuestCreated();
@@ -4554,4 +4620,83 @@ IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
 
   // Ensure that the fenced frame's navigation should not abort the PDF stream.
   EXPECT_EQ(1U, GetGuestViewManager()->GetNumGuestsActive());
+}
+
+// Test that ensures we cannot navigate a fenced frame to a PDF because PDF
+// isn't allowed by default static sandbox flags of fenced frames.
+IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
+                       LoadPdfInFencedFrame) {
+  ASSERT_TRUE(content::NavigateToURL(
+      GetActiveWebContents(), embedded_test_server()->GetURL("/empty.html")));
+
+  // Create a fenced frame and try to navigate to a PDF.
+  EXPECT_TRUE(fenced_frame_helper().CreateFencedFrame(
+      GetActiveWebContents()->GetPrimaryMainFrame(),
+      embedded_test_server()->GetURL("/pdf/test-fenced-frame.pdf"),
+      net::Error::ERR_BLOCKED_BY_CLIENT));
+  EXPECT_EQ(CountPDFProcesses(), 0);
+}
+
+// Like `LoadPdfInFencedFrame`, but without Supports-Loading-Mode headers set.
+IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
+                       LoadPdfInFencedFrameWithoutFencedFrameOptIn) {
+  ASSERT_TRUE(content::NavigateToURL(
+      GetActiveWebContents(), embedded_test_server()->GetURL("/empty.html")));
+
+  // Create a fenced frame and try to navigate to a PDF.
+  EXPECT_TRUE(fenced_frame_helper().CreateFencedFrame(
+      GetActiveWebContents()->GetPrimaryMainFrame(),
+      embedded_test_server()->GetURL("/pdf/test.pdf"),
+      net::Error::ERR_BLOCKED_BY_RESPONSE));
+  EXPECT_EQ(CountPDFProcesses(), 0);
+}
+
+// Test that ensures a fenced frame cannot load a document embedding a PDF
+// because PDF isn't allowed in fenced frames.
+IN_PROC_BROWSER_TEST_F(PDFExtensionPrerenderAndFencedFrameTest,
+                       LoadEmbeddedPdfInFencedFrame) {
+  ASSERT_TRUE(content::NavigateToURL(
+      GetActiveWebContents(), embedded_test_server()->GetURL("/empty.html")));
+
+  // Create a fenced frame for loading a document with pdf embed(s).
+  content::RenderFrameHost* fenced_frame_host =
+      fenced_frame_helper().CreateFencedFrame(
+          GetActiveWebContents()->GetPrimaryMainFrame(),
+          embedded_test_server()->GetURL("/fenced_frames/title1.html"));
+  ASSERT_TRUE(fenced_frame_host);
+
+  const GURL pdf_url =
+      embedded_test_server()->GetURL("/pdf/test-fenced-frame.pdf");
+  // Ensure that the fenced frame cannot load a PDF embedding with <iframe>.
+  ASSERT_TRUE(content::ExecJs(
+      fenced_frame_host,
+      content::JsReplace("let e = document.createElement('iframe');"
+                         "e.src = $1;"
+                         "e.type = 'application/pdf';"
+                         "document.body.appendChild(e);",
+                         pdf_url)));
+  ASSERT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
+  EXPECT_EQ(CountPDFProcesses(), 0);
+
+  // Ensure that the fenced frame cannot load a PDF embedding with <object>.
+  ASSERT_TRUE(content::ExecJs(
+      fenced_frame_host,
+      content::JsReplace("let e = document.createElement('object');"
+                         "e.data = $1;"
+                         "e.type = 'application/pdf';"
+                         "document.body.appendChild(e);",
+                         pdf_url)));
+  ASSERT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
+  EXPECT_EQ(CountPDFProcesses(), 0);
+
+  // Ensure that the fenced frame cannot load a PDF embedding with <embed>.
+  ASSERT_TRUE(content::ExecJs(
+      fenced_frame_host,
+      content::JsReplace("let e = document.createElement('embed');"
+                         "e.src = $1;"
+                         "e.type = 'application/pdf';"
+                         "document.body.appendChild(e);",
+                         pdf_url)));
+  ASSERT_TRUE(content::WaitForLoadStop(GetActiveWebContents()));
+  EXPECT_EQ(CountPDFProcesses(), 0);
 }

@@ -6,6 +6,7 @@
 #define CHROME_BROWSER_UI_VIEWS_TABS_TAB_CONTAINER_H_
 
 #include <memory>
+#include "base/memory/raw_ptr.h"
 #include "base/timer/timer.h"
 #include "chrome/browser/ui/views/frame/browser_root_view.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -25,7 +26,6 @@
 #include "ui/views/view_targeter_delegate.h"
 
 class TabStrip;
-class TabGroupHeader;
 class TabHoverCardController;
 class TabDragContext;
 
@@ -238,8 +238,6 @@ class TabContainer : public views::View,
   // the removal of the tab at |model_index|.
   void UpdateClosingModeOnRemovedTab(int model_index, bool was_active);
 
-  void MoveGroupHeader(TabGroupHeader* group_header, int first_tab_model_index);
-
   // Perform an animated resize-relayout of the TabContainer immediately.
   void ResizeLayoutTabs();
 
@@ -257,16 +255,9 @@ class TabContainer : public views::View,
   void AddMessageLoopObserver();
   void RemoveMessageLoopObserver();
 
-  // Returns the corresponding view index of a |tab| to be inserted at
-  // |to_model_index|. Used to reorder the child views of the tab container
-  // so that focus order stays consistent with the visual tab order.
-  // |from_model_index| is where the tab currently is, if it's being moved
-  // instead of added.
-  int GetViewInsertionIndex(absl::optional<tab_groups::TabGroupId> group,
-                            absl::optional<int> from_model_index,
-                            int to_model_index) const;
-
-  int GetViewIndexForModelIndex(int tab_model_index) const;
+  // Moves |slot_view| within children() to match |layout_helper_|'s slot
+  // ordering.
+  void OrderTabSlotView(TabSlotView* slot_view);
 
   // Returns true if the specified point in TabStrip coords is within the
   // hit-test region of the specified Tab.
@@ -318,17 +309,17 @@ class TabContainer : public views::View,
   // the remove animation completes.
   views::ViewModelT<Tab> tabs_view_model_;
 
-  TabStripController* controller_;
+  raw_ptr<TabStripController> controller_;
 
-  TabHoverCardController* hover_card_controller_;
+  raw_ptr<TabHoverCardController> hover_card_controller_;
 
   // May be nullptr in tests.
-  TabDragContext* drag_context_;
+  raw_ptr<TabDragContext> drag_context_;
 
-  TabSlotController* tab_slot_controller_;
+  raw_ptr<TabSlotController> tab_slot_controller_;
 
   // The View that is to be scrolled by |tab_scrolling_animation_|.
-  views::View* scroll_contents_view_;
+  raw_ptr<views::View> scroll_contents_view_;
 
   // Responsible for animating tabs in response to model changes.
   views::BoundsAnimator bounds_animator_;

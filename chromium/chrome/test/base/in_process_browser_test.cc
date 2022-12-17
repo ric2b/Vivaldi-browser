@@ -119,6 +119,10 @@
 #include "ui/events/test/event_generator.h"
 #endif  // BUILDFLAG(IS_CHROMEOS_ASH)
 
+#if defined(USE_OZONE)
+#include "ui/views/test/test_desktop_screen_ozone.h"
+#endif
+
 #if defined(TOOLKIT_VIEWS)
 #include "chrome/browser/ui/views/frame/browser_view.h"
 #include "chrome/browser/ui/views/tabs/tab.h"
@@ -425,12 +429,12 @@ void InProcessBrowserTest::SetUp() {
   chrome_browser_net::NetErrorTabHelper::set_state_for_testing(
       chrome_browser_net::NetErrorTabHelper::TESTING_FORCE_DISABLED);
 
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#if BUILDFLAG(IS_CHROMEOS)
   // On Chrome OS, access to files via file: scheme is restricted. Enable
   // access to all files here since browser_tests and interactive_ui_tests
   // rely on the ability to open any files via file: scheme.
   ChromeNetworkDelegate::EnableAccessToAllFilesForTesting(true);
-#endif  // BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
+#endif  // BUILDFLAG(IS_CHROMEOS)
 
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   // Device sync (for multidevice "Better Together") is ash specific.
@@ -483,6 +487,10 @@ void InProcessBrowserTest::SetUpDefaultCommandLine(
   // TODO(pkotwicz): Investigate if we can remove this switch.
   if (exit_when_last_browser_closes_)
     command_line->AppendSwitch(switches::kDisableZeroBrowsersOpenForTests);
+#if BUILDFLAG(IS_CHROMEOS)
+  // Do not automaximize in browser tests.
+  command_line->AppendSwitch(switches::kDisableAutoMaximizeForTests);
+#endif
 }
 
 void InProcessBrowserTest::TearDown() {
@@ -593,6 +601,22 @@ bool InProcessBrowserTest::AddTabAtIndex(int index,
 
 bool InProcessBrowserTest::SetUpUserDataDirectory() {
   return true;
+}
+
+void InProcessBrowserTest::SetScreenInstance() {
+  // TODO(crbug.com/1317416): On wayland platform, we need to check if the
+  // wayland-ozone platform is initialized at this point due to the async
+  // initialization of the display. Investigate if we can eliminate
+  // IsOzoneInitialized.
+#if BUILDFLAG(IS_LINUX) || BUILDFLAG(IS_CHROMEOS_LACROS)
+  if (!display::Screen::HasScreen() &&
+      views::test::TestDesktopScreenOzone::IsOzoneInitialized()) {
+    // This is necessary for interactive UI tests.
+    // It is enabled in interactive_ui_tests_main.cc
+    // (or through GPUMain)
+    screen_ = views::test::TestDesktopScreenOzone::Create();
+  }
+#endif
 }
 
 #if !BUILDFLAG(IS_MAC)
@@ -718,11 +742,6 @@ void InProcessBrowserTest::PreRunTestOnMainThread() {
 
   SelectFirstBrowser();
   if (browser_) {
-#if BUILDFLAG(IS_CHROMEOS_ASH) || BUILDFLAG(IS_CHROMEOS_LACROS)
-    // There are cases where windows get created maximized by default.
-    if (browser_->window()->IsMaximized())
-      browser_->window()->Restore();
-#endif
     auto* tab = browser_->tab_strip_model()->GetActiveWebContents();
     content::WaitForLoadStop(tab);
     SetInitialWebContents(tab);

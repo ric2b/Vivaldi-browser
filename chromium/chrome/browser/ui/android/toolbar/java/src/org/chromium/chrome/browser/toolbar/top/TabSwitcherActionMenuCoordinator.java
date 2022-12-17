@@ -35,6 +35,7 @@ import java.lang.annotation.RetentionPolicy;
 
 // Vivaldi
 import org.chromium.chrome.browser.preferences.SharedPreferencesManager;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 
 /**
  * The main coordinator for the Tab Switcher Action Menu, responsible for creating the popup menu
@@ -44,15 +45,18 @@ public class TabSwitcherActionMenuCoordinator {
     // For test.
     private View mContentView;
 
+    private static TabModelSelector mTabModelSelector; // Vivaldi
+
     @Retention(RetentionPolicy.SOURCE)
     @IntDef({MenuItemType.DIVIDER, MenuItemType.CLOSE_TAB, MenuItemType.NEW_TAB,
             MenuItemType.NEW_INCOGNITO_TAB, MenuItemType.VIVALDI_CREATE_TAB_STACK})
     public @interface MenuItemType {
         int DIVIDER = 0;
         int CLOSE_TAB = 1;
-        int NEW_TAB = 2;
-        int NEW_INCOGNITO_TAB = 3;
-        int VIVALDI_CREATE_TAB_STACK = 4; // Vivaldi
+        int VIVALDI_CLOSE_OTHER_TABS = 2; // Vivaldi
+        int NEW_TAB = 3;
+        int NEW_INCOGNITO_TAB = 4;
+        int VIVALDI_CREATE_TAB_STACK = 5; // Vivaldi
     }
 
     /**
@@ -69,6 +73,8 @@ public class TabSwitcherActionMenuCoordinator {
         return (view) -> {
             Context context = view.getContext();
             menu.displayMenu(context, (ListMenuButton) view, menu.buildMenuItems(), (id) -> {
+                // TODO(crbug.com/1317817): Refactor to allow subclasses to record different user
+                // actions and update StartSurfaceTabSwitcherActionMenuCoordinator.
                 recordUserActions(id);
                 onItemClicked.onResult(id);
             });
@@ -125,14 +131,16 @@ public class TabSwitcherActionMenuCoordinator {
     }
 
     @VisibleForTesting
-    public View getContentView() {
+    View getContentView() {
         return mContentView;
     }
 
-    @VisibleForTesting
     public ModelList buildMenuItems() {
         ModelList itemList = new ModelList();
         itemList.add(buildListItemByMenuItemType(MenuItemType.CLOSE_TAB));
+        // Vivaldi
+        if (mTabModelSelector != null && mTabModelSelector.getCurrentModel().getCount() > 1)
+            itemList.add(buildListItemByMenuItemType(MenuItemType.VIVALDI_CLOSE_OTHER_TABS));
         itemList.add(buildListItemByMenuItemType(MenuItemType.DIVIDER));
         itemList.add(buildListItemByMenuItemType(MenuItemType.NEW_TAB));
         // Vivaldi
@@ -146,6 +154,9 @@ public class TabSwitcherActionMenuCoordinator {
         switch (type) {
             case MenuItemType.CLOSE_TAB:
                 return buildMenuListItem(R.string.close_tab, R.id.close_tab, R.drawable.btn_close);
+            case MenuItemType.VIVALDI_CLOSE_OTHER_TABS:
+                return buildMenuListItem(R.string.tabs_menu_close_other_tabs,
+                        R.id.vivaldi_close_other_tabs, R.drawable.btn_close);
             case MenuItemType.NEW_TAB:
                 return buildMenuListItem(
                         R.string.menu_new_tab, R.id.new_tab_menu_id, R.drawable.new_tab_icon);
@@ -160,5 +171,10 @@ public class TabSwitcherActionMenuCoordinator {
             default:
                 return buildMenuDivider();
         }
+    }
+
+    /** Vivaldi **/
+    public static void setTabModel(TabModelSelector tabModel) {
+        mTabModelSelector = tabModel;
     }
 }

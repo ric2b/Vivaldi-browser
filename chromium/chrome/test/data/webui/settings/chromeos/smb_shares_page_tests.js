@@ -3,6 +3,7 @@
 // found in the LICENSE file.
 
 import {SmbBrowserProxyImpl, SmbMountResult} from 'chrome://os-settings/chromeos/lazy_load.js';
+import {webUIListenerCallback} from 'chrome://resources/js/cr.m.js';
 import {flush} from 'chrome://resources/polymer/v3_0/polymer/polymer_bundled.min.js';
 
 import {assertFalse, assertTrue} from '../../chai_assert.js';
@@ -49,12 +50,12 @@ suite('AddSmbShareDialogTests', function() {
     page = document.createElement('settings-smb-shares-page');
     document.body.appendChild(page);
 
-    const button = page.$$('#addShare');
+    const button = page.shadowRoot.querySelector('#addShare');
     assertTrue(!!button);
     button.click();
     flush();
 
-    addDialog = page.$$('add-smb-share-dialog');
+    addDialog = page.shadowRoot.querySelector('add-smb-share-dialog');
     assertTrue(!!addDialog);
 
     flush();
@@ -162,9 +163,9 @@ suite('AddSmbShareDialogTests', function() {
   });
 
   test('ControlledByPolicy', function() {
-    const button = page.$$('#addShare');
+    const button = page.shadowRoot.querySelector('#addShare');
 
-    assertFalse(!!page.$$('cr-policy-pref-indicator'));
+    assertFalse(!!page.shadowRoot.querySelector('cr-policy-pref-indicator'));
     assertFalse(button.disabled);
 
     page.prefs = {
@@ -172,7 +173,7 @@ suite('AddSmbShareDialogTests', function() {
     };
     flush();
 
-    assertTrue(!!page.$$('cr-policy-pref-indicator'));
+    assertTrue(!!page.shadowRoot.querySelector('cr-policy-pref-indicator'));
     assertTrue(button.disabled);
   });
 
@@ -225,19 +226,19 @@ suite('AddSmbShareDialogTests', function() {
     };
     document.body.appendChild(page);
 
-    const button = page.$$('#addShare');
+    const button = page.shadowRoot.querySelector('#addShare');
     assertTrue(!!button);
     assertFalse(button.disabled);
     button.click();
 
     flush();
 
-    addDialog = page.$$('add-smb-share-dialog');
+    addDialog = page.shadowRoot.querySelector('add-smb-share-dialog');
     assertTrue(!!addDialog);
 
     flush();
 
-    const openDialogButton = page.$$('#addShare');
+    const openDialogButton = page.shadowRoot.querySelector('#addShare');
     openDialogButton.click();
 
     assertEquals(expectedSmbUrl, addDialog.mountUrl_);
@@ -275,10 +276,10 @@ suite('AddSmbShareDialogTests', function() {
 
     await smbBrowserProxy.whenCalled('startDiscovery');
 
-    cr.webUIListenerCallback('on-shares-found', ['smb://foo/bar'], false);
+    webUIListenerCallback('on-shares-found', ['smb://foo/bar'], false);
     assertTrue(url.showLoading);
 
-    cr.webUIListenerCallback('on-shares-found', ['smb://foo/bar2'], true);
+    webUIListenerCallback('on-shares-found', ['smb://foo/bar2'], true);
     assertFalse(url.showLoading);
 
     assertEquals(2, url.items.length);

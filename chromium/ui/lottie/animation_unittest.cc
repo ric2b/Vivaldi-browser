@@ -942,6 +942,36 @@ TEST_F(AnimationTest, PaintTest) {
   IsAllSameColor(SK_ColorBLUE, canvas.GetBitmap());
 }
 
+TEST_F(AnimationTest, SetsPlaybackSpeed) {
+  TestAnimationObserver observer(animation_.get());
+
+  AdvanceClock(base::Milliseconds(300));
+
+  animation_->SetPlaybackSpeed(2);
+  animation_->Start(Animation::Style::kLinear);
+
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  EXPECT_FLOAT_EQ(animation_->GetCurrentProgress(), 0);
+
+  AdvanceClock(kAnimationDuration / 8);
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  EXPECT_FLOAT_EQ(animation_->GetCurrentProgress(), 1.f / 4);
+
+  AdvanceClock(kAnimationDuration / 8);
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  EXPECT_FLOAT_EQ(animation_->GetCurrentProgress(), 1.f / 2);
+
+  animation_->SetPlaybackSpeed(0.5f);
+
+  AdvanceClock(kAnimationDuration / 4);
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  EXPECT_FLOAT_EQ(animation_->GetCurrentProgress(), (1.f / 2) + (1.f / 8));
+
+  AdvanceClock(kAnimationDuration / 4);
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  EXPECT_FLOAT_EQ(animation_->GetCurrentProgress(), 3.f / 4);
+}
+
 TEST_F(AnimationWithImageAssetsTest, PaintsAnimationImagesToCanvas) {
   AdvanceClock(base::Milliseconds(300));
 
@@ -985,6 +1015,26 @@ TEST_F(AnimationWithImageAssetsTest, PaintsAnimationImagesToCanvas) {
   ASSERT_THAT(op, NotNull());
   EXPECT_THAT(op->images, UnorderedElementsAre(Pair(
                               cc::HashSkottieResourceId("image_1"), frame_1)));
+}
+
+TEST_F(AnimationWithImageAssetsTest, GracefullyHandlesNullImages) {
+  AdvanceClock(base::Milliseconds(300));
+
+  animation_->Start(Animation::Style::kLoop);
+
+  display_list_->StartPaint();
+  animation_->Paint(canvas(), NowTicks(), animation_->GetOriginalSize());
+  display_list_->EndPaintOfUnpaired(gfx::Rect(animation_->GetOriginalSize()));
+
+  sk_sp<cc::PaintRecord> paint_record = display_list_->ReleaseAsRecord();
+  ASSERT_THAT(paint_record, NotNull());
+  ASSERT_THAT(paint_record->size(), Eq(1u));
+  const cc::DrawSkottieOp* op =
+      paint_record->GetOpAtForTesting<cc::DrawSkottieOp>(0);
+  ASSERT_THAT(op, NotNull());
+  EXPECT_THAT(op->images,
+              UnorderedElementsAre(Pair(cc::HashSkottieResourceId("image_0"),
+                                        cc::SkottieFrameData())));
 }
 
 TEST_F(AnimationWithImageAssetsTest, LoadsCorrectFrameTimestamp) {

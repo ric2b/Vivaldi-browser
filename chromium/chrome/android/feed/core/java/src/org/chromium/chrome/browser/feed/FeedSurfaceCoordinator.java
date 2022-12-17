@@ -13,6 +13,7 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
 import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
@@ -48,11 +49,16 @@ import org.chromium.chrome.browser.profiles.Profile;
 import org.chromium.chrome.browser.settings.SettingsLauncherImpl;
 import org.chromium.chrome.browser.share.ShareDelegate;
 import org.chromium.chrome.browser.signin.services.IdentityServicesProvider;
+import org.chromium.chrome.browser.tab.Tab;
+import org.chromium.chrome.browser.tab.TabSelectionType;
+import org.chromium.chrome.browser.tabmodel.TabModelObserver;
+import org.chromium.chrome.browser.tabmodel.TabModelSelector;
 import org.chromium.chrome.browser.toolbar.top.Toolbar;
 import org.chromium.chrome.browser.ui.messages.snackbar.SnackbarManager;
 import org.chromium.chrome.browser.ui.native_page.TouchEnabledDelegate;
 import org.chromium.chrome.browser.user_education.UserEducationHelper;
 import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger;
+import org.chromium.chrome.browser.xsurface.FeedLaunchReliabilityLogger.SurfaceType;
 import org.chromium.chrome.browser.xsurface.HybridListRenderer;
 import org.chromium.chrome.browser.xsurface.ImageCacheHelper;
 import org.chromium.chrome.browser.xsurface.ProcessScope;
@@ -63,7 +69,6 @@ import org.chromium.components.browser_ui.styles.SemanticColorUtils;
 import org.chromium.components.browser_ui.widget.displaystyle.UiConfig;
 import org.chromium.components.feature_engagement.EventConstants;
 import org.chromium.components.feature_engagement.Tracker;
-import org.chromium.components.feed.proto.wire.ReliabilityLoggingEnums.DiscoverLaunchResult;
 import org.chromium.components.signin.identitymanager.ConsentLevel;
 import org.chromium.third_party.android.swiperefresh.SwipeRefreshLayout;
 import org.chromium.ui.base.ViewUtils;
@@ -83,7 +88,7 @@ import java.util.List;
 public class FeedSurfaceCoordinator
         implements FeedSurfaceProvider, FeedBubbleDelegate, SwipeRefreshLayout.OnRefreshListener,
                    BackToTopBubbleScrollListener.ResultHandler, SurfaceCoordinator,
-                   FeedAutoplaySettingsDelegate, FeedReliabilityLoggingSignals {
+                   FeedAutoplaySettingsDelegate, HasContentListener, FeedContentFirstLoadWatcher {
     private static final String TAG = "FeedSurfaceCoordinator";
     private static final long DELAY_FEED_HEADER_IPH_MS = 50;
 
@@ -104,10 +109,15 @@ public class FeedSurfaceCoordinator
     private final FeedActionDelegate mActionDelegate;
     private final HelpAndFeedbackLauncher mHelpAndFeedbackLauncher;
 
+    // FeedReliabilityLogger params.
+    private final @SurfaceType int mSurfaceType;
+    private final long mEmbeddingSurfaceCreatedTimeNs;
+
     private UiConfig mUiConfig;
     private FrameLayout mRootView;
     private boolean mIsActive;
     private int mHeaderCount;
+    private int mSectionHeaderIndex;
 
     // Used when Feed is enabled.
     private @Nullable Profile mProfile;
@@ -138,10 +148,7 @@ public class FeedSurfaceCoordinator
     private @Nullable HeaderIphScrollListener mHeaderIphScrollListener;
     private @Nullable RefreshIphScrollListener mRefreshIphScrollListener;
     private @Nullable BackToTopBubbleScrollListener mBackToTopBubbleScrollListener;
-
-    private final FeedLaunchReliabilityLoggingState mLaunchReliabilityLoggingState;
-    private FeedLaunchReliabilityLogger mLaunchReliabilityLogger =
-            new FeedLaunchReliabilityLogger() {};
+    private @Nullable FeedReliabilityLogger mReliabilityLogger;
     private final PrivacyPreferencesManagerImpl mPrivacyPreferencesManager;
 
     private final Supplier<Toolbar> mToolbarSupplier;
@@ -149,6 +156,8 @@ public class FeedSurfaceCoordinator
     private FeedSwipeRefreshLayout mSwipeRefreshLayout;
 
     private BackToTopBubble mBackToTopBubble;
+
+    private boolean mWebFeedHasContent;
 
     /**
      * Provides the additional capabilities needed for the container view.
@@ -209,6 +218,20 @@ public class FeedSurfaceCoordinator
         }
     }
 
+    private class Scroller implements Runnable {
+        @Override
+        public void run() {
+            // The feed header may not be visible for smaller screens or landscape mode. Scroll
+            // to show the header after showing the IPH.
+            mMediator.scrollToViewIfNecessary(getSectionHeaderPosition());
+        }
+    }
+
+    // Returns the index of the section header (for you and following tab header).
+    private int getSectionHeaderPosition() {
+        return mSectionHeaderIndex;
+    }
+
     /**
      * Constructs a new FeedSurfaceCoordinator.
      * @param activity The containing {@link Activity}.
@@ -227,14 +250,15 @@ public class FeedSurfaceCoordinator
      * @param launchOrigin The origin of what launched the feed.
      * @param privacyPreferencesManager Manages the privacy preferences.
      * @param toolbarSupplier Supplies the {@link Toolbar}.
-     * @param FeedLaunchReliabilityLoggingState Holds the state for feed surface creation.
+     * @param surfaceType Type of UI surface embedding the feed. Used for reliability logging.
+     * @param embeddingSurfaceCreatedTimeNs Timestamp of creation of the UI surface.
      * @param swipeRefreshLayout The layout to support pull-to-refresh.
      * @param overScrollDisabled Whether the overscroll effect is disabled.
      * @param viewportView The view that should be used as a container for viewport measurement
      *   purposes, or |null| if the view returned by HybridListRenderer is to be used.
      * @param actionDelegate Implements some Feed actions.
      * @param helpAndFeedbackLauncher A HelpAndFeedbackLauncher.
-     * @param feedHooks A @{link FeedHooks} instance.
+     * @param tabModelSelector TabModelSelector used to get TabModels we can observe.
      */
     public FeedSurfaceCoordinator(Activity activity, SnackbarManager snackbarManager,
             WindowAndroid windowAndroid, @Nullable SnapScrollHelper snapScrollHelper,
@@ -245,11 +269,11 @@ public class FeedSurfaceCoordinator
             @Nullable ScrollableContainerDelegate externalScrollableContainerDelegate,
             @NewTabPageLaunchOrigin int launchOrigin,
             PrivacyPreferencesManagerImpl privacyPreferencesManager,
-            @NonNull Supplier<Toolbar> toolbarSupplier,
-            FeedLaunchReliabilityLoggingState launchReliabilityLoggingState,
-            @Nullable FeedSwipeRefreshLayout swipeRefreshLayout, boolean overScrollDisabled,
-            @Nullable ViewGroup viewportView, FeedActionDelegate actionDelegate,
-            HelpAndFeedbackLauncher helpAndFeedbackLauncher) {
+            @NonNull Supplier<Toolbar> toolbarSupplier, @SurfaceType int surfaceType,
+            long embeddingSurfaceCreatedTimeNs, @Nullable FeedSwipeRefreshLayout swipeRefreshLayout,
+            boolean overScrollDisabled, @Nullable ViewGroup viewportView,
+            FeedActionDelegate actionDelegate, HelpAndFeedbackLauncher helpAndFeedbackLauncher,
+            TabModelSelector tabModelSelector) {
         mActivity = activity;
         mSnackbarManager = snackbarManager;
         mNtpHeader = ntpHeader;
@@ -261,7 +285,6 @@ public class FeedSurfaceCoordinator
         mWindowAndroid = windowAndroid;
         mShareSupplier = shareDelegateSupplier;
         mScrollableContainerDelegate = externalScrollableContainerDelegate;
-        mLaunchReliabilityLoggingState = launchReliabilityLoggingState;
         mPrivacyPreferencesManager = privacyPreferencesManager;
         mToolbarSupplier = toolbarSupplier;
         mSwipeRefreshLayout = swipeRefreshLayout;
@@ -269,6 +292,23 @@ public class FeedSurfaceCoordinator
         mViewportView = viewportView;
         mActionDelegate = actionDelegate;
         mHelpAndFeedbackLauncher = helpAndFeedbackLauncher;
+        mSurfaceType = surfaceType;
+        mEmbeddingSurfaceCreatedTimeNs = embeddingSurfaceCreatedTimeNs;
+        mWebFeedHasContent = false;
+        mSectionHeaderIndex = 0;
+
+        TabModelObserver tabModelObserver = new TabModelObserver() {
+            @Override
+            public void didSelectTab(Tab tab, @TabSelectionType int type, int lastId) {
+                if (mReliabilityLogger != null) {
+                    mReliabilityLogger.onSwitchTabs();
+                }
+            }
+        };
+        tabModelSelector.getModel(/*incognito=*/false).addObserver(tabModelObserver);
+        // The feed isn't shown in incognito tabs, but we add the observer to record when the user
+        // switches to an incognito tab from the feed.
+        tabModelSelector.getModel(/*incognito=*/true).addObserver(tabModelObserver);
 
         Resources resources = mActivity.getResources();
 
@@ -325,6 +365,13 @@ public class FeedSurfaceCoordinator
         mMediator.updateContent();
     }
 
+    @Override
+    public void hasContentChanged(@StreamKind int kind, boolean hasContent) {
+        if (kind == StreamKind.FOLLOWING) {
+            mWebFeedHasContent = hasContent;
+        }
+    }
+
     private void stopScrollTracking() {
         if (mScrollableContainerDelegate != null) {
             mScrollableContainerDelegate.removeScrollListener(mDependencyProvider);
@@ -336,10 +383,28 @@ public class FeedSurfaceCoordinator
         mHandler.postDelayed(() -> {
             // The feed header may not be visible for smaller screens or landscape mode. Scroll to
             // show the header before showing the IPH.
-            mMediator.scrollToViewIfNecessary(1);
+            mMediator.scrollToViewIfNecessary(getSectionHeaderPosition());
             UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
             mSectionHeaderView.showHeaderIph(helper);
         }, DELAY_FEED_HEADER_IPH_MS);
+    }
+
+    public void maybeShowWebFeedAwarenessIph() {
+        if (mWebFeedHasContent && mSectionHeaderView.shouldUseWebFeedAwarenessIPH()) {
+            UserEducationHelper helper = new UserEducationHelper(mActivity, mHandler);
+            mSectionHeaderView.showWebFeedAwarenessIph(
+                    helper, StreamTabId.FOLLOWING, new Scroller());
+        }
+    }
+
+    @Override
+    public void nonNativeContentLoaded(@StreamKind int kind) {
+        // We want to show the web feed IPH on the first load of the FOR_YOU feed.
+        if (kind == StreamKind.FOR_YOU) {
+            // After the web feed content has loaded, we will know if we have any content, and it is
+            // safe to show the IPH.
+            maybeShowWebFeedAwarenessIph();
+        }
     }
 
     @Override
@@ -420,12 +485,22 @@ public class FeedSurfaceCoordinator
     }
 
     @Override
+    public void reload() {
+        if (ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_INTERACTIVE_REFRESH)) {
+            onRefresh();
+        }
+    }
+
+    @Override
     public void onRefresh() {
         updateReloadButtonVisibility(/*isReloading=*/true);
-        mLaunchReliabilityLogger.logManualRefresh(System.nanoTime());
+        if (mReliabilityLogger != null) {
+            mReliabilityLogger.getLaunchLogger().logManualRefresh(
+                    SystemClock.elapsedRealtimeNanos());
+        }
         mMediator.manualRefresh((Boolean v) -> {
-            if (mSwipeRefreshLayout == null) return;
             updateReloadButtonVisibility(/*isReloading=*/false);
+            if (mSwipeRefreshLayout == null) return;
             mSwipeRefreshLayout.setRefreshing(false);
         });
         getFeatureEngagementTracker().notifyEvent(EventConstants.FEED_SWIPE_REFRESHED);
@@ -539,9 +614,13 @@ public class FeedSurfaceCoordinator
         if (mSurfaceScope != null) {
             mHybridListRenderer = mSurfaceScope.provideListRenderer();
 
-            if (isReliabilityLoggingEnabled()) {
-                mLaunchReliabilityLogger = mSurfaceScope.getFeedLaunchReliabilityLogger();
-                mLaunchReliabilityLoggingState.onLoggerAvailable(mLaunchReliabilityLogger);
+            if (mPrivacyPreferencesManager.isMetricsReportingEnabled()
+                    || CommandLine.getInstance().hasSwitch(
+                            "force-enable-feed-reliability-logging")) {
+                FeedLaunchReliabilityLogger launchLogger =
+                        mSurfaceScope.getFeedLaunchReliabilityLogger();
+                mReliabilityLogger = new FeedReliabilityLogger(launchLogger);
+                launchLogger.logUiStarting(mSurfaceType, mEmbeddingSurfaceCreatedTimeNs);
             }
 
         } else {
@@ -592,10 +671,11 @@ public class FeedSurfaceCoordinator
     }
 
     /**
-     * @return This surface's {@link FeedLaunchReliabilityLogger}. The logger instance may change.
+     * @return This surface's {@link FeedReliabilityLogger}.
      */
-    public FeedLaunchReliabilityLogger getLaunchReliabilityLogger() {
-        return mLaunchReliabilityLogger;
+    @Override
+    public FeedReliabilityLogger getReliabilityLogger() {
+        return mReliabilityLogger;
     }
 
     /**
@@ -641,7 +721,7 @@ public class FeedSurfaceCoordinator
     FeedStream createFeedStream(@StreamKind int kind) {
         return new FeedStream(mActivity, mSnackbarManager, mBottomSheetController,
                 mIsPlaceholderShownInitially, mWindowAndroid, mShareSupplier, kind, this,
-                mActionDelegate, mHelpAndFeedbackLauncher);
+                mActionDelegate, mHelpAndFeedbackLauncher, this /* FeedContentFirstLoadWatcher */);
     }
 
     private void setHeaders(List<View> headerViews) {
@@ -663,6 +743,8 @@ public class FeedSurfaceCoordinator
             mHeaderCount = headerList.size();
             mMediator.notifyHeadersChanged(mHeaderCount);
         }
+        // The section header is the last header to be added, save its index.
+        mSectionHeaderIndex = headerViews.size() - 1;
     }
 
     /** @return The {@link SectionHeaderListProperties} model for the Feed section header. */
@@ -905,64 +987,20 @@ public class FeedSurfaceCoordinator
 
     @Override
     public void onActivityPaused() {
-        logLaunchFinishedIfInProgress(DiscoverLaunchResult.FRAGMENT_PAUSED);
+        if (mReliabilityLogger != null) {
+            mReliabilityLogger.onActivityPaused();
+        }
     }
 
     @Override
     public void onActivityResumed() {
-        mLaunchReliabilityLogger.cancelPendingFinished();
-    }
-
-    @Override
-    public void onOmniboxFocused() {
-        // The user could return to the feed while it's still loading, so call pendingFinished()
-        // rather than logLaunchFinished().
-        recordPendingLaunchFinishedIfInProgress(DiscoverLaunchResult.SEARCH_BOX_TAPPED);
-    }
-
-    @Override
-    public void onVoiceSearch() {
-        // The user could return to the feed while it's still loading, so call pendingFinished()
-        // rather than logLaunchFinished().
-        recordPendingLaunchFinishedIfInProgress(DiscoverLaunchResult.VOICE_SEARCH_TAPPED);
-    }
-
-    @Override
-    public void onUrlFocusChange(boolean hasFocus) {
-        // URL bar gaining focus is already handled by onOmniboxFocused() and onVoiceSearch().
-        if (hasFocus || !mLaunchReliabilityLogger.isLaunchInProgress()) {
-            return;
+        if (mReliabilityLogger != null) {
+            mReliabilityLogger.onActivityResumed();
         }
-        mLaunchReliabilityLogger.cancelPendingFinished();
-    }
-
-    @Override
-    public void onUrlAnimationFinished(boolean hasFocus) {}
-
-    private void recordPendingLaunchFinishedIfInProgress(DiscoverLaunchResult status) {
-        if (!mLaunchReliabilityLogger.isLaunchInProgress()) {
-            return;
-        }
-        mLaunchReliabilityLogger.pendingFinished(System.nanoTime(), status.getNumber());
-    }
-
-    private void logLaunchFinishedIfInProgress(DiscoverLaunchResult status) {
-        if (!mLaunchReliabilityLogger.isLaunchInProgress()) {
-            return;
-        }
-        // TODO(iwells): Switch logging to use SystemClock.elapsedRealtimeNanos() instead.
-        mLaunchReliabilityLogger.logLaunchFinished(System.nanoTime(), status.getNumber());
     }
 
     public boolean isLoadingFeed() {
         return mMediator.isLoadingFeed();
-    }
-
-    private boolean isReliabilityLoggingEnabled() {
-        return ChromeFeatureList.isEnabled(ChromeFeatureList.FEED_RELIABILITY_LOGGING)
-                && (mPrivacyPreferencesManager.isMetricsReportingEnabled()
-                        || CommandLine.getInstance().hasSwitch(
-                                "force-enable-feed-reliability-logging"));
     }
 
     // Clear the memory cache if the FEED_CLEAR_IMAGE_MEMORY_CACHE flag is enabled.
@@ -981,5 +1019,10 @@ public class FeedSurfaceCoordinator
     private int getLateralPaddingsPx() {
         return mActivity.getResources().getDimensionPixelSize(
                 R.dimen.ntp_header_lateral_paddings_v2);
+    }
+
+    @VisibleForTesting
+    public void setReliabilityLoggerForTesting(FeedReliabilityLogger logger) {
+        mReliabilityLogger = logger;
     }
 }

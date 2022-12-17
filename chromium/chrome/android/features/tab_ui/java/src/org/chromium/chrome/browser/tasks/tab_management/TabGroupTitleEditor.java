@@ -31,7 +31,7 @@ public abstract class TabGroupTitleEditor {
                 int tabRootId = CriticalPersistedTabData.from(tab).getRootId();
                 TabGroupModelFilter filter =
                         (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getCurrentTabModelFilter();
+                                .getCurrentTabModelFilter(true); // Vivaldi
                 // If the group becomes a single tab after closing or we are closing a group, delete
                 // the stored title.
                 if (filter.getRelatedTabListForRootId(tabRootId).size() == 1) {
@@ -58,7 +58,7 @@ public abstract class TabGroupTitleEditor {
             public void willMoveTabOutOfGroup(Tab movedTab, int newRootId) {
                 TabGroupModelFilter filter =
                         (TabGroupModelFilter) mTabModelSelector.getTabModelFilterProvider()
-                                .getCurrentTabModelFilter();
+                                .getCurrentTabModelFilter(true); // Vivaldi
                 String title = getTabGroupTitle(getRootId(movedTab));
                 if (title == null) return;
                 // If the group size is 2, i.e. the group becomes a single tab after ungroup, delete

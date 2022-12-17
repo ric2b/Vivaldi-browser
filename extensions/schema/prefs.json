@@ -321,7 +321,15 @@
       {
         "name": "resetAllToDefault",
         "description": "Reset all preferences to their default values.",
-        "parameters": []
+        "parameters": [
+          {
+            "name": "paths",
+            "type": "array",
+            "optional":  true,
+            "description": "Which preferences should be excluded from being reset",
+            "items": { "type": "string" }
+          }
+        ]
       }
     ],
     "events": [

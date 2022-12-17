@@ -19,6 +19,7 @@
 #ifdef VIVALDI_BUILD
 #include "installer/util/vivaldi_install_constants.h"
 
+bool g_vivaldi_has_silent_switch = false;
 bool g_vivaldi_has_unpack_switch = false;
 #endif
 
@@ -95,6 +96,8 @@ bool Configuration::ParseCommandLine(const wchar_t* command_line) {
     else if (0 == ::lstrcmpi(args_[i], L"--chrome-frame"))
       has_invalid_switch_ = true;
 #ifdef VIVALDI_BUILD
+    else if (0 == ::lstrcmpi(args_[i], L"--" VIVALDI_INSTALLER_SWITCH_SILENT))
+      g_vivaldi_has_silent_switch = true;
     else if (0 == ::lstrcmpi(args_[i], L"--" VIVALDI_INSTALLER_SWITCH_UNPACK))
       g_vivaldi_has_unpack_switch = true;
 #endif

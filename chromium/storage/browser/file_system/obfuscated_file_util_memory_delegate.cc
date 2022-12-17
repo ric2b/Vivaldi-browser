@@ -33,7 +33,7 @@ bool IsMemoryAvailable(int64_t required_memory) {
 #else
   int64_t max_allocatable =
       std::min(base::SysInfo::AmountOfAvailablePhysicalMemory(),
-               static_cast<int64_t>(base::MaxDirectMapped()));
+               static_cast<int64_t>(partition_alloc::MaxDirectMapped()));
 
   return max_allocatable >= required_memory;
 #endif
@@ -234,7 +234,7 @@ bool ObfuscatedFileUtilMemoryDelegate::PathExists(const base::FilePath& path) {
 
 base::File ObfuscatedFileUtilMemoryDelegate::CreateOrOpen(
     const base::FilePath& path,
-    int file_flags) {
+    uint32_t file_flags) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   // TODO:(https://crbug.com/936722): Once the output of this function is
   // changed to base::File::Error, it can use CreateOrOpenInternal to perform
@@ -244,7 +244,7 @@ base::File ObfuscatedFileUtilMemoryDelegate::CreateOrOpen(
 
 void ObfuscatedFileUtilMemoryDelegate::CreateOrOpenInternal(
     const DecomposedPath& dp,
-    int file_flags) {
+    uint32_t file_flags) {
   DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (!dp.entry) {
     dp.parent->directory_content.emplace(dp.components.back(), Entry::kFile);
@@ -549,7 +549,7 @@ int ObfuscatedFileUtilMemoryDelegate::WriteFile(
 // |MaxDirectMapped| function is not implemented on FUCHSIA, yet.
 // (crbug.com/986608)
 #if !BUILDFLAG(IS_FUCHSIA)
-    if (last_position >= base::MaxDirectMapped() / 2) {
+    if (last_position >= partition_alloc::MaxDirectMapped() / 2) {
       // TODO(https://crbug.com/1043914): Allocated memory is rounded up to
       // 100MB blocks to reduce memory allocation delays. Switch to a more
       // proper container to remove this dependency.

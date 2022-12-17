@@ -10,11 +10,15 @@
 #include "ash/components/phonehub/fake_camera_roll_manager.h"
 #include "ash/components/phonehub/fake_multidevice_feature_access_manager.h"
 #include "ash/components/phonehub/multidevice_feature_access_manager.h"
+#include "ash/components/phonehub/pref_names.h"
+#include "ash/components/phonehub/screen_lock_manager.h"
 #include "ash/constants/ash_features.h"
+#include "ash/constants/ash_pref_names.h"
 #include "ash/services/multidevice_setup/public/cpp/fake_android_sms_pairing_state_tracker.h"
 #include "ash/services/multidevice_setup/public/cpp/fake_multidevice_setup_client.h"
 #include "ash/services/multidevice_setup/public/cpp/prefs.h"
 #include "ash/webui/eche_app_ui/fake_apps_access_manager.h"
+#include "base/test/metrics/histogram_tester.h"
 #include "base/test/scoped_feature_list.h"
 #include "chrome/browser/ash/android_sms/android_sms_urls.h"
 #include "chrome/browser/ash/android_sms/fake_android_sms_app_manager.h"
@@ -35,6 +39,25 @@ namespace chromeos {
 namespace settings {
 
 namespace {
+
+constexpr char kDialogIntroActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents.IntroScreen";
+constexpr char kDialogFinishOnPhoneActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents."
+    "FinishSetupOnYourPhoneScreen";
+constexpr char kDialogConnectingActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents.ConnectingToPhoneScreen";
+constexpr char kDialogConnectionErrorActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents."
+    "CouldNotEstablishConnectionScreen";
+constexpr char kDialogConnectionTimeOutActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents.ConnectionLostScreen";
+constexpr char kDialogSetAPinOrPasswordHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents.SetAPinOrPasswordScreen";
+constexpr char kDialogSetupFinishedActionHistogram[] =
+    "PhoneHub.PermissionsOnboarding.DialogScreenEvents.SetUpFinishedScreen";
+constexpr char kSetupButtonInSettingsClikedHistogram[] =
+    "PhoneHub.PermissionsOnboarding.SetUpMode.OnSettingsClicked";
 
 // TODO(https://crbug.com/1164001): remove after migrating to ash.
 namespace multidevice_setup = ::ash::multidevice_setup;
@@ -72,25 +95,35 @@ multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap
 GenerateDefaultFeatureStatesMap() {
   return multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap{
       {multidevice_setup::mojom::Feature::kBetterTogetherSuite,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kInstantTethering,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kMessages,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kSmartLock,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kPhoneHub,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kPhoneHubNotifications,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kPhoneHubCameraRoll,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kPhoneHubTaskContinuation,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kWifiSync,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost},
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts},
       {multidevice_setup::mojom::Feature::kEche,
-       multidevice_setup::mojom::FeatureState::kUnavailableNoVerifiedHost}};
+       multidevice_setup::mojom::FeatureState::
+           kUnavailableNoVerifiedHost_NoEligibleHosts}};
 }
 
 void VerifyPageContentDict(
@@ -153,9 +186,16 @@ void VerifyPageContentDict(
   absl::optional<int> phone_hub_camera_roll_state =
       page_content_dict->FindIntKey("phoneHubCameraRollState");
   ASSERT_TRUE(phone_hub_camera_roll_state);
-  it = feature_states_map.find(
-      multidevice_setup::mojom::Feature::kPhoneHubCameraRoll);
-  EXPECT_EQ(static_cast<int>(it->second), *phone_hub_camera_roll_state);
+  if (base::FeatureList::IsEnabled(chromeos::features::kPhoneHubCameraRoll)) {
+    it = feature_states_map.find(
+        multidevice_setup::mojom::Feature::kPhoneHubCameraRoll);
+    EXPECT_EQ(static_cast<int>(it->second), *phone_hub_camera_roll_state);
+  } else {
+    EXPECT_EQ(
+        static_cast<int>(
+            multidevice_setup::mojom::FeatureState::kNotSupportedByChromebook),
+        *phone_hub_camera_roll_state);
+  }
 
   absl::optional<int> phone_hub_task_continuation_state =
       page_content_dict->FindIntKey("phoneHubTaskContinuationState");
@@ -167,8 +207,15 @@ void VerifyPageContentDict(
   absl::optional<int> phone_hub_apps_state =
       page_content_dict->FindIntKey("phoneHubAppsState");
   ASSERT_TRUE(phone_hub_apps_state);
-  it = feature_states_map.find(multidevice_setup::mojom::Feature::kEche);
-  EXPECT_EQ(static_cast<int>(it->second), *phone_hub_apps_state);
+  if (base::FeatureList::IsEnabled(chromeos::features::kEcheSWA)) {
+    it = feature_states_map.find(multidevice_setup::mojom::Feature::kEche);
+    EXPECT_EQ(static_cast<int>(it->second), *phone_hub_apps_state);
+  } else {
+    EXPECT_EQ(
+        static_cast<int>(
+            multidevice_setup::mojom::FeatureState::kNotSupportedByChromebook),
+        *phone_hub_apps_state);
+  }
 
   absl::optional<int> wifi_sync_state =
       page_content_dict->FindIntKey("wifiSyncState");
@@ -188,8 +235,8 @@ void VerifyPageContentDict(
   EXPECT_THAT(page_content_dict->FindBoolKey("isNearbyShareDisallowedByPolicy"),
               Optional(expected_is_nearby_share_disallowed_by_policy_));
 
-  EXPECT_THAT(page_content_dict->FindBoolKey("isPhoneHubAppsAccessGranted"),
-              Optional(expected_is_phone_hub_apps_access_granted_));
+  EXPECT_THAT(page_content_dict->FindIntKey("appsAccessStatus"),
+              Optional(expected_is_phone_hub_apps_access_granted_ ? 2 : 1));
 
   EXPECT_THAT(
       page_content_dict->FindBoolKey("isCameraRollFilePermissionGranted"),
@@ -197,7 +244,8 @@ void VerifyPageContentDict(
 
   EXPECT_THAT(
       page_content_dict->FindBoolKey("isPhoneHubPermissionsDialogSupported"),
-      Optional(true));
+      Optional(features::IsEcheSWAEnabled() ||
+               features::IsPhoneHubCameraRollEnabled()));
 
   EXPECT_THAT(page_content_dict->FindIntKey("cameraRollAccessStatus"),
               Optional(expected_is_camera_roll_access_status_granted_ ? 2 : 1));
@@ -247,6 +295,12 @@ class MultideviceHandlerTest : public testing::Test {
     prefs_->registry()->RegisterBooleanPref(
         multidevice_setup::kInstantTetheringAllowedPrefName,
         /*default_value=*/true);
+    prefs_->registry()->RegisterBooleanPref(ash::prefs::kEnableAutoScreenLock,
+                                            false);
+    prefs_->registry()->RegisterIntegerPref(
+        ash::phonehub::prefs::kScreenLockStatus,
+        static_cast<int>(
+            ash::phonehub::ScreenLockManager::LockStatus::kLockedOff));
 
     handler_ = std::make_unique<TestMultideviceHandler>(
         prefs_.get(), fake_multidevice_setup_client_.get(),
@@ -263,11 +317,11 @@ class MultideviceHandlerTest : public testing::Test {
 
     handler_->RegisterMessages();
     handler_->AllowJavascript();
+  }
 
-    scoped_feature_list_.InitWithFeatures(
-        {chromeos::features::kPhoneHub, chromeos::features::kEcheSWA,
-         chromeos::features::kEchePhoneHubPermissionsOnboarding},
-        {});
+  void InitWithFeatures(const std::vector<base::Feature>& enabled_features,
+                        const std::vector<base::Feature>& disabled_features) {
+    scoped_feature_list_.InitWithFeatures(enabled_features, disabled_features);
   }
 
   void SetUpHandlerWithEmptyManagers() {
@@ -700,6 +754,38 @@ class MultideviceHandlerTest : public testing::Test {
     EXPECT_EQ(call_data.arg2()->GetInt(), static_cast<int32_t>(status));
   }
 
+  void SimulateEnableScreenLockChanged() {
+    size_t call_data_count_before_call = test_web_ui()->call_data().size();
+
+    prefs_->SetBoolean(ash::prefs::kEnableAutoScreenLock, true);
+
+    EXPECT_EQ(call_data_count_before_call + 1u,
+              test_web_ui()->call_data().size());
+    const content::TestWebUI::CallData& call_data =
+        CallDataAtIndex(call_data_count_before_call);
+    EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
+    EXPECT_EQ("settings.OnEnableScreenLockChanged",
+              call_data.arg1()->GetString());
+  }
+
+  void SimulateScreenLockStatusChanged() {
+    size_t call_data_count_before_call = test_web_ui()->call_data().size();
+
+    prefs_->SetInteger(
+        ash::phonehub::prefs::kScreenLockStatus,
+        static_cast<int>(
+            ash::phonehub::ScreenLockManager::LockStatus::kLockedOn));
+
+    EXPECT_EQ(call_data_count_before_call + 1u,
+              test_web_ui()->call_data().size());
+    const content::TestWebUI::CallData& call_data =
+        CallDataAtIndex(call_data_count_before_call);
+    EXPECT_EQ("cr.webUIListenerCallback", call_data.function_name());
+    EXPECT_EQ("settings.OnScreenLockStatusChanged",
+              call_data.arg1()->GetString());
+    EXPECT_TRUE(call_data.arg2()->GetBool());
+  }
+
   bool IsCameraRollAccessSetupOperationInProgress() {
     return fake_multidevice_feature_access_manager()
         ->IsCombinedSetupOperationInProgress();
@@ -750,7 +836,6 @@ class MultideviceHandlerTest : public testing::Test {
       fake_android_sms_app_manager_;
 
   std::unique_ptr<TestMultideviceHandler> handler_;
-
   base::test::ScopedFeatureList scoped_feature_list_;
 };
 
@@ -813,6 +898,9 @@ TEST_F(MultideviceHandlerTest, NotificationSetupFlow) {
 }
 
 TEST_F(MultideviceHandlerTest, AppsSetupFlow) {
+  InitWithFeatures(/* enabled_features */ {chromeos::features::kPhoneHub,
+                                           chromeos::features::kEcheSWA},
+                   /* disabled_features */ {});
   using Status = ash::eche_app::AppsAccessSetupOperation::Status;
 
   // Simulate success flow.
@@ -912,7 +1000,128 @@ TEST_F(MultideviceHandlerTest, CameraRollSetupFlow) {
   EXPECT_FALSE(IsCameraRollAccessSetupOperationInProgress());
 }
 
+TEST_F(MultideviceHandlerTest, LogUmaMetricsForSetupFlow) {
+  using Status = phonehub::CombinedAccessSetupOperation::Status;
+  fake_multidevice_feature_access_manager()
+      ->SetFeatureSetupRequestSupportedInternal(true);
+  base::HistogramTester histogram_tester;
+  histogram_tester.ExpectTotalCount(kDialogIntroActionHistogram, 0);
+
+  base::ListValue set_up_screen_args;
+  set_up_screen_args.Append(/*irrelivant_set_up_dialog=*/0);
+  set_up_screen_args.Append(/*action_cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectTotalCount(kDialogIntroActionHistogram, 0);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*intro_screen_index=*/1);
+  set_up_screen_args.Append(/*learn_more=*/2);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogIntroActionHistogram,
+                                     /*learn_more=*/2, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*intro_screen_index=*/1);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogIntroActionHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*intro_screen_index=*/1);
+  set_up_screen_args.Append(/*next=*/5);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogIntroActionHistogram,
+                                     /*done=*/5, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*finish_on_phone_screen_index=*/2);
+  set_up_screen_args.Append(/*learn_more=*/2);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogFinishOnPhoneActionHistogram,
+                                     /*learn_more=*/2, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*finish_on_phone_screen_index=*/2);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogFinishOnPhoneActionHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connecting_screen_index=*/3);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogConnectingActionHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connected_screen_index=*/6);
+  set_up_screen_args.Append(/*done=*/4);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogSetupFinishedActionHistogram,
+                                     /*done=*/4, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connection_error_screen_index=*/4);
+  set_up_screen_args.Append(/*try_again=*/5);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogConnectionErrorActionHistogram,
+                                     /*try_again=*/5, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connection_error_screen_index=*/4);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogConnectionErrorActionHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connection_time_out_screen_index=*/5);
+  set_up_screen_args.Append(/*try_again=*/5);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogConnectionTimeOutActionHistogram,
+                                     /*try_again=*/5, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*connection_time_out_screen_index=*/5);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogConnectionTimeOutActionHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*set_a_pin_screen_index=*/7);
+  set_up_screen_args.Append(/*cancel=*/3);
+  test_web_ui()->HandleReceivedMessage("logPhoneHubPermissionSetUpScreenAction",
+                                       &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kDialogSetAPinOrPasswordHistogram,
+                                     /*cancel=*/3, 1);
+
+  set_up_screen_args.ClearList();
+  set_up_screen_args.Append(/*camera_roll_setup=*/3);
+  test_web_ui()->HandleReceivedMessage(
+      "logPhoneHubPermissionSetUpButtonClicked", &set_up_screen_args);
+  histogram_tester.ExpectBucketCount(kSetupButtonInSettingsClikedHistogram,
+                                     /*camera_roll_setup=*/3, 1);
+}
+
 TEST_F(MultideviceHandlerTest, PageContentData) {
+  InitWithFeatures(/* enabled_features */ {chromeos::features::kPhoneHub,
+                                           chromeos::features::kEcheSWA},
+                   /* disabled_features */ {});
   CallGetPageContentData();
   CallGetPageContentData();
 
@@ -991,6 +1200,9 @@ TEST_F(MultideviceHandlerTest, RemoveHostDevice) {
 }
 
 TEST_F(MultideviceHandlerTest, GetAndroidSmsInfo) {
+  InitWithFeatures(/* enabled_features */ {chromeos::features::kPhoneHub,
+                                           chromeos::features::kEcheSWA},
+                   /* disabled_features */ {});
   // Check that getAndroidSmsInfo returns correct value.
   CallGetAndroidSmsInfo(false /* expected_enabled */,
                         android_sms::GetAndroidMessagesURL(
@@ -1027,6 +1239,48 @@ TEST_F(MultideviceHandlerTest, GetAndroidSmsInfo) {
       android_sms::GetAndroidMessagesURL(
           true /* use_install_url */,
           android_sms::PwaDomain::kStaging) /* expected_url */);
+}
+
+TEST_F(MultideviceHandlerTest, PageContentDataWhenEcheSWADisabled) {
+  InitWithFeatures(
+      /* enabled_features */ {chromeos::features::kPhoneHub},
+      /* disabled_features */ {chromeos::features::kEcheSWA});
+
+  multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap
+      feature_states_map = GenerateDefaultFeatureStatesMap();
+
+  feature_states_map[multidevice_setup::mojom::Feature::kEche] =
+      multidevice_setup::mojom::FeatureState::kProhibitedByPolicy;
+  SimulateFeatureStatesUpdate(feature_states_map);
+}
+
+TEST_F(MultideviceHandlerTest, PageContentDataWhenPhoneHubCameraRollDisabled) {
+  InitWithFeatures(
+      /* enabled_features */ {chromeos::features::kPhoneHub},
+      /* disabled_features */ {chromeos::features::kPhoneHubCameraRoll});
+
+  multidevice_setup::MultiDeviceSetupClient::FeatureStatesMap
+      feature_states_map = GenerateDefaultFeatureStatesMap();
+
+  feature_states_map[multidevice_setup::mojom::Feature::kPhoneHubCameraRoll] =
+      multidevice_setup::mojom::FeatureState::kProhibitedByPolicy;
+  SimulateFeatureStatesUpdate(feature_states_map);
+}
+
+TEST_F(MultideviceHandlerTest, EnableScreenLockChanged) {
+  InitWithFeatures(/* enabled_features */ {chromeos::features::kPhoneHub, chromeos::features::kEcheSWA},
+                   {});
+  SetUpHandlerWithEmptyManagers();
+
+  SimulateEnableScreenLockChanged();
+}
+
+TEST_F(MultideviceHandlerTest, ScreenLockStatusChanged) {
+  InitWithFeatures(/* enabled_features */ {chromeos::features::kPhoneHub, chromeos::features::kEcheSWA},
+                   {});
+  SetUpHandlerWithEmptyManagers();
+
+  SimulateScreenLockStatusChanged();
 }
 
 }  // namespace settings

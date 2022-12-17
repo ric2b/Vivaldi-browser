@@ -20,7 +20,6 @@
 #include "ash/strings/grit/ash_strings.h"
 #include "ash/style/ash_color_provider.h"
 #include "ash/style/icon_button.h"
-#include "ash/style/system_shadow.h"
 #include "ash/system/model/system_tray_model.h"
 #include "ash/system/palette/palette_tool_manager.h"
 #include "ash/system/palette/palette_utils.h"
@@ -165,7 +164,7 @@ class TitleView : public views::View {
       AddChildView(std::make_unique<BatteryView>());
 
       auto* separator = AddChildView(std::make_unique<views::Separator>());
-      separator->SetPreferredHeight(GetPreferredSize().height());
+      separator->SetPreferredLength(GetPreferredSize().height());
       separator->SetColor(AshColorProvider::Get()->GetContentLayerColor(
           AshColorProvider::ContentLayerType::kSeparatorColor));
     }
@@ -298,8 +297,9 @@ bool PaletteTray::ShouldShowPalette() const {
 
 bool PaletteTray::ShouldShowOnDisplay() {
   if (stylus_utils::IsPaletteEnabledOnEveryDisplay() ||
-      display_has_stylus_for_testing_)
+      display_has_stylus_for_testing_) {
     return true;
+  }
 
   // |widget| is null when this function is called from PaletteTray constructor
   // before it is added to a widget.
@@ -322,6 +322,7 @@ bool PaletteTray::ShouldShowOnDisplay() {
     ids.insert(ids.end(), mirrors.begin(), mirrors.end());
     ids.push_back(display_manager->mirroring_source_id());
   }
+
   for (const ui::TouchscreenDevice& device :
        ui::DeviceDataManager::GetInstance()->GetTouchscreenDevices()) {
     if (device.has_stylus && std::find(ids.begin(), ids.end(),
@@ -523,7 +524,6 @@ void PaletteTray::HidePalette() {
   is_bubble_auto_opened_ = false;
   num_actions_in_bubble_ = 0;
   bubble_.reset();
-  shadow_.reset();
 
   shelf()->UpdateAutoHideState();
 }
@@ -646,7 +646,6 @@ void PaletteTray::ShowBubble() {
   init_params.preferred_width = kPaletteWidth;
   init_params.close_on_deactivate = true;
   init_params.translucent = true;
-  init_params.has_shadow = false;
   init_params.corner_radius = kTrayItemCornerRadius;
   init_params.reroute_event_handler = true;
 
@@ -691,12 +690,6 @@ void PaletteTray::ShowBubble() {
   // Show the bubble.
   bubble_ = std::make_unique<TrayBubbleWrapper>(this, bubble_view);
   SetIsActive(true);
-
-  // Create a system shadow for the tray bubble.
-  shadow_ = SystemShadow::CreateShadowForWidget(
-      bubble_->GetBubbleWidget(), SystemShadow::Type::kElevation12);
-  shadow_->SetRoundedCornerRadius(kTrayItemCornerRadius);
-  shadow_->SetContentBounds(gfx::Rect(bubble_view->GetBoundsInScreen().size()));
 }
 
 TrayBubbleView* PaletteTray::GetBubbleView() {

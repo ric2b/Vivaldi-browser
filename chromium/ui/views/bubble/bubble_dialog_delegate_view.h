@@ -242,6 +242,11 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
     color_explicitly_set_ = true;
   }
 
+  void set_force_create_contents_background(
+      bool force_create_contents_background) {
+    force_create_contents_background_ = force_create_contents_background;
+  }
+
   void set_title_margins(const gfx::Insets& title_margins) {
     title_margins_ = title_margins;
   }
@@ -287,15 +292,6 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // Override this method if you want to position the bubble regardless of its
   // anchor, while retaining the other anchor view logic.
   virtual gfx::Rect GetBubbleBounds();
-
-  // Update the button highlight, which may be the anchor view or an explicit
-  // view set in |highlighted_button_tracker_|. This can be overridden to
-  // provide different highlight effects.
-  //
-  // TODO(ellyjones): Remove this; it is only used in one place, to disable
-  // highlighting the button, but this is trivial to achieve using other
-  // methods.
-  virtual void UpdateHighlightedButton(bool highlight);
 
   // Override this to perform initialization after the Widget is created but
   // before it is shown.
@@ -371,6 +367,8 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // after losing it.
   void NotifyAnchoredBubbleIsPrimary();
 
+  void UpdateHighlightedButton(bool highlight);
+
   void SetAnchoredDialogKey();
 
   gfx::Insets title_margins_;
@@ -416,6 +414,10 @@ class VIEWS_EXPORT BubbleDialogDelegate : public DialogDelegate {
   // ClientViews always paint to a layer.
   // TODO(tluk): Flip this to true for all bubbles.
   bool paint_client_to_layer_ = false;
+
+  // If true, contents view will be forced to create a solid color background in
+  // UpdateColorsFromTheme().
+  bool force_create_contents_background_ = false;
 
 #if BUILDFLAG(IS_MAC)
   // Special handler for close_on_deactivate() on Mac. Window (de)activation is

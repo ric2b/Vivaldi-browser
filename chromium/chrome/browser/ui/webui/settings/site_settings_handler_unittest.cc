@@ -190,7 +190,8 @@ class ContentSettingSourceSetter {
   ContentSettingsType content_type_;
 };
 
-class SiteSettingsHandlerTest : public testing::Test {
+class SiteSettingsHandlerTest : public testing::Test,
+                                public testing::WithParamInterface<bool> {
  public:
   SiteSettingsHandlerTest()
       : kNotifications(site_settings::ContentSettingsTypeToGroupName(
@@ -602,8 +603,14 @@ class SiteSettingsHandlerTest : public testing::Test {
 #if BUILDFLAG(IS_CHROMEOS_ASH)
   std::unique_ptr<user_manager::ScopedUserManager> user_manager_enabler_;
 #endif
-  browsing_topics::MockBrowsingTopicsService* mock_browsing_topics_service_;
+  raw_ptr<browsing_topics::MockBrowsingTopicsService>
+      mock_browsing_topics_service_;
 };
+
+// True if testing for handle clear unpartitioned usage with HTTPS scheme URL.
+// When set to true, the tests use HTTPS scheme as origin. When set to
+// false, the tests use HTTP scheme as origin.
+INSTANTIATE_TEST_SUITE_P(All, SiteSettingsHandlerTest, testing::Bool());
 
 TEST_F(SiteSettingsHandlerTest, GetAndSetDefault) {
   // Test the JS -> C++ -> JS callback path for getting and setting defaults.
@@ -724,7 +731,7 @@ TEST_F(SiteSettingsHandlerTest, GetAllSites) {
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
       auto_blocker->GetEmbargoResult(url4, ContentSettingsType::NOTIFICATIONS)
-          .content_setting);
+          ->content_setting);
   handler()->HandleGetAllSites(get_all_sites_args.GetList());
 
   {
@@ -762,12 +769,11 @@ TEST_F(SiteSettingsHandlerTest, GetAllSites) {
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
       auto_blocker->GetEmbargoResult(url3, ContentSettingsType::NOTIFICATIONS)
-          .content_setting);
+          ->content_setting);
   clock.Advance(base::Days(8));
-  EXPECT_EQ(
-      CONTENT_SETTING_ASK,
+  EXPECT_FALSE(
       auto_blocker->GetEmbargoResult(url3, ContentSettingsType::NOTIFICATIONS)
-          .content_setting);
+          .has_value());
 
   handler()->HandleGetAllSites(get_all_sites_args.GetList());
   {
@@ -791,12 +797,11 @@ TEST_F(SiteSettingsHandlerTest, GetAllSites) {
   EXPECT_EQ(
       CONTENT_SETTING_BLOCK,
       auto_blocker->GetEmbargoResult(url5, ContentSettingsType::NOTIFICATIONS)
-          .content_setting);
+          ->content_setting);
   clock.Advance(base::Days(8));
-  EXPECT_EQ(
-      CONTENT_SETTING_ASK,
+  EXPECT_FALSE(
       auto_blocker->GetEmbargoResult(url5, ContentSettingsType::NOTIFICATIONS)
-          .content_setting);
+          .has_value());
 
   handler()->HandleGetAllSites(get_all_sites_args.GetList());
   {
@@ -1243,7 +1248,7 @@ TEST_F(SiteSettingsHandlerTest, ResetCategoryPermissionForEmbargoedOrigins) {
         CONTENT_SETTING_BLOCK,
         auto_blocker
             ->GetEmbargoResult(GURL(kOriginToEmbargo), kPermissionNotifications)
-            .content_setting);
+            ->content_setting);
   }
 
   // Check there are 2 blocked origins.
@@ -2596,13 +2601,14 @@ TEST_F(SiteSettingsHandlerTest, HandleClearEtldPlus1DataAndCookies) {
   EXPECT_EQ(0U, storage_and_cookie_list.size());
 }
 
-TEST_F(SiteSettingsHandlerTest, HandleClearUnpartitionedUsage) {
+TEST_P(SiteSettingsHandlerTest, HandleClearUnpartitionedUsage) {
   SetUpCookiesTreeModel();
 
   EXPECT_EQ(31, handler()->cookies_tree_model_->GetRoot()->GetTotalNodeCount());
 
   base::Value args(base::Value::Type::LIST);
-  args.Append("https://www.example.com/");
+  args.Append(GetParam() ? "https://www.example.com/"
+                         : "http://www.example.com/");
   handler()->HandleClearUnpartitionedUsage(args.GetList());
 
   // Confirm that only the unpartitioned items for example.com have been
@@ -2709,6 +2715,18 @@ TEST_F(SiteSettingsHandlerTest, ClearClientHints) {
   EXPECT_EQ(ContentSettingsPattern::Wildcard(),
             client_hints_settings.at(0).secondary_pattern);
   EXPECT_EQ(client_hints_dictionary, client_hints_settings.at(0).setting_value);
+
+  // Clear unpartitioned usage data through HTTPS scheme, make sure https site
+  // client hints have been cleared when the specific origin HTTPS scheme
+  // exist.
+  args.ClearList();
+  args.Append("http://www.google.com/");
+  handler()->HandleClearUnpartitionedUsage(args.GetList());
+
+  // Validate the client hint has been cleared.
+  host_content_settings_map->GetSettingsForOneType(
+      ContentSettingsType::CLIENT_HINTS, &client_hints_settings);
+  EXPECT_EQ(0U, client_hints_settings.size());
 }
 
 TEST_F(SiteSettingsHandlerTest, HandleClearPartitionedUsage) {
@@ -2898,10 +2916,7 @@ TEST_F(SiteSettingsHandlerTest, NonTreeModelDeletion) {
   handler()->HandleClearEtldPlus1DataAndCookies(args.GetList());
 
   auto* browsing_data_remover = profile()->GetBrowsingDataRemover();
-  EXPECT_EQ(content::BrowsingDataRemover::DATA_TYPE_INTEREST_GROUPS |
-                content::BrowsingDataRemover::DATA_TYPE_AGGREGATION_SERVICE |
-                content::BrowsingDataRemover::DATA_TYPE_CONVERSIONS |
-                content::BrowsingDataRemover::DATA_TYPE_TRUST_TOKENS,
+  EXPECT_EQ(content::BrowsingDataRemover::DATA_TYPE_PRIVACY_SANDBOX,
             browsing_data_remover->GetLastUsedRemovalMaskForTesting());
   EXPECT_EQ(base::Time::Min(),
             browsing_data_remover->GetLastUsedBeginTimeForTesting());

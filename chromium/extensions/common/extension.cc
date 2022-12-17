@@ -284,6 +284,8 @@ scoped_refptr<Extension> Extension::Create(const base::FilePath& path,
   }
 
   extension->guid_ = base::GUID::GenerateRandomV4();
+  extension->dynamic_url_ = Extension::GetBaseURLFromExtensionId(
+      extension->guid_.AsLowercaseString());
 
   return extension;
 }
@@ -480,6 +482,8 @@ void Extension::SetManifestData(const std::string& key,
 void Extension::SetGUID(const ExtensionGuid& guid) {
   guid_ = base::GUID::ParseLowercase(guid);
   DCHECK(guid_.is_valid());
+  dynamic_url_ =
+      Extension::GetBaseURLFromExtensionId(guid_.AsLowercaseString());
 }
 
 const ExtensionGuid& Extension::guid() const {
@@ -725,8 +729,7 @@ bool Extension::LoadExtent(const char* key,
     *error = base::ASCIIToUTF16(list_error);
     return false;
   }
-  base::Value::ConstListView pattern_list =
-      temp_pattern_value->GetListDeprecated();
+  const base::Value::List& pattern_list = temp_pattern_value->GetList();
   for (size_t i = 0; i < pattern_list.size(); ++i) {
     std::string pattern_string;
     if (pattern_list[i].is_string()) {

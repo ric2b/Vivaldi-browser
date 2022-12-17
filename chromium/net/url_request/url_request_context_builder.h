@@ -33,6 +33,7 @@
 #include "net/base/network_change_notifier.h"
 #include "net/base/network_delegate.h"
 #include "net/base/proxy_delegate.h"
+#include "net/disk_cache/disk_cache.h"
 #include "net/dns/host_resolver.h"
 #include "net/http/http_network_session.h"
 #include "net/net_buildflags.h"
@@ -109,17 +110,22 @@ class NET_EXPORT URLRequestContextBuilder {
     ~HttpCacheParams();
 
     // The type of HTTP cache. Default is IN_MEMORY.
-    Type type;
+    Type type = IN_MEMORY;
 
     // The max size of the cache in bytes. Default is algorithmically determined
     // based off available disk space.
-    int max_size;
+    int max_size = 0;
 
     // Whether or not we need to reset the cache due to an experiment change.
-    bool reset_cache;
+    bool reset_cache = false;
 
     // The cache path (when type is DISK).
     base::FilePath path;
+
+    // A factory to broker file operations. This is needed for network process
+    // sandboxing in some platforms.
+    scoped_refptr<disk_cache::BackendFileOperationsFactory>
+        file_operations_factory;
 
 #if BUILDFLAG(IS_ANDROID)
     // If this is set, will override the default ApplicationStatusListener. This

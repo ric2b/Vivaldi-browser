@@ -57,6 +57,7 @@ class Menubar : public views::MenuDelegate {
   bool VivaldiShouldTryPositioningInMenuBar() const override;
   void ExecuteCommand(int id, int mouse_event_flags) override;
   bool IsItemChecked(int id) const override;
+  bool IsCommandEnabled(int id) const override;
   bool GetAccelerator(int id, ui::Accelerator* accelerator) const override;
 
   void WillShowMenu(views::MenuItemView* menu) override;

@@ -11,20 +11,26 @@
 #include "base/containers/flat_set.h"
 #include "base/task/sequenced_task_runner.h"
 #include "base/time/clock.h"
-#include "components/optimization_guide/proto/models.pb.h"
+#include "components/segmentation_platform/internal/execution/execution_request.h"
 #include "components/segmentation_platform/internal/execution/model_execution_manager_impl.h"
+#include "components/segmentation_platform/internal/input_context.h"
 #include "components/segmentation_platform/internal/scheduler/model_execution_scheduler.h"
+#include "components/segmentation_platform/public/proto/segmentation_platform.pb.h"
+
+class PrefService;
 
 namespace segmentation_platform {
-
-struct PlatformOptions;
+namespace processing {
 class FeatureListQueryProcessor;
+class InputDelegateHolder;
+}
+
+struct Config;
+struct PlatformOptions;
 class ModelExecutor;
 class ModelProviderFactory;
-class SegmentInfoDatabase;
-class SignalDatabase;
 class SignalHandler;
-class SignalStorageConfig;
+class StorageService;
 class TrainingDataCollector;
 
 // Handles feature processing and model execution.
@@ -37,65 +43,59 @@ class ExecutionService {
   ExecutionService& operator=(ExecutionService&) = delete;
 
   void InitForTesting(
-      std::unique_ptr<FeatureListQueryProcessor> feature_processor,
+      std::unique_ptr<processing::FeatureListQueryProcessor> feature_processor,
       std::unique_ptr<ModelExecutor> executor,
-      std::unique_ptr<ModelExecutionScheduler> scheduler);
+      std::unique_ptr<ModelExecutionScheduler> scheduler,
+      std::unique_ptr<ModelExecutionManager> execution_manager);
 
   void Initialize(
-      SignalDatabase* signal_database,
-      SegmentInfoDatabase* segment_info_database,
-      SignalStorageConfig* signal_storage_config,
+      StorageService* storage_service,
       SignalHandler* signal_handler,
       base::Clock* clock,
       ModelExecutionManager::SegmentationModelUpdatedCallback callback,
       scoped_refptr<base::SequencedTaskRunner> task_runner,
-      const base::flat_set<OptimizationTarget>& all_segment_ids,
+      const base::flat_set<SegmentId>& all_segment_ids,
       ModelProviderFactory* model_provider_factory,
       std::vector<ModelExecutionScheduler::Observer*>&& observers,
-      const PlatformOptions& platform_options);
+      const PlatformOptions& platform_options,
+      std::unique_ptr<processing::InputDelegateHolder> input_delegate_holder,
+      std::vector<std::unique_ptr<Config>>* configs,
+      PrefService* profile_prefs);
 
   // Called whenever a new or updated model is available. Must be a valid
   // SegmentInfo with valid metadata and features.
   void OnNewModelInfoReady(const proto::SegmentInfo& segment_info);
 
-  using ModelExecutionCallback =
-      base::OnceCallback<void(const std::pair<float, ModelExecutionStatus>&)>;
-  struct ExecutionRequest {
-    ExecutionRequest();
-    ~ExecutionRequest();
-
-    // Required: The segment info to use for model execution.
-    const proto::SegmentInfo* segment_info = nullptr;
-    // Required: The model provider used to execute the model.
-    ModelProvider* model_provider = nullptr;
-
-    // Save result of execution to the database.
-    bool save_result_to_db = false;
-    // Record metrics for default model instead of optimization_guide based
-    // models.
-    bool record_metrics_for_default = false;
-    // returns result as by callback, to be used when `save_result_to_db` is
-    // false.
-    ModelExecutionCallback callback;
-  };
+  // Gets the model provider for execution.
+  ModelProvider* GetModelProvider(SegmentId segment_id);
 
   void RequestModelExecution(std::unique_ptr<ExecutionRequest> request);
 
   void OverwriteModelExecutionResult(
-      optimization_guide::proto::OptimizationTarget segment_id,
+      proto::SegmentId segment_id,
       const std::pair<float, ModelExecutionStatus>& result);
 
+  // Refreshes model results for all eligible models.
+  void RefreshModelResults();
+
+  // Executes daily maintenance and collection tasks.
+  void RunDailyTasks(bool is_startup);
+
  private:
+  raw_ptr<StorageService> storage_service_{};
+
   // Training/inference input data generation.
-  std::unique_ptr<FeatureListQueryProcessor> feature_list_query_processor_;
+  std::unique_ptr<processing::FeatureListQueryProcessor>
+      feature_list_query_processor_;
 
   // Traing data collection logic.
   std::unique_ptr<TrainingDataCollector> training_data_collector_;
 
+  // Utility to execute model and return result.
   std::unique_ptr<ModelExecutor> model_executor_;
 
   // Model execution.
-  std::unique_ptr<ModelExecutionManagerImpl> model_execution_manager_;
+  std::unique_ptr<ModelExecutionManager> model_execution_manager_;
 
   // Model execution scheduling logic.
   std::unique_ptr<ModelExecutionScheduler> model_execution_scheduler_;

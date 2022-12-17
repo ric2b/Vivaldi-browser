@@ -125,7 +125,6 @@ class FakeWebState : public WebState {
   void SetLastActiveTime(base::Time time);
   void SetBrowserState(BrowserState* browser_state);
   void SetIsRealized(bool value);
-  void SetJSInjectionReceiver(CRWJSInjectionReceiver* injection_receiver);
   void SetTitle(const std::u16string& title);
   void SetContentIsHTML(bool content_is_html);
   void SetContentsMimeType(const std::string& mime_type);
@@ -180,7 +179,6 @@ class FakeWebState : public WebState {
 
  private:
   BrowserState* browser_state_ = nullptr;
-  CRWJSInjectionReceiver* injection_receiver_ = nil;
   NSString* stable_identifier_ = nil;
   bool web_usage_enabled_ = true;
   bool is_realized_ = true;
@@ -212,10 +210,10 @@ class FakeWebState : public WebState {
   PermissionState microphone_permission_state_ = PermissionStateNotAccessible;
 
   // A list of observers notified when page state changes. Weak references.
-  base::ObserverList<WebStateObserver, true>::Unchecked observers_;
+  base::ObserverList<WebStateObserver, true> observers_;
   // All the WebStatePolicyDeciders asked for navigation decision. Weak
   // references.
-  base::ObserverList<WebStatePolicyDecider, true>::Unchecked policy_deciders_;
+  base::ObserverList<WebStatePolicyDecider, true> policy_deciders_;
 
   base::WeakPtrFactory<FakeWebState> weak_factory_{this};
 };

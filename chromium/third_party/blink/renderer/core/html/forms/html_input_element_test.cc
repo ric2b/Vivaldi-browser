@@ -207,7 +207,7 @@ TEST_F(HTMLInputElementTest, RadioKeyDownDCHECKFailure) {
       "<input type=radio name=g><input type=radio name=g>");
   auto& radio1 = To<HTMLInputElement>(*GetDocument().body()->firstChild());
   auto& radio2 = To<HTMLInputElement>(*radio1.nextSibling());
-  radio1.focus();
+  radio1.Focus();
   // Make layout-dirty.
   radio2.setAttribute(html_names::kStyleAttr, "position:fixed");
   KeyboardEventInit* init = KeyboardEventInit::Create();
@@ -276,7 +276,7 @@ TEST_F(HTMLInputElementTest, RepaintAfterClearingFile) {
   ASSERT_TRUE(input->GetLayoutObject());
   EXPECT_FALSE(input->GetLayoutObject()->ShouldCheckForPaintInvalidation());
 
-  input->setValue("");
+  input->SetValue("");
   GetDocument().UpdateStyleAndLayoutTree();
 
   ASSERT_TRUE(input->GetLayoutObject());
@@ -290,7 +290,7 @@ TEST_F(HTMLInputElementTest, UpdateTypeDcheck) {
   doc.body()->remove();
   Element* input = doc.CreateRawElement(html_names::kInputTag);
   doc.documentElement()->appendChild(input);
-  input->focus();
+  input->Focus();
   input->setAttribute(html_names::kTypeAttr, AtomicString("radio"));
   // Test succeeds if the above setAttribute() didn't trigger a DCHECK failure
   // in Document::UpdateFocusAppearanceAfterLayout().
@@ -328,15 +328,15 @@ TEST_P(HTMLInputElementPasswordFieldResetTest, PasswordFieldReset) {
   TestElement().setType(GetParam().new_type);
   GetDocument().UpdateStyleAndLayoutTree();
 
-  TestElement().setValue(GetParam().temporary_value);
+  TestElement().SetValue(GetParam().temporary_value);
   GetDocument().UpdateStyleAndLayoutTree();
 
   EXPECT_CALL(chrome_client(),
               PasswordFieldReset(Truly([this](const HTMLInputElement& e) {
-                return e.isSameNode(&TestElement()) && e.value().IsEmpty();
+                return e.isSameNode(&TestElement()) && e.Value().IsEmpty();
               })))
       .Times(GetParam().expected_call ? 1 : 0);
-  TestElement().setValue("");
+  TestElement().SetValue("");
   GetDocument().UpdateStyleAndLayoutTree();
 }
 

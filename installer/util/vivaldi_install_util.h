@@ -12,8 +12,6 @@
 
 #include "installer/util/vivaldi_install_constants.h"
 
-#include "third_party/abseil-cpp/absl/types/optional.h"
-
 // Installation-related utilities shared by the browser, installer and
 // update_notifier.exe
 
@@ -64,6 +62,10 @@ const base::FilePath& GetDirectoryOfCurrentExe();
 const base::FilePath& GetPathOfCurrentExe();
 
 base::FilePath GetInstallBinaryDir();
+
+// NOTE(igor@vivaldi.com): Ideally this should be in vivaldi_setup_util.h as it
+// is only used by the setup process but to simplify linking we place this here.
+void AppendInstallChildProcessSwitches(base::CommandLine& command_line);
 
 // Get the version of Vivaldi installation in the given directory or in
 // GetInstallBinaryDir() if not given. If there is a pending update, return its

@@ -285,7 +285,7 @@ bool LayoutView::ShouldPlaceBlockDirectionScrollbarOnLogicalLeft() const {
   NOT_DESTROYED();
   LocalFrame& frame = GetFrameView()->GetFrame();
   // See crbug.com/249860
-  if (frame.IsMainFrame())
+  if (frame.IsOutermostMainFrame())
     return false;
   // <body> inherits 'direction' from <html>, so checking style on the body is
   // sufficient.
@@ -914,13 +914,13 @@ void LayoutView::StyleDidChange(StyleDifference diff,
   LayoutBlockFlow::StyleDidChange(diff, old_style);
 
   LocalFrame& frame = GetFrameView()->GetFrame();
-  if (frame.IsMainFrame()) {
+  VisualViewport& visual_viewport = frame.GetPage()->GetVisualViewport();
+  if (frame.IsMainFrame() && visual_viewport.IsActiveViewport()) {
     // |VisualViewport::UsedColorScheme| depends on the LayoutView's used
     // color scheme.
     if (!old_style ||
-        old_style->UsedColorScheme() !=
-            frame.GetPage()->GetVisualViewport().UsedColorScheme()) {
-      frame.GetPage()->GetVisualViewport().UsedColorSchemeChanged();
+        old_style->UsedColorScheme() != visual_viewport.UsedColorScheme()) {
+      visual_viewport.UsedColorSchemeChanged();
     }
   }
 }
@@ -960,7 +960,7 @@ CompositingReasons LayoutView::AdditionalCompositingReasons() const {
   NOT_DESTROYED();
   // TODO(lfg): Audit for portals
   const LocalFrame& frame = frame_view_->GetFrame();
-  if (frame.OwnerLayoutObject() && frame.IsCrossOriginToParentFrame())
+  if (frame.OwnerLayoutObject() && frame.IsCrossOriginToParentOrOuterDocument())
     return CompositingReason::kIFrame;
   return CompositingReason::kNone;
 }

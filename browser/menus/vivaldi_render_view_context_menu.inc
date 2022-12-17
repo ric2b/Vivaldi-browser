@@ -14,6 +14,10 @@
   void VivaldiAppendSearchProvider() {
     AppendSearchProvider();
   }
+  void VivaldiAppendLinkToTextItems() {
+    AppendLinkToTextItems();
+  }
+
   std::vector<base::FilePath>& get_profile_link_paths() {
     return profile_link_paths_;
   }

@@ -7,6 +7,7 @@ package org.chromium.chrome.browser.toolbar.top;
 import android.view.View;
 import android.view.ViewStub;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import org.chromium.base.supplier.BooleanSupplier;
@@ -26,7 +27,7 @@ import org.chromium.chrome.browser.toolbar.menu_button.MenuButtonCoordinator;
  */
 class TabSwitcherModeTTCoordinator {
     private final ViewStub mTabSwitcherToolbarStub;
-    private final ViewStub mTabSwitcherFullscreenToolbarStub;
+    private ViewStub mTabSwitcherFullscreenToolbarStub;
 
     // TODO(twellington): Create a model to hold all of these properties. Consider using
     // LazyConstructionPropertyMcp to collect all of the properties since it is designed to
@@ -50,6 +51,7 @@ class TabSwitcherModeTTCoordinator {
     private final boolean mIsTabletGtsPolishEnabled;
     private final boolean mIsTabToGtsAnimationEnabled;
     private final BooleanSupplier mIsIncognitoModeEnabledSupplier;
+    private final TopToolbarInteractabilityManager mTopToolbarInteractabilityManager;
 
     TabSwitcherModeTTCoordinator(ViewStub tabSwitcherToolbarStub,
             ViewStub tabSwitcherFullscreenToolbarStub, MenuButtonCoordinator menuButtonCoordinator,
@@ -62,6 +64,16 @@ class TabSwitcherModeTTCoordinator {
         mIsTabletGtsPolishEnabled = isTabletGtsPolishEnabled;
         mIsTabToGtsAnimationEnabled = isTabToGtsAnimationEnabled;
         mIsIncognitoModeEnabledSupplier = isIncognitoModeEnabledSupplier;
+        mTopToolbarInteractabilityManager =
+                new TopToolbarInteractabilityManager(enabled -> setNewTabEnabled(enabled));
+    }
+
+    /**
+     * Set stub for GTS fullscreen toolbar.
+     * @param toolbarStub stub to set.
+     */
+    void setFullScreenToolbarStub(ViewStub toolbarStub) {
+        mTabSwitcherFullscreenToolbarStub = toolbarStub;
     }
 
     /**
@@ -198,6 +210,7 @@ class TabSwitcherModeTTCoordinator {
     private TabSwitcherModeTopToolbar maybeInflateActiveToolbar(boolean useFullscreenToolbar) {
         if (useFullscreenToolbar) {
             if (mTabSwitcherFullscreenToolbar == null) {
+                assert mTabSwitcherFullscreenToolbarStub != null;
                 mTabSwitcherFullscreenToolbar =
                         (TabSwitcherModeTopToolbar) mTabSwitcherFullscreenToolbarStub.inflate();
                 initializeToolbar(mTabSwitcherFullscreenToolbar, true);
@@ -261,6 +274,11 @@ class TabSwitcherModeTTCoordinator {
         mActiveTabSwitcherToolbar.setNewTabButtonHighlight(highlight);
     }
 
+    @NonNull
+    TopToolbarInteractabilityManager getTopToolbarInteractabilityManager() {
+        return mTopToolbarInteractabilityManager;
+    }
+
     /**
      * Initialize {@link IncognitoTabModelObserver}, if the new tab variation is enabled. This
      * function will initialize observer, if it is not initialized before.
@@ -300,5 +318,11 @@ class TabSwitcherModeTTCoordinator {
 
         boolean doesExist = mTabModelSelector.getModel(true).getCount() != 0;
         mActiveTabSwitcherToolbar.onIncognitoTabsExistenceChanged(doesExist);
+    }
+
+    private void setNewTabEnabled(boolean enabled) {
+        if (mActiveTabSwitcherToolbar != null) {
+            mActiveTabSwitcherToolbar.setNewTabButtonEnabled(enabled);
+        }
     }
 }

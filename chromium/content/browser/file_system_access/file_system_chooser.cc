@@ -190,6 +190,7 @@ ui::SelectFileDialog::Type ValidateType(ui::SelectFileDialog::Type type) {
 FileSystemChooser::Options::Options(
     ui::SelectFileDialog::Type type,
     blink::mojom::AcceptsTypesInfoPtr accepts_types_info,
+    std::u16string title,
     base::FilePath default_directory,
     base::FilePath suggested_name)
     : type_(ValidateType(type)),
@@ -198,9 +199,12 @@ FileSystemChooser::Options::Options(
       // This value will be updated if the extension of `suggested_name`
       // matches an extension in `accepts_types_info->accepts`.
       default_file_type_index_(file_types_.extensions.empty() ? 0 : 1),
+      title_(std::move(title)),
       default_path_(default_directory.Append(
           ResolveSuggestedNameExtension(std::move(suggested_name),
                                         file_types_))) {}
+
+FileSystemChooser::Options::Options(const Options& other) = default;
 
 base::FilePath FileSystemChooser::Options::ResolveSuggestedNameExtension(
     base::FilePath suggested_name,
@@ -255,7 +259,7 @@ void FileSystemChooser::CreateAndShow(
   }
 
   listener->dialog_->SelectFile(
-      options.type(), /*title=*/std::u16string(), options.default_path(),
+      options.type(), options.title(), options.default_path(),
       &options.file_type_info(), options.default_file_type_index(),
       /*default_extension=*/base::FilePath::StringType(),
       web_contents ? web_contents->GetTopLevelNativeWindow() : nullptr,
@@ -275,13 +279,15 @@ bool FileSystemChooser::IsShellIntegratedExtension(
   base::FilePath::StringType extension_lower =
       base::ToLowerASCII(GetLastExtension(extension));
 
-  // .lnk and .scf files may be used to execute arbitrary code (see
+  // '.lnk' and '.scf' files may be used to execute arbitrary code (see
   // https://nvd.nist.gov/vuln/detail/CVE-2010-2568 and
-  // https://crbug.com/1227995, respectively). .local files are used by Windows
-  // to determine which DLLs to load for an application.
+  // https://crbug.com/1227995, respectively). '.local' files are used by
+  // Windows to determine which DLLs to load for an application. '.url' files
+  // can be used to read arbirtary files (see https://crbug.com/1307930).
   if ((extension_lower == FILE_PATH_LITERAL("lnk")) ||
       (extension_lower == FILE_PATH_LITERAL("local")) ||
-      (extension_lower == FILE_PATH_LITERAL("scf"))) {
+      (extension_lower == FILE_PATH_LITERAL("scf")) ||
+      (extension_lower == FILE_PATH_LITERAL("url"))) {
     return true;
   }
 
@@ -304,6 +310,7 @@ FileSystemChooser::FileSystemChooser(ui::SelectFileDialog::Type type,
       fullscreen_block_(std::move(fullscreen_block)) {}
 
 FileSystemChooser::~FileSystemChooser() {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   if (dialog_)
     dialog_->ListenerDestroyed();
 }
@@ -311,12 +318,14 @@ FileSystemChooser::~FileSystemChooser() {
 void FileSystemChooser::FileSelected(const base::FilePath& path,
                                      int index,
                                      void* params) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   MultiFilesSelected({path}, params);
 }
 
 void FileSystemChooser::MultiFilesSelected(
     const std::vector<base::FilePath>& files,
     void* params) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   MultiFilesSelectedWithExtraInfo(ui::FilePathListToSelectedFileInfoList(files),
                                   params);
 }
@@ -325,12 +334,14 @@ void FileSystemChooser::FileSelectedWithExtraInfo(
     const ui::SelectedFileInfo& file,
     int index,
     void* params) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   MultiFilesSelectedWithExtraInfo({file}, params);
 }
 
 void FileSystemChooser::MultiFilesSelectedWithExtraInfo(
     const std::vector<ui::SelectedFileInfo>& files,
     void* params) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   std::vector<ResultEntry> result;
 
   for (const ui::SelectedFileInfo& file : files) {
@@ -349,6 +360,7 @@ void FileSystemChooser::MultiFilesSelectedWithExtraInfo(
 }
 
 void FileSystemChooser::FileSelectionCanceled(void* params) {
+  DCHECK_CALLED_ON_VALID_SEQUENCE(sequence_checker_);
   RecordFileSelectionResult(type_, 0);
   std::move(callback_).Run(
       file_system_access_error::FromStatus(

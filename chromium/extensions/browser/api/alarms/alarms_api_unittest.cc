@@ -81,7 +81,7 @@ class ExtensionAlarmsTest : public ApiUnitTest {
   // JsAlarms.
   std::vector<std::unique_ptr<JsAlarm>> ToAlarmList(base::Value* value) {
     std::vector<std::unique_ptr<JsAlarm>> list;
-    for (const auto& item : value->GetListDeprecated()) {
+    for (const auto& item : value->GetList()) {
       std::unique_ptr<JsAlarm> alarm(new JsAlarm());
 
       if (!item.is_dict()) {
@@ -320,7 +320,8 @@ class ConsoleLogMessageLocalFrame : public content::FakeLocalFrame {
 TEST_F(ExtensionAlarmsTest, CreateDelayBelowMinimum) {
   // Create an alarm with delay below the minimum accepted value.
   ConsoleLogMessageLocalFrame local_frame;
-  local_frame.Init(contents()->GetMainFrame()->GetRemoteAssociatedInterfaces());
+  local_frame.Init(
+      contents()->GetPrimaryMainFrame()->GetRemoteAssociatedInterfaces());
   base::RunLoop().RunUntilIdle();
   ASSERT_EQ(local_frame.message_count(), 0u);
   CreateAlarm("[\"negative\", {\"delayInMinutes\": -0.2}]");

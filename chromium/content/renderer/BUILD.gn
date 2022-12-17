@@ -245,10 +245,13 @@ target(link_target_type, "renderer") {
     "//cc/mojom",
     "//cc/paint",
     "//components/cast_streaming/public",
+    "//components/cast_streaming/renderer:resource_provider",
     "//components/cast_streaming/renderer:wrapping_renderer_factory_selector",
     "//components/discardable_memory/client",
     "//components/metrics",
     "//components/metrics:single_sample_metrics",
+    "//components/services/screen_ai/buildflags",
+    "//components/services/screen_ai/public/mojom",
     "//components/url_formatter",
     "//components/variations:variations_mojom",
     "//components/variations/net",
@@ -261,9 +264,9 @@ target(link_target_type, "renderer") {
     "//content/common:buildflags",
     "//content/gpu:gpu_sources",
     "//content/public/child:child_sources",
+    "//content/services/auction_worklet:auction_worklet",
     "//content/services/shared_storage_worklet",
     "//crypto",
-    "//crypto:platform",
     "//device/base/synchronization",
     "//device/gamepad/public/cpp:shared_with_blink",
     "//device/gamepad/public/mojom",
@@ -355,6 +358,7 @@ target(link_target_type, "renderer") {
 
     deps += [
       "//media/fuchsia/cdm/client",
+      "//media/fuchsia/video",
       "//third_party/fuchsia-sdk/sdk/pkg/sys_cpp",
     ]
   }
@@ -534,6 +538,10 @@ target(link_target_type, "renderer") {
       "media/win/dcomp_texture_host.h",
       "media/win/dcomp_texture_wrapper_impl.cc",
       "media/win/dcomp_texture_wrapper_impl.h",
+      "media/win/overlay_state_observer_impl.cc",
+      "media/win/overlay_state_observer_impl.h",
+      "media/win/overlay_state_service_provider.cc",
+      "media/win/overlay_state_service_provider.h",
     ]
   }
 
@@ -547,7 +555,7 @@ target(link_target_type, "renderer") {
   if (is_chromeos_ash) {
     deps += [ "//chromeos:chromeos_export" ]
     if (target_cpu == "x64") {
-      deps += [ "//chromeos/memory/userspace_swap" ]
+      deps += [ "//chromeos/ash/components/memory/userspace_swap" ]
     }
   }
 

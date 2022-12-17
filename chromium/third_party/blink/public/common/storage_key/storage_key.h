@@ -8,14 +8,13 @@
 #include <iosfwd>
 #include <string>
 
-#include "base/strings/string_piece.h"
+#include "base/strings/string_piece_forward.h"
 #include "base/unguessable_token.h"
 #include "net/base/schemeful_site.h"
 #include "net/cookies/site_for_cookies.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
 #include "third_party/blink/public/common/common_export.h"
 #include "third_party/blink/public/mojom/storage_key/ancestor_chain_bit.mojom.h"
-#include "url/gurl.h"
 #include "url/origin.h"
 
 namespace blink {
@@ -160,9 +159,8 @@ class BLINK_COMMON_EXPORT StorageKey {
 
   // Returns a copy of what this storage key would have been if
   // `kThirdPartyStoragePartitioning` were enabled. This is a convenience
-  // function for callsites that benefit from future functionality that
-  // should be removed when storage partitioning is fully launched.
-  // TODO(crbug.com/1159586): Add support in BlinkStorageKey if needed.
+  // function for callsites that benefit from future functionality.
+  // TODO(crbug.com/1159586): Remove when no longer needed.
   StorageKey CopyWithForceEnabledThirdPartyStoragePartitioning() const {
     StorageKey storage_key = *this;
     storage_key.top_level_site_ =
@@ -234,9 +232,8 @@ class BLINK_COMMON_EXPORT StorageKey {
 
   // Stores the value `top_level_site_` would have had if
   // `kThirdPartyStoragePartitioning` were enabled. This isn't used in
-  // serialization or comparison, and this information is lost if you convert
-  // to a BlinkStorageKey or send it via mojom.
-  // TODO(crbug.com/1159586): Add support in BlinkStorageKey if needed.
+  // serialization or comparison.
+  // TODO(crbug.com/1159586): Remove when no longer needed.
   net::SchemefulSite top_level_site_if_third_party_enabled_;
 
   // An optional nonce, forcing a partitioned storage from anything else. Used
@@ -247,14 +244,15 @@ class BLINK_COMMON_EXPORT StorageKey {
   // kCrossSite if any frame in the current frame's ancestor chain is
   // cross-site with the current frame. kSameSite if entire ancestor
   // chain is same-site with the current frame. Used by service workers.
-  blink::mojom::AncestorChainBit ancestor_chain_bit_;
+  blink::mojom::AncestorChainBit ancestor_chain_bit_{
+      blink::mojom::AncestorChainBit::kSameSite};
 
   // Stores the value `ancestor_chain_bit_` would have had if
   // `kThirdPartyStoragePartitioning` were enabled. This isn't used in
-  // serialization or comparison, and this information is lost if you convert
-  // to a BlinkStorageKey or send it via mojom.
-  // TODO(crbug.com/1159586): Add support in BlinkStorageKey if needed.
-  blink::mojom::AncestorChainBit ancestor_chain_bit_if_third_party_enabled_;
+  // serialization or comparison.
+  // TODO(crbug.com/1159586): Remove when no longer needed.
+  blink::mojom::AncestorChainBit ancestor_chain_bit_if_third_party_enabled_{
+      blink::mojom::AncestorChainBit::kSameSite};
 };
 
 BLINK_COMMON_EXPORT

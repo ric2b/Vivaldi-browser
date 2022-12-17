@@ -1,5 +1,8 @@
 include_rules = [
+  "+chromeos/crosapi/cpp/crosapi_constants.h",
+  "+chromeos/lacros/lacros_paths.h",
   "+components/vector_icons",
+  "+components/version_info",
   "+media/media_buildflags.h",
   "+net",
   "+skia/ext",

@@ -71,7 +71,6 @@ if (enable_pdf) {
       "accessibility.cc",
       "accessibility.h",
       "chunk_stream.h",
-      "content_restriction.h",
       "document_attachment_info.cc",
       "document_attachment_info.h",
       "document_layout.cc",
@@ -158,6 +157,7 @@ if (enable_pdf) {
     deps = [
       ":accessibility",
       ":buildflags",
+      ":content_restriction",
       ":features",
       ":ppapi_migration",
       "//base",
@@ -201,6 +201,7 @@ if (enable_pdf) {
 
     deps = [
       ":accessibility",
+      ":content_restriction",
       ":internal",
       ":pdf",
       ":ppapi_migration",
@@ -208,6 +209,11 @@ if (enable_pdf) {
       "//third_party/pdfium",
       "//ui/base",
     ]
+  }
+
+  source_set("content_restriction") {
+    # Exists separately to expose this header for testing.
+    public = [ "content_restriction.h" ]
   }
 
   source_set("accessibility") {
@@ -240,10 +246,6 @@ if (enable_pdf) {
     visibility = [ ":*" ]
 
     sources = [
-      "ppapi_migration/bitmap.cc",
-      "ppapi_migration/bitmap.h",
-      "ppapi_migration/graphics.cc",
-      "ppapi_migration/graphics.h",
       "ppapi_migration/result_codes.h",
       "ppapi_migration/url_loader.cc",
       "ppapi_migration/url_loader.h",
@@ -253,13 +255,9 @@ if (enable_pdf) {
 
     deps = [
       "//base",
-      "//printing/mojom",
-      "//skia",
+      "//net",
       "//third_party/blink/public:blink",
-      "//third_party/blink/public/common:headers",
-      "//ui/base",
-      "//ui/base/cursor/mojom:cursor_type",
-      "//ui/gfx",
+      "//url",
     ]
   }
 
@@ -279,8 +277,6 @@ if (enable_pdf) {
       "pdf_view_web_plugin.cc",
       "post_message_receiver.cc",
       "post_message_receiver.h",
-      "post_message_sender.cc",
-      "post_message_sender.h",
       "v8_value_converter.h",
     ]
 
@@ -292,6 +288,8 @@ if (enable_pdf) {
 
     deps = [
       ":accessibility",
+      ":buildflags",
+      ":content_restriction",
       ":internal",
       ":ppapi_migration",
       "//base",
@@ -305,7 +303,6 @@ if (enable_pdf) {
       "//third_party/blink/public/common:headers",
       "//ui/base/cursor",
       "//ui/base/cursor/mojom:cursor_type",
-      "//ui/display",
       "//ui/events/blink",
       "//v8",
     ]
@@ -331,6 +328,7 @@ if (enable_pdf) {
       ":internal",
       ":ppapi_migration",
       "//base",
+      "//cc:test_support",
       "//testing/gmock",
       "//testing/gtest",
       "//third_party/blink/public/common:headers",
@@ -340,7 +338,7 @@ if (enable_pdf) {
   }
 
   if (is_linux || is_chromeos) {
-    # TODO(crbug.com/702993): After PPAPI deprecation, there will only be one
+    # TODO(crbug.com/1302059): After PPAPI deprecation, there will only be one
     # caller left. Move inside the file with the caller.
     static_library("font_table_linux") {
       sources = [ "font_table_linux.cc" ]
@@ -363,6 +361,7 @@ if (enable_pdf) {
       "draw_utils/coordinates_unittest.cc",
       "file_extension_unittest.cc",
       "page_orientation_unittest.cc",
+      "paint_manager_unittest.cc",
       "parsed_params_unittest.cc",
       "pdf_transform_unittest.cc",
       "pdf_utils/dates_unittest.cc",
@@ -378,7 +377,6 @@ if (enable_pdf) {
       "pdfium/pdfium_print_unittest.cc",
       "pdfium/pdfium_test_base.cc",
       "pdfium/pdfium_test_base.h",
-      "ppapi_migration/graphics_unittest.cc",
       "ppapi_migration/url_loader_unittest.cc",
       "range_set_unittest.cc",
       "test/run_all_unittests.cc",
@@ -393,6 +391,7 @@ if (enable_pdf) {
       ":accessibility",
       ":assert_enums",
       ":buildflags",
+      ":content_restriction",
       ":features",
       ":internal",
       ":pdf",

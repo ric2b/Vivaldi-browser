@@ -355,6 +355,11 @@ public class BookmarkBridge {
 
         /** @return (Vivaldi) GUID of item */
         public String getGUID() { return mGUID; }
+
+        /** @return (Vivaldi) Whether this is a default (pre-installed) bookmark. */
+        public boolean isDefaultBookmark() {
+            return (mThumbnailPath != null) && (mThumbnailPath.startsWith("/resources"));
+        }
     }
 
     /**

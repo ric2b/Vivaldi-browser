@@ -53,7 +53,7 @@
 // Reauthentication module used by passwords export and password details.
 @property(nonatomic, strong) ReauthenticationModule* reauthModule;
 
-// The dispatcher used by |viewController|.
+// The dispatcher used by `viewController`.
 @property(nonatomic, weak)
     id<ApplicationCommands, BrowserCommands, BrowsingDataCommands>
         dispatcher;
@@ -140,6 +140,7 @@
 }
 
 - (void)stop {
+  self.passwordsViewController.delegate = nil;
   self.passwordsViewController = nil;
 
   [self.passwordIssuesCoordinator stop];

@@ -49,7 +49,6 @@
 #include "components/custom_handlers/protocol_handler_registry.h"
 #include "components/infobars/content/content_infobar_manager.h"
 #include "components/permissions/permission_decision_auto_blocker.h"
-#include "components/permissions/permission_manager.h"
 #include "components/permissions/permission_request_manager.h"
 #include "components/permissions/permission_result.h"
 #include "components/permissions/permission_uma_util.h"
@@ -64,6 +63,7 @@
 #include "components/vector_icons/vector_icons.h"
 #include "content/public/browser/notification_service.h"
 #include "content/public/browser/page.h"
+#include "content/public/browser/permission_controller.h"
 #include "content/public/browser/render_process_host.h"
 #include "content/public/browser/render_view_host.h"
 #include "content/public/browser/weak_document_ptr.h"
@@ -76,6 +76,7 @@
 #include "services/network/public/cpp/is_potentially_trustworthy.h"
 #include "third_party/blink/public/common/associated_interfaces/associated_interface_provider.h"
 #include "third_party/blink/public/common/loader/network_utils.h"
+#include "third_party/blink/public/common/permissions/permission_utils.h"
 #include "ui/base/l10n/l10n_util.h"
 #include "ui/base/resource/resource_bundle.h"
 #include "ui/base/window_open_disposition.h"
@@ -242,6 +243,9 @@ void ContentSettingSimpleBubbleModel::SetTitle() {
       {ContentSettingsType::GEOLOCATION, IDS_BLOCKED_GEOLOCATION_TITLE},
       {ContentSettingsType::MIDI_SYSEX, IDS_BLOCKED_MIDI_SYSEX_TITLE},
       {ContentSettingsType::SENSORS, IDS_BLOCKED_SENSORS_TITLE},
+#if defined(VIVALDI_BUILD)
+      {ContentSettingsType::AUTOPLAY, IDS_BLOCKED_AUTOPLAY_TITLE},
+#endif  // VIVALDI_BUILD
   };
   // Fields as for kBlockedTitleIDs, above.
   static const ContentSettingsTypeIdEntry kAccessedTitleIDs[] = {
@@ -250,6 +254,9 @@ void ContentSettingSimpleBubbleModel::SetTitle() {
       {ContentSettingsType::GEOLOCATION, IDS_ALLOWED_GEOLOCATION_TITLE},
       {ContentSettingsType::MIDI_SYSEX, IDS_ALLOWED_MIDI_SYSEX_TITLE},
       {ContentSettingsType::SENSORS, IDS_ALLOWED_SENSORS_TITLE},
+#if defined(VIVALDI_BUILD)
+      {ContentSettingsType::AUTOPLAY, IDS_ALLOWED_AUTOPLAY_TITLE},
+#endif  // VIVALDI_BUILD
   };
   const ContentSettingsTypeIdEntry* title_ids = kBlockedTitleIDs;
   size_t num_title_ids = std::size(kBlockedTitleIDs);
@@ -284,6 +291,9 @@ void ContentSettingSimpleBubbleModel::SetMessage() {
        base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses)
            ? IDS_BLOCKED_SENSORS_MESSAGE
            : IDS_BLOCKED_MOTION_SENSORS_MESSAGE},
+#if defined(VIVALDI_BUILD)
+      {ContentSettingsType::AUTOPLAY, IDS_BLOCKED_AUTOPLAY_TITLE},
+#endif  // VIVALDI_BUILD
   };
   // Fields as for kBlockedMessageIDs, above.
   const ContentSettingsTypeIdEntry kAccessedMessageIDs[] = {
@@ -296,6 +306,9 @@ void ContentSettingSimpleBubbleModel::SetMessage() {
        base::FeatureList::IsEnabled(features::kGenericSensorExtraClasses)
            ? IDS_ALLOWED_SENSORS_MESSAGE
            : IDS_ALLOWED_MOTION_SENSORS_MESSAGE},
+#if defined(VIVALDI_BUILD)
+      {ContentSettingsType::AUTOPLAY, IDS_ALLOWED_AUTOPLAY_TITLE},
+#endif  // VIVALDI_BUILD
   };
   const ContentSettingsTypeIdEntry* message_ids = kBlockedMessageIDs;
   size_t num_message_ids = std::size(kBlockedMessageIDs);
@@ -1005,15 +1018,15 @@ void ContentSettingMediaStreamBubbleModel::SetRadioGroup() {
           CameraAccessed() ? IDS_BLOCKED_MEDIASTREAM_MIC_AND_CAMERA_NO_ACTION
                            : IDS_BLOCKED_MEDIASTREAM_MIC_NO_ACTION;
   } else {
-    permissions::PermissionManager* permission_manager =
-        permissions::PermissionsClient::Get()->GetPermissionManager(
-            web_contents()->GetBrowserContext());
-    permissions::PermissionResult pan_tilt_zoom_permission =
-        permission_manager->GetPermissionStatusForFrame(
-            ContentSettingsType::CAMERA_PAN_TILT_ZOOM,
-            &GetPage().GetMainDocument(), url);
     bool has_pan_tilt_zoom_permission_granted =
-        pan_tilt_zoom_permission.content_setting == CONTENT_SETTING_ALLOW;
+        web_contents()
+            ->GetBrowserContext()
+            ->GetPermissionController()
+            ->GetPermissionStatusForCurrentDocument(
+                blink::PermissionType::CAMERA_PAN_TILT_ZOOM,
+                &GetPage().GetMainDocument()) ==
+        blink::mojom::PermissionStatus::GRANTED;
+
     if (MicrophoneAccessed() && CameraAccessed()) {
       radio_allow_label_id =
           has_pan_tilt_zoom_permission_granted
@@ -1744,12 +1757,6 @@ void ContentSettingQuietRequestBubbleModel::OnCancelButtonClicked() {
   }
 }
 
-void ContentSettingQuietRequestBubbleModel::OnBubbleDismissedByUser() {
-  if (on_bubble_dismissed_by_user_callback_) {
-    std::move(on_bubble_dismissed_by_user_callback_).Run();
-  }
-}
-
 // ContentSettingBubbleModel ---------------------------------------------------
 
 // This class must be placed last because it needs the definition of the other
@@ -1797,7 +1804,10 @@ ContentSettingBubbleModel::CreateContentSettingBubbleModel(
       content_type == ContentSettingsType::SOUND ||
       content_type == ContentSettingsType::CLIPBOARD_READ_WRITE ||
       content_type == ContentSettingsType::MIDI_SYSEX ||
-      content_type == ContentSettingsType::SENSORS) {
+#if defined(VIVALDI_BUILD)
+      content_type == ContentSettingsType::AUTOPLAY ||
+#endif  // defined(VIVALDI_BUILD)
+    content_type == ContentSettingsType::SENSORS) {
     return std::make_unique<ContentSettingSingleRadioGroup>(
         delegate, web_contents, content_type);
   }

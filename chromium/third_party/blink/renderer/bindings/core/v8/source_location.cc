@@ -193,7 +193,7 @@ void SourceLocation::WriteIntoTrace(perfetto::TracedValue context) const {
   // TODO(altimin): Add TracedValue support to v8::StringView and remove
   // ToCoreString calls.
   dict.Add("functionName", ToCoreString(stack_trace_->topFunctionName()));
-  dict.Add("scriptId", stack_trace_->topScriptId());
+  dict.Add("scriptId", String::Number(stack_trace_->topScriptId()));
   dict.Add("url", ToCoreString(stack_trace_->topSourceURL()));
   dict.Add("lineNumber", stack_trace_->topLineNumber());
   dict.Add("columnNumber", stack_trace_->topColumnNumber());
@@ -201,9 +201,8 @@ void SourceLocation::WriteIntoTrace(perfetto::TracedValue context) const {
 
 std::unique_ptr<SourceLocation> SourceLocation::Clone() const {
   return base::WrapUnique(new SourceLocation(
-      url_.IsolatedCopy(), function_.IsolatedCopy(), line_number_,
-      column_number_, stack_trace_ ? stack_trace_->clone() : nullptr,
-      script_id_));
+      url_, function_, line_number_, column_number_,
+      stack_trace_ ? stack_trace_->clone() : nullptr, script_id_));
 }
 
 std::unique_ptr<v8_inspector::protocol::Runtime::API::StackTrace>

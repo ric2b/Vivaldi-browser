@@ -19,6 +19,7 @@
 <translation id="1768211456781949159"><ph name="BEGIN_LINK" />Спробуйте запустити засоби діагностики мережі Windows<ph name="END_LINK" />.</translation>
 <translation id="1834321415901700177">Цей сайт містить шкідливі програми</translation>
 <translation id="1916770123977586577">Щоб застосувати оновлені налаштування на цьому сайті, оновіть сторінку</translation>
+<translation id="1973351931613083086">автовідтворення</translation>
 <translation id="1974060860693918893">Детальніше</translation>
 <translation id="2032962459168915086"><ph name="BEGIN_LINK" />Перевірити проксі-сервер і брандмауер<ph name="END_LINK" /></translation>
 <translation id="2119505898009119320">Кому видано: <ph name="ORGANIZATION" /> [<ph name="JURISDICTION" />]</translation>
@@ -37,7 +38,6 @@
 <translation id="2501278716633472235">Повернутися</translation>
 <translation id="2539524384386349900">Визначити</translation>
 <translation id="255002559098805027">Хост <ph name="HOST_NAME" /> надіслав недійсну відповідь.</translation>
-<translation id="2609632851001447353">Різновиди</translation>
 <translation id="2634124572758952069">IP-адресу сервера <ph name="HOST_NAME" /> не знайдено.</translation>
 <translation id="2649204054376361687"><ph name="CITY" />, <ph name="COUNTRY" /></translation>
 <translation id="2650446666397867134">У доступі до файлу відмовлено</translation>
@@ -48,6 +48,7 @@
 <translation id="2856444702002559011">Зловмисники можуть намагатися викрасти вашу інформацію із сайту <ph name="BEGIN_BOLD" /><ph name="SITE" /><ph name="END_BOLD" /> (наприклад, паролі, повідомлення чи дані кредитних карток). <ph name="BEGIN_LEARN_MORE_LINK" />Докладніше<ph name="END_LEARN_MORE_LINK" /></translation>
 <translation id="2909946352844186028">Виявлено зміну в мережі.</translation>
 <translation id="2948083400971632585">Ви можете відключити використовувані проксі-сервери на сторінці налаштувань.</translation>
+<translation id="2953943267837858202">Не дозволено автоматичне відтворення відео</translation>
 <translation id="2991571918955627853">Зараз не можна перейти на сторінку <ph name="SITE" />, оскільки веб-сайт використовує протокол HSTS. Помилки мережі й атаки зазвичай тимчасові, тому ця сторінка, скоріш за все, запрацює пізніше.</translation>
 <translation id="3005723025932146533">Показати збережену копію</translation>
 <translation id="301521992641321250">Блокується автоматично</translation>
@@ -61,6 +62,7 @@
       <ph name="PLATFORM_TEXT" /></translation>
 <translation id="3226128629678568754">Щоб повторно надіслати дані, потрібні для завантаження сторінки, перезавантажте сторінку.</translation>
 <translation id="3234666976984236645">Завжди виявляти важливий вміст на цьому сайті</translation>
+<translation id="3291915639428159043">Автовідтворення заблоковане</translation>
 <translation id="3308738399950580893">рекламу</translation>
 <translation id="3422472998109090673">Хост <ph name="HOST_NAME" /> зараз недоступний.</translation>
 <translation id="3427092606871434483">Дозволяти (за умовчанням)</translation>
@@ -71,6 +73,7 @@
 <translation id="3566021033012934673">Ваше з’єднання не захищене</translation>
 <translation id="3574305903863751447"><ph name="CITY" />, <ph name="STATE" />, <ph name="COUNTRY" /></translation>
 <translation id="3586931643579894722">Сховати докладні дані</translation>
+<translation id="3620979700683094848">Сайти можуть автоматично відтворювати відео</translation>
 <translation id="3630155396527302611">Якщо цій програмі вже надано доступ до мережі, спробуйте
         вилучити її зі списку та додати знову.</translation>
 <translation id="3658742229777143148">Редакція</translation>
@@ -82,6 +85,7 @@
 <translation id="3973234410852337861">Хост <ph name="HOST_NAME" /> заблокований</translation>
 <translation id="3987940399970879459">Менше 1 Мб</translation>
 <translation id="4075732493274867456">Клієнт і сервер підтримують різні версії протоколу SSL або набору шифрів.</translation>
+<translation id="410351446219883937">Автовідтворення</translation>
 <translation id="4116663294526079822">Завжди дозволяти на цьому сайті</translation>
 <translation id="4130226655945681476">Перевірити мережевий кабель, модем і маршрутизатор</translation>
 <translation id="4151403195736952345">Використовувати загальне значення за умовчанням (визначати)</translation>
@@ -147,6 +151,7 @@
 <translation id="6321917430147971392">Перевірте налаштування DNS</translation>
 <translation id="6328639280570009161">Спробуйте вимкнути прогнозування мережі</translation>
 <translation id="6328786501058569169">Це оманливий сайт</translation>
+<translation id="6348220984832452017">Активні варіанти</translation>
 <translation id="6358450015545214790">Що це означає?</translation>
 <translation id="6433595998831338502">Хост <ph name="HOST_NAME" /> відхилив запит на з’єднання.</translation>
 <translation id="6447842834002726250">Cookie-файли</translation>
@@ -165,6 +170,7 @@
 <translation id="7113310725918019676">Дозволити <ph name="BLOCKED_TYPE" /> з сервера <ph name="DOMAIN" /></translation>
 <translation id="7210863904660874423">Хост <ph name="HOST_NAME" /> не відповідає стандартам безпеки.</translation>
 <translation id="7219179957768738017">З'єднання використовує версію <ph name="SSL_VERSION" />.</translation>
+<translation id="7221855153210829124">Показувати сповіщення</translation>
 <translation id="7260504762447901703">Скасувати доступ</translation>
 <translation id="7353601530677266744">Командний рядок</translation>
 <translation id="7364115444476960850">Сторінка, до якої ви звернулися, була заблокована Vivaldi <ph name="BLOCKER_NAME" /></translation>
@@ -183,11 +189,13 @@
 <translation id="7758069387465995638">Можливо, брандмауер або антивірусна програма заблокували з’єднання.</translation>
 <translation id="7800304661137206267">З'єднання зашифровано з використанням <ph name="CIPHER" /> з алгоритмом <ph name="MAC" /> для автентифікації повідомлення та кодування <ph name="KX" /> як механізму обміну ключами.</translation>
 <translation id="7834399512844817676">Зазвичай веб-сайт <ph name="SITE" /> використовує шифрування для захисту вашої інформації. Але зараз при спробі Vivaldi під’єднатися до сторінки <ph name="SITE" /> з неї отримано незвичні й неправильні облікові дані. Це може статися, коли зловмисник намагається видавати себе за веб-сайт <ph name="SITE" /> або з’єднання перервано екраном входу Wi-Fi. Ваша інформація залишається захищеною, оскільки Vivaldi припинив з’єднання до того, як почався обмін будь-якими даними.</translation>
+<translation id="7834693436815575883">Автовідтворення дозволене</translation>
 <translation id="7878562273885520351">Ваш пароль можуть зламати</translation>
 <translation id="7951415247503192394">(32-розрядна версія)</translation>
 <translation id="8025119109950072390">Зловмисники на цьому сайті можуть обманом змусити вас виконати небезпечну дію, наприклад, установити програмне забезпечення або повідомити особисту інформацію (наприклад, паролі, номери телефонів або кредитних карток).</translation>
 <translation id="8037357227543935929">Запитувати (за умовчанням)</translation>
 <translation id="8041940743680923270">Використовувати глобальне налаштування за умовчанням (Запитувати)</translation>
+<translation id="8044382196220116469">Не дозволяти сайтам автоматично відтворювати відео</translation>
 <translation id="808894953321890993">Змінити пароль</translation>
 <translation id="8119307142152921512">стеження та рекламу</translation>
 <translation id="8149426793427495338">Ваш комп'ютер перейшов у режим сну.</translation>
@@ -205,6 +213,7 @@
 <translation id="8503813439785031346">Ім'я користувача</translation>
 <translation id="8703575177326907206">Ваше з’єднання з <ph name="DOMAIN" /> не зашифровано.</translation>
 <translation id="8740359287975076522">Неможливо знайти &lt;abbr id="dnsDefinition"&gt;DNS-адресу&lt;/abbr&gt; сайта <ph name="HOST_NAME" />. Виконується діагностика.</translation>
+<translation id="8774017153185436870">Сайти можуть автоматично відтворювати відео</translation>
 <translation id="8820817407110198400">Закладки</translation>
 <translation id="8940028675168378100">Блоковано <ph name="BLOCKER_NAME" /></translation>
 <translation id="8963117664422609631">Перейти до налаштувань сайту</translation>
@@ -212,6 +221,7 @@
 <translation id="9008201768610948239">Ігнорувати</translation>
 <translation id="9025348182339809926">(Недійсний)</translation>
 <translation id="9039213469156557790">Окрім цього, сторінка містить незахищені ресурси. Інші особи можуть переглядати їх під час передавання даних, а зловмисники можуть змінювати роботу сторінки.</translation>
+<translation id="9048224371732578627">Дозволено автоматично відтворювати відео</translation>
 <translation id="9062620674789239642">Можливо, його було переміщено, змінено або видалено.</translation>
 <translation id="9069693763241529744">Заблоковано розширенням</translation>
 <translation id="9073799351042754113">Ви вимкнули попередження про небезпеку для цього сайту.</translation>

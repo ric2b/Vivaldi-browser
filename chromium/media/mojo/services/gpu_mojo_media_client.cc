@@ -9,25 +9,20 @@
 #include "base/bind.h"
 #include "base/feature_list.h"
 #include "base/memory/ptr_util.h"
-#include "base/task/thread_pool.h"
 #include "build/build_config.h"
 #include "build/chromeos_buildflags.h"
 #include "gpu/ipc/service/gpu_channel.h"
-#include "media/audio/audio_features.h"
 #include "media/base/audio_decoder.h"
+#include "media/base/audio_encoder.h"
 #include "media/base/cdm_factory.h"
 #include "media/base/media_switches.h"
 #include "media/base/media_util.h"
-#include "media/base/offloading_audio_encoder.h"
 #include "media/base/video_decoder.h"
 #include "media/gpu/gpu_video_accelerator_util.h"
 #include "media/gpu/gpu_video_decode_accelerator_factory.h"
 #include "media/gpu/gpu_video_decode_accelerator_helpers.h"
 #include "media/gpu/ipc/service/media_gpu_channel_manager.h"
 #include "media/gpu/ipc/service/vda_video_decoder.h"
-#if BUILDFLAG(IS_WIN)
-#include "media/gpu/windows/mf_audio_encoder.h"
-#endif  // IS_WIN
 #include "media/mojo/mojom/video_decoder.mojom.h"
 #include "media/video/video_decode_accelerator.h"
 #include "third_party/abseil-cpp/absl/types/optional.h"
@@ -91,7 +86,8 @@ VideoDecoderTraits::VideoDecoderTraits(
     gpu::GpuMemoryBufferFactory* gpu_memory_buffer_factory,
     GetConfigCacheCB get_cached_configs_cb,
     GetCommandBufferStubCB get_command_buffer_stub_cb,
-    AndroidOverlayMojoFactoryCB android_overlay_factory_cb)
+    AndroidOverlayMojoFactoryCB android_overlay_factory_cb,
+    mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder)
     : task_runner(std::move(task_runner)),
       gpu_task_runner(std::move(gpu_task_runner)),
       media_log(std::move(media_log)),
@@ -104,7 +100,8 @@ VideoDecoderTraits::VideoDecoderTraits(
       gpu_memory_buffer_factory(gpu_memory_buffer_factory),
       get_cached_configs_cb(std::move(get_cached_configs_cb)),
       get_command_buffer_stub_cb(std::move(get_command_buffer_stub_cb)),
-      android_overlay_factory_cb(std::move(android_overlay_factory_cb)) {}
+      android_overlay_factory_cb(std::move(android_overlay_factory_cb)),
+      oop_video_decoder(std::move(oop_video_decoder)) {}
 
 GpuMojoMediaClient::GpuMojoMediaClient(
     const gpu::GpuPreferences& gpu_preferences,
@@ -128,23 +125,14 @@ GpuMojoMediaClient::~GpuMojoMediaClient() = default;
 
 std::unique_ptr<AudioDecoder> GpuMojoMediaClient::CreateAudioDecoder(
     scoped_refptr<base::SingleThreadTaskRunner> task_runner) {
-  return CreatePlatformAudioDecoder(task_runner);
+  return CreatePlatformAudioDecoder(std::move(task_runner));
 }
 
 std::unique_ptr<AudioEncoder> GpuMojoMediaClient::CreateAudioEncoder(
     scoped_refptr<base::SequencedTaskRunner> task_runner) {
-#if BUILDFLAG(IS_WIN)
-  if (!base::FeatureList::IsEnabled(features::kPlatformAudioEncoder))
-    return nullptr;
-
-  auto encoding_runner = base::ThreadPool::CreateCOMSTATaskRunner({});
-  auto mf_encoder = std::make_unique<MFAudioEncoder>(encoding_runner);
-  return std::make_unique<OffloadingAudioEncoder>(std::move(mf_encoder),
-                                                  std::move(encoding_runner),
-                                                  std::move(task_runner));
-#else
-  return nullptr;
-#endif  // IS_WIN
+  return base::FeatureList::IsEnabled(kPlatformAudioEncoder)
+             ? CreatePlatformAudioEncoder(std::move(task_runner))
+             : nullptr;
 }
 
 VideoDecoderType GpuMojoMediaClient::GetDecoderImplementationType() {
@@ -177,7 +165,8 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
     MediaLog* media_log,
     mojom::CommandBufferIdPtr command_buffer_id,
     RequestOverlayInfoCB request_overlay_info_cb,
-    const gfx::ColorSpace& target_color_space) {
+    const gfx::ColorSpace& target_color_space,
+    mojo::PendingRemote<stable::mojom::StableVideoDecoder> oop_video_decoder) {
   // All implementations require a command buffer.
   if (!command_buffer_id)
     return nullptr;
@@ -195,7 +184,7 @@ std::unique_ptr<VideoDecoder> GpuMojoMediaClient::CreateVideoDecoder(
       base::BindRepeating(
           &GetCommandBufferStub, gpu_task_runner_, media_gpu_channel_manager_,
           command_buffer_id->channel_token, command_buffer_id->route_id),
-      android_overlay_factory_cb_);
+      android_overlay_factory_cb_, std::move(oop_video_decoder));
 
   return CreatePlatformVideoDecoder(traits);
 }

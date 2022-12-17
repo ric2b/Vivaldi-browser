@@ -4,13 +4,20 @@
 
 #include "third_party/blink/public/common/fenced_frame/fenced_frame_utils.h"
 
+#include <cstring>
+
 #include "base/guid.h"
 #include "base/strings/string_util.h"
+#include "net/base/url_util.h"
+#include "url/gurl.h"
 
 namespace blink {
 
-bool IsValidFencedFrameURL(GURL url) {
-  return url.SchemeIs(url::kHttpsScheme) || url.IsAboutBlank();
+bool IsValidFencedFrameURL(const GURL& url) {
+  if (!url.is_valid())
+    return false;
+  return url.SchemeIs(url::kHttpsScheme) || url.IsAboutBlank() ||
+         net::IsLocalhost(url);
 }
 
 const char kURNUUIDprefix[] = "urn:uuid:";
@@ -18,7 +25,7 @@ const char kURNUUIDprefix[] = "urn:uuid:";
 bool IsValidUrnUuidURL(const GURL& url) {
   if (!url.is_valid())
     return false;
-  std::string spec = url.spec();
+  const std::string& spec = url.spec();
   return base::StartsWith(spec, kURNUUIDprefix,
                           base::CompareCase::INSENSITIVE_ASCII) &&
          base::GUID::ParseCaseInsensitive(
